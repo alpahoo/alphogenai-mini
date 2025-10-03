@@ -91,7 +91,15 @@ If you wish to just develop locally and not deploy to Vercel, [follow the steps 
    # File: supabase/migrations/20251002_add_notes.sql
    ```
 
-6. You can now run the Next.js local development server:
+6. (New) Run videos features migrations:
+
+   ```bash
+   # In Supabase SQL editor, execute both files in order:
+   # 1) supabase/migrations/20251003_add_videos.sql
+   # 2) supabase/migrations/20251003_storage_videos.sql
+   ```
+
+7. You can now run the Next.js local development server:
 
    ```bash
    npm run dev
@@ -106,11 +114,30 @@ If you wish to just develop locally and not deploy to Vercel, [follow the steps 
 ### Features
 - Single global Navbar and Footer in `app/layout.tsx`.
 - Notes CRUD with RLS so each user only sees their own notes.
+- AlphoGenAI Dashboard at `/dashboard` to generate scripts (Qwen) and videos (WAN), with files stored in `videos` private bucket.
 
 ### Deploy
 - Deploy to Vercel. Ensure env vars are set in the project settings.
 
 6. This template comes with the default shadcn/ui style initialized. If you instead want other ui.shadcn styles, delete `components.json` and [re-install shadcn/ui](https://ui.shadcn.com/docs/installation/next)
+## Environment Variables
+
+Add the following in `.env.local` in addition to Supabase vars:
+
+```
+# Qwen text generation API
+QWEN_API_URL=your-qwen-endpoint
+QWEN_API_KEY=your-qwen-api-key
+
+# WAN (video generation) API (e.g., RunPod or your service)
+WAN_API_URL=your-wan-endpoint
+WAN_API_KEY=your-wan-api-key
+```
+
+Notes:
+- `NEXT_PUBLIC_SUPABASE_URL` and either `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` must be set.
+- Storage bucket `videos` is private; downloads use authenticated requests.
+
 
 > Check out [the docs for Local Development](https://supabase.com/docs/guides/getting-started/local-development) to also run Supabase locally.
 

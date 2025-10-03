@@ -53,6 +53,12 @@ export default async function Navbar() {
                 Notes
               </Link>
               <Link
+                href="/dashboard"
+                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+              >
+                Dashboard
+              </Link>
+              <Link
                 href="/uploads"
                 className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
               >
