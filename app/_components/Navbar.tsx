@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { LogoutButton } from "@/components/logout-button";
-import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
+import { createServerComponentClient as createClient } from "@supabase/auth-helpers-nextjs";
 
 export default async function Navbar() {
-  const supabase = await createClient();
+  const supabase = createClient({ cookies });
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -29,15 +30,12 @@ export default async function Navbar() {
               >
                 Notes
               </Link>
-              {/* Optionnel: décommentez si la route existe */}
-              {false && (
-                <Link
-                  href="/uploads"
-                  className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-                >
-                  Uploads
-                </Link>
-              )}
+              <Link
+                href="/uploads"
+                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+              >
+                Uploads
+              </Link>
             </>
           ) : null}
         </div>
