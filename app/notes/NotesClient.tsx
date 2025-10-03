@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { EmptyState } from "@/components/ui/empty-state";
 
 type Note = { id: string; title: string; created_at: string };
 
@@ -58,28 +59,29 @@ export function NotesClient({ initialNotes }: { initialNotes: Note[] }) {
         </Button>
       </form>
 
-      <ul className="space-y-2">
-        {notes.map((note) => (
-          <li
-            key={note.id}
-            className="flex items-center justify-between rounded-md border p-3"
-          >
-            <span className="truncate">{note.title}</span>
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              onClick={() => handleDelete(note.id)}
-              disabled={isPending}
+      {notes.length === 0 ? (
+        <EmptyState title="No notes yet" description="Create your first note using the form above." />
+      ) : (
+        <ul className="space-y-2">
+          {notes.map((note) => (
+            <li
+              key={note.id}
+              className="flex items-center justify-between rounded-md border p-3"
             >
-              Delete
-            </Button>
-          </li>
-        ))}
-        {notes.length === 0 && (
-          <li className="text-sm text-muted-foreground">No notes yet.</li>
-        )}
-      </ul>
+              <span className="truncate">{note.title}</span>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => handleDelete(note.id)}
+                disabled={isPending}
+              >
+                Delete
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
