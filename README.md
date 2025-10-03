@@ -49,7 +49,7 @@ The above will also clone the Starter kit to your GitHub, you can clone that loc
 
 If you wish to just develop locally and not deploy to Vercel, [follow the steps below](#clone-and-run-locally).
 
-## Clone and run locally
+## Setup
 
 1. You'll first need a Supabase project which can be made [via the Supabase dashboard](https://database.new)
 
@@ -73,22 +73,42 @@ If you wish to just develop locally and not deploy to Vercel, [follow the steps 
    cd with-supabase-app
    ```
 
-4. Rename `.env.example` to `.env.local` and update the following:
+4. Create `.env.local` and set:
 
    ```
-   NEXT_PUBLIC_SUPABASE_URL=[INSERT SUPABASE PROJECT URL]
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=[INSERT SUPABASE PROJECT API ANON KEY]
+   NEXT_PUBLIC_SUPABASE_URL=your-project-url
+   # Support either of these keys
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY=your-anon-or-publishable-key
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
    ```
 
    Both `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` can be found in [your Supabase project's API settings](https://supabase.com/dashboard/project/_?showConnect=true)
 
-5. You can now run the Next.js local development server:
+5. Run database migrations (notes table + RLS):
+
+   ```bash
+   # Using the provided SQL file, run it in your Supabase SQL editor
+   # File: supabase/migrations/20251002_add_notes.sql
+   ```
+
+6. You can now run the Next.js local development server:
 
    ```bash
    npm run dev
    ```
 
-   The starter kit should now be running on [localhost:3000](http://localhost:3000/).
+   The app should now be running on [localhost:3000](http://localhost:3000/).
+
+### Auth & Security
+- Email confirmation is required. Users are redirected to `/auth/confirm` and then to `/notes` after verifying email.
+- Middleware protects all routes except static assets and `/auth/*`; unauthenticated users are redirected to `/auth/login`.
+
+### Features
+- Single global Navbar and Footer in `app/layout.tsx`.
+- Notes CRUD with RLS so each user only sees their own notes.
+
+### Deploy
+- Deploy to Vercel. Ensure env vars are set in the project settings.
 
 6. This template comes with the default shadcn/ui style initialized. If you instead want other ui.shadcn styles, delete `components.json` and [re-install shadcn/ui](https://ui.shadcn.com/docs/installation/next)
 
