@@ -1,12 +1,22 @@
 import Link from "next/link";
 import { LogoutButton } from "@/components/logout-button";
-import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
+import { createServerComponentClient as createClient } from "@supabase/auth-helpers-nextjs";
 
 export default async function Navbar() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  let user: unknown = null;
+  if (supabaseUrl && supabaseKey) {
+    const supabase = createClient({ cookies, supabaseUrl, supabaseKey });
+    const {
+      data: { user: u },
+    } = await supabase.auth.getUser();
+    user = u;
+  }
 
   return (
     <nav
