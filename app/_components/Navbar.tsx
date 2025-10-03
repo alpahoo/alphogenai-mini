@@ -4,19 +4,10 @@ import { cookies } from "next/headers";
 import { createServerComponentClient as createClient } from "@supabase/auth-helpers-nextjs";
 
 export default async function Navbar() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  let user: unknown = null;
-  if (supabaseUrl && supabaseKey) {
-    const supabase = createClient({ cookies, supabaseUrl, supabaseKey });
-    const {
-      data: { user: u },
-    } = await supabase.auth.getUser();
-    user = u;
-  }
+  const supabase = createClient({ cookies });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   return (
     <nav
@@ -39,15 +30,12 @@ export default async function Navbar() {
               >
                 Notes
               </Link>
-              {/* Optionnel: décommentez si la route existe */}
-              {false && (
-                <Link
-                  href="/uploads"
-                  className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-                >
-                  Uploads
-                </Link>
-              )}
+              <Link
+                href="/uploads"
+                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+              >
+                Uploads
+              </Link>
             </>
           ) : null}
         </div>
