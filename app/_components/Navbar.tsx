@@ -52,15 +52,12 @@ export default async function Navbar() {
               >
                 Notes
               </Link>
-              {/* Optionnel: décommentez si la route existe */}
-              {false && (
-                <Link
-                  href="/uploads"
-                  className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-                >
-                  Uploads
-                </Link>
-              )}
+              <Link
+                href="/uploads"
+                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+              >
+                Uploads
+              </Link>
             </>
           ) : null}
         </div>
