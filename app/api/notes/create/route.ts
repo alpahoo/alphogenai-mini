@@ -31,6 +31,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ note: data }, { status: 201 });
   } catch (error) {
+    console.error("/api/notes/create failed:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

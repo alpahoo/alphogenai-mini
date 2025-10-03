@@ -26,6 +26,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    console.error("/api/notes/delete failed:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
