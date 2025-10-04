@@ -1,5 +1,5 @@
 """
-API service wrappers for AI providers
+Wrappers API pour les services IA AlphogenAI Mini
 """
 import httpx
 from typing import Dict, Any, List, Optional
@@ -8,7 +8,7 @@ from .config import get_settings
 
 
 class QwenService:
-    """Qwen LLM for script generation"""
+    """Qwen LLM pour génération de scripts"""
     
     def __init__(self):
         self.settings = get_settings()
@@ -24,7 +24,7 @@ class QwenService:
         prompt: str,
         context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Generate video script using Qwen"""
+        """Génère un script vidéo avec Qwen (4 scènes)"""
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
@@ -37,7 +37,7 @@ class QwenService:
                     "messages": [
                         {
                             "role": "system",
-                            "content": "You are a creative video script writer. Generate engaging, concise video scripts with scene descriptions."
+                            "content": "Tu es un scénariste créatif. Génère des scripts vidéo engageants avec exactement 4 scènes, chaque scène avec une description visuelle et une narration."
                         },
                         {
                             "role": "user",
@@ -63,8 +63,7 @@ class QwenService:
             }
     
     def _parse_scenes(self, script: str) -> List[Dict[str, str]]:
-        """Parse script into scenes"""
-        # Simple scene parsing - splits by "Scene" markers
+        """Parse le script en 4 scènes"""
         scenes = []
         lines = script.split("\n")
         current_scene = {"description": "", "narration": ""}
@@ -81,11 +80,12 @@ class QwenService:
         if current_scene["description"] or current_scene["narration"]:
             scenes.append(current_scene)
         
-        return scenes[:4]  # Limit to 4 scenes
+        # Limiter à exactement 4 scènes
+        return scenes[:4]
 
 
 class WANImageService:
-    """WAN Image generation for key visuals"""
+    """WAN Image pour génération d'images clés"""
     
     def __init__(self):
         self.settings = get_settings()
@@ -101,7 +101,7 @@ class WANImageService:
         prompt: str,
         style: str = "cinematic"
     ) -> Dict[str, Any]:
-        """Generate key visual using WAN Image"""
+        """Génère une image clé avec WAN Image"""
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 f"{self.base_url}/images/generate",
@@ -128,7 +128,7 @@ class WANImageService:
 
 
 class PikaService:
-    """Pika API for video clip generation"""
+    """Pika pour génération de clips vidéo (4s avec --image + seed)"""
     
     def __init__(self):
         self.settings = get_settings()
@@ -143,18 +143,27 @@ class PikaService:
         self,
         prompt: str,
         image_url: Optional[str] = None,
-        duration: int = 5
+        seed: Optional[int] = None,
+        duration: int = 4
     ) -> Dict[str, Any]:
-        """Generate video clip using Pika"""
+        """Génère un clip vidéo de 4s avec Pika (options --image + seed)"""
         async with httpx.AsyncClient(timeout=300.0) as client:
             payload = {
                 "prompt": prompt,
                 "duration": duration,
                 "aspect_ratio": "16:9",
+                "options": {
+                    "image": True,  # Flag --image pour utiliser image de référence
+                }
             }
             
+            # Image de référence (seed visuel)
             if image_url:
-                payload["image"] = image_url
+                payload["image_url"] = image_url
+            
+            # Seed pour cohérence visuelle
+            if seed is not None:
+                payload["seed"] = seed
             
             response = await client.post(
                 f"{self.base_url}/videos/generate",
@@ -167,7 +176,7 @@ class PikaService:
             response.raise_for_status()
             data = response.json()
             
-            # Poll for completion
+            # Attendre la génération
             video_id = data["id"]
             video_url = await self._poll_video_status(client, video_id)
             
@@ -183,7 +192,7 @@ class PikaService:
         video_id: str,
         max_attempts: int = 60
     ) -> str:
-        """Poll Pika API for video completion"""
+        """Poll l'API Pika pour attendre la génération"""
         import asyncio
         
         for _ in range(max_attempts):
@@ -197,15 +206,15 @@ class PikaService:
             if data["status"] == "completed":
                 return data["url"]
             elif data["status"] == "failed":
-                raise Exception(f"Video generation failed: {data.get('error')}")
+                raise Exception(f"Pika generation failed: {data.get('error')}")
             
             await asyncio.sleep(5)
         
-        raise Exception("Video generation timeout")
+        raise Exception("Pika generation timeout")
 
 
 class ElevenLabsService:
-    """ElevenLabs for text-to-speech and SRT generation"""
+    """ElevenLabs pour text-to-speech + SRT"""
     
     def __init__(self):
         self.settings = get_settings()
@@ -219,11 +228,10 @@ class ElevenLabsService:
     async def generate_speech(
         self,
         text: str,
-        voice_id: str = "21m00Tcm4TlvDq8ikWAM"  # Default voice
+        voice_id: str = "21m00Tcm4TlvDq8ikWAM"
     ) -> Dict[str, Any]:
-        """Generate speech and SRT captions"""
+        """Génère voix + sous-titres SRT"""
         async with httpx.AsyncClient(timeout=120.0) as client:
-            # Generate audio
             response = await client.post(
                 f"{self.base_url}/text-to-speech/{voice_id}",
                 headers={
@@ -241,26 +249,23 @@ class ElevenLabsService:
             )
             response.raise_for_status()
             
-            # Save audio to temp location or return URL
             audio_bytes = response.content
-            
-            # Generate SRT from text (simple word timing estimation)
             srt_content = self._generate_srt(text)
             
             return {
                 "audio_bytes": audio_bytes,
-                "audio_url": None,  # Would upload to storage
+                "audio_url": None,  # À uploader vers Supabase Storage
                 "srt_content": srt_content,
-                "duration": len(audio_bytes) / 44100 / 2,  # Rough estimate
+                "duration": len(audio_bytes) / 44100 / 2,  # Estimation
             }
     
     def _generate_srt(self, text: str) -> str:
-        """Generate SRT captions with estimated timing"""
+        """Génère fichier SRT avec timing estimé"""
         words = text.split()
         words_per_second = 2.5
         srt_lines = []
         
-        for i in range(0, len(words), 5):  # 5 words per subtitle
+        for i in range(0, len(words), 5):
             chunk = " ".join(words[i:i+5])
             start_time = i / words_per_second
             end_time = (i + 5) / words_per_second
@@ -275,7 +280,7 @@ class ElevenLabsService:
         return "\n".join(srt_lines)
     
     def _format_srt_time(self, seconds: float) -> str:
-        """Format seconds to SRT timestamp"""
+        """Formate timestamp SRT"""
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
         secs = int(seconds % 60)
@@ -284,7 +289,7 @@ class ElevenLabsService:
 
 
 class RemotionService:
-    """Remotion for final video assembly"""
+    """Remotion pour assemblage final"""
     
     def __init__(self):
         self.settings = get_settings()
@@ -301,7 +306,7 @@ class RemotionService:
         srt_content: str,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Assemble final video using Remotion"""
+        """Assemble la vidéo finale avec Remotion"""
         async with httpx.AsyncClient(timeout=600.0) as client:
             response = await client.post(
                 f"{self.renderer_url}/render",
@@ -320,7 +325,7 @@ class RemotionService:
             response.raise_for_status()
             data = response.json()
             
-            # Poll for render completion
+            # Attendre le rendu
             render_id = data["renderId"]
             video_url = await self._poll_render_status(client, render_id)
             
@@ -335,7 +340,7 @@ class RemotionService:
         render_id: str,
         max_attempts: int = 120
     ) -> str:
-        """Poll Remotion renderer for completion"""
+        """Poll Remotion pour attendre le rendu"""
         import asyncio
         
         for _ in range(max_attempts):
@@ -348,8 +353,8 @@ class RemotionService:
             if data["status"] == "completed":
                 return data["url"]
             elif data["status"] == "failed":
-                raise Exception(f"Render failed: {data.get('error')}")
+                raise Exception(f"Remotion render failed: {data.get('error')}")
             
             await asyncio.sleep(5)
         
-        raise Exception("Render timeout")
+        raise Exception("Remotion render timeout")

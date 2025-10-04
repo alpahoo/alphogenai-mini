@@ -1,8 +1,10 @@
 """
-LangGraph Orchestrator for AlphoGenAI Mini
-Manages the pipeline: Qwen → WAN Image → Pika → ElevenLabs → Remotion
+Orchestrateur LangGraph pour AlphogenAI Mini
+Pipeline: Qwen (script 4 scènes) → WAN Image → Pika (4 clips 4s) → ElevenLabs → Remotion
+Sauvegarde l'état à chaque étape dans Supabase (jobs.app_state)
 """
 import asyncio
+import random
 from typing import Dict, Any, TypedDict, Annotated, Sequence
 from datetime import datetime
 import httpx
@@ -22,124 +24,128 @@ from .api_services import (
 
 
 class WorkflowState(TypedDict):
-    """State passed between workflow nodes"""
+    """État LangGraph passé entre les nœuds"""
     job_id: str
     user_id: str
     prompt: str
+    
+    # Résultats de chaque étape
     script: Dict[str, Any]
     key_visual: Dict[str, Any]
     clips: list[Dict[str, Any]]
     audio: Dict[str, Any]
     final_video: Dict[str, Any]
+    
+    # Gestion erreurs
     error: str | None
     retry_count: int
+    
+    # LangChain compatibility
     messages: Annotated[Sequence[BaseMessage], "messages"]
 
 
-class VideoGenerationOrchestrator:
-    """LangGraph-based orchestrator for video generation pipeline"""
+class AlphogenAIOrchestrator:
+    """Orchestrateur LangGraph pour génération vidéo AlphogenAI Mini"""
     
     def __init__(self):
         self.settings = get_settings()
         self.supabase = SupabaseClient()
         
-        # Initialize API services
+        # Initialiser les services AI
         self.qwen = QwenService()
         self.wan_image = WANImageService()
         self.pika = PikaService()
         self.elevenlabs = ElevenLabsService()
         self.remotion = RemotionService()
         
-        # Build the workflow graph
+        # Construire le workflow LangGraph
         self.workflow = self._build_workflow()
     
     def _build_workflow(self) -> StateGraph:
-        """Build the LangGraph workflow"""
+        """Construit le workflow LangGraph avec 6 étapes"""
         workflow = StateGraph(WorkflowState)
         
-        # Add nodes for each stage
-        workflow.add_node("generate_script", self._generate_script_node)
-        workflow.add_node("generate_key_visual", self._generate_key_visual_node)
-        workflow.add_node("generate_clips", self._generate_clips_node)
-        workflow.add_node("generate_audio", self._generate_audio_node)
-        workflow.add_node("assemble_video", self._assemble_video_node)
-        workflow.add_node("handle_error", self._handle_error_node)
-        workflow.add_node("notify_completion", self._notify_completion_node)
+        # Ajouter les nœuds du pipeline
+        workflow.add_node("qwen_script", self._node_qwen_script)
+        workflow.add_node("wan_image", self._node_wan_image)
+        workflow.add_node("pika_clips", self._node_pika_clips)
+        workflow.add_node("elevenlabs_audio", self._node_elevenlabs_audio)
+        workflow.add_node("remotion_assembly", self._node_remotion_assembly)
+        workflow.add_node("webhook_notify", self._node_webhook_notify)
         
-        # Define the flow
-        workflow.set_entry_point("generate_script")
-        
-        workflow.add_edge("generate_script", "generate_key_visual")
-        workflow.add_edge("generate_key_visual", "generate_clips")
-        workflow.add_edge("generate_clips", "generate_audio")
-        workflow.add_edge("generate_audio", "assemble_video")
-        workflow.add_edge("assemble_video", "notify_completion")
-        workflow.add_edge("notify_completion", END)
-        
-        # Error handling edges (would add conditional edges for retry logic)
-        workflow.add_edge("handle_error", END)
+        # Définir le flux
+        workflow.set_entry_point("qwen_script")
+        workflow.add_edge("qwen_script", "wan_image")
+        workflow.add_edge("wan_image", "pika_clips")
+        workflow.add_edge("pika_clips", "elevenlabs_audio")
+        workflow.add_edge("elevenlabs_audio", "remotion_assembly")
+        workflow.add_edge("remotion_assembly", "webhook_notify")
+        workflow.add_edge("webhook_notify", END)
         
         return workflow.compile()
     
-    async def _generate_script_node(self, state: WorkflowState) -> WorkflowState:
-        """Node 1: Generate script using Qwen"""
+    async def _save_state(
+        self,
+        job_id: str,
+        state: WorkflowState,
+        stage: str,
+        status: str = "in_progress"
+    ) -> None:
+        """Sauvegarde l'état complet dans jobs.app_state"""
+        app_state = {
+            "prompt": state["prompt"],
+            "script": state.get("script", {}),
+            "key_visual": state.get("key_visual", {}),
+            "clips": state.get("clips", []),
+            "audio": state.get("audio", {}),
+            "final_video": state.get("final_video", {}),
+            "retry_count": state.get("retry_count", 0),
+            "last_stage": stage,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        
+        await self.supabase.update_job_state(
+            job_id=job_id,
+            app_state=app_state,
+            status=status,
+            current_stage=stage,
+            error_message=state.get("error")
+        )
+    
+    async def _node_qwen_script(self, state: WorkflowState) -> WorkflowState:
+        """Étape 1: Génération script avec Qwen (4 scènes)"""
         try:
-            await self.supabase.update_job_status(
-                state["job_id"],
-                "in_progress",
-                stage="generate_script"
-            )
+            print(f"[Qwen] Génération du script pour job {state['job_id']}")
             
-            # Check cache first
-            cached = await self.supabase.check_cache(
-                state["prompt"],
-                state["user_id"]
-            )
-            
-            if cached and cached.get("result", {}).get("script"):
-                print(f"[Qwen] Using cached script for job {state['job_id']}")
-                state["script"] = cached["result"]["script"]
-                return state
-            
-            # Generate new script
-            print(f"[Qwen] Generating script for job {state['job_id']}")
+            # Générer le script
             script_result = await self.qwen.generate_script(state["prompt"])
+            
+            # Limiter à exactement 4 scènes
+            script_result["scenes"] = script_result["scenes"][:4]
             
             state["script"] = script_result
             
-            # Save artifact
-            await self.supabase.save_stage_artifact(
-                state["job_id"],
-                "script",
-                script_result
-            )
+            # Sauvegarder l'état
+            await self._save_state(state["job_id"], state, "qwen_script")
             
-            print(f"[Qwen] Script generated: {len(script_result['scenes'])} scenes")
+            print(f"[Qwen] ✓ Script généré: {len(script_result['scenes'])} scènes")
             return state
             
         except Exception as e:
-            print(f"[Qwen] Error: {str(e)}")
-            state["error"] = f"Script generation failed: {str(e)}"
-            await self.supabase.update_job_status(
-                state["job_id"],
-                "failed",
-                error_message=state["error"]
-            )
+            print(f"[Qwen] ✗ Erreur: {str(e)}")
+            state["error"] = f"Qwen script error: {str(e)}"
+            await self._handle_error(state)
             raise
     
-    async def _generate_key_visual_node(self, state: WorkflowState) -> WorkflowState:
-        """Node 2: Generate key visual using WAN Image"""
+    async def _node_wan_image(self, state: WorkflowState) -> WorkflowState:
+        """Étape 2: Génération image clé avec WAN Image"""
         try:
-            await self.supabase.update_job_status(
-                state["job_id"],
-                "in_progress",
-                stage="generate_key_visual"
-            )
+            print(f"[WAN Image] Génération de l'image clé pour job {state['job_id']}")
             
-            # Use first scene description for key visual
+            # Utiliser la description de la première scène
             first_scene = state["script"]["scenes"][0]["description"]
             
-            print(f"[WAN Image] Generating key visual for job {state['job_id']}")
+            # Générer l'image clé
             visual_result = await self.wan_image.generate_image(
                 first_scene,
                 style="cinematic"
@@ -147,143 +153,106 @@ class VideoGenerationOrchestrator:
             
             state["key_visual"] = visual_result
             
-            # Save artifact
-            await self.supabase.save_stage_artifact(
-                state["job_id"],
-                "key_visual",
-                visual_result
-            )
+            # Sauvegarder l'état
+            await self._save_state(state["job_id"], state, "wan_image")
             
-            print(f"[WAN Image] Key visual generated: {visual_result['image_url']}")
+            print(f"[WAN Image] ✓ Image clé générée: {visual_result['image_url']}")
             return state
             
         except Exception as e:
-            print(f"[WAN Image] Error: {str(e)}")
-            state["error"] = f"Key visual generation failed: {str(e)}"
-            await self.supabase.update_job_status(
-                state["job_id"],
-                "failed",
-                error_message=state["error"]
-            )
+            print(f"[WAN Image] ✗ Erreur: {str(e)}")
+            state["error"] = f"WAN Image error: {str(e)}"
+            await self._handle_error(state)
             raise
     
-    async def _generate_clips_node(self, state: WorkflowState) -> WorkflowState:
-        """Node 3: Generate 4 video clips using Pika"""
+    async def _node_pika_clips(self, state: WorkflowState) -> WorkflowState:
+        """Étape 3: Génération 4 clips vidéo avec Pika (4s, --image + seed)"""
         try:
-            await self.supabase.update_job_status(
-                state["job_id"],
-                "in_progress",
-                stage="generate_clips"
-            )
+            print(f"[Pika] Génération de 4 clips pour job {state['job_id']}")
             
-            scenes = state["script"]["scenes"][:4]  # Limit to 4 clips
-            clips = []
+            scenes = state["script"]["scenes"]
+            key_visual_url = state["key_visual"]["image_url"]
             
-            print(f"[Pika] Generating {len(scenes)} clips for job {state['job_id']}")
+            # Générer seed pour cohérence visuelle
+            base_seed = random.randint(1000, 9999)
             
-            # Generate clips in parallel
+            # Générer les 4 clips en parallèle
             tasks = []
             for i, scene in enumerate(scenes):
-                # First clip uses key visual as starting frame
-                image_url = state["key_visual"]["image_url"] if i == 0 else None
+                # Le premier clip utilise l'image clé + seed
+                image_url = key_visual_url if i == 0 else None
+                seed = base_seed + i
                 
                 tasks.append(
                     self.pika.generate_clip(
                         prompt=scene["description"],
                         image_url=image_url,
-                        duration=5
+                        duration=4,  # 4 secondes par clip
+                        seed=seed
                     )
                 )
             
+            # Exécuter en parallèle
             clip_results = await asyncio.gather(*tasks)
             
+            # Formater les résultats
+            clips = []
             for i, clip_result in enumerate(clip_results):
                 clips.append({
                     "index": i,
                     "scene": scenes[i],
+                    "seed": base_seed + i,
                     **clip_result
                 })
             
             state["clips"] = clips
             
-            # Save artifacts
-            await self.supabase.save_stage_artifact(
-                state["job_id"],
-                "clips",
-                {"clips": clips}
-            )
+            # Sauvegarder l'état
+            await self._save_state(state["job_id"], state, "pika_clips")
             
-            print(f"[Pika] Generated {len(clips)} clips")
+            print(f"[Pika] ✓ {len(clips)} clips générés (4s chacun)")
             return state
             
         except Exception as e:
-            print(f"[Pika] Error: {str(e)}")
-            state["error"] = f"Clip generation failed: {str(e)}"
-            await self.supabase.update_job_status(
-                state["job_id"],
-                "failed",
-                error_message=state["error"]
-            )
+            print(f"[Pika] ✗ Erreur: {str(e)}")
+            state["error"] = f"Pika clips error: {str(e)}"
+            await self._handle_error(state)
             raise
     
-    async def _generate_audio_node(self, state: WorkflowState) -> WorkflowState:
-        """Node 4: Generate voiceover and SRT using ElevenLabs"""
+    async def _node_elevenlabs_audio(self, state: WorkflowState) -> WorkflowState:
+        """Étape 4: Génération audio + SRT avec ElevenLabs"""
         try:
-            await self.supabase.update_job_status(
-                state["job_id"],
-                "in_progress",
-                stage="generate_audio"
-            )
+            print(f"[ElevenLabs] Génération audio pour job {state['job_id']}")
             
-            # Combine all scene narrations
+            # Combiner toutes les narrations
             full_narration = " ".join([
                 scene["narration"].strip()
                 for scene in state["script"]["scenes"]
             ])
             
-            print(f"[ElevenLabs] Generating audio for job {state['job_id']}")
+            # Générer l'audio et les sous-titres
             audio_result = await self.elevenlabs.generate_speech(full_narration)
-            
-            # TODO: Upload audio to Supabase Storage and get public URL
-            # For now, store locally or in temp location
             
             state["audio"] = audio_result
             
-            # Save artifact
-            await self.supabase.save_stage_artifact(
-                state["job_id"],
-                "audio",
-                {
-                    "srt_content": audio_result["srt_content"],
-                    "duration": audio_result["duration"],
-                }
-            )
+            # Sauvegarder l'état
+            await self._save_state(state["job_id"], state, "elevenlabs_audio")
             
-            print(f"[ElevenLabs] Audio generated: {audio_result['duration']}s")
+            print(f"[ElevenLabs] ✓ Audio généré: {audio_result['duration']}s")
             return state
             
         except Exception as e:
-            print(f"[ElevenLabs] Error: {str(e)}")
-            state["error"] = f"Audio generation failed: {str(e)}"
-            await self.supabase.update_job_status(
-                state["job_id"],
-                "failed",
-                error_message=state["error"]
-            )
+            print(f"[ElevenLabs] ✗ Erreur: {str(e)}")
+            state["error"] = f"ElevenLabs audio error: {str(e)}"
+            await self._handle_error(state)
             raise
     
-    async def _assemble_video_node(self, state: WorkflowState) -> WorkflowState:
-        """Node 5: Assemble final video using Remotion"""
+    async def _node_remotion_assembly(self, state: WorkflowState) -> WorkflowState:
+        """Étape 5: Assemblage final avec Remotion"""
         try:
-            await self.supabase.update_job_status(
-                state["job_id"],
-                "in_progress",
-                stage="assemble_video"
-            )
+            print(f"[Remotion] Assemblage vidéo finale pour job {state['job_id']}")
             
-            print(f"[Remotion] Assembling final video for job {state['job_id']}")
-            
-            # Prepare clips data for Remotion
+            # Préparer les données pour Remotion
             clips_data = [
                 {
                     "url": clip["video_url"],
@@ -293,75 +262,59 @@ class VideoGenerationOrchestrator:
                 for clip in state["clips"]
             ]
             
-            # TODO: Get actual audio URL from storage
+            # TODO: Upload audio vers Supabase Storage et obtenir l'URL
             audio_url = state["audio"].get("audio_url", "")
             
+            # Assembler la vidéo
             video_result = await self.remotion.render_video(
                 clips=clips_data,
                 audio_url=audio_url,
                 srt_content=state["audio"]["srt_content"],
                 metadata={
                     "prompt": state["prompt"],
-                    "created_at": datetime.utcnow().isoformat(),
+                    "scenes": len(state["clips"]),
+                    "duration": sum(clip["duration"] for clip in state["clips"]),
                 }
             )
             
             state["final_video"] = video_result
             
-            # Update job with final result
-            await self.supabase.update_job_status(
-                state["job_id"],
-                "completed",
-                stage="completed",
-                result_data={
-                    "video_url": video_result["video_url"],
-                    "render_id": video_result["render_id"],
+            # Sauvegarder l'état final
+            await self.supabase.update_job_state(
+                job_id=state["job_id"],
+                app_state={
+                    "prompt": state["prompt"],
                     "script": state["script"],
-                }
+                    "key_visual": state["key_visual"],
+                    "clips": state["clips"],
+                    "audio": state["audio"],
+                    "final_video": state["final_video"],
+                    "completed_at": datetime.utcnow().isoformat(),
+                },
+                status="completed",
+                current_stage="completed",
+                video_url=video_result["video_url"]
             )
             
-            print(f"[Remotion] Final video ready: {video_result['video_url']}")
+            print(f"[Remotion] ✓ Vidéo finale: {video_result['video_url']}")
             return state
             
         except Exception as e:
-            print(f"[Remotion] Error: {str(e)}")
-            state["error"] = f"Video assembly failed: {str(e)}"
-            await self.supabase.update_job_status(
-                state["job_id"],
-                "failed",
-                error_message=state["error"]
-            )
+            print(f"[Remotion] ✗ Erreur: {str(e)}")
+            state["error"] = f"Remotion assembly error: {str(e)}"
+            await self._handle_error(state)
             raise
     
-    async def _handle_error_node(self, state: WorkflowState) -> WorkflowState:
-        """Handle errors and implement retry logic"""
-        max_retries = self.settings.MAX_RETRIES
-        
-        if state["retry_count"] < max_retries:
-            state["retry_count"] += 1
-            print(f"[Retry] Attempt {state['retry_count']}/{max_retries}")
-            await asyncio.sleep(self.settings.RETRY_DELAY)
-            # Could implement restart from last successful stage
-        else:
-            print(f"[Error] Max retries reached for job {state['job_id']}")
-            await self.supabase.update_job_status(
-                state["job_id"],
-                "failed",
-                error_message=state["error"]
-            )
-        
-        return state
-    
-    async def _notify_completion_node(self, state: WorkflowState) -> WorkflowState:
-        """Send webhook notification when video is ready"""
+    async def _node_webhook_notify(self, state: WorkflowState) -> WorkflowState:
+        """Étape 6: Notification webhook quand vidéo prête"""
         try:
             webhook_url = self.settings.WEBHOOK_URL
             
             if not webhook_url:
-                print("[Webhook] No webhook URL configured, skipping notification")
+                print("[Webhook] Pas de webhook configuré, skip")
                 return state
             
-            print(f"[Webhook] Sending completion notification for job {state['job_id']}")
+            print(f"[Webhook] Envoi notification pour job {state['job_id']}")
             
             async with httpx.AsyncClient(timeout=10.0) as client:
                 payload = {
@@ -369,11 +322,11 @@ class VideoGenerationOrchestrator:
                     "user_id": state["user_id"],
                     "status": "completed",
                     "video_url": state["final_video"]["video_url"],
+                    "prompt": state["prompt"],
                     "timestamp": datetime.utcnow().isoformat(),
                 }
                 
                 headers = {"Content-Type": "application/json"}
-                
                 if self.settings.WEBHOOK_SECRET:
                     headers["X-Webhook-Secret"] = self.settings.WEBHOOK_SECRET
                 
@@ -384,14 +337,32 @@ class VideoGenerationOrchestrator:
                 )
                 response.raise_for_status()
                 
-                print(f"[Webhook] Notification sent successfully")
+                print(f"[Webhook] ✓ Notification envoyée")
             
             return state
             
         except Exception as e:
-            print(f"[Webhook] Failed to send notification: {str(e)}")
-            # Don't fail the job if webhook fails
+            print(f"[Webhook] ⚠ Erreur (non-bloquant): {str(e)}")
+            # Ne pas faire échouer le job si le webhook échoue
             return state
+    
+    async def _handle_error(self, state: WorkflowState) -> None:
+        """Gestion des erreurs avec retry logic"""
+        job_id = state["job_id"]
+        retry_count = await self.supabase.increment_retry(job_id)
+        
+        if retry_count < self.settings.MAX_RETRIES:
+            print(f"[Retry] Tentative {retry_count}/{self.settings.MAX_RETRIES}")
+            await asyncio.sleep(self.settings.RETRY_DELAY)
+            # Le retry sera géré par le worker qui relance le job
+        else:
+            print(f"[Error] Max retries atteint pour job {job_id}")
+            await self.supabase.update_job_state(
+                job_id=job_id,
+                app_state={"error": state["error"]},
+                status="failed",
+                error_message=state["error"]
+            )
     
     async def run(
         self,
@@ -399,7 +370,7 @@ class VideoGenerationOrchestrator:
         user_id: str,
         prompt: str
     ) -> Dict[str, Any]:
-        """Execute the complete video generation workflow"""
+        """Exécute le workflow complet"""
         
         initial_state: WorkflowState = {
             "job_id": job_id,
@@ -415,32 +386,42 @@ class VideoGenerationOrchestrator:
             "messages": [],
         }
         
-        print(f"\n{'='*60}")
-        print(f"Starting video generation workflow for job {job_id}")
+        print(f"\n{'='*70}")
+        print(f"🎬 AlphogenAI Mini - Démarrage workflow")
+        print(f"{'='*70}")
+        print(f"Job ID: {job_id}")
         print(f"Prompt: {prompt}")
-        print(f"{'='*60}\n")
+        print(f"{'='*70}\n")
         
         try:
-            # Run the workflow
+            # Marquer comme en cours
+            await self.supabase.update_job_state(
+                job_id=job_id,
+                app_state=initial_state,
+                status="in_progress",
+                current_stage="starting"
+            )
+            
+            # Exécuter le workflow LangGraph
             final_state = await self.workflow.ainvoke(initial_state)
             
-            print(f"\n{'='*60}")
-            print(f"Workflow completed for job {job_id}")
-            print(f"Video URL: {final_state.get('final_video', {}).get('video_url', 'N/A')}")
-            print(f"{'='*60}\n")
+            print(f"\n{'='*70}")
+            print(f"✅ Workflow terminé avec succès!")
+            print(f"Vidéo: {final_state.get('final_video', {}).get('video_url', 'N/A')}")
+            print(f"{'='*70}\n")
             
             return {
                 "status": "success",
                 "job_id": job_id,
                 "video_url": final_state.get("final_video", {}).get("video_url"),
-                "result": final_state,
+                "state": final_state,
             }
             
         except Exception as e:
-            print(f"\n{'='*60}")
-            print(f"Workflow failed for job {job_id}")
-            print(f"Error: {str(e)}")
-            print(f"{'='*60}\n")
+            print(f"\n{'='*70}")
+            print(f"❌ Workflow échoué")
+            print(f"Erreur: {str(e)}")
+            print(f"{'='*70}\n")
             
             return {
                 "status": "failed",
@@ -454,37 +435,37 @@ async def create_and_run_job(
     prompt: str
 ) -> Dict[str, Any]:
     """
-    High-level function to create and run a video generation job
+    Fonction high-level pour créer et exécuter un job
     
     Usage:
         result = await create_and_run_job(
             user_id="user_123",
-            prompt="Create a video about AI innovations in 2024"
+            prompt="Créer une vidéo sur l'IA en 2024"
         )
     """
     supabase = SupabaseClient()
     
-    # Create job in database
+    # Créer le job
     job_id = await supabase.create_job(
         user_id=user_id,
         prompt=prompt,
-        metadata={"created_at": datetime.utcnow().isoformat()}
+        initial_state={"created_at": datetime.utcnow().isoformat()}
     )
     
-    # Initialize and run orchestrator
-    orchestrator = VideoGenerationOrchestrator()
+    # Exécuter l'orchestrateur
+    orchestrator = AlphogenAIOrchestrator()
     result = await orchestrator.run(job_id, user_id, prompt)
     
     return result
 
 
-# CLI entry point for testing
+# Point d'entrée CLI pour test
 if __name__ == "__main__":
     import sys
     
     async def main():
         if len(sys.argv) < 2:
-            print("Usage: python langgraph_orchestrator.py <prompt>")
+            print("Usage: python -m workers.langgraph_orchestrator <prompt>")
             sys.exit(1)
         
         prompt = " ".join(sys.argv[1:])
@@ -493,7 +474,11 @@ if __name__ == "__main__":
             prompt=prompt
         )
         
-        print("\n=== Final Result ===")
-        print(result)
+        print("\n=== Résultat Final ===")
+        print(f"Status: {result['status']}")
+        if result['status'] == 'success':
+            print(f"Vidéo URL: {result['video_url']}")
+        else:
+            print(f"Erreur: {result['error']}")
     
     asyncio.run(main())

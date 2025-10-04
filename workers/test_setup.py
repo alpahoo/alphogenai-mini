@@ -1,5 +1,5 @@
 """
-Test script to verify the setup is correct
+Script de vérification de la configuration AlphogenAI Mini
 """
 import asyncio
 import sys
@@ -10,9 +10,9 @@ from .supabase_client import SupabaseClient
 
 
 def test_env_vars():
-    """Test that all required environment variables are set"""
+    """Vérifie que les variables d'environnement sont configurées"""
     print("\n" + "="*60)
-    print("Testing Environment Variables")
+    print("Test des variables d'environnement")
     print("="*60)
     
     try:
@@ -30,61 +30,56 @@ def test_env_vars():
         all_set = True
         for name, value in required_vars:
             if not value or value.startswith("your-") or "xxxx" in value:
-                print(f"❌ {name}: NOT SET or using placeholder")
+                print(f"❌ {name}: NON CONFIGURÉ ou placeholder")
                 all_set = False
             else:
-                # Show first 10 chars for security
                 masked = value[:10] + "..." if len(value) > 10 else value
                 print(f"✅ {name}: {masked}")
         
-        print("\nOptional:")
-        print(f"   WEBHOOK_URL: {settings.WEBHOOK_URL or 'Not set'}")
+        print("\nOptionnel:")
+        print(f"   WEBHOOK_URL: {settings.WEBHOOK_URL or 'Non configuré'}")
         print(f"   REMOTION_RENDERER_URL: {settings.REMOTION_RENDERER_URL}")
         
         if all_set:
-            print("\n✅ All required environment variables are set!")
+            print("\n✅ Toutes les variables requises sont configurées!")
             return True
         else:
-            print("\n❌ Some required environment variables are missing.")
-            print("Please update .env.local with your API keys.")
+            print("\n❌ Certaines variables sont manquantes.")
+            print("Mettez à jour .env.local avec vos clés API.")
             return False
             
     except Exception as e:
-        print(f"❌ Error loading environment: {str(e)}")
+        print(f"❌ Erreur de chargement: {str(e)}")
         return False
 
 
 async def test_supabase_connection():
-    """Test Supabase connection and database tables"""
+    """Test la connexion Supabase et la table jobs"""
     print("\n" + "="*60)
-    print("Testing Supabase Connection")
+    print("Test de connexion Supabase")
     print("="*60)
     
     try:
         supabase = SupabaseClient()
         
-        # Test video_cache table exists
-        result = supabase.client.table("video_cache").select("id").limit(1).execute()
-        print("✅ video_cache table accessible")
+        # Test table jobs existe
+        result = supabase.client.table("jobs").select("id").limit(1).execute()
+        print("✅ Table 'jobs' accessible")
         
-        # Test video_artifacts table exists
-        result = supabase.client.table("video_artifacts").select("id").limit(1).execute()
-        print("✅ video_artifacts table accessible")
-        
-        print("\n✅ Supabase connection successful!")
+        print("\n✅ Connexion Supabase réussie!")
         return True
         
     except Exception as e:
-        print(f"❌ Supabase connection failed: {str(e)}")
-        print("\nMake sure you've run the database migration:")
-        print("  File: supabase/migrations/20251004_video_generation_tables.sql")
+        print(f"❌ Connexion Supabase échouée: {str(e)}")
+        print("\nAssurez-vous d'avoir exécuté la migration SQL:")
+        print("  Fichier: supabase/migrations/20251004_alphogenai_jobs_table.sql")
         return False
 
 
 async def test_create_test_job():
-    """Test creating a test job (won't actually process it)"""
+    """Test la création d'un job"""
     print("\n" + "="*60)
-    print("Testing Job Creation")
+    print("Test de création de job")
     print("="*60)
     
     try:
@@ -92,57 +87,54 @@ async def test_create_test_job():
         
         job_id = await supabase.create_job(
             user_id="test_user_id",
-            prompt="Test prompt for setup verification",
-            metadata={"test": True}
+            prompt="Test de configuration AlphogenAI Mini"
         )
         
-        print(f"✅ Test job created: {job_id}")
+        print(f"✅ Job de test créé: {job_id}")
         
-        # Retrieve the job
+        # Récupérer le job
         job = await supabase.get_job(job_id)
-        print(f"✅ Test job retrieved: {job['status']}")
+        print(f"✅ Job de test récupéré: {job['status']}")
         
-        # Clean up - delete the test job
-        supabase.client.table("video_cache").delete().eq("id", job_id).execute()
-        print("✅ Test job cleaned up")
+        # Nettoyer
+        supabase.client.table("jobs").delete().eq("id", job_id).execute()
+        print("✅ Job de test nettoyé")
         
-        print("\n✅ Job creation and retrieval working!")
+        print("\n✅ Création et récupération de job fonctionnent!")
         return True
         
     except Exception as e:
-        print(f"❌ Job creation failed: {str(e)}")
+        print(f"❌ Création de job échouée: {str(e)}")
         return False
 
 
 def print_summary(results: Dict[str, bool]):
-    """Print test summary"""
+    """Affiche le résumé des tests"""
     print("\n" + "="*60)
-    print("Setup Test Summary")
+    print("Résumé des tests")
     print("="*60)
     
     all_passed = all(results.values())
     
     for test_name, passed in results.items():
-        status = "✅ PASSED" if passed else "❌ FAILED"
+        status = "✅ PASSÉ" if passed else "❌ ÉCHOUÉ"
         print(f"{status}: {test_name}")
     
     print("\n" + "="*60)
     
     if all_passed:
-        print("🎉 All tests passed! Your setup is ready.")
-        print("\nNext steps:")
-        print("1. Start the worker:")
+        print("🎉 Tous les tests sont passés ! Configuration prête.")
+        print("\nProchaines étapes:")
+        print("1. Démarrer le worker:")
         print("   python -m workers.worker")
-        print("\n2. Create a video generation job via API:")
-        print("   POST /api/generate-video")
-        print("\n3. Or test directly with Python:")
-        print("   python -m workers.langgraph_orchestrator 'Your prompt here'")
+        print("\n2. Créer un job de test:")
+        print("   python -m workers.langgraph_orchestrator 'Votre prompt ici'")
     else:
-        print("⚠️  Some tests failed. Please fix the issues above.")
-        print("\nCommon solutions:")
-        print("- Update .env.local with valid API keys")
-        print("- Run database migration in Supabase SQL editor")
-        print("- Check Supabase service key has correct permissions")
+        print("⚠️  Certains tests ont échoué. Corrigez les problèmes ci-dessus.")
+        print("\nSolutions courantes:")
+        print("- Mettez à jour .env.local avec des clés API valides")
+        print("- Exécutez la migration SQL dans l'éditeur Supabase")
+        print("- Vérifiez que la service key a les bonnes permissions")
     
     print("="*60 + "\n")
     
@@ -150,23 +142,23 @@ def print_summary(results: Dict[str, bool]):
 
 
 async def main():
-    """Run all setup tests"""
-    print("\n🔧 AlphoGenAI Mini Setup Verification\n")
+    """Lance tous les tests de configuration"""
+    print("\n🔧 Vérification de la configuration AlphogenAI Mini\n")
     
     results = {}
     
-    # Test 1: Environment variables
-    results["Environment Variables"] = test_env_vars()
+    # Test 1: Variables d'environnement
+    results["Variables d'environnement"] = test_env_vars()
     
-    # Test 2: Supabase connection (only if env vars are set)
-    if results["Environment Variables"]:
-        results["Supabase Connection"] = await test_supabase_connection()
+    # Test 2: Connexion Supabase
+    if results["Variables d'environnement"]:
+        results["Connexion Supabase"] = await test_supabase_connection()
         
-        # Test 3: Job creation (only if Supabase works)
-        if results["Supabase Connection"]:
-            results["Job Creation"] = await test_create_test_job()
+        # Test 3: Création de job
+        if results["Connexion Supabase"]:
+            results["Création de job"] = await test_create_test_job()
     
-    # Print summary
+    # Résumé
     all_passed = print_summary(results)
     
     sys.exit(0 if all_passed else 1)
