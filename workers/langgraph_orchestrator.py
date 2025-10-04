@@ -291,9 +291,21 @@ class AlphogenAIOrchestrator:
                     "final_video": state["final_video"],
                     "completed_at": datetime.utcnow().isoformat(),
                 },
-                status="completed",
+                status="done",
                 current_stage="completed",
-                video_url=video_result["video_url"]
+                video_url=video_result["video_url"],
+                final_url=video_result["video_url"]
+            )
+            
+            # Sauvegarder dans le cache
+            await self.supabase.save_to_cache(
+                prompt=state["prompt"],
+                video_url=video_result["video_url"],
+                metadata={
+                    "scenes": len(state["clips"]),
+                    "duration": sum(clip["duration"] for clip in state["clips"]),
+                    "created_at": datetime.utcnow().isoformat(),
+                }
             )
             
             print(f"[Remotion] ✓ Vidéo finale: {video_result['video_url']}")

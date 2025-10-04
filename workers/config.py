@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     ELEVENLABS_API_BASE: str = "https://api.elevenlabs.io/v1"
     
     REMOTION_RENDERER_URL: str = "http://localhost:3001"
+    REMOTION_SITE_ID: Optional[str] = None
+    REMOTION_SECRET_KEY: Optional[str] = None
     
     # Webhook settings
     WEBHOOK_URL: Optional[str] = None
