@@ -54,9 +54,10 @@
 3. **LangGraph orchestrator** processes the job through 5 stages:
    - Qwen generates a creative script with 4 scenes
    - WAN Image creates a cinematic key visual
-   - Pika generates 4 video clips (5 seconds each)
+   - Pika generates 4 video clips (4 seconds each, with --image + seed for consistency)
    - ElevenLabs produces voiceover + SRT subtitles
    - Remotion assembles the final video
+   - State saved in `jobs.app_state` after each step
 4. **Webhook notification** sent when video is ready
 5. **User downloads** their AI-generated video
 
@@ -109,7 +110,7 @@ Open your [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql) an
 
 ```sql
 -- File: supabase/migrations/20251002_add_notes.sql (notes table)
--- File: supabase/migrations/20251004_video_generation_tables.sql (video tables)
+-- File: supabase/migrations/20251004_jobs_table.sql (jobs table avec app_state)
 ```
 
 ### 5. Start the Application
@@ -140,39 +141,42 @@ This will verify all API keys and database tables are configured correctly.
 
 ## Usage
 
-### Generate a Video via API
+### Generate a Video via Python
 
-```bash
-curl -X POST http://localhost:3000/api/generate-video \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <your-session-token>" \
-  -d '{
-    "prompt": "Create a 20-second video about the future of AI"
-  }'
+```python
+import asyncio
+from workers.langgraph_orchestrator import create_and_run_job
+
+async def main():
+    result = await create_and_run_job(
+        user_id="user_123",
+        prompt="Create a video about AI innovations in 2024"
+    )
+    
+    if result['status'] == 'success':
+        print(f"Video ready: {result['video_url']}")
+    else:
+        print(f"Error: {result['error']}")
+
+asyncio.run(main())
 ```
 
-Response:
-```json
-{
-  "job_id": "uuid",
-  "status": "pending",
-  "message": "Video generation job created. Processing will begin shortly."
-}
-```
-
-### Check Job Status
-
-```bash
-curl http://localhost:3000/api/generate-video?job_id=<job_id> \
-  -H "Authorization: Bearer <your-session-token>"
-```
-
-### Direct Python Usage
+### Generate a Video via CLI
 
 ```bash
 cd workers
-python -m workers.langgraph_orchestrator "Your video prompt here"
+python -m workers.langgraph_orchestrator "Your prompt here"
 ```
+
+### Check Job Status (SQL)
+
+```sql
+SELECT id, status, current_stage, video_url 
+FROM jobs 
+WHERE user_id = 'user-uuid'
+ORDER BY created_at DESC;
+```
+
 
 ## Project Structure
 
@@ -199,24 +203,24 @@ alphogenai-mini/
 
 ## Database Schema
 
-### `video_cache` Table
+### `jobs` Table
 - `id` - UUID primary key
 - `user_id` - Foreign key to auth.users
 - `prompt` - User's video generation prompt
 - `status` - pending | in_progress | completed | failed
-- `current_stage` - Current pipeline stage
+- `app_state` - **Complete LangGraph workflow state (JSONB)**
+- `current_stage` - Current pipeline stage (qwen, wan_image, pika, elevenlabs, remotion)
 - `error_message` - Error details if failed
-- `result` - Final video URL and metadata
-- `metadata` - Additional job metadata
+- `retry_count` - Number of retry attempts
+- `video_url` - Final video URL when completed
 - `created_at` - Job creation timestamp
 - `updated_at` - Last update timestamp
 
-### `video_artifacts` Table
-- `id` - UUID primary key
-- `job_id` - Foreign key to video_cache
-- `stage` - Pipeline stage name
-- `data` - Stage output data (JSON)
-- `created_at` - Artifact creation timestamp
+**Why `app_state`?**  
+The complete LangGraph workflow state is saved at each step, enabling:
+- Resume after failures
+- Debugging with full context
+- Access to all intermediate results (script, key visual, clips, audio)
 
 ## Deployment
 

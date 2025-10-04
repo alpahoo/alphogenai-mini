@@ -33,9 +33,23 @@ CREATE TABLE jobs (
 );
 ```
 
-L'état complet du workflow est sauvegardé dans `app_state` à chaque étape.
+**L'état complet est sauvegardé dans `app_state` après chaque étape:**
 
-## ⚙️ Installation
+```json
+{
+  "prompt": "...",
+  "script": {...},
+  "key_visual": {...},
+  "clips": [{}, {}, {}, {}],
+  "audio": {...},
+  "final_video": {...},
+  "retry_count": 0,
+  "last_stage": "pika_clips",
+  "timestamp": "2025-10-04T..."
+}
+```
+
+## 🚀 Installation
 
 ### 1. Installer les dépendances Python
 
@@ -46,52 +60,64 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Configurer l'environnement
+### 2. Configurer `.env.local`
 
 Créer `.env.local` à la racine du projet:
 
 ```bash
 # Supabase
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_SERVICE_KEY=eyJhbGc...
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_SERVICE_KEY=your-service-key
 
-# Services AI
-QWEN_API_KEY=sk-...
-WAN_IMAGE_API_KEY=wan-...
-PIKA_API_KEY=pika-...
-ELEVENLABS_API_KEY=el-...
+# AI Services
+QWEN_API_KEY=your-qwen-key
+QWEN_API_BASE=https://dashscope.aliyuncs.com/compatible-mode/v1
 
-# Remotion (optionnel)
+WAN_IMAGE_API_KEY=your-wan-key
+WAN_IMAGE_API_BASE=https://api.wan.ai/v1
+
+PIKA_API_KEY=your-pika-key
+PIKA_API_BASE=https://api.pika.art/v1
+
+ELEVENLABS_API_KEY=your-elevenlabs-key
+ELEVENLABS_API_BASE=https://api.elevenlabs.io/v1
+
 REMOTION_RENDERER_URL=http://localhost:3001
 
 # Webhook (optionnel)
-WEBHOOK_URL=https://votre-domaine.com/api/webhook
-WEBHOOK_SECRET=secret
+WEBHOOK_URL=https://your-domain.com/api/webhook
+WEBHOOK_SECRET=your-secret
 
-# Configuration
+# Retry config
 MAX_RETRIES=3
 RETRY_DELAY=5
+JOB_TIMEOUT=3600
 ```
 
 ### 3. Exécuter la migration
 
-Dans l'éditeur SQL Supabase:
+Ouvrir le SQL Editor de Supabase et exécuter:
 
 ```sql
--- Fichier: supabase/migrations/20251004_jobs_table.sql
+-- File: supabase/migrations/20251004_jobs_table.sql
 ```
 
-### 4. Vérifier la configuration
+### 4. Tester la configuration
 
 ```bash
 python -m workers.test_setup
 ```
 
-## 🚀 Utilisation
+Si tout est OK, vous verrez:
 
-### Démarrer le worker
+```
+✅ All required environment variables are set!
+✅ Supabase connection successful!
+✅ Job creation and retrieval working!
+🎉 All tests passed! Your setup is ready.
+```
 
-Le worker traite automatiquement les jobs avec `status='pending'`:
+### 5. Démarrer le worker
 
 ```bash
 # Unix/Mac
@@ -104,313 +130,258 @@ start_worker.bat
 python -m workers.worker
 ```
 
-Le worker vérifie la base de données toutes les 10 secondes par défaut.
+## 📡 Utilisation
 
-### Créer un job manuellement
+### Via l'API Next.js
+
+**Créer un job:**
 
 ```bash
-python -m workers.langgraph_orchestrator "Crée une vidéo sur l'IA en 2024"
+curl -X POST http://localhost:3000/api/generate-video \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"prompt": "Créer une vidéo sur l'\''IA en 2024"}'
 ```
 
-### Créer un job via Python
+**Vérifier le statut:**
+
+```bash
+curl http://localhost:3000/api/generate-video?job_id=<uuid> \
+  -H "Authorization: Bearer <token>"
+```
+
+### Directement en Python
+
+```bash
+python -m workers.langgraph_orchestrator "Créer une vidéo sur l'IA"
+```
+
+### Depuis le code Python
 
 ```python
-import asyncio
 from workers.langgraph_orchestrator import create_and_run_job
 
-async def main():
-    result = await create_and_run_job(
-        user_id="user_123",
-        prompt="Crée une vidéo sur les innovations IA"
-    )
-    
-    if result['status'] == 'success':
-        print(f"Vidéo prête: {result['video_url']}")
-    else:
-        print(f"Erreur: {result['error']}")
+result = await create_and_run_job(
+    user_id="user_123",
+    prompt="Créer une vidéo sur l'IA en 2024"
+)
 
-asyncio.run(main())
+print(f"Video URL: {result['video_url']}")
 ```
 
-### Créer un job depuis Next.js
+## 🔄 Retry Logic
 
-Créer une route API (si nécessaire):
+- **Tentatives max:** 3 (configurable)
+- **Délai entre tentatives:** 5 secondes (configurable)
+- **Comportement:**
+  - En cas d'erreur, `retry_count` est incrémenté
+  - Si `retry_count < MAX_RETRIES`, le job est retraité
+  - Si `retry_count >= MAX_RETRIES`, le job est marqué `failed`
 
-```typescript
-// app/api/jobs/create/route.ts
-import { createClient } from '@/lib/supabase/server';
+## 📡 Webhook
 
-export async function POST(request: Request) {
-  const { prompt } = await request.json();
-  const supabase = await createClient();
-  
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+Quand la vidéo est prête, un POST est envoyé au webhook:
 
-  const { data: job } = await supabase
-    .from('jobs')
-    .insert({
-      user_id: user.id,
-      prompt: prompt,
-      status: 'pending'
-    })
-    .select()
-    .single();
-
-  return Response.json({ job_id: job.id });
-}
-```
-
-## 🔄 Workflow LangGraph
-
-Le workflow est un graphe d'états qui progresse linéairement:
-
-```
-┌─────────┐
-│  START  │
-└────┬────┘
-     │
-     ▼
-┌──────────────┐
-│ qwen_script  │ ← Génère 4 scènes
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│  wan_image   │ ← Crée l'image clé
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│ pika_clips   │ ← 4 clips de 4s (avec seed)
-└──────┬───────┘
-       │
-       ▼
-┌──────────────────┐
-│ elevenlabs_audio │ ← Voix + SRT
-└──────┬───────────┘
-       │
-       ▼
-┌───────────────────┐
-│ remotion_assembly │ ← Assemblage final
-└──────┬────────────┘
-       │
-       ▼
-┌────────────────┐
-│ webhook_notify │ ← Notification
-└──────┬─────────┘
-       │
-       ▼
-┌─────────┐
-│   END   │
-└─────────┘
-```
-
-À chaque étape, l'état complet est sauvegardé dans `jobs.app_state`.
-
-## 🎯 Détails du Pipeline
-
-### 1. Qwen (Script)
-
-- Génère exactement 4 scènes
-- Chaque scène contient:
-  - `description` - Description visuelle
-  - `narration` - Texte à narrer
-- Si moins de 4 scènes générées, duplique la dernière
-
-### 2. WAN Image (Image clé)
-
-- Utilise la description de la première scène
-- Style cinématique
-- Résolution: 1920x1080 (16:9)
-
-### 3. Pika (Clips vidéo)
-
-- **4 clips de 4 secondes exactement**
-- Premier clip: utilise l'image clé (`--image`)
-- **Seed cohérent**: `base_seed + index` pour chaque clip
-- Génération en parallèle pour performance
-
-Exemple:
-```python
-clip_0: image=key_visual, seed=1234
-clip_1: seed=1235
-clip_2: seed=1236
-clip_3: seed=1237
-```
-
-### 4. ElevenLabs (Audio)
-
-- Combine toutes les narrations
-- Génère l'audio
-- Génère les sous-titres SRT avec timing
-
-### 5. Remotion (Assemblage)
-
-- Combine les 4 clips
-- Ajoute l'audio
-- Ajoute les sous-titres
-- Format final: MP4 (H.264)
-
-### 6. Webhook (Notification)
-
-- Envoyé uniquement si `WEBHOOK_URL` est configuré
-- Payload:
 ```json
 {
   "job_id": "uuid",
   "user_id": "uuid",
   "status": "completed",
   "video_url": "https://...",
-  "timestamp": "2025-10-04T...",
-  "prompt": "..."
+  "prompt": "...",
+  "timestamp": "2025-10-04T..."
 }
 ```
 
-## 🔁 Gestion des erreurs
+Headers:
+- `Content-Type: application/json`
+- `X-Webhook-Secret: <WEBHOOK_SECRET>` (si configuré)
 
-### Retry automatique
+## 🎥 Détails Pika
 
-Chaque service API utilise `tenacity` pour retry automatique:
-- 3 tentatives maximum par défaut
-- Backoff exponentiel (4s, 8s, 16s)
-- Configuré via `MAX_RETRIES` et `RETRY_DELAY`
+Les 4 clips sont générés avec ces paramètres:
 
-### Persistance de l'état
+- **Duration:** 4 secondes par clip
+- **--image:** Le premier clip utilise l'image clé de WAN Image
+- **seed:** Chaque clip a un seed unique (base_seed + index) pour cohérence visuelle
 
-L'état est sauvegardé après chaque étape:
-- En cas d'échec, l'état est disponible pour debug
-- Le `retry_count` est incrémenté dans la DB
-- L'erreur est stockée dans `error_message`
+```python
+base_seed = random.randint(1000, 9999)
 
-### Échec définitif
+# Clip 1: avec image clé
+pika.generate_clip(
+    prompt=scene1,
+    image_url=key_visual_url,
+    duration=4,
+    seed=base_seed
+)
 
-Si `retry_count >= MAX_RETRIES`:
-- Status → `failed`
-- `error_message` contient la dernière erreur
-- Pas de nouvelle tentative automatique
-
-## 📊 Monitoring
-
-### Vérifier l'état d'un job
-
-```sql
-SELECT 
-    id,
-    status,
-    current_stage,
-    retry_count,
-    error_message,
-    created_at,
-    updated_at
-FROM jobs 
-WHERE id = 'job-uuid';
+# Clips 2-4: seed incrémenté
+for i in range(1, 4):
+    pika.generate_clip(
+        prompt=scene,
+        image_url=None,
+        duration=4,
+        seed=base_seed + i
+    )
 ```
 
-### Voir l'état complet
+Les 4 clips sont générés **en parallèle** avec `asyncio.gather()`.
 
-```sql
-SELECT app_state FROM jobs WHERE id = 'job-uuid';
-```
-
-### Statistiques
-
-```sql
-SELECT 
-    status,
-    COUNT(*) as count,
-    AVG(EXTRACT(EPOCH FROM (updated_at - created_at))) as avg_duration_seconds
-FROM jobs
-GROUP BY status;
-```
-
-## ⚡ Performance
-
-Temps estimé par étape:
+## 📊 Performance
 
 | Étape | Temps | Notes |
 |-------|-------|-------|
-| Qwen | 5-10s | Génération LLM |
-| WAN Image | 10-20s | Image HD |
-| Pika (×4) | 2-5min | Parallèle |
+| Qwen | 5-10s | LLM generation |
+| WAN Image | 10-20s | 1 image 1920x1080 |
+| Pika | 2-5min | 4 clips en parallèle |
 | ElevenLabs | 10-30s | TTS + SRT |
-| Remotion | 1-3min | Rendu vidéo |
+| Remotion | 1-3min | Assemblage final |
 | **Total** | **4-9min** | Pipeline complet |
 
-## 🐛 Dépannage
-
-### Le worker ne traite pas les jobs
-
-1. Vérifier que le worker tourne:
-```bash
-ps aux | grep "workers.worker"
-```
-
-2. Vérifier les logs du worker
-
-3. Vérifier qu'il y a des jobs pending:
-```sql
-SELECT COUNT(*) FROM jobs WHERE status = 'pending';
-```
-
-### Erreur "Table does not exist"
-
-Exécuter la migration:
-```bash
-# Dans Supabase SQL Editor
--- Fichier: supabase/migrations/20251004_jobs_table.sql
-```
-
-### Erreur API "Unauthorized"
-
-Vérifier dans `.env.local`:
-- `SUPABASE_SERVICE_KEY` (pas anon key!)
-- Les clés API des services
-
-### Job bloqué en "in_progress"
-
-Le worker a peut-être crashé. Marquer comme failed:
-```sql
-UPDATE jobs 
-SET status = 'failed', error_message = 'Worker timeout'
-WHERE id = 'job-uuid';
-```
-
-## 🔒 Sécurité
-
-- ✅ RLS activé sur la table `jobs`
-- ✅ Les users voient seulement leurs jobs
-- ✅ Service role a accès complet (pour le worker)
-- ✅ `.env.local` dans `.gitignore`
-- ✅ Webhook avec signature HMAC (optionnel)
-
-## 📚 Architecture des fichiers
+## 🏗️ Architecture
 
 ```
 workers/
-├── __init__.py
-├── langgraph_orchestrator.py  # Workflow principal
-├── api_services.py            # Wrappers API
-├── supabase_client.py         # Client DB
-├── config.py                  # Configuration
-├── worker.py                  # Worker de fond
-├── test_setup.py              # Tests de config
-├── requirements.txt           # Dépendances
-├── README.md                  # Cette doc
-└── start_worker.sh/.bat       # Scripts de démarrage
+├── langgraph_orchestrator.py
+│   └── AlphogenAIOrchestrator
+│       ├── _build_workflow()        # Construit le graph LangGraph
+│       ├── _node_qwen_script()      # Étape 1
+│       ├── _node_wan_image()        # Étape 2
+│       ├── _node_pika_clips()       # Étape 3 (4 clips 4s)
+│       ├── _node_elevenlabs_audio() # Étape 4
+│       ├── _node_remotion_assembly()# Étape 5
+│       ├── _node_webhook_notify()   # Étape 6
+│       └── _save_state()            # Sauvegarde app_state
+│
+├── api_services.py
+│   ├── QwenService
+│   ├── WANImageService
+│   ├── PikaService               # Supporte --image + seed
+│   ├── ElevenLabsService
+│   └── RemotionService
+│
+├── supabase_client.py
+│   ├── create_job()
+│   ├── update_job_state()        # Sauvegarde dans app_state
+│   ├── increment_retry()
+│   └── get_pending_jobs()
+│
+├── worker.py                     # Worker background
+├── config.py                     # Configuration
+└── test_setup.py                 # Tests de setup
 ```
 
-## 🚀 Prochaines étapes
+## 🐛 Debugging
 
-1. **Frontend** - Créer l'interface pour soumettre des prompts
-2. **Stockage** - Uploader l'audio sur Supabase Storage
-3. **Queue** - Remplacer le polling par Redis/RabbitMQ
-4. **Monitoring** - Ajouter Sentry ou LogRocket
-5. **Scaling** - Plusieurs workers en parallèle
+### Voir l'état d'un job
 
-## 📖 Ressources
+```sql
+SELECT 
+  id,
+  status,
+  current_stage,
+  app_state->>'last_stage' as last_stage,
+  error_message,
+  retry_count,
+  video_url
+FROM jobs
+WHERE id = 'your-job-id';
+```
 
-- [LangGraph](https://langchain-ai.github.io/langgraph/)
-- [Supabase](https://supabase.com/docs)
-- [Tenacity](https://tenacity.readthedocs.io/) (retry logic)
-- [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/)
+### Tous les jobs en cours
+
+```sql
+SELECT id, status, current_stage, created_at
+FROM jobs
+WHERE status = 'in_progress'
+ORDER BY created_at DESC;
+```
+
+### Réinitialiser un job bloqué
+
+```sql
+UPDATE jobs
+SET status = 'pending', retry_count = 0
+WHERE id = 'your-job-id';
+```
+
+### Logs du worker
+
+Le worker affiche des logs détaillés:
+
+```
+🎬 AlphogenAI Mini - Video Worker
+======================================================================
+Démarré à: 2025-10-04T...
+======================================================================
+
+📋 Nouveau Job: abc-123
+👤 User: user-456
+💬 Prompt: Créer une vidéo...
+
+[Qwen] Génération du script pour job abc-123
+[Qwen] ✓ Script généré: 4 scènes
+
+[WAN Image] Génération de l'image clé pour job abc-123
+[WAN Image] ✓ Image clé générée: https://...
+
+[Pika] Génération de 4 clips pour job abc-123
+[Pika] ✓ 4 clips générés (4s chacun)
+
+[ElevenLabs] Génération audio pour job abc-123
+[ElevenLabs] ✓ Audio généré: 16.5s
+
+[Remotion] Assemblage vidéo finale pour job abc-123
+[Remotion] ✓ Vidéo finale: https://...
+
+[Webhook] Envoi notification pour job abc-123
+[Webhook] ✓ Notification envoyée
+
+✅ Job abc-123 terminé avec succès!
+🎥 Vidéo: https://...
+```
+
+## 🔧 Troubleshooting
+
+**Problème:** "API key invalid"
+- Vérifier les clés dans `.env.local`
+- S'assurer qu'elles n'ont pas de guillemets
+
+**Problème:** "Supabase connection failed"
+- Vérifier `SUPABASE_URL` et `SUPABASE_SERVICE_KEY`
+- Tester avec `python -m workers.test_setup`
+
+**Problème:** "Table 'jobs' does not exist"
+- Exécuter la migration `20251004_jobs_table.sql` dans Supabase
+
+**Problème:** "Worker ne traite pas les jobs"
+- Vérifier que le worker est lancé: `python -m workers.worker`
+- Regarder les logs du worker
+- Vérifier qu'il y a des jobs `pending` dans la DB
+
+**Problème:** "Job bloqué en 'in_progress'"
+- Le worker a peut-être crashé
+- Réinitialiser le job avec la commande SQL ci-dessus
+- Redémarrer le worker
+
+## 📚 Ressources
+
+- [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
+- [Supabase Documentation](https://supabase.com/docs)
+- [Documentation complète](../ALPHOGENAI_ORCHESTRATOR.md)
+
+## ✅ Checklist
+
+- [ ] Python 3.9+ installé
+- [ ] Dépendances installées
+- [ ] `.env.local` configuré avec toutes les clés
+- [ ] Migration `20251004_jobs_table.sql` exécutée
+- [ ] Test setup réussi
+- [ ] Worker démarré
+- [ ] Job test créé et complété
+
+---
+
+**Version:** 2.0  
+**Dernière mise à jour:** 2025-10-04
