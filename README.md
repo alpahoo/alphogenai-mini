@@ -177,27 +177,28 @@ WHERE user_id = 'user-uuid'
 ORDER BY created_at DESC;
 ```
 
-
 ## Project Structure
 
 ```
 alphogenai-mini/
 ├── app/                          # Next.js App Router
-│   ├── api/
-│   │   └── generate-video/      # Video generation API endpoint
+│   ├── api/                     # API routes
 │   ├── auth/                    # Authentication pages
 │   ├── notes/                   # Notes feature (demo)
 │   └── uploads/                 # File upload feature (demo)
 ├── workers/                      # Python LangGraph orchestrator
-│   ├── langgraph_orchestrator.py  # Main workflow
+│   ├── langgraph_orchestrator.py  # Main workflow (LangGraph)
 │   ├── api_services.py          # AI service wrappers
-│   ├── supabase_client.py       # Database client
+│   ├── supabase_client.py       # Database client (jobs table)
 │   ├── worker.py                # Background job processor
-│   └── test_setup.py            # Setup verification
+│   ├── test_setup.py            # Setup verification
+│   └── README.md                # Worker documentation
 ├── components/                   # React UI components
 ├── lib/                         # Utilities
 ├── supabase/
-│   └── migrations/              # Database migrations
+│   └── migrations/
+│       ├── 20251002_add_notes.sql
+│       └── 20251004_jobs_table.sql  # Jobs avec app_state
 └── .env.local                   # Environment variables (create this)
 ```
 
