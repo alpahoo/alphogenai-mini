@@ -1,146 +1,77 @@
+import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import crypto from "crypto";
 
-export const dynamic = "force-dynamic";
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE!
+);
 
-/**
- * POST /api/generate-video
- * 
- * Crée un nouveau job de génération vidéo
- * 
- * Body:
- * {
- *   "prompt": "Créer une vidéo sur l'IA"
- * }
- * 
- * Returns:
- * {
- *   "job_id": "uuid",
- *   "status": "pending"
- * }
- */
-export async function POST(request: Request) {
+export async function POST(req: Request) {
   try {
-    const supabase = await createClient();
-    
-    // Vérifier l'authentification
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+    const { prompt, webhookUrl } = await req.json();
+
+    if (!prompt || prompt.length < 5)
+      return NextResponse.json({ error: "Prompt required" }, { status: 400 });
+
+    const promptHash = crypto.createHash("sha256").update(prompt).digest("hex");
+
+    // Vérifie le cache
+    const { data: cached } = await supabase
+      .from("video_cache")
+      .select("video_url")
+      .eq("prompt_hash", promptHash)
+      .single();
+
+    if (cached?.video_url) {
+      const { data: job } = await supabase
+        .from("jobs")
+        .insert({
+          prompt,
+          status: "done",
+          final_url: cached.video_url,
+          app_state: { cached: true, prompt, promptHash },
+        })
+        .select()
+        .single();
+
+      return NextResponse.json({
+        jobId: job.id,
+        final_url: cached.video_url,
+        cached: true,
+      });
     }
-    
-    // Parser le body
-    const body = await request.json();
-    const { prompt } = body;
-    
-    if (!prompt || typeof prompt !== "string") {
-      return NextResponse.json(
-        { error: "Invalid prompt" },
-        { status: 400 }
-      );
-    }
-    
-    // Créer le job dans la table jobs
-    const { data: job, error: insertError } = await supabase
+
+    // Crée un nouveau job
+    const { data: job, error } = await supabase
       .from("jobs")
       .insert({
-        user_id: user.id,
-        prompt: prompt,
+        prompt,
         status: "pending",
-        app_state: {},
+        app_state: { prompt, promptHash, cached: false },
+        webhook_url: webhookUrl || null,
       })
       .select()
       .single();
-    
-    if (insertError) {
-      console.error("Error creating job:", insertError);
-      return NextResponse.json(
-        { error: "Failed to create job" },
-        { status: 500 }
-      );
-    }
-    
-    return NextResponse.json({
-      job_id: job.id,
-      status: job.status,
-      message: "Job créé. Le worker va le traiter automatiquement.",
-    });
-    
-  } catch (error) {
-    console.error("Unexpected error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+
+    if (error) throw error;
+    return NextResponse.json({ jobId: job.id, cached: false });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
 
-/**
- * GET /api/generate-video?job_id=uuid
- * 
- * Vérifie le statut d'un job
- */
-export async function GET(request: Request) {
-  try {
-    const supabase = await createClient();
-    
-    // Vérifier l'authentification
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-    
-    // Récupérer job_id
-    const { searchParams } = new URL(request.url);
-    const jobId = searchParams.get("job_id");
-    
-    if (!jobId) {
-      return NextResponse.json(
-        { error: "Missing job_id parameter" },
-        { status: 400 }
-      );
-    }
-    
-    // Récupérer le job
-    const { data: job, error: fetchError } = await supabase
-      .from("jobs")
-      .select("*")
-      .eq("id", jobId)
-      .eq("user_id", user.id)
-      .single();
-    
-    if (fetchError || !job) {
-      return NextResponse.json(
-        { error: "Job not found" },
-        { status: 404 }
-      );
-    }
-    
-    // Retourner le statut
-    return NextResponse.json({
-      job_id: job.id,
-      status: job.status,
-      current_stage: job.current_stage,
-      error_message: job.error_message,
-      video_url: job.video_url,
-      app_state: job.app_state,
-      created_at: job.created_at,
-      updated_at: job.updated_at,
-    });
-    
-  } catch (error) {
-    console.error("Unexpected error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
-  }
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+  const { data, error } = await supabase
+    .from("jobs")
+    .select()
+    .eq("id", id)
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 404 });
+  return NextResponse.json(data);
 }
