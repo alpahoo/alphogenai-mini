@@ -1,10 +1,11 @@
-<a href="https://demo-nextjs-with-supabase.vercel.app/">
-  <img alt="Next.js and Supabase Starter Kit - the fastest way to build apps with Next.js and Supabase" src="https://demo-nextjs-with-supabase.vercel.app/opengraph-image.png">
-  <h1 align="center">Next.js and Supabase Starter Kit</h1>
-</a>
+<h1 align="center">AlphoGenAI Mini</h1>
 
 <p align="center">
- The fastest way to build apps with Next.js and Supabase
+ AI-powered video generation SaaS built with Next.js, Supabase, and LangGraph
+</p>
+
+<p align="center">
+  <strong>Qwen</strong> → <strong>WAN Image</strong> → <strong>Pika</strong> → <strong>ElevenLabs</strong> → <strong>Remotion</strong>
 </p>
 
 <p align="center">
@@ -19,107 +20,287 @@
 
 ## Features
 
-- Works across the entire [Next.js](https://nextjs.org) stack
-  - App Router
-  - Pages Router
-  - Middleware
-  - Client
-  - Server
-  - It just works!
-- supabase-ssr. A package to configure Supabase Auth to use cookies
-- Password-based authentication block installed via the [Supabase UI Library](https://supabase.com/ui/docs/nextjs/password-based-auth)
-- Styling with [Tailwind CSS](https://tailwindcss.com)
-- Components with [shadcn/ui](https://ui.shadcn.com/)
-- Optional deployment with [Supabase Vercel Integration and Vercel deploy](#deploy-your-own)
-  - Environment variables automatically assigned to Vercel project
+### 🎬 AI Video Generation Pipeline
+- **Qwen LLM** - Intelligent script generation with scene breakdown
+- **WAN Image** - Cinematic key visual generation
+- **Pika** - 4-clip video generation with AI-powered motion
+- **ElevenLabs** - Professional voiceover with automatic SRT subtitles
+- **Remotion** - Final video assembly and rendering
 
-## Demo
+### 🔄 LangGraph Orchestration
+- **Workflow Management** - Automated pipeline with state management
+- **Job Persistence** - Supabase-backed job tracking
+- **Smart Caching** - Avoid regenerating identical videos
+- **Retry Logic** - Robust error handling with exponential backoff
+- **Webhook Notifications** - Real-time updates when videos are ready
 
-You can view a fully working demo at [demo-nextjs-with-supabase.vercel.app](https://demo-nextjs-with-supabase.vercel.app/).
+### 🔐 Full-Stack Foundation
+- **Next.js 15** - App Router, Server Components, API Routes
+- **Supabase** - Authentication, Database (Postgres), Storage
+- **TypeScript** - Type-safe development
+- **shadcn/ui** - Beautiful, accessible UI components
+- **Tailwind CSS** - Modern styling system
 
-## Deploy to Vercel
+### 🛡️ Security & Auth
+- Email-based authentication with confirmation
+- Row Level Security (RLS) on all tables
+- Protected routes with middleware
+- Secure API key management
 
-Vercel deployment will guide you through creating a Supabase account and project.
+## How It Works
 
-After installation of the Supabase integration, all relevant environment variables will be assigned to the project so the deployment is fully functioning.
+1. **User submits a prompt** via the web interface
+2. **Job created** in Supabase with status tracking
+3. **LangGraph orchestrator** processes the job through 5 stages:
+   - Qwen generates a creative script with 4 scenes
+   - WAN Image creates a cinematic key visual
+   - Pika generates 4 video clips (5 seconds each)
+   - ElevenLabs produces voiceover + SRT subtitles
+   - Remotion assembles the final video
+4. **Webhook notification** sent when video is ready
+5. **User downloads** their AI-generated video
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fnext.js%2Ftree%2Fcanary%2Fexamples%2Fwith-supabase&project-name=nextjs-with-supabase&repository-name=nextjs-with-supabase&demo-title=nextjs-with-supabase&demo-description=This+starter+configures+Supabase+Auth+to+use+cookies%2C+making+the+user%27s+session+available+throughout+the+entire+Next.js+app+-+Client+Components%2C+Server+Components%2C+Route+Handlers%2C+Server+Actions+and+Middleware.&demo-url=https%3A%2F%2Fdemo-nextjs-with-supabase.vercel.app%2F&external-id=https%3A%2F%2Fgithub.com%2Fvercel%2Fnext.js%2Ftree%2Fcanary%2Fexamples%2Fwith-supabase&demo-image=https%3A%2F%2Fdemo-nextjs-with-supabase.vercel.app%2Fopengraph-image.png)
+## Quick Start
 
-The above will also clone the Starter kit to your GitHub, you can clone that locally and develop locally.
+### 1. Prerequisites
 
-If you wish to just develop locally and not deploy to Vercel, [follow the steps below](#clone-and-run-locally).
+- Node.js 18+ and npm
+- Python 3.9+ and pip
+- Supabase account ([create one here](https://database.new))
+- API keys for: Qwen, WAN Image, Pika, ElevenLabs
 
-## Setup
+### 2. Clone and Install
 
-1. You'll first need a Supabase project which can be made [via the Supabase dashboard](https://database.new)
+```bash
+git clone <repository-url>
+cd alphogenai-mini
 
-2. Create a Next.js app using the Supabase Starter template npx command
+# Install Node.js dependencies
+npm install
 
-   ```bash
-   npx create-next-app --example with-supabase with-supabase-app
-   ```
+# Install Python dependencies
+cd workers
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+cd ..
+```
 
-   ```bash
-   yarn create next-app --example with-supabase with-supabase-app
-   ```
+### 3. Configure Environment
 
-   ```bash
-   pnpm create next-app --example with-supabase with-supabase-app
-   ```
+Copy `.env.example` to `.env.local` and fill in your credentials:
 
-3. Use `cd` to change into the app's directory
+```bash
+cp .env.example .env.local
+```
 
-   ```bash
-   cd with-supabase-app
-   ```
+Required variables:
+- `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anonymous key
+- `SUPABASE_SERVICE_KEY` - Supabase service role key
+- `QWEN_API_KEY` - Qwen/Alibaba Cloud API key
+- `WAN_IMAGE_API_KEY` - WAN Image API key
+- `PIKA_API_KEY` - Pika API key
+- `ELEVENLABS_API_KEY` - ElevenLabs API key
 
-4. Create `.env.local` and set:
+### 4. Run Database Migrations
 
-   ```
-   NEXT_PUBLIC_SUPABASE_URL=your-project-url
-   # Support either of these keys
-   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY=your-anon-or-publishable-key
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-   ```
+Open your [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql) and run:
 
-   Both `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` can be found in [your Supabase project's API settings](https://supabase.com/dashboard/project/_?showConnect=true)
+```sql
+-- File: supabase/migrations/20251002_add_notes.sql (notes table)
+-- File: supabase/migrations/20251004_video_generation_tables.sql (video tables)
+```
 
-5. Run database migrations (notes table + RLS):
+### 5. Start the Application
 
-   ```bash
-   # Using the provided SQL file, run it in your Supabase SQL editor
-   # File: supabase/migrations/20251002_add_notes.sql
-   ```
+**Terminal 1 - Next.js Frontend:**
+```bash
+npm run dev
+```
 
-6. You can now run the Next.js local development server:
+**Terminal 2 - Python Worker:**
+```bash
+cd workers
+./start_worker.sh  # Unix/Mac
+# or
+start_worker.bat   # Windows
+```
 
-   ```bash
-   npm run dev
-   ```
+The app will be available at [http://localhost:3000](http://localhost:3000)
 
-   The app should now be running on [localhost:3000](http://localhost:3000/).
+### 6. Verify Setup
 
-### Auth & Security
-- Email confirmation is required. Users are redirected to `/auth/confirm` and then to `/notes` after verifying email.
-- Middleware protects all routes except static assets and `/auth/*`; unauthenticated users are redirected to `/auth/login`.
+```bash
+cd workers
+python -m workers.test_setup
+```
 
-### Features
-- Single global Navbar and Footer in `app/layout.tsx`.
-- Notes CRUD with RLS so each user only sees their own notes.
+This will verify all API keys and database tables are configured correctly.
 
-### Deploy
-- Deploy to Vercel. Ensure env vars are set in the project settings.
+## Usage
 
-6. This template comes with the default shadcn/ui style initialized. If you instead want other ui.shadcn styles, delete `components.json` and [re-install shadcn/ui](https://ui.shadcn.com/docs/installation/next)
+### Generate a Video via API
 
-> Check out [the docs for Local Development](https://supabase.com/docs/guides/getting-started/local-development) to also run Supabase locally.
+```bash
+curl -X POST http://localhost:3000/api/generate-video \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-session-token>" \
+  -d '{
+    "prompt": "Create a 20-second video about the future of AI"
+  }'
+```
 
-## Feedback and issues
+Response:
+```json
+{
+  "job_id": "uuid",
+  "status": "pending",
+  "message": "Video generation job created. Processing will begin shortly."
+}
+```
 
-Please file feedback and issues over on the [Supabase GitHub org](https://github.com/supabase/supabase/issues/new/choose).
+### Check Job Status
 
-## More Supabase examples
+```bash
+curl http://localhost:3000/api/generate-video?job_id=<job_id> \
+  -H "Authorization: Bearer <your-session-token>"
+```
 
-- [Next.js Subscription Payments Starter](https://github.com/vercel/nextjs-subscription-payments)
-- [Cookie-based Auth and the Next.js 13 App Router (free course)](https://youtube.com/playlist?list=PL5S4mPUpp4OtMhpnp93EFSo42iQ40XjbF)
-- [Supabase Auth and the Next.js App Router](https://github.com/supabase/supabase/tree/master/examples/auth/nextjs)
+### Direct Python Usage
+
+```bash
+cd workers
+python -m workers.langgraph_orchestrator "Your video prompt here"
+```
+
+## Project Structure
+
+```
+alphogenai-mini/
+├── app/                          # Next.js App Router
+│   ├── api/
+│   │   └── generate-video/      # Video generation API endpoint
+│   ├── auth/                    # Authentication pages
+│   ├── notes/                   # Notes feature (demo)
+│   └── uploads/                 # File upload feature (demo)
+├── workers/                      # Python LangGraph orchestrator
+│   ├── langgraph_orchestrator.py  # Main workflow
+│   ├── api_services.py          # AI service wrappers
+│   ├── supabase_client.py       # Database client
+│   ├── worker.py                # Background job processor
+│   └── test_setup.py            # Setup verification
+├── components/                   # React UI components
+├── lib/                         # Utilities
+├── supabase/
+│   └── migrations/              # Database migrations
+└── .env.local                   # Environment variables (create this)
+```
+
+## Database Schema
+
+### `video_cache` Table
+- `id` - UUID primary key
+- `user_id` - Foreign key to auth.users
+- `prompt` - User's video generation prompt
+- `status` - pending | in_progress | completed | failed
+- `current_stage` - Current pipeline stage
+- `error_message` - Error details if failed
+- `result` - Final video URL and metadata
+- `metadata` - Additional job metadata
+- `created_at` - Job creation timestamp
+- `updated_at` - Last update timestamp
+
+### `video_artifacts` Table
+- `id` - UUID primary key
+- `job_id` - Foreign key to video_cache
+- `stage` - Pipeline stage name
+- `data` - Stage output data (JSON)
+- `created_at` - Artifact creation timestamp
+
+## Deployment
+
+### Vercel (Frontend)
+
+1. Push to GitHub
+2. Import project in Vercel
+3. Add environment variables from `.env.local`
+4. Deploy
+
+### Python Worker (Background)
+
+Deploy to any platform that supports Python:
+- **Heroku** - `heroku ps:scale worker=1`
+- **Railway** - Background worker service
+- **AWS EC2** - Run as systemd service
+- **Docker** - Use provided Dockerfile (create one)
+
+## Development
+
+### Adding New Features
+
+1. **Frontend** - Add pages in `app/` directory
+2. **API Routes** - Create in `app/api/` directory
+3. **Components** - Add to `components/` directory
+4. **Worker Logic** - Modify `workers/langgraph_orchestrator.py`
+
+### Testing
+
+```bash
+# Frontend
+npm run lint
+npm run build
+
+# Worker
+cd workers
+python -m pytest tests/
+```
+
+## Troubleshooting
+
+See [workers/README.md](workers/README.md) for detailed troubleshooting guide.
+
+Common issues:
+- **API keys not working** - Verify keys in `.env.local`
+- **Database connection failed** - Check Supabase credentials
+- **Worker not processing jobs** - Ensure worker is running
+- **Video generation timeout** - Increase `JOB_TIMEOUT` in config
+
+## Architecture
+
+AlphoGenAI Mini uses a hybrid architecture:
+
+- **Frontend**: Next.js 15 with Server Components
+- **Backend**: Next.js API Routes + Python Workers
+- **Database**: Supabase (PostgreSQL with RLS)
+- **Storage**: Supabase Storage (for uploads)
+- **Orchestration**: LangGraph (Python)
+- **AI Services**: External APIs (Qwen, WAN, Pika, ElevenLabs, Remotion)
+
+## Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## License
+
+MIT License - feel free to use this project for your own purposes.
+
+## Acknowledgments
+
+Built with:
+- [Next.js](https://nextjs.org/)
+- [Supabase](https://supabase.com/)
+- [LangGraph](https://github.com/langchain-ai/langgraph)
+- [shadcn/ui](https://ui.shadcn.com/)
+- [Tailwind CSS](https://tailwindcss.com/)
+
+## Support
+
+- 📖 [Documentation](workers/README.md)
+- 💬 [Discussions](https://github.com/your-repo/discussions)
+- 🐛 [Issue Tracker](https://github.com/your-repo/issues)
