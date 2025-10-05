@@ -11,8 +11,13 @@ class Settings(BaseSettings):
     
     # Supabase
     SUPABASE_URL: str
-    SUPABASE_SERVICE_KEY: str
+    SUPABASE_SERVICE_KEY: Optional[str] = None
+    SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
     SUPABASE_ANON_KEY: Optional[str] = None
+    
+    def get_service_key(self) -> str:
+        """Get Supabase service key with fallback"""
+        return self.SUPABASE_SERVICE_ROLE_KEY or self.SUPABASE_SERVICE_KEY or ""
     
     # AI Service API Keys
     QWEN_API_KEY: str
