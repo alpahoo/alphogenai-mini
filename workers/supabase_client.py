@@ -13,9 +13,12 @@ class SupabaseClient:
     
     def __init__(self):
         settings = get_settings()
+        service_key = settings.get_service_key()
+        if not service_key:
+            raise ValueError("SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_KEY must be set")
         self.client: Client = create_client(
             settings.SUPABASE_URL,
-            settings.SUPABASE_SERVICE_KEY
+            service_key
         )
     
     async def create_job(
