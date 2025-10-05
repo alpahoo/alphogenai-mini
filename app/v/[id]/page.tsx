@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import VideoPlayer from "./VideoPlayer";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,41 +12,34 @@ interface PageProps {
 
 export default async function VideoPage({ params }: PageProps) {
   const resolvedParams = await params;
-  const { data: job } = await supabase
+  const jobId = resolvedParams.id;
+
+  // Récupérer le job depuis Supabase
+  const { data: job, error } = await supabase
     .from("jobs")
     .select("*")
-    .eq("id", resolvedParams.id)
+    .eq("id", jobId)
     .single();
 
-  if (!job) {
-    return <p className="text-center p-8">Video not found</p>;
+  if (error || !job) {
+    return (
+      <main className="min-h-screen flex items-center justify-center p-6">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold mb-4">❌ Vidéo introuvable</h1>
+          <p className="text-slate-600 dark:text-slate-400 mb-6">
+            Le job demandé n'existe pas ou a été supprimé.
+          </p>
+          <a
+            href="/generate"
+            className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            ← Créer une vidéo
+          </a>
+        </div>
+      </main>
+    );
   }
 
-  return (
-    <main className="flex flex-col items-center p-6">
-      <h1 className="text-2xl font-bold mb-4">🎥 Your Video</h1>
-      {job.status === "done" ? (
-        <video 
-          src={job.final_url} 
-          controls 
-          className="w-full max-w-md rounded"
-          poster="/placeholder-video.jpg"
-        >
-          Your browser does not support the video tag.
-        </video>
-      ) : (
-        <div className="text-center">
-          <p className="mb-2">⏳ Video is being generated...</p>
-          <p className="text-sm text-gray-500">
-            Status: {job.status} {job.current_stage && `(${job.current_stage})`}
-          </p>
-          <p className="text-xs text-gray-400 mt-2">Refresh in a few minutes.</p>
-        </div>
-      )}
-      <p className="mt-4 text-gray-500 text-center">{job.prompt}</p>
-      {job.error_message && (
-        <p className="mt-2 text-red-500 text-sm">Error: {job.error_message}</p>
-      )}
-    </main>
-  );
+  // Passer le job au composant client pour polling
+  return <VideoPlayer initialJob={job} />;
 }
