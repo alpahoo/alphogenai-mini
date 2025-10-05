@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     
     # AI Service API Keys
     QWEN_API_KEY: str
-    QWEN_API_BASE: str = "https://api.openai.com/v1"  # OpenAI-compatible endpoint
+    # Note: Qwen utilise l'API native DashScope (hardcodé dans api_services.py)
     
     WAN_IMAGE_API_KEY: str
     WAN_IMAGE_API_BASE: str = "https://api.wan.ai/v1"

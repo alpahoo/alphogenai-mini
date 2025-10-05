@@ -8,12 +8,13 @@ from .config import get_settings
 
 
 class QwenService:
-    """Qwen LLM pour génération de scripts"""
+    """Qwen LLM pour génération de scripts (API native DashScope)"""
     
     def __init__(self):
         self.settings = get_settings()
         self.api_key = self.settings.QWEN_API_KEY
-        self.base_url = self.settings.QWEN_API_BASE
+        # API native DashScope (pas l'endpoint OpenAI-compatible)
+        self.base_url = "https://dashscope-intl.aliyuncs.com/api/v1"
     
     @retry(
         stop=stop_after_attempt(3),
@@ -24,29 +25,47 @@ class QwenService:
         prompt: str,
         context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Génère un script vidéo avec Qwen (4 scènes)"""
+        """Génère un script vidéo avec Qwen (4 scènes) - API native DashScope"""
+        
+        # Construire le prompt système complet
+        full_prompt = f"""Tu es un scénariste créatif. Génère un script vidéo engageant avec exactement 4 scènes.
+
+Chaque scène doit avoir:
+- Un titre (Scène X: ...)
+- Une description visuelle détaillée
+- Une narration engageante
+
+Prompt utilisateur: {prompt}
+
+Format attendu:
+Scène 1: [Titre]
+[Description visuelle]
+[Narration]
+
+Scène 2: [Titre]
+[Description visuelle]
+[Narration]
+
+... (4 scènes au total)"""
+        
         async with httpx.AsyncClient(timeout=60.0) as client:
             try:
                 response = await client.post(
-                    f"{self.base_url}/chat/completions",
+                    f"{self.base_url}/services/aigc/text-generation/generation",
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",
                     },
                     json={
                         "model": "qwen-plus",
-                        "messages": [
-                            {
-                                "role": "system",
-                                "content": "Tu es un scénariste créatif. Génère des scripts vidéo engageants avec exactement 4 scènes, chaque scène avec une description visuelle et une narration."
-                            },
-                            {
-                                "role": "user",
-                                "content": prompt
-                            }
-                        ],
-                        "temperature": 0.8,
-                        "max_tokens": 2000,
+                        "input": {
+                            "prompt": full_prompt
+                        },
+                        "parameters": {
+                            "result_format": "text",
+                            "max_tokens": 2000,
+                            "temperature": 0.8,
+                        }
                     }
                 )
                 response.raise_for_status()
@@ -55,7 +74,8 @@ class QwenService:
                 print(f"[Qwen] HTTP Error {e.response.status_code}: {e.response.text[:500]}")
                 raise
             
-            script_text = data["choices"][0]["message"]["content"]
+            # API native DashScope retourne le texte dans data["output"]["text"]
+            script_text = data["output"]["text"]
             
             return {
                 "script": script_text,
@@ -74,11 +94,13 @@ class QwenService:
         
         for line in lines:
             line = line.strip()
-            if line.lower().startswith("scene"):
+            # Détecter les marqueurs de scène (Scène, Scene, SCÈNE, SCENE)
+            if line.lower().startswith("scène") or line.lower().startswith("scene") or line.startswith("**Scène"):
                 if current_scene["description"] or current_scene["narration"]:
                     scenes.append(current_scene)
                 current_scene = {"description": line, "narration": ""}
-            elif line:
+            elif line and not line.startswith("**Titre"):
+                # Ajouter à la narration (ignorer les titres markdown)
                 current_scene["narration"] += " " + line
         
         if current_scene["description"] or current_scene["narration"]:
