@@ -3,8 +3,12 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 
 function getSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 
+    process.env.SUPABASE_SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE;
   
   if (!supabaseUrl || !supabaseKey) {
     throw new Error("Missing Supabase environment variables");
