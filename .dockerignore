@@ -1,0 +1,62 @@
+# Node modules
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+.pytest_cache/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Tests
+.coverage
+htmlcov/
+.tox/
+.pytest_cache/
+
+# Logs
+*.log
+logs/
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Misc
+.cache/
+*.bak
+*.tmp
+.vercel/

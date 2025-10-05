@@ -1,0 +1,13 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile.worker"
+
+[deploy]
+startCommand = "python -m workers.worker"
+restartPolicyType = "always"
+restartPolicyMaxRetries = 10
+
+[healthcheck]
+path = "/"
+interval = 30
+timeout = 10

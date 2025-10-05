@@ -1,0 +1,24 @@
+# Dockerfile pour le Worker AlphogenAI Mini
+FROM python:3.11-slim
+
+# Définir le répertoire de travail
+WORKDIR /app
+
+# Copier les fichiers de dépendances
+COPY workers/requirements.txt ./requirements.txt
+
+# Installer les dépendances Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copier le code du worker
+COPY workers/ ./workers/
+
+# Variables d'environnement par défaut (à surcharger en production)
+ENV PYTHONUNBUFFERED=1
+ENV POLL_INTERVAL=10
+
+# Exposer un port pour les health checks (optionnel)
+EXPOSE 8080
+
+# Commande pour démarrer le worker
+CMD ["python", "-m", "workers.worker"]

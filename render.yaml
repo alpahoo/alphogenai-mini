@@ -3,30 +3,54 @@ services:
     name: alphogenai-worker
     env: python
     region: oregon
-    buildCommand: pip install -r workers/requirements.txt
-    startCommand: python -m workers.worker
+    dockerfilePath: ./Dockerfile.worker
+    plan: free
+    autoDeploy: true
+    branch: main
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: SUPABASE_URL
+        sync: false
       - key: NEXT_PUBLIC_SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: QWEN_API_KEY
         sync: false
+      - key: QWEN_API_BASE
+        value: https://dashscope.aliyuncs.com/compatible-mode/v1
       - key: WAN_IMAGE_API_KEY
         sync: false
+      - key: WAN_IMAGE_API_BASE
+        value: https://api.wan.ai/v1
       - key: WAN_VIDEO_API_KEY
         sync: false
+      - key: PIKA_API_KEY
+        sync: false
+      - key: PIKA_API_BASE
+        value: https://api.pika.art/v1
+      - key: DASHSCOPE_API_KEY
+        sync: false
+      - key: DASHSCOPE_API_BASE
+        value: https://dashscope-intl.aliyuncs.com/api/v1
+      - key: VIDEO_ENGINE
+        value: wan
       - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_BASE
+        value: https://api.elevenlabs.io/v1
+      - key: REMOTION_SITE_ID
+        sync: false
+      - key: REMOTION_SECRET_KEY
         sync: false
       - key: REMOTION_RENDERER_URL
         sync: false
-      - key: VIDEO_ENGINE
-        value: wan
       - key: MAX_RETRIES
         value: 3
       - key: RETRY_DELAY
         value: 5
       - key: JOB_TIMEOUT
         value: 3600
+      - key: POLL_INTERVAL
+        value: 10
