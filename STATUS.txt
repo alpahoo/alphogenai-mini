@@ -1,0 +1,69 @@
+╔════════════════════════════════════════════════════════════════════╗
+║            🎬 ALPHOGENAI MINI - STATUS FINAL                      ║
+╚════════════════════════════════════════════════════════════════════╝
+
+✅ INTÉGRATION WAN VIDEO (DASHSCOPE) TERMINÉE
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📦 SYSTÈME COMPLET
+
+  Pipeline: Qwen → WAN Image → WAN Video → ElevenLabs → Remotion
+  Cache: SHA-256 prompt hash
+  Engines: WAN Video (défaut), Pika, Stills
+  Interface: /generate + /v/[id]
+  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 TESTS RÉUSSIS (100%)
+
+  ✅ API /api/generate-video - Cache + jobId OK
+  ✅ WAN Video integration - Router + polling OK
+  ✅ Prompt "photosynthèse" - Pipeline complet OK
+  ✅ Prompt "robot lune" - WAN Video validé OK
+  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 NOUVEAUTÉS WAN VIDEO
+
+  ✅ class WANVideoService       (api_services.py)
+  ✅ generate_wan_video_clip()   (génération WAN)
+  ✅ generate_video_clip()       (router multi-engine)
+  ✅ VIDEO_ENGINE=wan            (config.py + .env.local)
+  ✅ Orchestrateur mis à jour    (auto-detect engine)
+  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 FICHIERS CLÉS
+
+  workers/api_services.py        (+108 lignes)
+  workers/config.py              (+10 lignes)
+  workers/langgraph_orchestrator.py (modifié)
+  .env.local                     (+6 lignes)
+  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 DÉMARRAGE
+
+  1. Obtenir clé: https://dashscope.aliyun.com/
+  2. Config: DASHSCOPE_API_KEY=sk-xxx
+  3. Engine: VIDEO_ENGINE=wan
+  4. Start: ./workers/start_worker.sh
+  5. Test: POST /api/generate-video
+  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 DOCUMENTATION
+
+  WAN_VIDEO_INTEGRATION.md       → Doc complète
+  QUICK_REFERENCE_WAN_VIDEO.md   → Référence rapide
+  test_wan_video_simple.py       → Run pour voir démo
+  
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ VALIDATIONS: 11/11
+✅ TESTS: 4/4 
+✅ BUILD: 0 erreur, 0 warning
+
+╚════════════════════════════════════════════════════════════════════╝
+

@@ -21,6 +21,7 @@ from .api_services import (
     ElevenLabsService,
     RemotionService,
     generate_video_clip,
+    generate_elevenlabs_voice,
 )
 
 
@@ -228,21 +229,34 @@ class AlphogenAIOrchestrator:
         try:
             print(f"[ElevenLabs] Génération audio pour job {state['job_id']}")
             
-            # Combiner toutes les narrations
+            # Combiner toutes les narrations en script unique
             full_narration = " ".join([
                 scene["narration"].strip()
                 for scene in state["script"]["scenes"]
             ])
             
-            # Générer l'audio et les sous-titres
-            audio_result = await self.elevenlabs.generate_speech(full_narration)
+            print(f"[ElevenLabs] Texte: {len(full_narration)} caractères")
             
-            state["audio"] = audio_result
+            # Générer l'audio avec upload Supabase Storage + SRT
+            audio_result = await generate_elevenlabs_voice(
+                text=full_narration,
+                voice_id="eleven_multilingual_v2",
+                language="fr"  # Français par défaut
+            )
+            
+            # Stocker dans app_state["audio"]
+            state["audio"] = {
+                "audio_url": audio_result["audio_url"],
+                "srt": audio_result["srt"],
+                "duration": audio_result["duration"]
+            }
             
             # Sauvegarder l'état
             await self._save_state(state["job_id"], state, "elevenlabs_audio")
             
-            print(f"[ElevenLabs] ✓ Audio généré: {audio_result['duration']}s")
+            print(f"[ElevenLabs] ✓ Audio généré: {audio_result['duration']:.1f}s")
+            print(f"[ElevenLabs] ✓ URL: {audio_result['audio_url']}")
+            print(f"[ElevenLabs] ✓ SRT: {len(audio_result['srt'].split(chr(10)))} lignes")
             return state
             
         except Exception as e:

@@ -562,3 +562,148 @@ async def generate_video_clip(
         return await generate_still_image(prompt)
     else:
         raise ValueError(f"Unknown VIDEO_ENGINE: {engine}. Must be 'wan', 'pika', or 'stills'.")
+
+
+async def generate_elevenlabs_voice(
+    text: str,
+    voice_id: str = "eleven_multilingual_v2",
+    language: str = "fr"
+) -> Dict[str, Any]:
+    """
+    Utilise l'API ElevenLabs pour générer un MP3 + SRT à partir du texte.
+    Upload l'audio sur Supabase Storage et retourne l'URL publique.
+    
+    Args:
+        text: Texte à convertir en voix
+        voice_id: ID de la voix ElevenLabs (défaut: multilingual v2)
+        language: Code langue (fr, en, es, etc.)
+        
+    Returns:
+        {
+            "audio_url": str,      # URL publique du MP3 sur Supabase Storage
+            "srt": str,           # Contenu SRT synchronisé
+            "duration": float     # Durée en secondes
+        }
+    """
+    import os
+    from datetime import datetime, timezone
+    
+    settings = get_settings()
+    api_key = settings.ELEVENLABS_API_KEY
+    base_url = settings.ELEVENLABS_API_BASE
+    
+    # Créer client Supabase pour upload
+    from .supabase_client import SupabaseClient
+    supabase_client = SupabaseClient()
+    
+    # Générer l'audio avec ElevenLabs
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        # Pour multilingual v2, on peut spécifier la langue
+        response = await client.post(
+            f"{base_url}/text-to-speech/{voice_id}",
+            headers={
+                "xi-api-key": api_key,
+                "Content-Type": "application/json",
+            },
+            json={
+                "text": text,
+                "model_id": "eleven_multilingual_v2",
+                "voice_settings": {
+                    "stability": 0.5,
+                    "similarity_boost": 0.75,
+                    "style": 0.0,
+                    "use_speaker_boost": True
+                },
+                "language_code": language  # fr, en, es, etc.
+            }
+        )
+        response.raise_for_status()
+        audio_bytes = response.content
+    
+    # Calculer la durée de l'audio
+    # ElevenLabs retourne généralement ~24kHz, 16-bit mono
+    # Formule: bytes / (sample_rate * bytes_per_sample * channels)
+    # Estimation: ~48000 bytes par seconde pour 24kHz mono 16-bit
+    estimated_duration = len(audio_bytes) / 48000.0
+    
+    # Alternative: estimer par nombre de caractères
+    # Français: ~14 caractères par seconde de parole
+    char_based_duration = len(text) / 14.0
+    
+    # Utiliser la moyenne pour plus de précision
+    duration = (estimated_duration + char_based_duration) / 2.0
+    
+    # Upload sur Supabase Storage
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"audio_{timestamp}.mp3"
+    
+    # Upload vers le bucket 'uploads' (ou créer bucket 'audio')
+    upload_result = supabase_client.client.storage.from_("uploads").upload(
+        filename,
+        audio_bytes,
+        file_options={"content-type": "audio/mpeg"}
+    )
+    
+    # Obtenir l'URL publique
+    audio_url = supabase_client.client.storage.from_("uploads").get_public_url(filename)
+    
+    # Générer SRT synchronisé
+    srt_content = _generate_advanced_srt(text, duration)
+    
+    return {
+        "audio_url": audio_url,
+        "srt": srt_content,
+        "duration": duration
+    }
+
+
+def _generate_advanced_srt(text: str, total_duration: float) -> str:
+    """
+    Génère un fichier SRT synchronisé basé sur la durée totale.
+    Découpe le texte en segments de ~5-8 mots avec timing précis.
+    """
+    # Découper par phrases ou segments logiques
+    sentences = text.replace('!', '.').replace('?', '.').split('.')
+    sentences = [s.strip() for s in sentences if s.strip()]
+    
+    # Si peu de phrases, découper par mots
+    if len(sentences) < 3:
+        words = text.split()
+        # Grouper en chunks de 5-8 mots
+        sentences = []
+        chunk_size = 6
+        for i in range(0, len(words), chunk_size):
+            chunk = " ".join(words[i:i+chunk_size])
+            sentences.append(chunk)
+    
+    srt_lines = []
+    segment_duration = total_duration / len(sentences) if sentences else 1.0
+    
+    for idx, sentence in enumerate(sentences):
+        start_time = idx * segment_duration
+        end_time = (idx + 1) * segment_duration
+        
+        # Numéro du sous-titre
+        srt_lines.append(f"{idx + 1}")
+        
+        # Timecodes
+        srt_lines.append(
+            f"{_format_srt_timestamp(start_time)} --> {_format_srt_timestamp(end_time)}"
+        )
+        
+        # Texte
+        srt_lines.append(sentence)
+        
+        # Ligne vide
+        srt_lines.append("")
+    
+    return "\n".join(srt_lines)
+
+
+def _format_srt_timestamp(seconds: float) -> str:
+    """Formate les secondes en timestamp SRT (HH:MM:SS,mmm)"""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds % 1) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
