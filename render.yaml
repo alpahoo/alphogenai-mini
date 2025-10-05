@@ -1,0 +1,32 @@
+services:
+  - type: worker
+    name: alphogenai-worker
+    env: python
+    region: oregon
+    buildCommand: pip install -r workers/requirements.txt
+    startCommand: python -m workers.worker
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: QWEN_API_KEY
+        sync: false
+      - key: WAN_IMAGE_API_KEY
+        sync: false
+      - key: WAN_VIDEO_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: REMOTION_RENDERER_URL
+        sync: false
+      - key: VIDEO_ENGINE
+        value: wan
+      - key: MAX_RETRIES
+        value: 3
+      - key: RETRY_DELAY
+        value: 5
+      - key: JOB_TIMEOUT
+        value: 3600
