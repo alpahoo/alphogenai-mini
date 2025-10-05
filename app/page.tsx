@@ -9,12 +9,6 @@ export const metadata = {
   keywords: "vidéo IA, génération vidéo, text to video, IA générative",
 };
 
-// Créer le client Supabase pour RSC
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
 interface Video {
   id: string;
   prompt: string;
@@ -24,6 +18,15 @@ interface Video {
 
 async function getRecentVideos(): Promise<Video[]> {
   try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error("Missing Supabase environment variables");
+      return [];
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
     const { data, error } = await supabase
       .from("jobs")
       .select("id, prompt, final_url, created_at")

@@ -2,13 +2,20 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE!
-);
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE;
+  
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error("Missing Supabase environment variables");
+  }
+  
+  return createClient(supabaseUrl, supabaseKey);
+}
 
 export async function POST(req: Request) {
   try {
+    const supabase = getSupabaseClient();
     const { prompt, webhookUrl } = await req.json();
 
     if (!prompt || prompt.length < 5)
@@ -62,6 +69,7 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
+  const supabase = getSupabaseClient();
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });

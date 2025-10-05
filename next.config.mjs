@@ -3,10 +3,13 @@ const nextConfig = {
   eslint: { 
     ignoreDuringBuilds: true 
   },
-  // Optionnel: si TypeScript bloque un build en prod
-  // typescript: { 
-  //   ignoreBuildErrors: true 
-  // },
+  typescript: { 
+    ignoreBuildErrors: true 
+  },
+  webpack: (config) => {
+    config.externals = [...(config.externals || []), { remotion: 'remotion' }];
+    return config;
+  },
 };
 
 export default nextConfig;

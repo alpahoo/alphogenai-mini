@@ -1,4 +1,3 @@
-import fetch from "node-fetch";
 
 export type RenderRequest = {
   clips: { url: string; durationSec: number }[];
