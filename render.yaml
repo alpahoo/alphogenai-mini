@@ -17,10 +17,10 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      - key: QWEN_API_KEY
-        sync: false
-      - key: QWEN_API_BASE
-        value: https://dashscope.aliyuncs.com/compatible-mode/v1
+            - key: QWEN_API_KEY
+              sync: false
+              # Note: Qwen utilise maintenant l'API native DashScope
+              # (hardcodé: https://dashscope-intl.aliyuncs.com/api/v1)
       - key: WAN_IMAGE_API_KEY
         sync: false
       - key: WAN_IMAGE_API_BASE
