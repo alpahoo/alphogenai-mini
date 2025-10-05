@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     REMOTION_RENDERER_URL: str = "http://localhost:3001"
     REMOTION_SITE_ID: Optional[str] = None
     REMOTION_SECRET_KEY: Optional[str] = None
+    LOGO_URL: Optional[str] = None
     
     # Webhook settings
     WEBHOOK_URL: Optional[str] = None

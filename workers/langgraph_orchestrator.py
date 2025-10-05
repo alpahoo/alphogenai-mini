@@ -6,7 +6,7 @@ Sauvegarde l'état à chaque étape dans Supabase (jobs.app_state)
 import asyncio
 import random
 from typing import Dict, Any, TypedDict, Annotated, Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 import httpx
 
 from langgraph.graph import StateGraph, END
@@ -22,6 +22,7 @@ from .api_services import (
     RemotionService,
     generate_video_clip,
     generate_elevenlabs_voice,
+    render_with_remotion,
 )
 
 
@@ -266,36 +267,34 @@ class AlphogenAIOrchestrator:
             raise
     
     async def _node_remotion_assembly(self, state: WorkflowState) -> WorkflowState:
-        """Étape 5: Assemblage final avec Remotion"""
+        """Étape 5: Assemblage final avec Remotion Cloud"""
         try:
             print(f"[Remotion] Assemblage vidéo finale pour job {state['job_id']}")
             
-            # Préparer les données pour Remotion
-            clips_data = [
-                {
-                    "url": clip["video_url"],
-                    "duration": clip["duration"],
-                    "index": clip["index"],
-                }
-                for clip in state["clips"]
-            ]
-            
-            # TODO: Upload audio vers Supabase Storage et obtenir l'URL
+            # Récupérer audio_url depuis state (uploadé par ElevenLabs)
             audio_url = state["audio"].get("audio_url", "")
+            srt_content = state["audio"].get("srt", "")
             
-            # Assembler la vidéo
-            video_result = await self.remotion.render_video(
-                clips=clips_data,
+            # Logo optionnel (peut être ajouté dans config)
+            logo_url = getattr(self.settings, 'LOGO_URL', None)
+            
+            # Assembler avec Remotion Cloud
+            video_result = await render_with_remotion(
+                clips=state["clips"],
                 audio_url=audio_url,
-                srt_content=state["audio"]["srt_content"],
-                metadata={
-                    "prompt": state["prompt"],
-                    "scenes": len(state["clips"]),
-                    "duration": sum(clip["duration"] for clip in state["clips"]),
-                }
+                srt=srt_content,
+                logo_url=logo_url
             )
             
-            state["final_video"] = video_result
+            final_url = video_result["final_video_url"]
+            
+            # Stocker résultat
+            state["final_video"] = {
+                "final_video_url": final_url,
+                "render_id": video_result["render_id"],
+                "clips_count": len(state["clips"]),
+                "total_duration": sum(clip.get("duration", 6) for clip in state["clips"])
+            }
             
             # Sauvegarder l'état final
             await self.supabase.update_job_state(
@@ -307,12 +306,12 @@ class AlphogenAIOrchestrator:
                     "clips": state["clips"],
                     "audio": state["audio"],
                     "final_video": state["final_video"],
-                    "completed_at": datetime.utcnow().isoformat(),
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
                 },
                 status="done",
                 current_stage="completed",
-                video_url=video_result["video_url"],
-                final_url=video_result["video_url"]
+                video_url=final_url,
+                final_url=final_url
             )
             
             # Sauvegarder dans le cache
@@ -326,7 +325,7 @@ class AlphogenAIOrchestrator:
                 }
             )
             
-            print(f"[Remotion] ✓ Vidéo finale: {video_result['video_url']}")
+            print(f"[Remotion] ✓ Vidéo finale: {final_url}")
             return state
             
         except Exception as e:

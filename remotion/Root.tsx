@@ -1,22 +1,21 @@
 import { Composition } from "remotion";
-import { VideoComposition, InputProps } from "./VideoComposition";
+import VideoComposition from "./VideoComposition";
 
 export const RemotionRoot: React.FC = () => {
   return (
     <>
-      <Composition<InputProps>
-        id="AGM_Video"
+      <Composition
+        id="VideoComposition"
         component={VideoComposition}
-        durationInFrames={30 * 48}
+        durationInFrames={30 * 24} // 24 secondes par défaut (4 clips × 6s)
         fps={30}
-        width={1080}
-        height={1920}
+        width={1920}
+        height={1080}
         defaultProps={{
           clips: [],
           audioUrl: "",
-          fps: 30,
-          width: 1080,
-          height: 1920,
+          srt: undefined,
+          logoUrl: undefined,
         }}
       />
     </>

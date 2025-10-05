@@ -707,3 +707,151 @@ def _format_srt_timestamp(seconds: float) -> str:
     secs = int(seconds % 60)
     millis = int((seconds % 1) * 1000)
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+
+async def render_with_remotion(
+    clips: List[Dict[str, Any]],
+    audio_url: str,
+    srt: str | None = None,
+    logo_url: str | None = None
+) -> Dict[str, Any]:
+    """
+    Déclenche un rendu Remotion Cloud (Lambda) et retourne l'URL finale.
+    
+    Args:
+        clips: Liste de clips avec video_url et duration
+        audio_url: URL publique du fichier audio MP3
+        srt: Contenu SRT des sous-titres (optionnel)
+        logo_url: URL du logo watermark (optionnel)
+        
+    Returns:
+        {
+            "final_video_url": str,  # URL de la vidéo finale MP4
+            "render_id": str         # ID du rendu Remotion
+        }
+    """
+    import os
+    from datetime import datetime, timezone
+    
+    settings = get_settings()
+    
+    # Vérifier si on utilise Remotion Cloud ou Local
+    use_cloud = settings.REMOTION_SITE_ID and settings.REMOTION_SECRET_KEY
+    
+    if not use_cloud:
+        raise ValueError(
+            "Remotion Cloud credentials not configured. "
+            "Please set REMOTION_SITE_ID and REMOTION_SECRET_KEY"
+        )
+    
+    site_id = settings.REMOTION_SITE_ID
+    secret_key = settings.REMOTION_SECRET_KEY
+    
+    # Formater les clips pour Remotion
+    formatted_clips = [
+        {
+            "video_url": clip.get("video_url") or clip.get("url"),
+            "duration": clip.get("duration", 6)
+        }
+        for clip in clips
+    ]
+    
+    # Calculer durée totale
+    total_duration = sum(clip["duration"] for clip in formatted_clips)
+    total_frames = int(total_duration * 30)  # 30 FPS
+    
+    print(f"[Remotion Cloud] 🎬 Démarrage rendu...")
+    print(f"[Remotion Cloud] Clips: {len(formatted_clips)}")
+    print(f"[Remotion Cloud] Durée: {total_duration}s ({total_frames} frames)")
+    
+    async with httpx.AsyncClient(timeout=600.0) as client:
+        # Démarrer le rendu
+        render_payload = {
+            "compositionId": "VideoComposition",
+            "serveUrl": f"https://remotion.pro/api/sites/{site_id}",
+            "inputProps": {
+                "clips": formatted_clips,
+                "audioUrl": audio_url,
+                "srt": srt,
+                "logoUrl": logo_url,
+            },
+            "codec": "h264",
+            "imageFormat": "jpeg",
+            "scale": 1,
+            "everyNthFrame": 1,
+            "numberOfGifLoops": 0,
+            "frameRange": None,
+        }
+        
+        response = await client.post(
+            "https://api.remotion.pro/lambda/render",
+            headers={
+                "Authorization": f"Bearer {secret_key}",
+                "Content-Type": "application/json",
+            },
+            json=render_payload
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        render_id = data.get("renderId")
+        if not render_id:
+            raise Exception(f"No renderId in Remotion response: {data}")
+        
+        print(f"[Remotion Cloud] 📡 Render ID: {render_id}")
+        print(f"[Remotion Cloud] ⏳ Polling status...")
+        
+        # Poller jusqu'à ce que le rendu soit terminé
+        final_video_url = await _poll_remotion_render(
+            client,
+            render_id,
+            secret_key
+        )
+        
+        print(f"[Remotion Cloud] ✅ Rendu terminé!")
+        print(f"[Remotion Cloud] URL: {final_video_url}")
+        
+        return {
+            "final_video_url": final_video_url,
+            "render_id": render_id
+        }
+
+
+async def _poll_remotion_render(
+    client: httpx.AsyncClient,
+    render_id: str,
+    secret_key: str,
+    max_attempts: int = 240  # 20 minutes max
+) -> str:
+    """
+    Polle le statut du rendu Remotion Cloud jusqu'à completion
+    """
+    import asyncio
+    
+    for attempt in range(max_attempts):
+        await asyncio.sleep(5)  # Check toutes les 5 secondes
+        
+        response = await client.get(
+            f"https://api.remotion.pro/lambda/render/{render_id}",
+            headers={"Authorization": f"Bearer {secret_key}"}
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        status = data.get("status")
+        progress = data.get("overallProgress", 0)
+        
+        if attempt % 6 == 0:  # Log toutes les 30s
+            print(f"[Remotion Cloud] Status: {status} ({progress * 100:.0f}%)")
+        
+        if status == "done":
+            video_url = data.get("outputFile") or data.get("url")
+            if not video_url:
+                raise Exception(f"No outputFile in completed render: {data}")
+            return video_url
+        
+        elif status in ["error", "failed"]:
+            error_msg = data.get("errors", data.get("error", "Unknown error"))
+            raise Exception(f"Remotion render failed: {error_msg}")
+    
+    raise Exception(f"Remotion render timeout after {max_attempts * 5} seconds")
