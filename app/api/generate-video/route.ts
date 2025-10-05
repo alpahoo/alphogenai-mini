@@ -6,6 +6,9 @@ function getSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE;
   
+  console.log('[ENV CHECK] NEXT_PUBLIC_SUPABASE_URL:', supabaseUrl ? '✓ Set' : '✗ Missing');
+  console.log('[ENV CHECK] SUPABASE_SERVICE_ROLE:', supabaseKey ? '✓ Set' : '✗ Missing');
+  
   if (!supabaseUrl || !supabaseKey) {
     throw new Error("Missing Supabase environment variables");
   }
@@ -15,22 +18,32 @@ function getSupabaseClient() {
 
 export async function POST(req: Request) {
   try {
+    console.log('[API] Starting video generation request');
     const supabase = getSupabaseClient();
     const { prompt, webhookUrl } = await req.json();
+
+    console.log('[API] Prompt received:', prompt);
 
     if (!prompt || prompt.length < 5)
       return NextResponse.json({ error: "Prompt required" }, { status: 400 });
 
     const promptHash = crypto.createHash("sha256").update(prompt).digest("hex");
+    console.log('[API] Prompt hash:', promptHash);
 
     // Vérifie le cache
-    const { data: cached } = await supabase
+    console.log('[API] Checking cache...');
+    const { data: cached, error: cacheError } = await supabase
       .from("video_cache")
       .select("video_url")
       .eq("prompt_hash", promptHash)
       .single();
 
+    if (cacheError) {
+      console.log('[API] Cache check error (expected if no cache):', cacheError.message);
+    }
+
     if (cached?.video_url) {
+      console.log('[API] Cache hit! Returning cached video');
       const { data: job } = await supabase
         .from("jobs")
         .insert({
@@ -50,6 +63,7 @@ export async function POST(req: Request) {
     }
 
     // Crée un nouveau job
+    console.log('[API] Creating new job...');
     const { data: job, error } = await supabase
       .from("jobs")
       .insert({
@@ -61,9 +75,15 @@ export async function POST(req: Request) {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.log('[API] Error creating job:', error);
+      throw error;
+    }
+    
+    console.log('[API] Job created successfully:', job.id);
     return NextResponse.json({ jobId: job.id, cached: false });
   } catch (e: any) {
+    console.error('[API] Error:', e.message, e.stack);
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }
