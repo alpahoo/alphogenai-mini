@@ -1,1 +1,1 @@
-worker: python -m workers.worker
+worker: python start_render_worker.py

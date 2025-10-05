@@ -10,7 +10,7 @@ Le fichier `render.yaml` à la racine du projet configure automatiquement le wor
 
 **Commande de démarrage:**
 ```bash
-python -m workers.worker
+python start_render_worker.py
 ```
 
 ### Option 2: Configuration manuelle
@@ -25,7 +25,7 @@ Si vous préférez configurer manuellement dans le dashboard Render:
    ```
 4. **Start Command:**
    ```bash
-   python -m workers.worker
+   python start_render_worker.py
    ```
 
 ### Variables d'environnement requises
@@ -71,17 +71,20 @@ En attente de jobs...
 
 ## Dépannage
 
-### Erreur: "can't open file workers/workers/worker.py"
+### Erreur: "can't open file workers/workers/worker.py" ou "No module named 'workers'"
 
-❌ **Commande incorrecte:**
+❌ **Commandes incorrectes:**
 ```bash
 python workers/worker.py
+python -m workers.worker
 ```
 
 ✅ **Commande correcte:**
 ```bash
-python -m workers.worker
+python start_render_worker.py
 ```
+
+Ce script configure correctement le PYTHONPATH pour les imports relatifs.
 
 ### Le worker ne traite pas les jobs
 
