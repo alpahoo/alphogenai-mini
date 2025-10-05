@@ -213,6 +213,104 @@ class PikaService:
         raise Exception("Pika generation timeout")
 
 
+class WANVideoService:
+    """DashScope WAN Video pour génération de clips (4-8s)"""
+    
+    def __init__(self):
+        self.settings = get_settings()
+        self.api_key = self.settings.DASHSCOPE_API_KEY
+        self.base_url = self.settings.DASHSCOPE_API_BASE
+    
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10)
+    )
+    async def generate_clip(
+        self,
+        prompt: str,
+        duration: int = 6
+    ) -> Dict[str, Any]:
+        """Génère un clip vidéo de 4-8s avec WAN Video via DashScope"""
+        async with httpx.AsyncClient(timeout=600.0) as client:
+            payload = {
+                "model": "wanx-v1",
+                "input": {
+                    "text": prompt
+                },
+                "parameters": {}
+            }
+            
+            response = await client.post(
+                f"{self.base_url}/services/aigc/text2video/generation",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                    "X-DashScope-Async": "enable"  # Mode async
+                },
+                json=payload
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            # Récupérer task_id pour polling
+            if data.get("output") and data["output"].get("task_id"):
+                task_id = data["output"]["task_id"]
+            elif data.get("request_id"):
+                task_id = data["request_id"]
+            else:
+                raise Exception(f"No task_id in response: {data}")
+            
+            # Poll pour la génération
+            video_result = await self._poll_generation_status(client, task_id)
+            
+            return {
+                "engine": "wan",
+                "prompt": prompt,
+                "video_url": video_result["video_url"],
+                "duration": video_result.get("duration", duration),
+                "task_id": task_id
+            }
+    
+    async def _poll_generation_status(
+        self,
+        client: httpx.AsyncClient,
+        task_id: str,
+        max_attempts: int = 120
+    ) -> Dict[str, Any]:
+        """Poll DashScope pour attendre la génération"""
+        import asyncio
+        
+        for attempt in range(max_attempts):
+            await asyncio.sleep(5)
+            
+            response = await client.get(
+                f"{self.base_url}/services/aigc/text2video/generation/{task_id}",
+                headers={"Authorization": f"Bearer {self.api_key}"}
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            output = data.get("output", {})
+            task_status = output.get("task_status", "UNKNOWN")
+            
+            if task_status == "SUCCEEDED":
+                video_url = output.get("video_url")
+                if not video_url:
+                    raise Exception(f"No video_url in completed task: {output}")
+                
+                return {
+                    "video_url": video_url,
+                    "duration": output.get("video_duration", 6)
+                }
+            elif task_status in ["FAILED", "CANCELED"]:
+                error_msg = output.get("message", "Unknown error")
+                raise Exception(f"WAN Video generation {task_status}: {error_msg}")
+            
+            # Continue polling pour PENDING, RUNNING, etc.
+        
+        raise Exception(f"WAN Video generation timeout after {max_attempts * 5}s")
+
+
 class ElevenLabsService:
     """ElevenLabs pour text-to-speech + SRT"""
     
@@ -358,3 +456,109 @@ class RemotionService:
             await asyncio.sleep(5)
         
         raise Exception("Remotion render timeout")
+
+
+# ============================================================================
+# Fonctions d'aiguillage pour choix du moteur vidéo
+# ============================================================================
+
+async def generate_wan_video_clip(prompt: str) -> Dict[str, Any]:
+    """
+    Génère un clip vidéo avec WAN Video (DashScope)
+    
+    Args:
+        prompt: Description textuelle du clip vidéo à générer
+        
+    Returns:
+        Dict avec: engine, prompt, video_url, duration
+    """
+    wan_service = WANVideoService()
+    result = await wan_service.generate_clip(prompt)
+    return result
+
+
+async def generate_pika_video_clip(
+    prompt: str,
+    image_url: Optional[str] = None,
+    seed: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Génère un clip vidéo avec Pika
+    
+    Args:
+        prompt: Description textuelle du clip vidéo
+        image_url: URL d'image de référence (optionnel)
+        seed: Seed pour cohérence visuelle (optionnel)
+        
+    Returns:
+        Dict avec: engine, prompt, video_url, duration
+    """
+    pika_service = PikaService()
+    result = await pika_service.generate_clip(
+        prompt=prompt,
+        image_url=image_url,
+        seed=seed,
+        duration=4
+    )
+    
+    return {
+        "engine": "pika",
+        "prompt": prompt,
+        "video_url": result["video_url"],
+        "duration": result["duration"],
+        "video_id": result.get("video_id")
+    }
+
+
+async def generate_still_image(prompt: str) -> Dict[str, Any]:
+    """
+    Génère une image fixe avec WAN Image
+    (Pour mode "stills" - image statique au lieu de vidéo)
+    
+    Args:
+        prompt: Description de l'image
+        
+    Returns:
+        Dict avec: engine, prompt, video_url (image), duration (0)
+    """
+    wan_image_service = WANImageService()
+    result = await wan_image_service.generate_image(prompt, style="cinematic")
+    
+    return {
+        "engine": "stills",
+        "prompt": prompt,
+        "video_url": result["image_url"],  # Image au lieu de vidéo
+        "duration": 0,  # Image statique
+        "image_id": result["image_id"]
+    }
+
+
+async def generate_video_clip(
+    engine: str,
+    prompt: str,
+    image_url: Optional[str] = None,
+    seed: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Fonction d'aiguillage pour générer un clip vidéo avec le moteur choisi
+    
+    Args:
+        engine: Moteur à utiliser ("wan", "pika", ou "stills")
+        prompt: Description du clip à générer
+        image_url: URL d'image de référence (pour Pika)
+        seed: Seed pour cohérence visuelle (pour Pika)
+        
+    Returns:
+        Dict avec: engine, prompt, video_url, duration
+        
+    Raises:
+        ValueError: Si le moteur n'est pas reconnu
+    """
+    if engine == "wan":
+        return await generate_wan_video_clip(prompt)
+    elif engine == "pika":
+        return await generate_pika_video_clip(prompt, image_url, seed)
+    elif engine == "stills":
+        return await generate_still_image(prompt)
+    else:
+        raise ValueError(f"Unknown VIDEO_ENGINE: {engine}. Must be 'wan', 'pika', or 'stills'.")

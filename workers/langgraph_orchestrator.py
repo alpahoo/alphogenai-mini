@@ -20,6 +20,7 @@ from .api_services import (
     PikaService,
     ElevenLabsService,
     RemotionService,
+    generate_video_clip,
 )
 
 
@@ -166,28 +167,31 @@ class AlphogenAIOrchestrator:
             raise
     
     async def _node_pika_clips(self, state: WorkflowState) -> WorkflowState:
-        """Étape 3: Génération 4 clips vidéo avec Pika (4s, --image + seed)"""
+        """Étape 3: Génération 4 clips vidéo (WAN/Pika selon VIDEO_ENGINE)"""
         try:
-            print(f"[Pika] Génération de 4 clips pour job {state['job_id']}")
+            # Lire le moteur vidéo depuis config
+            video_engine = self.settings.VIDEO_ENGINE
+            print(f"[Video] Génération de 4 clips avec moteur: {video_engine.upper()}")
+            print(f"[Video] Job: {state['job_id']}")
             
             scenes = state["script"]["scenes"]
             key_visual_url = state["key_visual"]["image_url"]
             
-            # Générer seed pour cohérence visuelle
+            # Générer seed pour cohérence visuelle (utilisé par Pika)
             base_seed = random.randint(1000, 9999)
             
             # Générer les 4 clips en parallèle
             tasks = []
             for i, scene in enumerate(scenes):
-                # Le premier clip utilise l'image clé + seed
-                image_url = key_visual_url if i == 0 else None
-                seed = base_seed + i
+                # Le premier clip utilise l'image clé (pour Pika)
+                image_url = key_visual_url if i == 0 and video_engine == "pika" else None
+                seed = base_seed + i if video_engine == "pika" else None
                 
                 tasks.append(
-                    self.pika.generate_clip(
+                    generate_video_clip(
+                        engine=video_engine,
                         prompt=scene["description"],
                         image_url=image_url,
-                        duration=4,  # 4 secondes par clip
                         seed=seed
                     )
                 )
@@ -201,21 +205,21 @@ class AlphogenAIOrchestrator:
                 clips.append({
                     "index": i,
                     "scene": scenes[i],
-                    "seed": base_seed + i,
+                    "engine": clip_result.get("engine", video_engine),
                     **clip_result
                 })
             
             state["clips"] = clips
             
             # Sauvegarder l'état
-            await self._save_state(state["job_id"], state, "pika_clips")
+            await self._save_state(state["job_id"], state, "video_clips")
             
-            print(f"[Pika] ✓ {len(clips)} clips générés (4s chacun)")
+            print(f"[Video] ✓ {len(clips)} clips générés avec {video_engine.upper()}")
             return state
             
         except Exception as e:
-            print(f"[Pika] ✗ Erreur: {str(e)}")
-            state["error"] = f"Pika clips error: {str(e)}"
+            print(f"[Video] ✗ Erreur: {str(e)}")
+            state["error"] = f"Video clips error: {str(e)}"
             await self._handle_error(state)
             raise
     

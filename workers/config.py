@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     PIKA_API_KEY: str
     PIKA_API_BASE: str = "https://api.pika.art/v1"
     
+    # DashScope WAN Video
+    DASHSCOPE_API_KEY: str
+    DASHSCOPE_API_BASE: str = "https://dashscope-intl.aliyuncs.com/api/v1"
+    
+    # Video Engine selection
+    VIDEO_ENGINE: str = "wan"  # wan, pika, or stills
+    
     ELEVENLABS_API_KEY: str
     ELEVENLABS_API_BASE: str = "https://api.elevenlabs.io/v1"
     
