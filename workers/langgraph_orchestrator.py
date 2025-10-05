@@ -119,6 +119,8 @@ class AlphogenAIOrchestrator:
         """Étape 1: Génération script avec Qwen (4 scènes)"""
         try:
             print(f"[Qwen] Génération du script pour job {state['job_id']}")
+            print(f"[Qwen] API Base: {self.qwen.base_url}")
+            print(f"[Qwen] API Key configured: {bool(self.qwen.api_key)}")
             
             # Générer le script
             script_result = await self.qwen.generate_script(state["prompt"])

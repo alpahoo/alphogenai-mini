@@ -26,30 +26,34 @@ class QwenService:
     ) -> Dict[str, Any]:
         """Génère un script vidéo avec Qwen (4 scènes)"""
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{self.base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": "qwen-plus",
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "Tu es un scénariste créatif. Génère des scripts vidéo engageants avec exactement 4 scènes, chaque scène avec une description visuelle et une narration."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    "temperature": 0.8,
-                    "max_tokens": 2000,
-                }
-            )
-            response.raise_for_status()
-            data = response.json()
+            try:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": "qwen-plus",
+                        "messages": [
+                            {
+                                "role": "system",
+                                "content": "Tu es un scénariste créatif. Génère des scripts vidéo engageants avec exactement 4 scènes, chaque scène avec une description visuelle et une narration."
+                            },
+                            {
+                                "role": "user",
+                                "content": prompt
+                            }
+                        ],
+                        "temperature": 0.8,
+                        "max_tokens": 2000,
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+            except httpx.HTTPStatusError as e:
+                print(f"[Qwen] HTTP Error {e.response.status_code}: {e.response.text[:500]}")
+                raise
             
             script_text = data["choices"][0]["message"]["content"]
             
