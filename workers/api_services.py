@@ -119,12 +119,13 @@ Scène 2: [Titre]
 
 
 class WANImageService:
-    """WAN Image pour génération d'images clés"""
+    """DashScope WANX Image pour génération d'images clés"""
     
     def __init__(self):
         self.settings = get_settings()
-        self.api_key = self.settings.WAN_IMAGE_API_KEY
-        self.base_url = self.settings.WAN_IMAGE_API_BASE
+        # Utiliser DashScope (même clé que Qwen)
+        self.api_key = self.settings.DASHSCOPE_API_KEY
+        self.base_url = "https://dashscope-intl.aliyuncs.com/api/v1"
     
     @retry(
         stop=stop_after_attempt(3),
@@ -135,41 +136,115 @@ class WANImageService:
         prompt: str,
         style: str = "cinematic"
     ) -> Dict[str, Any]:
-        """Génère une image clé avec WAN Image"""
+        """Génère une image clé avec DashScope WANX Image"""
+        
+        # Adapter le prompt avec le style
+        full_prompt = f"{prompt}, {style} style, high quality, detailed, 8k"
+        
         async with httpx.AsyncClient(timeout=120.0) as client:
             try:
+                print(f"[WANX Image] Génération avec DashScope...")
+                
                 response = await client.post(
-                    f"{self.base_url}/images/generate",
+                    f"{self.base_url}/services/aigc/text2image/image-synthesis",
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",
+                        "X-DashScope-Async": "enable",  # Mode async
                     },
                     json={
-                        "prompt": prompt,
-                        "style": style,
-                        "width": 1920,
-                        "height": 1080,
-                        "num_images": 1,
+                        "model": "wanx-v1",
+                        "input": {
+                            "prompt": full_prompt
+                        },
+                        "parameters": {
+                            "size": "1024*1024",  # DashScope format
+                            "n": 1
+                        }
                     }
                 )
                 response.raise_for_status()
                 data = response.json()
                 
+                # Vérifier si on a un task_id pour polling
+                output = data.get("output", {})
+                task_id = output.get("task_id")
+                
+                if task_id:
+                    # Mode async - attendre la génération
+                    print(f"[WANX Image] Task ID: {task_id}, attente génération...")
+                    image_url = await self._poll_image_generation(client, task_id)
+                else:
+                    # Mode sync - l'image est déjà prête
+                    results = output.get("results", [])
+                    if not results or not results[0].get("url"):
+                        raise RuntimeError(f"No image URL in response: {data}")
+                    image_url = results[0]["url"]
+                
+                print(f"[WANX Image] ✓ Image générée: {image_url[:50]}...")
+                
                 return {
-                    "image_url": data["images"][0]["url"],
-                    "image_id": data["images"][0]["id"],
-                    "metadata": data.get("metadata", {}),
+                    "image_url": image_url,
+                    "image_id": task_id or "sync",
+                    "metadata": {
+                        "model": "wanx-v1",
+                        "provider": "dashscope"
+                    },
                 }
             except httpx.HTTPStatusError as e:
                 error_detail = e.response.text[:500] if e.response.text else "No details"
-                print(f"[WAN Image] HTTP Error {e.response.status_code}: {error_detail}")
-                raise RuntimeError(f"WAN Image API error {e.response.status_code}: {error_detail}") from e
+                print(f"[WANX Image] HTTP Error {e.response.status_code}: {error_detail}")
+                raise RuntimeError(f"DashScope WANX Image API error {e.response.status_code}: {error_detail}") from e
             except httpx.TimeoutException as e:
-                print(f"[WAN Image] Timeout after 120s")
-                raise RuntimeError("WAN Image API timeout") from e
+                print(f"[WANX Image] Timeout after 120s")
+                raise RuntimeError("DashScope WANX Image API timeout") from e
             except Exception as e:
-                print(f"[WAN Image] Unexpected error: {type(e).__name__}: {str(e)}")
+                print(f"[WANX Image] Unexpected error: {type(e).__name__}: {str(e)}")
                 raise
+    
+    async def _poll_image_generation(
+        self,
+        client: httpx.AsyncClient,
+        task_id: str,
+        max_attempts: int = 60
+    ) -> str:
+        """Poll DashScope pour attendre la génération d'image"""
+        import asyncio
+        
+        for attempt in range(max_attempts):
+            await asyncio.sleep(2)  # 2s entre chaque tentative
+            
+            try:
+                response = await client.get(
+                    f"{self.base_url}/services/aigc/text2image/image-synthesis/{task_id}",
+                    headers={"Authorization": f"Bearer {self.api_key}"}
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                output = data.get("output", {})
+                task_status = output.get("task_status", "UNKNOWN")
+                
+                if task_status == "SUCCEEDED":
+                    results = output.get("results", [])
+                    if not results or not results[0].get("url"):
+                        raise RuntimeError(f"No image URL in completed task: {output}")
+                    
+                    return results[0]["url"]
+                elif task_status in ["FAILED", "CANCELED"]:
+                    error_msg = output.get("message", "Unknown error")
+                    raise RuntimeError(f"Image generation {task_status}: {error_msg}")
+                
+                # Afficher progression tous les 10 tentatives
+                if (attempt + 1) % 10 == 0:
+                    print(f"[WANX Image] Toujours en attente... ({attempt + 1}/{max_attempts})")
+            
+            except httpx.HTTPStatusError as e:
+                print(f"[WANX Image] Erreur polling {task_id}: {e.response.status_code}")
+                if attempt == max_attempts - 1:
+                    raise
+        
+        raise RuntimeError(f"Image generation timeout after {max_attempts * 2}s")
 
 
 class PikaService:

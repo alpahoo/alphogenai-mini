@@ -24,8 +24,7 @@ def validate_environment() -> Tuple[bool, List[str]]:
         
         # AI Services
         "QWEN_API_KEY": "Clé API DashScope pour Qwen",
-        "WAN_IMAGE_API_KEY": "Clé API WAN pour génération d'images",
-        "DASHSCOPE_API_KEY": "Clé API DashScope pour WAN Video",
+        "DASHSCOPE_API_KEY": "Clé API DashScope (Qwen, WANX Image, WAN Video)",
         "ELEVENLABS_API_KEY": "Clé API ElevenLabs pour TTS",
         
         # Video Engine (au moins un des deux)
@@ -75,19 +74,8 @@ def validate_environment() -> Tuple[bool, List[str]]:
     
     print()
     
-    # Vérifier WAN Image
-    print("🖼️  WAN Image:")
-    wan_image_key = os.getenv("WAN_IMAGE_API_KEY")
-    if not wan_image_key:
-        errors.append("❌ WAN_IMAGE_API_KEY manquante")
-        print("  ❌ WAN_IMAGE_API_KEY: MANQUANTE")
-    else:
-        print(f"  ✅ WAN_IMAGE_API_KEY: {wan_image_key[:15]}...")
-    
-    print()
-    
-    # Vérifier DashScope (WAN Video)
-    print("🎬 WAN Video (DashScope):")
+    # Vérifier DashScope (pour WANX Image + WAN Video)
+    print("🎨 DashScope (WANX Image + WAN Video):")
     dashscope_key = os.getenv("DASHSCOPE_API_KEY")
     if not dashscope_key:
         warnings.append("⚠️  DASHSCOPE_API_KEY manquante (requis si VIDEO_ENGINE=wan)")
