@@ -269,6 +269,30 @@ class AlphogenAIOrchestrator:
             print(f"[ElevenLabs] ✓ Audio généré: {audio_result['duration']:.1f}s")
             print(f"[ElevenLabs] ✓ URL: {audio_result['audio_url']}")
             print(f"[ElevenLabs] ✓ SRT: {len(audio_result['srt'].split(chr(10)))} lignes")
+            
+            # TEMPORAIRE : Marquer comme terminé ici (sans Remotion)
+            print(f"[Workflow] ⚠️  Remotion désactivé - sauvegarde des clips comme résultat final")
+            
+            # Utiliser le premier clip vidéo comme URL finale
+            final_url = state["clips"][0].get("video_url", "") if state["clips"] else ""
+            
+            await self.supabase.update_job_state(
+                job_id=state["job_id"],
+                app_state={
+                    "prompt": state["prompt"],
+                    "script": state["script"],
+                    "clips": state["clips"],
+                    "audio": state["audio"],
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                },
+                status="done",
+                current_stage="completed",
+                video_url=final_url,
+                final_url=final_url
+            )
+            
+            print(f"[Workflow] ✓ Job terminé - {len(state['clips'])} clips générés")
+            
             return state
             
         except Exception as e:
