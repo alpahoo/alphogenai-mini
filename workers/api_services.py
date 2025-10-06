@@ -1000,8 +1000,115 @@ async def _poll_remotion_render(
 # REPLICATE SERVICES (SD 3.5 Turbo + WAN i2v)
 # ========================================
 
+def _to_url(x):
+    """
+    Normalise n'importe quelle sortie Replicate en URL str.
+    Gère: str, FileOutput (url/path), dict, liste, etc.
+    """
+    try:
+        # cas déjà str
+        if isinstance(x, str):
+            return x
+        # nouveaux SDK: FileOutput => .url ou .path
+        url = getattr(x, "url", None) or getattr(x, "path", None)
+        if url:
+            return str(url)
+        # parfois les modèles renvoient un dict {"images": [...]} ou {"image": "..."}
+        if isinstance(x, dict):
+            if "images" in x:
+                v = x["images"]
+            elif "image" in x:
+                v = x["image"]
+            elif "output" in x:
+                v = x["output"]
+            else:
+                v = x
+            # re-normalise récursivement
+            if isinstance(v, list):
+                return _to_url(v[0]) if v else None
+            return _to_url(v)
+        # liste/tuple => prends le premier
+        if isinstance(x, (list, tuple)):
+            return _to_url(x[0]) if x else None
+        # fallback
+        return str(x)
+    except Exception:
+        return None
+
+
+def generate_image_with_replicate(
+    prompt: str,
+    *,
+    aspect_ratio: str = "16:9",
+    width: int = 1280,
+    height: int = 720,
+    seed: int | None = None,
+    model: str | None = None
+) -> str:
+    """
+    Retourne TOUJOURS une URL d'image (str) ou lève une Exception claire.
+    Par défaut utilise FLUX.1-schnell (rapide) pour un MVP.
+    """
+    import os
+    
+    api_token = os.getenv("REPLICATE_API_TOKEN")
+    if not api_token:
+        raise RuntimeError("REPLICATE_API_TOKEN manquant")
+    
+    client = replicate.Client(api_token=api_token)
+    
+    # Modèle par défaut: FLUX.1-schnell (rapide et pas cher)
+    model_id = model or "black-forest-labs/flux-schnell"
+    
+    # Beaucoup de modèles acceptent "width/height" + "num_outputs"
+    # Ne PAS utiliser len() sur le résultat: normaliser via _to_url
+    inputs = {
+        "prompt": prompt,
+        "num_outputs": 1,
+        "width": width,
+        "height": height,
+        # mets un seed si dispo; sinon le modèle l'ignore
+        "seed": seed or 42,
+    }
+    
+    # Utilise la méthode la plus simple et fiable
+    result = client.run(f"{model_id}:latest", input=inputs)
+    
+    # Normalise en URL
+    url = _to_url(result)
+    if not url:
+        # si le modèle renvoie une liste d'images, essaye de les aplatir
+        if isinstance(result, (list, tuple)) and result:
+            url = _to_url(result[0])
+    if not url:
+        raise RuntimeError(f"Impossible d'extraire une URL d'image depuis la sortie Replicate: {result}")
+    
+    return url
+
+
+def generate_scene_images_with_replicate(scenes: list[str]) -> list[str]:
+    """
+    scenes: liste de prompts (4 scènes).
+    Retourne une liste de 4 URLs d'images.
+    En cas d'échec ponctuel, lève une Exception (gérée par le retry existant).
+    """
+    urls = []
+    for idx, s in enumerate(scenes, start=1):
+        # Option: enrichir le prompt pour cohérence style
+        prompt_img = f"{s}, cinematic, high quality, detailed, 16:9, sharp focus, soft lighting, no text, no watermark"
+        url = generate_image_with_replicate(
+            prompt_img,
+            aspect_ratio="16:9",
+            width=1280,
+            height=720,
+            seed=1000 + idx
+        )
+        urls.append(url)
+    return urls
+
+
 class ReplicateSDService:
-    """Stable Diffusion 3.5 Turbo via Replicate pour génération d'images"""
+    """Replicate Images via FLUX.1-schnell (rapide et robuste)"""
     
     def __init__(self):
         self.settings = get_settings()
@@ -1017,58 +1124,43 @@ class ReplicateSDService:
         prompt: str,
         style: str = "cinematic"
     ) -> Dict[str, Any]:
-        """Génère une image avec Stable Diffusion 3.5 Turbo"""
+        """Génère une image avec Replicate (FLUX.1-schnell)"""
         
         try:
             # Améliorer le prompt avec le style
-            full_prompt = f"{prompt}, {style} style, high quality, detailed, professional photography, 8k"
+            full_prompt = f"{prompt}, {style} style, high quality, detailed, 16:9, sharp focus, soft lighting, no text, no watermark"
             
-            print(f"[Replicate SD] Génération image...")
-            print(f"[Replicate SD] Prompt: {full_prompt[:80]}...")
+            print(f"[Replicate Images] Génération image...")
+            print(f"[Replicate Images] Prompt: {full_prompt[:80]}...")
             
-            # Appel Replicate (synchrone mais exécuté dans async context)
+            # Appel synchrone dans async context
             import asyncio
-            output = await asyncio.to_thread(
-                replicate.run,
-                "stability-ai/stable-diffusion-3.5-large-turbo",
-                input={
-                    "prompt": full_prompt,
-                    "aspect_ratio": "16:9",
-                    "output_format": "png",
-                    "output_quality": 90,
-                    "num_outputs": 1,
-                }
+            image_url = await asyncio.to_thread(
+                generate_image_with_replicate,
+                full_prompt,
+                aspect_ratio="16:9",
+                width=1280,
+                height=720
             )
             
-            # output peut être FileOutput, liste, ou string
-            if not output:
-                raise RuntimeError("No image generated by Replicate")
+            if not image_url or not image_url.startswith("http"):
+                raise RuntimeError(f"URL d'image invalide: {image_url}")
             
-            # Gérer différents formats de sortie
-            if isinstance(output, str):
-                image_url = output
-            elif isinstance(output, list) and len(output) > 0:
-                image_url = str(output[0])
-            elif hasattr(output, 'url'):
-                image_url = output.url
-            else:
-                image_url = str(output)
-            
-            print(f"[Replicate SD] ✓ Image générée: {image_url[:60]}...")
+            print(f"[Replicate Images] ✓ Image générée: {image_url[:60]}...")
             
             return {
                 "image_url": image_url,
-                "image_id": "replicate-sd",
+                "image_id": "replicate-flux",
                 "metadata": {
-                    "model": "stable-diffusion-3.5-large-turbo",
+                    "model": "flux-schnell",
                     "provider": "replicate"
                 }
             }
         
         except Exception as e:
             error_msg = f"{type(e).__name__}: {str(e)}"
-            print(f"[Replicate SD] ✗ Erreur: {error_msg}")
-            raise RuntimeError(f"Replicate SD error: {error_msg}") from e
+            print(f"[Replicate Images] ✗ Erreur: {error_msg}")
+            raise RuntimeError(f"Replicate Images error: {error_msg}") from e
 
 
 class ReplicateWANVideoService:
