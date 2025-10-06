@@ -705,7 +705,7 @@ async def generate_video_clip(
 
 async def generate_elevenlabs_voice(
     text: str,
-    voice_id: str = "eleven_multilingual_v2",
+    voice_id: str = "pNInz6obpgDQGcFmaJgB",  # Adam (multilingue, supporte français)
     language: str = "fr"
 ) -> Dict[str, Any]:
     """
