@@ -131,9 +131,8 @@ def validate_environment() -> Tuple[bool, List[str]]:
     video_engine = os.getenv("VIDEO_ENGINE", "wan")
     print(f"  ✅ VIDEO_ENGINE: {video_engine}")
     
-    if video_engine == "wan" and not dashscope_key:
-        errors.append("❌ VIDEO_ENGINE=wan mais DASHSCOPE_API_KEY manquante")
-    elif video_engine == "pika" and not pika_key:
+    # Note: VIDEO_ENGINE legacy, maintenant géré par Replicate
+    if video_engine == "pika" and not pika_key:
         errors.append("❌ VIDEO_ENGINE=pika mais PIKA_API_KEY manquante")
     
     poll_interval = os.getenv("POLL_INTERVAL", "10")
