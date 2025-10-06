@@ -153,7 +153,7 @@ class WANImageService:
                         "X-DashScope-Async": "enable",  # Mode async
                     },
                     json={
-                        "model": "wanx-v1",
+                        "model": "wanx-1.0",  # Nom correct du modèle DashScope
                         "input": {
                             "prompt": full_prompt
                         },
@@ -187,7 +187,7 @@ class WANImageService:
                     "image_url": image_url,
                     "image_id": task_id or "sync",
                     "metadata": {
-                        "model": "wanx-v1",
+                        "model": "wanx-1.0",
                         "provider": "dashscope"
                     },
                 }
