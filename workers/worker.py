@@ -123,11 +123,11 @@ class AlphogenAIWorker:
     
     async def _recover_stuck_jobs(self):
         """Récupère les jobs bloqués en in_progress depuis > 5 minutes"""
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
         
         try:
             # Calculer le timestamp d'il y a 5 minutes
-            five_minutes_ago = (datetime.utcnow() - timedelta(minutes=5)).isoformat()
+            five_minutes_ago = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
             
             # Chercher les jobs in_progress depuis > 5 minutes
             result = self.supabase.client.table("jobs") \
@@ -163,7 +163,7 @@ class AlphogenAIWorker:
                     self.supabase.client.table("jobs").update({
                         "status": "pending",
                         "retry_count": retry_count + 1,
-                        "updated_at": datetime.utcnow().isoformat(),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
                     }).eq("id", job_id).execute()
         
         except Exception as e:

@@ -2,7 +2,7 @@
 Supabase client pour la persistance des jobs et état LangGraph
 """
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 from supabase import create_client, Client
 from .config import get_settings
@@ -33,7 +33,7 @@ class SupabaseClient:
             "prompt": prompt,
             "status": "pending",
             "app_state": initial_state or {},
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
         
         result = self.client.table("jobs").insert(job_data).execute()
@@ -52,7 +52,7 @@ class SupabaseClient:
         """Met à jour l'état complet du job (app_state LangGraph)"""
         update_data: Dict[str, Any] = {
             "app_state": app_state,
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         
         if status:
@@ -76,7 +76,7 @@ class SupabaseClient:
         
         self.client.table("jobs").update({
             "retry_count": new_retry,
-            "updated_at": datetime.utcnow().isoformat()
+            "updated_at": datetime.now(timezone.utc).isoformat()
         }).eq("id", job_id).execute()
         
         return new_retry
