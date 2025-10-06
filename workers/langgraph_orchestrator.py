@@ -104,7 +104,7 @@ class AlphogenAIOrchestrator:
             "final_video": state.get("final_video", {}),
             "retry_count": state.get("retry_count", 0),
             "last_stage": stage,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         
         await self.supabase.update_job_state(
@@ -331,7 +331,7 @@ class AlphogenAIOrchestrator:
                 metadata={
                     "scenes": len(state["clips"]),
                     "duration": sum(clip["duration"] for clip in state["clips"]),
-                    "created_at": datetime.utcnow().isoformat(),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                 }
             )
             
@@ -364,7 +364,7 @@ class AlphogenAIOrchestrator:
                     "status": "completed",
                     "video_url": state["final_video"]["video_url"],
                     "prompt": state["prompt"],
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
                 
                 headers = {"Content-Type": "application/json"}
@@ -490,7 +490,7 @@ async def create_and_run_job(
     job_id = await supabase.create_job(
         user_id=user_id,
         prompt=prompt,
-        initial_state={"created_at": datetime.utcnow().isoformat()}
+        initial_state={"created_at": datetime.now(timezone.utc).isoformat()}
     )
     
     # Exécuter l'orchestrateur
