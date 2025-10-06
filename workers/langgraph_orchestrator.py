@@ -65,21 +65,21 @@ class AlphogenAIOrchestrator:
         self.workflow = self._build_workflow()
     
     def _build_workflow(self) -> StateGraph:
-        """Construit le workflow LangGraph avec 6 étapes"""
+        """Construit le workflow LangGraph - IMAGE DÉSACTIVÉE TEMPORAIREMENT"""
         workflow = StateGraph(WorkflowState)
         
         # Ajouter les nœuds du pipeline
         workflow.add_node("qwen_script", self._node_qwen_script)
-        workflow.add_node("wan_image", self._node_wan_image)
+        # workflow.add_node("wan_image", self._node_wan_image)  # DÉSACTIVÉ
         workflow.add_node("pika_clips", self._node_pika_clips)
         workflow.add_node("elevenlabs_audio", self._node_elevenlabs_audio)
         workflow.add_node("remotion_assembly", self._node_remotion_assembly)
         workflow.add_node("webhook_notify", self._node_webhook_notify)
         
-        # Définir le flux
+        # Définir le flux SANS images
         workflow.set_entry_point("qwen_script")
-        workflow.add_edge("qwen_script", "wan_image")
-        workflow.add_edge("wan_image", "pika_clips")
+        workflow.add_edge("qwen_script", "pika_clips")  # Direct vers vidéos
+        # workflow.add_edge("wan_image", "pika_clips")  # DÉSACTIVÉ
         workflow.add_edge("pika_clips", "elevenlabs_audio")
         workflow.add_edge("elevenlabs_audio", "remotion_assembly")
         workflow.add_edge("remotion_assembly", "webhook_notify")
@@ -181,9 +181,12 @@ class AlphogenAIOrchestrator:
             video_engine = self.settings.VIDEO_ENGINE
             print(f"[Video] Génération de 4 clips avec moteur: {video_engine.upper()}")
             print(f"[Video] Job: {state['job_id']}")
+            print(f"[Video] ⚠️  Mode sans images - génération vidéo directe")
             
             scenes = state["script"]["scenes"]
-            key_visual_url = state["key_visual"]["image_url"]
+            
+            # PAS d'image clé (désactivée temporairement)
+            key_visual_url = None
             
             # Générer seed pour cohérence visuelle (utilisé par Pika)
             base_seed = random.randint(1000, 9999)
