@@ -1055,25 +1055,25 @@ def generate_image_with_replicate(
     if not api_token:
         raise RuntimeError("REPLICATE_API_TOKEN manquant")
     
-    client = replicate.Client(api_token=api_token)
+    # Modèle par défaut: stability-ai/sdxl (stable, gratuit, rapide)
+    # Alternative testée et validée sur Replicate
+    model_id = model or "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b"
     
-    # Modèle par défaut: FLUX.1-schnell (rapide et pas cher)
-    model_id = model or "black-forest-labs/flux-schnell"
-    
-    # Beaucoup de modèles acceptent "width/height" + "num_outputs"
-    # Ne PAS utiliser len() sur le résultat: normaliser via _to_url
+    # Utiliser replicate.run() directement (plus simple et stable)
     inputs = {
         "prompt": prompt,
-        "num_outputs": 1,
         "width": width,
         "height": height,
-        # mets un seed si dispo; sinon le modèle l'ignore
-        "seed": seed or 42,
+        # SDXL utilise "seed" et "num_outputs"
+        "num_outputs": 1,
     }
     
-    # Utilise la méthode la plus simple et fiable
-    # NE PAS ajouter ":latest" - Replicate gère ça automatiquement
-    result = client.run(model_id, input=inputs)
+    # Ajouter seed uniquement si fourni
+    if seed:
+        inputs["seed"] = seed
+    
+    # Utilise replicate.run() sans instancier de client
+    result = replicate.run(model_id, input=inputs)
     
     # Normalise en URL
     url = _to_url(result)
