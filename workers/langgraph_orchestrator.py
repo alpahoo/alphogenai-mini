@@ -137,8 +137,10 @@ class AlphogenAIOrchestrator:
             return state
             
         except Exception as e:
-            print(f"[Qwen] ✗ Erreur: {str(e)}")
-            state["error"] = f"Qwen script error: {str(e)}"
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            print(f"[Qwen] ✗ Erreur: {error_msg}")
+            state["error"] = f"Qwen script error: {error_msg}"
+            state["retry_count"] = state.get("retry_count", 0) + 1
             await self._handle_error(state)
             raise
     
@@ -165,8 +167,10 @@ class AlphogenAIOrchestrator:
             return state
             
         except Exception as e:
-            print(f"[WAN Image] ✗ Erreur: {str(e)}")
-            state["error"] = f"WAN Image error: {str(e)}"
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            print(f"[WAN Image] ✗ Erreur: {error_msg}")
+            state["error"] = f"WAN Image error: {error_msg}"
+            state["retry_count"] = state.get("retry_count", 0) + 1
             await self._handle_error(state)
             raise
     
@@ -222,8 +226,10 @@ class AlphogenAIOrchestrator:
             return state
             
         except Exception as e:
-            print(f"[Video] ✗ Erreur: {str(e)}")
-            state["error"] = f"Video clips error: {str(e)}"
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            print(f"[Video] ✗ Erreur: {error_msg}")
+            state["error"] = f"Video clips error: {error_msg}"
+            state["retry_count"] = state.get("retry_count", 0) + 1
             await self._handle_error(state)
             raise
     
@@ -263,8 +269,10 @@ class AlphogenAIOrchestrator:
             return state
             
         except Exception as e:
-            print(f"[ElevenLabs] ✗ Erreur: {str(e)}")
-            state["error"] = f"ElevenLabs audio error: {str(e)}"
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            print(f"[ElevenLabs] ✗ Erreur: {error_msg}")
+            state["error"] = f"ElevenLabs audio error: {error_msg}"
+            state["retry_count"] = state.get("retry_count", 0) + 1
             await self._handle_error(state)
             raise
     
@@ -331,8 +339,10 @@ class AlphogenAIOrchestrator:
             return state
             
         except Exception as e:
-            print(f"[Remotion] ✗ Erreur: {str(e)}")
-            state["error"] = f"Remotion assembly error: {str(e)}"
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            print(f"[Remotion] ✗ Erreur: {error_msg}")
+            state["error"] = f"Remotion assembly error: {error_msg}"
+            state["retry_count"] = state.get("retry_count", 0) + 1
             await self._handle_error(state)
             raise
     

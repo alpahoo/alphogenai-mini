@@ -71,7 +71,15 @@ Scène 2: [Titre]
                 response.raise_for_status()
                 data = response.json()
             except httpx.HTTPStatusError as e:
-                print(f"[Qwen] HTTP Error {e.response.status_code}: {e.response.text[:500]}")
+                error_detail = e.response.text[:500] if e.response.text else "No details"
+                print(f"[Qwen] HTTP Error {e.response.status_code}: {error_detail}")
+                print(f"[Qwen] Request URL: {e.request.url}")
+                raise RuntimeError(f"Qwen API error {e.response.status_code}: {error_detail}") from e
+            except httpx.TimeoutException as e:
+                print(f"[Qwen] Timeout after 60s")
+                raise RuntimeError("Qwen API timeout after 60 seconds") from e
+            except Exception as e:
+                print(f"[Qwen] Unexpected error: {type(e).__name__}: {str(e)}")
                 raise
             
             # API native DashScope retourne le texte dans data["output"]["text"]
@@ -129,28 +137,39 @@ class WANImageService:
     ) -> Dict[str, Any]:
         """Génère une image clé avec WAN Image"""
         async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(
-                f"{self.base_url}/images/generate",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "prompt": prompt,
-                    "style": style,
-                    "width": 1920,
-                    "height": 1080,
-                    "num_images": 1,
+            try:
+                response = await client.post(
+                    f"{self.base_url}/images/generate",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "prompt": prompt,
+                        "style": style,
+                        "width": 1920,
+                        "height": 1080,
+                        "num_images": 1,
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                return {
+                    "image_url": data["images"][0]["url"],
+                    "image_id": data["images"][0]["id"],
+                    "metadata": data.get("metadata", {}),
                 }
-            )
-            response.raise_for_status()
-            data = response.json()
-            
-            return {
-                "image_url": data["images"][0]["url"],
-                "image_id": data["images"][0]["id"],
-                "metadata": data.get("metadata", {}),
-            }
+            except httpx.HTTPStatusError as e:
+                error_detail = e.response.text[:500] if e.response.text else "No details"
+                print(f"[WAN Image] HTTP Error {e.response.status_code}: {error_detail}")
+                raise RuntimeError(f"WAN Image API error {e.response.status_code}: {error_detail}") from e
+            except httpx.TimeoutException as e:
+                print(f"[WAN Image] Timeout after 120s")
+                raise RuntimeError("WAN Image API timeout") from e
+            except Exception as e:
+                print(f"[WAN Image] Unexpected error: {type(e).__name__}: {str(e)}")
+                raise
 
 
 class PikaService:
@@ -221,22 +240,39 @@ class PikaService:
         """Poll l'API Pika pour attendre la génération"""
         import asyncio
         
-        for _ in range(max_attempts):
-            response = await client.get(
-                f"{self.base_url}/videos/{video_id}",
-                headers={"Authorization": f"Bearer {self.api_key}"}
-            )
-            response.raise_for_status()
-            data = response.json()
-            
-            if data["status"] == "completed":
-                return data["url"]
-            elif data["status"] == "failed":
-                raise Exception(f"Pika generation failed: {data.get('error')}")
-            
-            await asyncio.sleep(5)
+        print(f"[Pika] Attente génération vidéo {video_id}...")
         
-        raise Exception("Pika generation timeout")
+        for attempt in range(max_attempts):
+            try:
+                response = await client.get(
+                    f"{self.base_url}/videos/{video_id}",
+                    headers={"Authorization": f"Bearer {self.api_key}"}
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                status = data.get("status", "unknown")
+                
+                if status == "completed":
+                    print(f"[Pika] ✓ Vidéo {video_id} prête ({attempt + 1} tentatives)")
+                    return data["url"]
+                elif status == "failed":
+                    error_msg = data.get('error', 'Unknown error')
+                    raise RuntimeError(f"Pika video generation failed: {error_msg}")
+                
+                # Afficher progression tous les 10 tentatives
+                if (attempt + 1) % 10 == 0:
+                    print(f"[Pika] Toujours en attente... ({attempt + 1}/{max_attempts})")
+                
+                await asyncio.sleep(5)
+            
+            except httpx.HTTPStatusError as e:
+                print(f"[Pika] Erreur polling {video_id}: {e.response.status_code}")
+                if attempt == max_attempts - 1:
+                    raise
+                await asyncio.sleep(5)
+        
+        raise RuntimeError(f"Pika video generation timeout after {max_attempts * 5}s")
 
 
 class WANVideoService:

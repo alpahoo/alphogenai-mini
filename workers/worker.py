@@ -63,8 +63,12 @@ class AlphogenAIWorker:
             print(f"Job {self.current_job_id} sera marqué comme échoué")
     
     async def _process_pending_jobs(self):
-        """Poll et traite les jobs en attente"""
-        # Chercher un job pending
+        """Poll et traite les jobs en attente + récupération des jobs bloqués"""
+        
+        # Étape 1: Récupérer les jobs bloqués (in_progress depuis > 5min)
+        await self._recover_stuck_jobs()
+        
+        # Étape 2: Chercher un job pending
         result = self.supabase.client.table("jobs") \
             .select("*") \
             .eq("status", "pending") \
@@ -117,6 +121,54 @@ class AlphogenAIWorker:
         finally:
             self.current_job_id = None
     
+    async def _recover_stuck_jobs(self):
+        """Récupère les jobs bloqués en in_progress depuis > 5 minutes"""
+        from datetime import datetime, timedelta
+        
+        try:
+            # Calculer le timestamp d'il y a 5 minutes
+            five_minutes_ago = (datetime.utcnow() - timedelta(minutes=5)).isoformat()
+            
+            # Chercher les jobs in_progress depuis > 5 minutes
+            result = self.supabase.client.table("jobs") \
+                .select("id, updated_at, retry_count, current_stage") \
+                .eq("status", "in_progress") \
+                .lt("updated_at", five_minutes_ago) \
+                .execute()
+            
+            if not result.data or len(result.data) == 0:
+                return
+            
+            for job in result.data:
+                job_id = job["id"]
+                retry_count = job.get("retry_count", 0)
+                current_stage = job.get("current_stage", "unknown")
+                
+                print(f"\n⚠️  Job bloqué détecté: {job_id}")
+                print(f"    Stage: {current_stage}")
+                print(f"    Retry: {retry_count}/{self.settings.MAX_RETRIES}")
+                
+                if retry_count >= self.settings.MAX_RETRIES:
+                    # Trop de retries → marquer comme failed
+                    print(f"    → Marqué comme FAILED (max retries atteint)")
+                    await self.supabase.update_job_state(
+                        job_id,
+                        "failed",
+                        {},
+                        error_message=f"Job stuck at stage '{current_stage}' after {retry_count} retries"
+                    )
+                else:
+                    # Retry possible → remettre en pending
+                    print(f"    → Remis en PENDING pour retry")
+                    self.supabase.client.table("jobs").update({
+                        "status": "pending",
+                        "retry_count": retry_count + 1,
+                        "updated_at": datetime.utcnow().isoformat(),
+                    }).eq("id", job_id).execute()
+        
+        except Exception as e:
+            print(f"[ERREUR] Récupération jobs bloqués: {str(e)}")
+    
     def stop(self):
         """Arrête le worker"""
         self.running = False
@@ -124,6 +176,21 @@ class AlphogenAIWorker:
 
 async def main():
     """Point d'entrée du worker"""
+    
+    # Valider l'environnement au démarrage
+    print("🔍 Validation de l'environnement...")
+    from .validate_env import validate_environment
+    success, errors = validate_environment()
+    
+    if not success:
+        print("\n🚨 Configuration invalide - impossible de démarrer le worker")
+        print("Corrigez les variables d'environnement manquantes.\n")
+        sys.exit(1)
+    
+    print("\n" + "=" * 70)
+    print("✅ Configuration valide - Démarrage du worker...")
+    print("=" * 70 + "\n")
+    
     poll_interval = 10
     
     if len(sys.argv) > 1:
