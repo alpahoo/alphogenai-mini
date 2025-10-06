@@ -20,6 +20,8 @@ from .api_services import (
     PikaService,
     ElevenLabsService,
     RemotionService,
+    ReplicateSDService,
+    ReplicateWANVideoService,
     generate_video_clip,
     generate_elevenlabs_voice,
     render_with_remotion,
@@ -34,8 +36,9 @@ class WorkflowState(TypedDict):
     
     # Résultats de chaque étape
     script: Dict[str, Any]
-    key_visual: Dict[str, Any]
-    clips: list[Dict[str, Any]]
+    images: list[Dict[str, Any]]  # 4 images (Replicate SD)
+    key_visual: Dict[str, Any]  # Legacy
+    clips: list[Dict[str, Any]]  # 4 vidéos (Replicate WAN i2v)
     audio: Dict[str, Any]
     final_video: Dict[str, Any]
     
@@ -56,8 +59,10 @@ class AlphogenAIOrchestrator:
         
         # Initialiser les services AI
         self.qwen = QwenService()
-        self.wan_image = WANImageService()
-        self.pika = PikaService()
+        self.replicate_sd = ReplicateSDService()  # Images via Replicate
+        self.replicate_wan = ReplicateWANVideoService()  # Vidéos via Replicate
+        self.wan_image = WANImageService()  # Backup (pas utilisé)
+        self.pika = PikaService()  # Backup (pas utilisé)
         self.elevenlabs = ElevenLabsService()
         self.remotion = RemotionService()
         
@@ -65,22 +70,22 @@ class AlphogenAIOrchestrator:
         self.workflow = self._build_workflow()
     
     def _build_workflow(self) -> StateGraph:
-        """Construit le workflow LangGraph - IMAGE DÉSACTIVÉE TEMPORAIREMENT"""
+        """Construit le workflow LangGraph avec Replicate (SD 3.5 + WAN i2v)"""
         workflow = StateGraph(WorkflowState)
         
         # Ajouter les nœuds du pipeline
         workflow.add_node("qwen_script", self._node_qwen_script)
-        # workflow.add_node("wan_image", self._node_wan_image)  # DÉSACTIVÉ
-        workflow.add_node("pika_clips", self._node_pika_clips)
+        workflow.add_node("replicate_images", self._node_replicate_images)  # SD 3.5 Turbo
+        workflow.add_node("replicate_videos", self._node_replicate_videos)  # WAN i2v
         workflow.add_node("elevenlabs_audio", self._node_elevenlabs_audio)
         workflow.add_node("remotion_assembly", self._node_remotion_assembly)
         workflow.add_node("webhook_notify", self._node_webhook_notify)
         
-        # Définir le flux SANS images
+        # Définir le flux complet avec Replicate
         workflow.set_entry_point("qwen_script")
-        workflow.add_edge("qwen_script", "pika_clips")  # Direct vers vidéos
-        # workflow.add_edge("wan_image", "pika_clips")  # DÉSACTIVÉ
-        workflow.add_edge("pika_clips", "elevenlabs_audio")
+        workflow.add_edge("qwen_script", "replicate_images")
+        workflow.add_edge("replicate_images", "replicate_videos")
+        workflow.add_edge("replicate_videos", "elevenlabs_audio")
         workflow.add_edge("elevenlabs_audio", "remotion_assembly")
         workflow.add_edge("remotion_assembly", "webhook_notify")
         workflow.add_edge("webhook_notify", END)
@@ -98,6 +103,7 @@ class AlphogenAIOrchestrator:
         app_state = {
             "prompt": state["prompt"],
             "script": state.get("script", {}),
+            "images": state.get("images", []),
             "key_visual": state.get("key_visual", {}),
             "clips": state.get("clips", []),
             "audio": state.get("audio", {}),
@@ -144,6 +150,48 @@ class AlphogenAIOrchestrator:
             await self._handle_error(state)
             raise
     
+    async def _node_replicate_images(self, state: WorkflowState) -> WorkflowState:
+        """Étape 2: Génération de 4 images avec Replicate SD 3.5 Turbo"""
+        try:
+            print(f"[Replicate Images] Génération de 4 images pour job {state['job_id']}")
+            
+            scenes = state["script"]["scenes"]
+            
+            # Générer 4 images en parallèle (une par scène)
+            import asyncio
+            tasks = []
+            for i, scene in enumerate(scenes):
+                print(f"[Replicate Images] Scène {i+1}/4: {scene['description'][:60]}...")
+                tasks.append(
+                    self.replicate_sd.generate_image(
+                        prompt=scene["description"],
+                        style="cinematic"
+                    )
+                )
+            
+            # Exécuter en parallèle
+            image_results = await asyncio.gather(*tasks)
+            
+            # Stocker les images
+            state["images"] = image_results
+            
+            # Sauvegarder l'état
+            await self._save_state(state["job_id"], state, "replicate_images")
+            
+            print(f"[Replicate Images] ✓ {len(image_results)} images générées")
+            for i, img in enumerate(image_results):
+                print(f"  Image {i+1}: {img['image_url'][:60]}...")
+            
+            return state
+            
+        except Exception as e:
+            error_msg = f"{type(e).__name__}: {str(e)}"
+            print(f"[Replicate Images] ✗ Erreur: {error_msg}")
+            state["error"] = f"Replicate Images error: {error_msg}"
+            state["retry_count"] = state.get("retry_count", 0) + 1
+            await self._handle_error(state)
+            raise
+    
     async def _node_wan_image(self, state: WorkflowState) -> WorkflowState:
         """Étape 2: Génération image clé avec WAN Image"""
         try:
@@ -174,58 +222,51 @@ class AlphogenAIOrchestrator:
             await self._handle_error(state)
             raise
     
-    async def _node_pika_clips(self, state: WorkflowState) -> WorkflowState:
-        """Étape 3: Génération 4 clips vidéo (WAN/Pika selon VIDEO_ENGINE)"""
+    async def _node_replicate_videos(self, state: WorkflowState) -> WorkflowState:
+        """Étape 3: Génération 4 clips vidéo avec Replicate WAN 2.1 i2v-720p"""
         try:
-            # Lire le moteur vidéo depuis config
-            video_engine = self.settings.VIDEO_ENGINE
-            print(f"[Video] Génération de 4 clips avec moteur: {video_engine.upper()}")
-            print(f"[Video] Job: {state['job_id']}")
-            print(f"[Video] ⚠️  Mode sans images - génération vidéo directe")
+            print(f"[Replicate Videos] Génération de 4 clips vidéo (image-to-video)")
+            print(f"[Replicate Videos] Job: {state['job_id']}")
             
             scenes = state["script"]["scenes"]
+            images = state["images"]
             
-            # PAS d'image clé (désactivée temporairement)
-            key_visual_url = None
-            
-            # Générer seed pour cohérence visuelle (utilisé par Pika)
-            base_seed = random.randint(1000, 9999)
-            
-            # Générer les 4 clips en parallèle
+            # Générer les 4 vidéos en parallèle (image-to-video)
+            import asyncio
             tasks = []
-            for i, scene in enumerate(scenes):
-                # Le premier clip utilise l'image clé (pour Pika)
-                image_url = key_visual_url if i == 0 and video_engine == "pika" else None
-                seed = base_seed + i if video_engine == "pika" else None
-                
+            for i, (scene, image_data) in enumerate(zip(scenes, images)):
+                print(f"[Replicate Videos] Clip {i+1}/4: {scene['description'][:50]}...")
                 tasks.append(
-                    generate_video_clip(
-                        engine=video_engine,
+                    self.replicate_wan.generate_video_from_image(
                         prompt=scene["description"],
-                        image_url=image_url,
-                        seed=seed
+                        image_url=image_data["image_url"],
+                        duration=4
                     )
                 )
             
             # Exécuter en parallèle
-            clip_results = await asyncio.gather(*tasks)
+            video_results = await asyncio.gather(*tasks)
             
             # Formater les résultats
             clips = []
-            for i, clip_result in enumerate(clip_results):
+            for i, video_result in enumerate(video_results):
                 clips.append({
                     "index": i,
                     "scene": scenes[i],
-                    "engine": clip_result.get("engine", video_engine),
-                    **clip_result
+                    "source_image": images[i]["image_url"],
+                    **video_result
                 })
             
             state["clips"] = clips
             
             # Sauvegarder l'état
-            await self._save_state(state["job_id"], state, "video_clips")
+            await self._save_state(state["job_id"], state, "replicate_videos")
             
-            print(f"[Video] ✓ {len(clips)} clips générés avec {video_engine.upper()}")
+            resolution = video_results[0].get("resolution", "720p") if video_results else "720p"
+            print(f"[Replicate Videos] ✓ {len(clips)} clips vidéo {resolution} générés")
+            for i, clip in enumerate(clips):
+                print(f"  Clip {i+1}: {clip['video_url'][:60]}...")
+            
             return state
             
         except Exception as e:
@@ -315,7 +356,7 @@ class AlphogenAIOrchestrator:
                 app_state={
                     "prompt": state["prompt"],
                     "script": state["script"],
-                    "key_visual": state["key_visual"],
+                    "images": state.get("images", []),
                     "clips": state["clips"],
                     "audio": state["audio"],
                     "final_video": state["final_video"],
@@ -421,8 +462,9 @@ class AlphogenAIOrchestrator:
             "user_id": user_id,
             "prompt": prompt,
             "script": {},
-            "key_visual": {},
-            "clips": [],
+            "images": [],  # Replicate SD images
+            "key_visual": {},  # Legacy
+            "clips": [],  # Replicate WAN videos
             "audio": {},
             "final_video": {},
             "error": None,

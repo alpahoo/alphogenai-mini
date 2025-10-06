@@ -23,10 +23,11 @@ class Settings(BaseSettings):
     QWEN_API_KEY: str
     # Note: Qwen utilise l'API native DashScope (hardcodé dans api_services.py)
     
-    # WAN Image maintenant utilise DashScope (même clé que Qwen)
-    # WAN_IMAGE_API_KEY n'est plus nécessaire (utilise DASHSCOPE_API_KEY)
+    # Replicate (images + vidéos)
+    REPLICATE_API_TOKEN: str
     
-    PIKA_API_KEY: str
+    # Anciens services (optionnels maintenant)
+    PIKA_API_KEY: Optional[str] = None
     PIKA_API_BASE: str = "https://api.pika.art/v1"
     
     # DashScope WAN Video

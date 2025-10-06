@@ -25,3 +25,6 @@ Pillow>=10.0.0
 
 # Utilities
 tenacity>=8.2.0
+
+# Replicate for images and videos
+replicate>=0.25.0

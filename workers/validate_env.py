@@ -24,7 +24,7 @@ def validate_environment() -> Tuple[bool, List[str]]:
         
         # AI Services
         "QWEN_API_KEY": "Clé API DashScope pour Qwen",
-        "DASHSCOPE_API_KEY": "Clé API DashScope (Qwen, WANX Image, WAN Video)",
+        "REPLICATE_API_TOKEN": "Clé API Replicate pour images et vidéos",
         "ELEVENLABS_API_KEY": "Clé API ElevenLabs pour TTS",
         
         # Video Engine (au moins un des deux)
@@ -74,14 +74,15 @@ def validate_environment() -> Tuple[bool, List[str]]:
     
     print()
     
-    # Vérifier DashScope (pour WANX Image + WAN Video)
-    print("🎨 DashScope (WANX Image + WAN Video):")
-    dashscope_key = os.getenv("DASHSCOPE_API_KEY")
-    if not dashscope_key:
-        warnings.append("⚠️  DASHSCOPE_API_KEY manquante (requis si VIDEO_ENGINE=wan)")
-        print("  ⚠️  DASHSCOPE_API_KEY: MANQUANTE")
+    # Vérifier Replicate (Images + Vidéos)
+    print("🎨 Replicate (SD 3.5 Turbo + WAN i2v):")
+    replicate_token = os.getenv("REPLICATE_API_TOKEN")
+    if not replicate_token:
+        errors.append("❌ REPLICATE_API_TOKEN manquante")
+        print("  ❌ REPLICATE_API_TOKEN: MANQUANTE")
     else:
-        print(f"  ✅ DASHSCOPE_API_KEY: {dashscope_key[:15]}...")
+        print(f"  ✅ REPLICATE_API_TOKEN: {replicate_token[:15]}...")
+        print("  ℹ️  Utilisé pour : SD 3.5 Turbo (images) + WAN 2.1 i2v (vidéos)")
     
     print()
     
