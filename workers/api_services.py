@@ -1072,7 +1072,8 @@ def generate_image_with_replicate(
     }
     
     # Utilise la méthode la plus simple et fiable
-    result = client.run(f"{model_id}:latest", input=inputs)
+    # NE PAS ajouter ":latest" - Replicate gère ça automatiquement
+    result = client.run(model_id, input=inputs)
     
     # Normalise en URL
     url = _to_url(result)
