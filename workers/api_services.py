@@ -703,157 +703,171 @@ async def generate_video_clip(
         raise ValueError(f"Unknown VIDEO_ENGINE: {engine}. Must be 'wan', 'pika', or 'stills'.")
 
 
-async def generate_elevenlabs_voice(
-    text: str,
-    voice_id: str = "pNInz6obpgDQGcFmaJgB",  # Adam (multilingue, supporte français)
-    language: str = "fr"
-) -> Dict[str, Any]:
-    """
-    Utilise l'API ElevenLabs pour générer un MP3 + SRT à partir du texte.
-    Upload l'audio sur Supabase Storage et retourne l'URL publique.
-    
-    Args:
-        text: Texte à convertir en voix
-        voice_id: ID de la voix ElevenLabs (défaut: multilingual v2)
-        language: Code langue (fr, en, es, etc.)
-        
-    Returns:
-        {
-            "audio_url": str,      # URL publique du MP3 sur Supabase Storage
-            "srt": str,           # Contenu SRT synchronisé
-            "duration": float     # Durée en secondes
-        }
-    """
-    import os
-    from datetime import datetime, timezone
-    
-    settings = get_settings()
-    api_key = settings.ELEVENLABS_API_KEY
-    base_url = settings.ELEVENLABS_API_BASE
-    
-    # Créer client Supabase pour upload
-    from .supabase_client import SupabaseClient
-    supabase_client = SupabaseClient()
-    
-    # Générer l'audio avec ElevenLabs
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        # Pour multilingual v2, on peut spécifier la langue
-        response = await client.post(
-            f"{base_url}/text-to-speech/{voice_id}",
-            headers={
-                "xi-api-key": api_key,
-                "Content-Type": "application/json",
-            },
-            json={
-                "text": text,
-                "model_id": "eleven_multilingual_v2",
-                "voice_settings": {
-                    "stability": 0.5,
-                    "similarity_boost": 0.75,
-                    "style": 0.0,
-                    "use_speaker_boost": True
-                },
-                "language_code": language  # fr, en, es, etc.
-            }
-        )
-        response.raise_for_status()
-        audio_bytes = response.content
-    
-    # Calculer la durée de l'audio
-    # ElevenLabs retourne généralement ~24kHz, 16-bit mono
-    # Formule: bytes / (sample_rate * bytes_per_sample * channels)
-    # Estimation: ~48000 bytes par seconde pour 24kHz mono 16-bit
-    estimated_duration = len(audio_bytes) / 48000.0
-    
-    # Alternative: estimer par nombre de caractères
-    # Français: ~14 caractères par seconde de parole
-    char_based_duration = len(text) / 14.0
-    
-    # Utiliser la moyenne pour plus de précision
-    duration = (estimated_duration + char_based_duration) / 2.0
-    
-    # Upload sur Supabase Storage
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    filename = f"audio_{timestamp}.mp3"
-    
-    # Upload vers le bucket 'uploads' (ou créer bucket 'audio')
-    upload_result = supabase_client.client.storage.from_("uploads").upload(
-        filename,
-        audio_bytes,
-        file_options={"content-type": "audio/mpeg"}
-    )
-    
-    # Obtenir l'URL publique
-    audio_url = supabase_client.client.storage.from_("uploads").get_public_url(filename)
-    
-    # Générer SRT synchronisé
-    srt_content = _generate_advanced_srt(text, duration)
-    
-    return {
-        "audio_url": audio_url,
-        "srt": srt_content,
-        "duration": duration
-    }
 
 
-def _generate_advanced_srt(text: str, total_duration: float) -> str:
+def _get_env(name: str, *, aliases: list[str] = []) -> str | None:
     """
-    Génère un fichier SRT synchronisé basé sur la durée totale.
-    Découpe le texte en segments de ~5-8 mots avec timing précis.
+    Récupère une variable d'environnement avec support d'aliases.
+    Essaie le nom principal puis les aliases dans l'ordre.
     """
-    # Découper par phrases ou segments logiques
-    sentences = text.replace('!', '.').replace('?', '.').split('.')
-    sentences = [s.strip() for s in sentences if s.strip()]
+    for k in [name] + aliases:
+        v = os.getenv(k)
+        if v:
+            return v
+    return None
+
+
+def _make_srt_from_text(text: str, total_duration: float) -> str:
+    """
+    Génère un SRT simple en répartissant le texte sur la durée.
+    Découpe par phrases (. ! ?) et répartit équitablement.
+    """
+    import re
     
-    # Si peu de phrases, découper par mots
-    if len(sentences) < 3:
-        words = text.split()
-        # Grouper en chunks de 5-8 mots
-        sentences = []
-        chunk_size = 6
-        for i in range(0, len(words), chunk_size):
-            chunk = " ".join(words[i:i+chunk_size])
-            sentences.append(chunk)
+    # Découper en phrases
+    sentences = [s.strip() for s in re.split(r'(?<=[\.\!\?])\s+', text) if s.strip()]
+    if not sentences:
+        sentences = [text]
+    
+    # Durée par phrase
+    per_sentence = max(1.5, total_duration / len(sentences))
     
     srt_lines = []
-    segment_duration = total_duration / len(sentences) if sentences else 1.0
+    start_time = 0.0
+    idx = 1
     
-    for idx, sentence in enumerate(sentences):
-        start_time = idx * segment_duration
-        end_time = (idx + 1) * segment_duration
+    for sentence in sentences:
+        end_time = start_time + per_sentence
         
-        # Numéro du sous-titre
-        srt_lines.append(f"{idx + 1}")
+        # Formater en HH:MM:SS,mmm
+        def format_time(seconds: float) -> str:
+            h = int(seconds // 3600)
+            m = int((seconds % 3600) // 60)
+            s = seconds % 60
+            ms = int((s - int(s)) * 1000)
+            return f"{h:02d}:{m:02d}:{int(s):02d},{ms:03d}"
         
-        # Timecodes
-        srt_lines.append(
-            f"{_format_srt_timestamp(start_time)} --> {_format_srt_timestamp(end_time)}"
-        )
-        
-        # Texte
+        srt_lines.append(f"{idx}")
+        srt_lines.append(f"{format_time(start_time)} --> {format_time(end_time)}")
         srt_lines.append(sentence)
+        srt_lines.append("")  # Ligne vide
         
-        # Ligne vide
-        srt_lines.append("")
+        start_time = end_time
+        idx += 1
     
     return "\n".join(srt_lines)
 
 
-def _format_srt_timestamp(seconds: float) -> str:
-    """Formate les secondes en timestamp SRT (HH:MM:SS,mmm)"""
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    millis = int((seconds % 1) * 1000)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
-
-
-async def render_with_remotion(
-    clips: List[Dict[str, Any]],
-    audio_url: str,
-    srt: str | None = None,
-    logo_url: str | None = None
+async def generate_elevenlabs_voice(
+    text: str,
+    *,
+    language: str = "fr",
+    model_id: str = "eleven_multilingual_v2"
 ) -> Dict[str, Any]:
+    """
+    Génère audio + SRT avec ElevenLabs.
+    
+    Retourne: { 'audio_url': str, 'duration': float, 'srt': str }
+    - Utilise l'endpoint correct: /v1/text-to-speech/{voice_id}
+    - voice_id en ENV: ELEVENLABS_VOICE_ID (défaut: Rachel si absent)
+    - model_id passé dans le body (ex: 'eleven_multilingual_v2')
+    - Gère 401/404 proprement avec message clair
+    - Upload vers Supabase Storage
+    """
+    ELEVEN_TTS_BASE = "https://api.elevenlabs.io/v1"
+    
+    # Récupérer les credentials
+    api_key = _get_env("ELEVENLABS_API_KEY", aliases=["ELEVEN_API_KEY"])
+    voice_id = _get_env("ELEVENLABS_VOICE_ID", aliases=["ELEVEN_VOICE_ID"])
+    
+    if not api_key:
+        raise RuntimeError("ELEVENLABS_API_KEY manquant")
+    
+    # Voix par défaut: Rachel (publique, multilingue)
+    if not voice_id:
+        voice_id = "21m00Tcm4TlvDq8ikWAM"
+        print(f"[ElevenLabs] ⚠️  ELEVENLABS_VOICE_ID non défini, utilisation de Rachel (défaut)")
+    
+    print(f"[ElevenLabs] Génération TTS...")
+    print(f"[ElevenLabs] Voice ID: {voice_id}")
+    print(f"[ElevenLabs] Model: {model_id}")
+    print(f"[ElevenLabs] Texte: {len(text)} caractères")
+    
+    url = f"{ELEVEN_TTS_BASE}/text-to-speech/{voice_id}"
+    
+    headers = {
+        "xi-api-key": api_key,
+        "accept": "audio/mpeg",
+        "content-type": "application/json",
+    }
+    
+    payload = {
+        "text": text,
+        "model_id": model_id,
+        "voice_settings": {
+            "stability": 0.5,
+            "similarity_boost": 0.75,
+            "style": 0.3,
+            "use_speaker_boost": True,
+        }
+    }
+    
+    # Requête ElevenLabs
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        try:
+            response = await client.post(url, headers=headers, json=payload)
+            
+            # Gestion d'erreurs explicites
+            if response.status_code == 401:
+                raise RuntimeError("ElevenLabs 401: API key invalide. Vérifiez ELEVENLABS_API_KEY")
+            if response.status_code == 404:
+                raise RuntimeError(f"ElevenLabs 404: voice_id '{voice_id}' introuvable. Vérifiez ELEVENLABS_VOICE_ID")
+            
+            response.raise_for_status()
+            audio_bytes = response.content
+            
+        except httpx.HTTPStatusError as e:
+            error_detail = e.response.text[:300] if e.response.text else "No details"
+            raise RuntimeError(f"ElevenLabs HTTP error: {e.response.status_code} - {error_detail}") from e
+        except httpx.RequestError as e:
+            raise RuntimeError(f"ElevenLabs network error: {str(e)}") from e
+    
+    # Durée approximative: ~13 chars/sec à vitesse normale
+    approx_duration = max(2.0, len(text) / 13.0)
+    
+    # Générer SRT
+    srt_text = _make_srt_from_text(text, approx_duration)
+    
+    # Upload vers Supabase Storage
+    from .supabase_client import SupabaseClient
+    import uuid
+    
+    supabase = SupabaseClient()
+    audio_filename = f"audio_{uuid.uuid4()}.mp3"
+    
+    try:
+        audio_url = await supabase.upload_file(
+            bucket="uploads",
+            path=audio_filename,
+            data=audio_bytes,
+            content_type="audio/mpeg"
+        )
+    except Exception as e:
+        # Fallback: data URL si l'upload échoue
+        print(f"[ElevenLabs] ⚠️  Upload Supabase échoué, fallback data URL: {e}")
+        import base64
+        audio_url = "data:audio/mpeg;base64," + base64.b64encode(audio_bytes).decode("utf-8")
+    
+    print(f"[ElevenLabs] ✓ Audio généré: {approx_duration:.1f}s")
+    print(f"[ElevenLabs] ✓ URL: {audio_url[:80]}...")
+    print(f"[ElevenLabs] ✓ SRT: {len(srt_text.split(chr(10)))} lignes")
+    
+    return {
+        "audio_url": audio_url,
+        "duration": approx_duration,
+        "srt": srt_text
+    }
+
     """
     Déclenche un rendu Remotion Cloud (Lambda) et retourne l'URL finale.
     
