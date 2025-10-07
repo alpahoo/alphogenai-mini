@@ -868,6 +868,13 @@ async def generate_elevenlabs_voice(
         "srt": srt_text
     }
 
+
+async def render_with_remotion(
+    clips: List[Dict[str, Any]],
+    audio_url: str,
+    srt: str | None = None,
+    logo_url: str | None = None
+) -> Dict[str, Any]:
     """
     Déclenche un rendu Remotion Cloud (Lambda) et retourne l'URL finale.
     
