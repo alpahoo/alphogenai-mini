@@ -99,11 +99,19 @@ def validate_environment() -> Tuple[bool, List[str]]:
     # Vérifier ElevenLabs
     print("🎙️  ElevenLabs TTS:")
     elevenlabs_key = os.getenv("ELEVENLABS_API_KEY")
+    elevenlabs_voice = os.getenv("ELEVENLABS_VOICE_ID")
+    
     if not elevenlabs_key:
         errors.append("❌ ELEVENLABS_API_KEY manquante")
         print("  ❌ ELEVENLABS_API_KEY: MANQUANTE")
     else:
         print(f"  ✅ ELEVENLABS_API_KEY: {elevenlabs_key[:15]}...")
+    
+    if not elevenlabs_voice:
+        warnings.append("⚠️  ELEVENLABS_VOICE_ID non définie (utilisera Rachel par défaut)")
+        print("  ⚠️  ELEVENLABS_VOICE_ID: NON DÉFINIE (Rachel par défaut)")
+    else:
+        print(f"  ✅ ELEVENLABS_VOICE_ID: {elevenlabs_voice[:15]}...")
     
     print()
     

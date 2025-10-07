@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     VIDEO_ENGINE: str = "wan"  # wan, pika, or stills
     
     ELEVENLABS_API_KEY: str
+    ELEVENLABS_VOICE_ID: Optional[str] = None  # Rachel par défaut si absent
     ELEVENLABS_API_BASE: str = "https://api.elevenlabs.io/v1"
     
     REMOTION_RENDERER_URL: str = "http://localhost:3001"
