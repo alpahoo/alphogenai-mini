@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     QWEN_API_KEY: str
     # Note: Qwen utilise l'API native DashScope (hardcodé dans api_services.py)
     
-    # Replicate (images + vidéos)
-    REPLICATE_API_TOKEN: str
+    # Hugging Face (images gratuites)
+    HUGGINGFACE_API_TOKEN: Optional[str] = None  # Optionnel, augmente les limites
     
     # Anciens services (optionnels maintenant)
     PIKA_API_KEY: Optional[str] = None
@@ -34,12 +34,8 @@ class Settings(BaseSettings):
     DASHSCOPE_API_KEY: str
     DASHSCOPE_API_BASE: str = "https://dashscope-intl.aliyuncs.com/api/v1"
     
-    # Video Engine selection
-    VIDEO_ENGINE: str = "wan"  # wan, pika, or stills
-    
-    ELEVENLABS_API_KEY: str
-    ELEVENLABS_VOICE_ID: Optional[str] = None  # Rachel par défaut si absent
-    ELEVENLABS_API_BASE: str = "https://api.elevenlabs.io/v1"
+    # Video Engine selection (images statiques par défaut)
+    VIDEO_ENGINE: str = "static"  # static (images+transitions), wan, pika
     
     REMOTION_RENDERER_URL: str = "http://localhost:3001"
     REMOTION_SITE_ID: Optional[str] = None

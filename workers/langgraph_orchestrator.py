@@ -18,13 +18,11 @@ from .api_services import (
     QwenService,
     WANImageService,
     PikaService,
-    ElevenLabsService,
     RemotionService,
-    ReplicateSDService,
-    ReplicateWANVideoService,
     generate_video_clip,
     render_with_remotion,
 )
+from .huggingface_service import HuggingFaceImageService
 
 
 class WorkflowState(TypedDict):
@@ -56,10 +54,9 @@ class AlphogenAIOrchestrator:
         self.settings = get_settings()
         self.supabase = SupabaseClient()
         
-        # Initialiser les services AI
+        # Initialiser les services AI (GRATUIT)
         self.qwen = QwenService()
-        self.replicate_sd = ReplicateSDService()  # Images via Replicate
-        self.replicate_wan = ReplicateWANVideoService()  # Vidéos via Replicate
+        self.huggingface = HuggingFaceImageService()  # Images GRATUITES
         self.wan_image = WANImageService()  # Backup (pas utilisé)
         self.pika = PikaService()  # Backup (pas utilisé)
         self.remotion = RemotionService()
@@ -185,91 +182,6 @@ class AlphogenAIOrchestrator:
             error_msg = f"{type(e).__name__}: {str(e)}"
             print(f"[Replicate Images] ✗ Erreur: {error_msg}")
             state["error"] = f"Replicate Images error: {error_msg}"
-            state["retry_count"] = state.get("retry_count", 0) + 1
-            await self._handle_error(state)
-            raise
-    
-    async def _node_wan_image(self, state: WorkflowState) -> WorkflowState:
-        """Étape 2: Génération image clé avec WAN Image"""
-        try:
-            print(f"[WAN Image] Génération de l'image clé pour job {state['job_id']}")
-            
-            # Utiliser la description de la première scène
-            first_scene = state["script"]["scenes"][0]["description"]
-            
-            # Générer l'image clé
-            visual_result = await self.wan_image.generate_image(
-                first_scene,
-                style="cinematic"
-            )
-            
-            state["key_visual"] = visual_result
-            
-            # Sauvegarder l'état
-            await self._save_state(state["job_id"], state, "wan_image")
-            
-            print(f"[WAN Image] ✓ Image clé générée: {visual_result['image_url']}")
-            return state
-            
-        except Exception as e:
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            print(f"[WAN Image] ✗ Erreur: {error_msg}")
-            state["error"] = f"WAN Image error: {error_msg}"
-            state["retry_count"] = state.get("retry_count", 0) + 1
-            await self._handle_error(state)
-            raise
-    
-    async def _node_replicate_videos(self, state: WorkflowState) -> WorkflowState:
-        """Étape 3: Génération 4 clips vidéo avec Replicate WAN 2.1 i2v-720p"""
-        try:
-            print(f"[Replicate Videos] Génération de 4 clips vidéo (image-to-video)")
-            print(f"[Replicate Videos] Job: {state['job_id']}")
-            
-            scenes = state["script"]["scenes"]
-            images = state["images"]
-            
-            # Générer les 4 vidéos en parallèle (image-to-video)
-            import asyncio
-            tasks = []
-            for i, (scene, image_data) in enumerate(zip(scenes, images)):
-                print(f"[Replicate Videos] Clip {i+1}/4: {scene['description'][:50]}...")
-                tasks.append(
-                    self.replicate_wan.generate_video_from_image(
-                        prompt=scene["description"],
-                        image_url=image_data["image_url"],
-                        duration=4
-                    )
-                )
-            
-            # Exécuter en parallèle
-            video_results = await asyncio.gather(*tasks)
-            
-            # Formater les résultats
-            clips = []
-            for i, video_result in enumerate(video_results):
-                clips.append({
-                    "index": i,
-                    "scene": scenes[i],
-                    "source_image": images[i]["image_url"],
-                    **video_result
-                })
-            
-            state["clips"] = clips
-            
-            # Sauvegarder l'état
-            await self._save_state(state["job_id"], state, "replicate_videos")
-            
-            resolution = video_results[0].get("resolution", "720p") if video_results else "720p"
-            print(f"[Replicate Videos] ✓ {len(clips)} clips vidéo {resolution} générés")
-            for i, clip in enumerate(clips):
-                print(f"  Clip {i+1}: {clip['video_url'][:60]}...")
-            
-            return state
-            
-        except Exception as e:
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            print(f"[Video] ✗ Erreur: {error_msg}")
-            state["error"] = f"Video clips error: {error_msg}"
             state["retry_count"] = state.get("retry_count", 0) + 1
             await self._handle_error(state)
             raise
