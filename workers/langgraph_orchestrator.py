@@ -293,7 +293,6 @@ class AlphogenAIOrchestrator:
             # Générer l'audio avec upload Supabase Storage + SRT
             audio_result = await generate_elevenlabs_voice(
                 text=full_narration,
-                voice_id="eleven_multilingual_v2",
                 language="fr"  # Français par défaut
             )
             
