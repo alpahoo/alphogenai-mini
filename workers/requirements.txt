@@ -28,3 +28,6 @@ tenacity>=8.2.0
 
 # Replicate for images and videos
 replicate>=0.25.0
+
+# Audio processing
+pydub==0.25.1

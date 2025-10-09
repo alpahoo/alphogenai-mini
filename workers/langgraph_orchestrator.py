@@ -23,9 +23,9 @@ from .api_services import (
     ReplicateSDService,
     ReplicateWANVideoService,
     generate_video_clip,
-    generate_elevenlabs_voice,
     render_with_remotion,
 )
+from .elevenlabs_service import generate_elevenlabs_voice
 
 
 class WorkflowState(TypedDict):
