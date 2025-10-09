@@ -1,7 +1,44 @@
 import { updateSession } from "@/lib/supabase/middleware";
-import { type NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Basic auth for admin UI (MVP). Uses ADMIN_PASSWORD or falls back to ADMIN_TOKEN.
+  if (pathname.startsWith("/admin")) {
+    const auth = request.headers.get("authorization");
+    const expectedPass = process.env.ADMIN_PASSWORD || process.env.ADMIN_TOKEN;
+    if (!expectedPass) {
+      // No password set → deny access by default
+      return new NextResponse("Admin disabled", {
+        status: 403,
+      });
+    }
+
+    if (!auth?.startsWith("Basic ")) {
+      return new NextResponse("Unauthorized", {
+        status: 401,
+        headers: { "WWW-Authenticate": 'Basic realm="Admin"' },
+      });
+    }
+    try {
+      const [, b64] = auth.split(" ");
+      const decoded = Buffer.from(b64, "base64").toString("utf8");
+      const password = decoded.split(":").slice(1).join(":");
+      if (password !== expectedPass) {
+        return new NextResponse("Unauthorized", {
+          status: 401,
+          headers: { "WWW-Authenticate": 'Basic realm="Admin"' },
+        });
+      }
+    } catch {
+      return new NextResponse("Unauthorized", {
+        status: 401,
+        headers: { "WWW-Authenticate": 'Basic realm="Admin"' },
+      });
+    }
+  }
+
   return await updateSession(request);
 }
 
