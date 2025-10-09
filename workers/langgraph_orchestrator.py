@@ -62,7 +62,6 @@ class AlphogenAIOrchestrator:
         self.replicate_wan = ReplicateWANVideoService()  # Vidéos via Replicate
         self.wan_image = WANImageService()  # Backup (pas utilisé)
         self.pika = PikaService()  # Backup (pas utilisé)
-        self.elevenlabs = ElevenLabsService()
         self.remotion = RemotionService()
         
         # Construire le workflow LangGraph
@@ -271,48 +270,6 @@ class AlphogenAIOrchestrator:
             error_msg = f"{type(e).__name__}: {str(e)}"
             print(f"[Video] ✗ Erreur: {error_msg}")
             state["error"] = f"Video clips error: {error_msg}"
-            state["retry_count"] = state.get("retry_count", 0) + 1
-            await self._handle_error(state)
-            raise
-    
-    async def _node_elevenlabs_audio(self, state: WorkflowState) -> WorkflowState:
-        """Étape 4: Génération audio + SRT avec ElevenLabs"""
-        try:
-            print(f"[ElevenLabs] Génération audio pour job {state['job_id']}")
-            
-            # Combiner toutes les narrations en script unique
-            full_narration = " ".join([
-                scene["narration"].strip()
-                for scene in state["script"]["scenes"]
-            ])
-            
-            print(f"[ElevenLabs] Texte: {len(full_narration)} caractères")
-            
-            # Générer l'audio avec upload Supabase Storage + SRT
-            audio_result = await generate_elevenlabs_voice(
-                text=full_narration,
-                language="fr"  # Français par défaut
-            )
-            
-            # Stocker dans app_state["audio"]
-            state["audio"] = {
-                "audio_url": audio_result["audio_url"],
-                "srt": audio_result["srt"],
-                "duration": audio_result["duration"]
-            }
-            
-            # Sauvegarder l'état
-            await self._save_state(state["job_id"], state, "elevenlabs_audio")
-            
-            print(f"[ElevenLabs] ✓ Audio généré: {audio_result['duration']:.1f}s")
-            print(f"[ElevenLabs] ✓ URL: {audio_result['audio_url']}")
-            print(f"[ElevenLabs] ✓ SRT: {len(audio_result['srt'].split(chr(10)))} lignes")
-            return state
-            
-        except Exception as e:
-            error_msg = f"{type(e).__name__}: {str(e)}"
-            print(f"[ElevenLabs] ✗ Erreur: {error_msg}")
-            state["error"] = f"ElevenLabs audio error: {error_msg}"
             state["retry_count"] = state.get("retry_count", 0) + 1
             await self._handle_error(state)
             raise
