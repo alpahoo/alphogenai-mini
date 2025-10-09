@@ -25,7 +25,6 @@ from .api_services import (
     generate_video_clip,
     render_with_remotion,
 )
-from .elevenlabs_service import generate_elevenlabs_voice
 
 
 class WorkflowState(TypedDict):
@@ -77,16 +76,15 @@ class AlphogenAIOrchestrator:
         workflow.add_node("qwen_script", self._node_qwen_script)
         workflow.add_node("replicate_images", self._node_replicate_images)  # SD 3.5 Turbo
         workflow.add_node("replicate_videos", self._node_replicate_videos)  # WAN i2v
-        workflow.add_node("elevenlabs_audio", self._node_elevenlabs_audio)
+        # ELEVENLABS SUPPRIMÉ - Vidéos sans audio
         workflow.add_node("remotion_assembly", self._node_remotion_assembly)
         workflow.add_node("webhook_notify", self._node_webhook_notify)
         
-        # Définir le flux complet avec Replicate
+        # Définir le flux complet avec Replicate (SANS AUDIO)
         workflow.set_entry_point("qwen_script")
         workflow.add_edge("qwen_script", "replicate_images")
         workflow.add_edge("replicate_images", "replicate_videos")
-        workflow.add_edge("replicate_videos", "elevenlabs_audio")
-        workflow.add_edge("elevenlabs_audio", "remotion_assembly")
+        workflow.add_edge("replicate_videos", "remotion_assembly")  # Direct vers assemblage
         workflow.add_edge("remotion_assembly", "webhook_notify")
         workflow.add_edge("webhook_notify", END)
         
@@ -320,13 +318,14 @@ class AlphogenAIOrchestrator:
             raise
     
     async def _node_remotion_assembly(self, state: WorkflowState) -> WorkflowState:
-        """Étape 5: Assemblage final avec Remotion Cloud"""
+        """Étape 5: Assemblage final avec Remotion Cloud (SANS AUDIO)"""
         try:
             print(f"[Remotion] Assemblage vidéo finale pour job {state['job_id']}")
+            print(f"[Remotion] ⚠️ Mode SANS AUDIO (ElevenLabs désactivé)")
             
-            # Récupérer audio_url depuis state (uploadé par ElevenLabs)
-            audio_url = state["audio"].get("audio_url", "")
-            srt_content = state["audio"].get("srt", "")
+            # PAS D'AUDIO - ElevenLabs supprimé du workflow
+            audio_url = None
+            srt_content = None
             
             # Logo optionnel (peut être ajouté dans config)
             logo_url = getattr(self.settings, 'LOGO_URL', None)
