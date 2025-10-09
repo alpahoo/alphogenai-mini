@@ -21,6 +21,34 @@ class SupabaseClient:
             service_key
         )
     
+    async def upload_file(
+        self,
+        *,
+        bucket: str,
+        path: str,
+        data: bytes,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        """Upload a file to Supabase Storage and return its public URL.
+
+        This helper centralizes storage uploads for workers.
+        """
+        # Upload the raw bytes
+        self.client.storage.from_(bucket).upload(
+            path=path,
+            file=data,
+            file_options={"content-type": content_type},
+        )
+        # Build and return the public URL
+        public_url = self.client.storage.from_(bucket).get_public_url(path)
+        # Some client versions return objects; normalize to string when needed
+        try:
+            if isinstance(public_url, dict):
+                return public_url.get("publicURL") or public_url.get("public_url") or ""
+        except Exception:
+            pass
+        return str(public_url)
+    
     async def create_job(
         self,
         user_id: str,
@@ -114,3 +142,20 @@ class SupabaseClient:
         
         # Upsert basé sur prompt_hash
         self.client.table("video_cache").upsert(cache_data, on_conflict="prompt_hash").execute()
+
+
+# ----------------------------------------------------------------------------
+# Backward-compat API: legacy import used in earlier worker versions
+# Some deployments import `get_supabase_client` from this module.
+# Provide a small factory to avoid ImportError while keeping new class-based API.
+# ----------------------------------------------------------------------------
+def get_supabase_client() -> Client:
+    """Return a configured Supabase Client (backward compatibility).
+
+    Older code expects `from workers.supabase_client import get_supabase_client`.
+    """
+    settings = get_settings()
+    service_key = settings.get_service_key()
+    if not service_key:
+        raise ValueError("SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_KEY must be set")
+    return create_client(settings.SUPABASE_URL, service_key)

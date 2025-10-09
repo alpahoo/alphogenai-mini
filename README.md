@@ -99,6 +99,8 @@ Required variables:
 - `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anonymous key
 - `SUPABASE_SERVICE_KEY` - Supabase service role key
+- `ADMIN_TOKEN` - Secret token for admin API updates
+- `SUPABASE_STORAGE_BUCKET` - Storage bucket used for music assets (e.g. `music`)
 - `QWEN_API_KEY` - Qwen/Alibaba Cloud API key
 - `WAN_IMAGE_API_KEY` - WAN Image API key
 - `PIKA_API_KEY` - Pika API key
