@@ -17,7 +17,7 @@ import subprocess
 import tempfile
 from typing import Dict, List, Optional, Tuple
 
-from workers.supabase_client import get_supabase_client
+from .supabase_client import SupabaseClient
 
 ELEVEN_API = os.getenv("ELEVENLABS_API_BASE", "https://api.elevenlabs.io")
 ELEVEN_KEY = os.getenv("ELEVENLABS_API_KEY", "")
@@ -270,21 +270,21 @@ async def generate_elevenlabs_voice(
 
         # Upload vers Supabase Storage
         try:
-            supabase = get_supabase_client()
+            supabase_client = SupabaseClient()
             ts = int(time.time())
             key = f"audio/{ts}-{abs(hash(text)) % 10_000_000}.mp3"
             
             print(f"[ElevenLabs] Upload vers Supabase Storage: {key}")
             
             # Upload via supabase-py
-            result = supabase.storage.from_("assets").upload(
+            result = supabase_client.client.storage.from_("assets").upload(
                 path=key,
                 file=out_bytes,
                 file_options={"content-type": "audio/mpeg"}
             )
             
             # Construire l'URL publique
-            public_url = supabase.storage.from_("assets").get_public_url(key)
+            public_url = supabase_client.client.storage.from_("assets").get_public_url(key)
             
             print(f"[ElevenLabs] ✓ Audio uploadé: {public_url}")
             
