@@ -196,7 +196,10 @@ export default function GeneratePage() {
         {/* Info */}
         <div className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
           <p>
-            💰 Coût par vidéo : ~$0.57 | ⏱️ Temps : ~2 minutes
+            💚 Coût par vidéo : $0.05 (Remotion uniquement) | ⏱️ Temps : ~2 minutes
+          </p>
+          <p className="mt-1 text-xs">
+            Images : HuggingFace FLUX (GRATUIT) | Vidéos : Images statiques + transitions
           </p>
         </div>
       </div>
