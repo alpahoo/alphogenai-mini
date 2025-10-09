@@ -55,23 +55,15 @@ def _chunks_by_char_limit(sentences: List[str], limit: int) -> List[str]:
 
 
 async def _ensure_voice_id(client: httpx.AsyncClient, requested: Optional[str]) -> str:
-    """Fallback: si voice_id absent, prendre la première voix disponible"""
+    """Fallback: si voice_id absent, utiliser Rachel (voix par défaut)"""
     if requested:
         return requested
     
-    print("[ElevenLabs] ELEVENLABS_VOICE_ID non défini, récupération d'une voix par défaut...")
-    resp = await client.get(
-        f"{ELEVEN_API}/v1/voices", 
-        headers={"xi-api-key": ELEVEN_KEY}
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    voices = data.get("voices", [])
-    if not voices:
-        raise RuntimeError("ElevenLabs: aucune voix disponible et ELEVENLABS_VOICE_ID non fourni.")
-    
-    fallback_voice = voices[0]["voice_id"]
-    print(f"[ElevenLabs] Utilisation de la voix par défaut: {fallback_voice}")
+    # Voix par défaut: Rachel (multilingual, high quality)
+    # Alternatives: pNInz6obpgDQGcFmaJgB (Adam), EXAVITQu4vr4xnSDxMaL (Bella)
+    fallback_voice = "21m00Tcm4TlvDq8ikWAM"  # Rachel
+    print(f"[ElevenLabs] ⚠️ ELEVENLABS_VOICE_ID non défini, utilisation de Rachel (par défaut)")
+    print(f"[ElevenLabs] Voice ID: {fallback_voice}")
     return fallback_voice
 
 
