@@ -91,9 +91,9 @@ class AlphogenAIWorker:
         try:
             # Marquer comme in_progress
             await self.supabase.update_job_state(
-                job["id"],
-                "in_progress",
-                {}
+                job_id=job["id"],
+                app_state={},
+                status="in_progress"
             )
             
             # Exécuter l'orchestrateur
@@ -112,9 +112,9 @@ class AlphogenAIWorker:
         except Exception as e:
             print(f"\n❌ Job {job['id']} échoué avec exception: {str(e)}\n")
             await self.supabase.update_job_state(
-                job["id"],
-                "failed",
-                {},
+                job_id=job["id"],
+                app_state={},
+                status="failed",
                 error_message=str(e)
             )
         
@@ -152,9 +152,9 @@ class AlphogenAIWorker:
                     # Trop de retries → marquer comme failed
                     print(f"    → Marqué comme FAILED (max retries atteint)")
                     await self.supabase.update_job_state(
-                        job_id,
-                        "failed",
-                        {},
+                        job_id=job_id,
+                        app_state={},
+                        status="failed",
                         error_message=f"Job stuck at stage '{current_stage}' after {retry_count} retries"
                     )
                 else:
