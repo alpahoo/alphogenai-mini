@@ -109,8 +109,11 @@ def get_music_url_from_storage(
     """
     subdir = TONE_DIR.get(tone.lower().strip(), "inspiring")
     
-    # Format: https://xxx.supabase.co/storage/v1/object/public/assets/music/inspiring/file.mp3
-    return f"{supabase_url}/storage/v1/object/public/assets/music/{subdir}/{filename}"
+    # Bucket configurable via env (fallback to 'assets')
+    import os
+    bucket = os.getenv("SUPABASE_STORAGE_BUCKET", "assets")
+    # Format: https://xxx.supabase.co/storage/v1/object/public/<bucket>/music/<subdir>/file.mp3
+    return f"{supabase_url}/storage/v1/object/public/{bucket}/music/{subdir}/{filename}"
 
 
 async def select_music_for_job(

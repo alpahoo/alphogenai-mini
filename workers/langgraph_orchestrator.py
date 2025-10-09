@@ -26,6 +26,9 @@ from .api_services import (
     render_with_remotion,
 )
 from .elevenlabs_service import generate_elevenlabs_voice
+from .admin_settings import get_admin_settings
+from .music_selector import select_music_for_job
+import os
 
 
 class WorkflowState(TypedDict):
@@ -278,37 +281,78 @@ class AlphogenAIOrchestrator:
             raise
     
     async def _node_elevenlabs_audio(self, state: WorkflowState) -> WorkflowState:
-        """Étape 4: Génération audio + SRT avec ElevenLabs"""
+        """Étape 4: Génération audio (voix ou musique) selon réglages admin"""
         try:
-            print(f"[ElevenLabs] Génération audio pour job {state['job_id']}")
-            
-            # Combiner toutes les narrations en script unique
-            full_narration = " ".join([
-                scene["narration"].strip()
-                for scene in state["script"]["scenes"]
-            ])
-            
-            print(f"[ElevenLabs] Texte: {len(full_narration)} caractères")
-            
-            # Générer l'audio avec upload Supabase Storage + SRT
-            audio_result = await generate_elevenlabs_voice(
-                text=full_narration,
-                language="fr"  # Français par défaut
-            )
-            
-            # Stocker dans app_state["audio"]
-            state["audio"] = {
-                "audio_url": audio_result["audio_url"],
-                "srt": audio_result["srt"],
-                "duration": audio_result["duration"]
-            }
+            print(f"[Audio] Sélection de l'audio pour job {state['job_id']}")
+
+            # Lire réglages admin avec fallbacks ENV
+            admin = get_admin_settings() or {}
+            enable_elevenlabs = bool(admin.get("enable_elevenlabs", False))
+            default_audio_mode = str(admin.get("default_audio_mode") or os.getenv("AUDIO_MODE_DEFAULT", "music")).lower()
+            music_source = str(admin.get("music_source") or os.getenv("MUSIC_SOURCE", "youtube")).lower()
+            music_volume = float(admin.get("music_volume") or os.getenv("MUSIC_VOLUME", "0.7"))
+            default_voice_id = admin.get("default_voice_id") or os.getenv("ELEVENLABS_VOICE_ID")
+
+            # Choisir mode audio (permettre override futur via state/job)
+            audio_mode = default_audio_mode
+            if audio_mode == "voice" and not enable_elevenlabs:
+                print("[Audio] Voix désactivée par admin, bascule vers musique")
+                audio_mode = "music"
+
+            if audio_mode == "voice":
+                # Combiner toutes les narrations en script unique
+                full_narration = " ".join([
+                    scene["narration"].strip()
+                    for scene in state["script"]["scenes"]
+                ])
+
+                print(f"[Voice] Texte: {len(full_narration)} caractères")
+
+                # Générer l'audio avec upload Supabase Storage + SRT
+                audio_result = await generate_elevenlabs_voice(
+                    text=full_narration,
+                    language="fr"
+                )
+                state["audio"] = {
+                    "mode": "voice",
+                    "audio_url": audio_result["audio_url"],
+                    "srt": audio_result["srt"],
+                    "duration": audio_result["duration"],
+                    "voice_id": default_voice_id,
+                }
+            elif audio_mode == "music":
+                # Sélection musique via storage
+                supabase_url = self.settings.SUPABASE_URL
+                # Ton détecté non implémenté ici, fallback générique
+                tone = state.get("script", {}).get("tone") or "inspirant"
+                music_url = await select_music_for_job(
+                    self.supabase,
+                    prompt=state["prompt"],
+                    tone=tone,
+                    supabase_url=supabase_url,
+                )
+                state["audio"] = {
+                    "mode": "music",
+                    "audio_url": music_url,
+                    "srt": None,
+                    "duration": sum(clip.get("duration", 6) for clip in state.get("clips", [])),
+                    "source": music_source,
+                    "volume": music_volume,
+                }
+            else:  # none
+                state["audio"] = {
+                    "mode": "none",
+                    "audio_url": None,
+                    "srt": None,
+                    "duration": sum(clip.get("duration", 6) for clip in state.get("clips", [])),
+                }
             
             # Sauvegarder l'état
             await self._save_state(state["job_id"], state, "elevenlabs_audio")
             
-            print(f"[ElevenLabs] ✓ Audio généré: {audio_result['duration']:.1f}s")
-            print(f"[ElevenLabs] ✓ URL: {audio_result['audio_url']}")
-            print(f"[ElevenLabs] ✓ SRT: {len(audio_result['srt'].split(chr(10)))} lignes")
+            au = state["audio"]
+            print(f"[Audio] ✓ Mode: {au.get('mode')}")
+            print(f"[Audio] ✓ URL: {au.get('audio_url')}")
             return state
             
         except Exception as e:

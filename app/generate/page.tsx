@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function GeneratePage() {
@@ -8,6 +8,25 @@ export default function GeneratePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const [admin, setAdmin] = useState<{
+    enable_elevenlabs: boolean;
+    default_audio_mode: "voice" | "music" | "none";
+  } | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/settings", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          setAdmin({
+            enable_elevenlabs: !!data.enable_elevenlabs,
+            default_audio_mode: (data.default_audio_mode || "music") as any,
+          });
+        }
+      } catch {}
+    })();
+  }, []);
 
   const handleGenerate = async () => {
     // Validation
@@ -116,6 +135,7 @@ export default function GeneratePage() {
           <p className="mt-4 text-xs text-center text-slate-500 dark:text-slate-400">
             La génération prend environ 4 à 9 minutes
           </p>
+          <AdminAudioHint admin={admin} />
         </div>
 
         {/* Footer */}
@@ -126,5 +146,29 @@ export default function GeneratePage() {
         </div>
       </div>
     </main>
+  );
+}
+
+function AdminAudioHint({
+  admin,
+}: {
+  admin: { enable_elevenlabs: boolean; default_audio_mode: "voice" | "music" | "none" } | null;
+}) {
+  if (!admin) return null;
+  const items: string[] = [];
+  if (!admin.enable_elevenlabs && admin.default_audio_mode === "voice") {
+    items.push("La voix est désactivée par l'admin — musique utilisée");
+  } else if (admin.default_audio_mode === "music") {
+    items.push("Par défaut: musique de fond");
+  } else if (admin.default_audio_mode === "none") {
+    items.push("Par défaut: sans audio");
+  } else if (admin.default_audio_mode === "voice") {
+    items.push("Par défaut: voix IA");
+  }
+  if (items.length === 0) return null;
+  return (
+    <div className="mt-3 text-xs text-center text-slate-500 dark:text-slate-400">
+      {items.join(" • ")}
+    </div>
   );
 }
