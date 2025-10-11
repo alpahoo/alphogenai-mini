@@ -18,6 +18,8 @@ export default async function CreatorViewPage({ params }: { params: { id: string
       <div className="max-w-4xl mx-auto space-y-4">
         <h1 className="text-2xl font-bold">{project.title}</h1>
         <VideoPlayer scenes={scenes} musicPath={musicPath} />
+        {/* Client-side assembler (WebCodecs + MediaRecorder) */}
+        <ClientAssembler projectId={project.id} scenes={scenes} musicPath={musicPath} />
       </div>
     </main>
   );
