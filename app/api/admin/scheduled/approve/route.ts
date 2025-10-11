@@ -16,6 +16,29 @@ export async function POST(req: Request) {
     .eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // TODO: trigger publish to YouTube/Instagram/TikTok via another function
-  return NextResponse.json({ ok: true });
+  // Trigger Runway generation via Edge Function with service role
+  try {
+    const serviceUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!serviceUrl || !serviceKey) throw new Error("Missing Supabase service envs");
+
+    const endpoint = `${serviceUrl}/functions/v1/runway-generate`;
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({ scheduled_post_id: id }),
+      // don't block admin UI on long processing
+      cache: "no-store",
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return NextResponse.json({ ok: false, trigger_error: json?.error || `HTTP ${res.status}` });
+    }
+    return NextResponse.json({ ok: true, trigger: json });
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, trigger_error: e.message || String(e) });
+  }
 }
