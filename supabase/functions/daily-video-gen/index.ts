@@ -100,18 +100,23 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Monthly credit cap reached', used }), { status: 429 })
     }
 
-    // Fetch pending themes for today and past days not processed
-    const today = new Date()
-    const { data: themes, error: themesErr } = await supabase
-      .from('daily_themes')
-      .select('*')
-      .lte('scheduled_for', today.toISOString().slice(0, 10))
-      .in('status', ['pending','queued'])
-      .order('scheduled_for', { ascending: true })
-    if (themesErr) throw themesErr
+    // Fetch pending themes up to CURRENT_DATE in PostgreSQL (no JS date math)
+    async function fetchPendingThemesDB() {
+      // Preferred RPC: get_pending_daily_themes()
+      let rpc = await supabase.rpc('get_pending_daily_themes')
+      if (rpc.error) {
+        // Fallback RPC name if different
+        rpc = await supabase.rpc('daily_themes_pending_up_to_today')
+      }
+      if (rpc.error) throw rpc.error
+      return rpc.data as any[]
+    }
+
+    const themesToProcess = await fetchPendingThemesDB()
+    console.log('Processing themes:', Array.isArray(themesToProcess) ? themesToProcess.length : 0)
 
     const results: any[] = []
-    for (const theme of themes || []) {
+    for (const theme of themesToProcess || []) {
       try {
         // Admin-only managed, created_by may be null; skip if missing topic/prompt
         const tone = theme.tone || 'fun'
@@ -161,7 +166,7 @@ serve(async (req) => {
           .from('projects')
           .insert({
             user_id: ownerId,
-            title: `${topic} (${today.toISOString().slice(0,10)})`,
+            title: `${topic} (${theme.scheduled_date || 'aujourd\'hui'})`,
             tone,
             plan_tier: 'pro',
             duration_limit_s: 120,
