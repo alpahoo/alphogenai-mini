@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional
 
 from .supabase_client import SupabaseClient
-from .langgraph_orchestrator import AlphogenAIOrchestrator
+from .runway_orchestrator import RunwayOrchestrator
 from .config import get_settings
 
 
@@ -18,7 +18,7 @@ class AlphogenAIWorker:
     def __init__(self, poll_interval: int = 10):
         self.settings = get_settings()
         self.supabase = SupabaseClient()
-        self.orchestrator = AlphogenAIOrchestrator()
+        self.orchestrator = RunwayOrchestrator()
         self.poll_interval = poll_interval
         self.running = False
         self.current_job_id: Optional[str] = None

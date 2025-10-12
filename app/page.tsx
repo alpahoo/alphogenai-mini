@@ -90,7 +90,7 @@ export default async function HomePage() {
             {/* CTA */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
-                href="/generate"
+                href="/creator/generate"
                 className="group bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
               >
                 Créer ma vidéo
@@ -168,7 +168,7 @@ export default async function HomePage() {
                   créer une vidéo avec notre IA !
                 </p>
                 <Link
-                  href="/generate"
+                  href="/creator/generate"
                   className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all shadow-md"
                 >
                   Commencer maintenant
@@ -191,7 +191,7 @@ export default async function HomePage() {
               transformer votre texte en vidéo professionnelle.
             </p>
             <Link
-              href="/generate"
+              href="/creator/generate"
               className="inline-block bg-white text-blue-600 px-8 py-4 rounded-xl font-bold text-lg hover:bg-blue-50 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
             >
               Générer ma vidéo gratuitement
