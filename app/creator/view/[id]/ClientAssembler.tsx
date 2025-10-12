@@ -31,6 +31,37 @@ export default function ClientAssembler({ projectId, scenes, musicPath }: { proj
     };
   }, [recordingUrl]);
 
+  async function uploadWithSignedUrl(projectId: string, blob: Blob) {
+    try {
+      // Get session user id via API since this is a client component; we rely on server session in sign-upload
+      const filename = `final-${Date.now()}.webm`;
+      const contentType = blob.type || "video/webm";
+      const signRes = await fetch("/api/sign-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: projectId, filename, contentType }),
+      });
+      const signJson = await signRes.json();
+      if (!signRes.ok) throw new Error(signJson.error || "sign-upload failed");
+
+      const { signedUrl, objectPath } = signJson;
+      const putRes = await fetch(signedUrl, { method: "PUT", body: blob, headers: { "Content-Type": contentType } });
+      if (!putRes.ok) throw new Error(`upload failed: ${putRes.status}`);
+
+      const confirmRes = await fetch("/api/confirm-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: projectId, objectPath }),
+      });
+      const confirmJson = await confirmRes.json();
+      if (!confirmRes.ok) throw new Error(confirmJson.error || "confirm-upload failed");
+      alert("Vidéo finale envoyée et enregistrée ✅");
+    } catch (err: any) {
+      console.error("Upload error", err);
+      alert(`Erreur upload: ${err?.message || String(err)}`);
+    }
+  }
+
   const startAssemble = async () => {
     if (!canvasRef.current) return;
     const canvas = canvasRef.current;
@@ -53,6 +84,8 @@ export default function ClientAssembler({ projectId, scenes, musicPath }: { proj
       const blob = new Blob(chunksRef.current, { type: "video/webm" });
       const url = URL.createObjectURL(blob);
       setRecordingUrl(url);
+      // Upload to Supabase via signed URL
+      uploadWithSignedUrl(projectId, blob);
     };
 
     // Prepare audio
