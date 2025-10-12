@@ -1,7 +1,37 @@
 import Link from "next/link";
+import { LogoutButton } from "@/components/logout-button";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
-export default function Header() {
+export default async function Header() {
   const githubUrl = process.env.NEXT_PUBLIC_GITHUB_URL;
+
+  // Server-side auth (SSR) to show contextual links
+  const cookieStore = await cookies();
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseKey =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+  const supabase = createServerClient(supabaseUrl, supabaseKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options),
+          );
+        } catch {}
+      },
+    },
+  });
+  const { data: userData } = await supabase.auth.getUser();
+  const { data: claims } = await supabase.auth.getClaims();
+  const user = userData?.user || null;
+  const role = (claims?.claims as any)?.app_metadata?.role;
+  const isAdmin = role === "admin";
 
   return (
     <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800">
@@ -19,11 +49,20 @@ export default function Header() {
           {/* Navigation */}
           <nav className="flex items-center gap-4">
             <Link
-              href="/generate"
+              href="/creator/generate"
               className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all shadow-sm hover:shadow-md"
             >
               Générer
             </Link>
+
+            {isAdmin && (
+              <Link
+                href="/admin/dashboard"
+                className="text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
+              >
+                Admin
+              </Link>
+            )}
 
             {githubUrl && (
               <a
@@ -48,6 +87,30 @@ export default function Header() {
               </a>
             )}
           </nav>
+          {/* Auth actions */}
+          <div className="flex items-center gap-3">
+            {user ? (
+              <>
+                <span className="text-slate-600 dark:text-slate-300 hidden sm:inline">{user.email}</span>
+                <LogoutButton />
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/auth/login"
+                  className="underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/auth/sign-up"
+                  className="underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                >
+                  Signup
+                </Link>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </header>
