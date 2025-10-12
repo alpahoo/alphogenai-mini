@@ -1,15 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 export default function GeneratePage() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [adminLoading, setAdminLoading] = useState(false);
-  const [adminMessage, setAdminMessage] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const router = useRouter();
+
+  useEffect(() => {
+    async function checkAuth() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        router.push('/auth/login');
+        return;
+      }
+      
+      setIsAuthenticated(true);
+      setIsAdmin(user?.user_metadata?.role === 'admin');
+      setCheckingAuth(false);
+    }
+    checkAuth();
+  }, [router]);
 
   const handleGenerate = async () => {
     if (!prompt || prompt.trim().length < 5) {
@@ -45,23 +64,17 @@ export default function GeneratePage() {
     }
   };
 
-  // FONCTIONS ADMIN
   const handleCancelAllJobs = async () => {
     if (!confirm("Annuler TOUS les jobs en cours ?")) return;
-    
-    setAdminLoading(true);
-    setAdminMessage(null);
     
     try {
       const res = await fetch("/api/admin/cancel-all-jobs", {
         method: "POST",
       });
-      const data = await res.json();
-      setAdminMessage(`✅ ${data.cancelled || 0} job(s) annulé(s)`);
+      await res.json();
+      alert("Jobs annulés");
     } catch (err: any) {
-      setAdminMessage(`❌ Erreur: ${err.message}`);
-    } finally {
-      setAdminLoading(false);
+      alert(`Erreur: ${err.message}`);
     }
   };
 
@@ -69,14 +82,21 @@ export default function GeneratePage() {
     router.push("/admin/jobs");
   };
 
-  const handleViewLogs = () => {
-    window.open("https://dashboard.render.com", "_blank");
-  };
+  if (checkingAuth) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <div>Vérification de l'authentification...</div>
+      </main>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <main className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
       <div className="w-full max-w-3xl">
-        {/* Titre */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             🎬 Génère ta Vidéo IA
@@ -86,7 +106,6 @@ export default function GeneratePage() {
           </p>
         </div>
 
-        {/* Formulaire Principal */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 mb-6">
           <textarea
             className="w-full h-40 border-2 border-slate-300 dark:border-slate-600 rounded-lg p-4 mb-4 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all resize-none"
@@ -139,67 +158,38 @@ export default function GeneratePage() {
           </button>
         </div>
 
-        {/* ADMIN PANEL - VISIBLE DIRECTEMENT */}
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 border-2 border-orange-200 dark:border-orange-800">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-2xl">⚙️</span>
-            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
-              Contrôle Admin
-            </h2>
-          </div>
-
-          {adminMessage && (
-            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-              <p className="text-blue-600 dark:text-blue-400 text-sm">
-                {adminMessage}
-              </p>
+        {isAdmin && (
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 border-2 border-orange-200 dark:border-orange-800">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-2xl">⚙️</span>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                Contrôle Admin
+              </h2>
             </div>
-          )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* Bouton Voir Jobs */}
-            <button
-              onClick={handleViewJobs}
-              className="flex items-center justify-center gap-2 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium py-3 px-4 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all border border-blue-300 dark:border-blue-700"
-            >
-              <span className="text-lg">📊</span>
-              Voir tous les jobs
-            </button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <button
+                onClick={handleViewJobs}
+                className="flex items-center justify-center gap-2 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium py-3 px-4 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all border border-blue-300 dark:border-blue-700"
+              >
+                <span className="text-lg">📊</span>
+                Voir tous les jobs
+              </button>
 
-            {/* Bouton Annuler Tous */}
-            <button
-              onClick={handleCancelAllJobs}
-              disabled={adminLoading}
-              className="flex items-center justify-center gap-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 font-medium py-3 px-4 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-all border border-red-300 dark:border-red-700 disabled:opacity-50"
-            >
-              <span className="text-lg">🛑</span>
-              {adminLoading ? "..." : "Annuler tous"}
-            </button>
-
-            {/* Bouton Logs Render */}
-            <button
-              onClick={handleViewLogs}
-              className="flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium py-3 px-4 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-all border border-slate-300 dark:border-slate-600"
-            >
-              <span className="text-lg">📝</span>
-              Logs Render
-            </button>
+              <button
+                onClick={handleCancelAllJobs}
+                className="flex items-center justify-center gap-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 font-medium py-3 px-4 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-all border border-red-300 dark:border-red-700"
+              >
+                <span className="text-lg">🛑</span>
+                Annuler tous
+              </button>
+            </div>
           </div>
+        )}
 
-          <div className="mt-4 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
-            <p className="text-orange-700 dark:text-orange-300 text-xs">
-              ℹ️ Retries automatiques <strong>DÉSACTIVÉS</strong> - Contrôle manuel requis
-            </p>
-          </div>
-        </div>
-
-        {/* Info */}
         <div className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
           <p>
-            💚 Coût par vidéo : $0.05 (Remotion uniquement) | ⏱️ Temps : ~2 minutes
-          </p>
-          <p className="mt-1 text-xs">
-            Images : HuggingFace FLUX (GRATUIT) | Vidéos : Images statiques + transitions
+            🎥 Runway Gen-4 Turbo | 🎵 Musiques libres | ⏱️ Temps : ~2-3 minutes
           </p>
         </div>
       </div>

@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>Qwen</strong> → <strong>WAN Image</strong> → <strong>Pika</strong> → <strong>ElevenLabs</strong> → <strong>Remotion</strong>
+  <strong>Qwen Mock</strong> → <strong>Runway Gen-4 Turbo</strong> → <strong>Free Music</strong>
 </p>
 
 <p align="center">
@@ -21,18 +21,16 @@
 ## Features
 
 ### 🎬 AI Video Generation Pipeline
-- **Qwen LLM** - Intelligent script generation with scene breakdown
-- **WAN Image** - Cinematic key visual generation
-- **Pika** - 4-clip video generation with AI-powered motion
-- **ElevenLabs** - Professional voiceover with automatic SRT subtitles
-- **Remotion** - Final video assembly and rendering
+- **Qwen Mock** - Script structure generation (no API calls)
+- **Runway Gen-4 Turbo** - Direct text-to-video generation (10s, 16:9)
+- **Free Music** - YouTube Audio Library tracks from Supabase Storage
 
-### 🔄 LangGraph Orchestration
-- **Workflow Management** - Automated pipeline with state management
+### 🔄 Simplified Orchestration
+- **Async Workflow** - Minimal worker with direct job processing
 - **Job Persistence** - Supabase-backed job tracking
 - **Smart Caching** - Avoid regenerating identical videos
-- **Retry Logic** - Robust error handling with exponential backoff
-- **Webhook Notifications** - Real-time updates when videos are ready
+- **Retry Logic** - Robust error handling
+- **Webhook Notifications** - Optional real-time updates
 
 ### 🔐 Full-Stack Foundation
 - **Next.js 15** - App Router, Server Components, API Routes
@@ -49,17 +47,15 @@
 
 ## How It Works
 
-1. **User submits a prompt** via the web interface
+1. **User submits a prompt** via the web interface at `/creator/generate`
 2. **Job created** in Supabase with status tracking
-3. **LangGraph orchestrator** processes the job through 5 stages:
-   - Qwen generates a creative script with 4 scenes
-   - WAN Image creates a cinematic key visual
-   - Pika generates 4 video clips (4 seconds each, with --image + seed for consistency)
-   - ElevenLabs produces voiceover + SRT subtitles
-   - Remotion assembles the final video
+3. **Runway orchestrator** processes the job:
+   - Qwen Mock generates script structure
+   - Runway Gen-4 Turbo creates video (10s, 16:9)
+   - Music selected from Supabase Storage by tone
    - State saved in `jobs.app_state` after each step
-4. **Webhook notification** sent when video is ready
-5. **User downloads** their AI-generated video
+4. **Webhook notification** sent when video is ready (optional)
+5. **User views** their AI-generated video at `/v/[jobId]`
 
 ## Quick Start
 
@@ -68,7 +64,7 @@
 - Node.js 18+ and npm
 - Python 3.9+ and pip
 - Supabase account ([create one here](https://database.new))
-- API keys for: Qwen, WAN Image, Pika, ElevenLabs
+- Runway Gen-4 Turbo API key
 
 ### 2. Clone and Install
 
@@ -98,11 +94,10 @@ cp .env.example .env.local
 Required variables:
 - `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anonymous key
-- `SUPABASE_SERVICE_KEY` - Supabase service role key
-- `QWEN_API_KEY` - Qwen/Alibaba Cloud API key
-- `WAN_IMAGE_API_KEY` - WAN Image API key
-- `PIKA_API_KEY` - Pika API key
-- `ELEVENLABS_API_KEY` - ElevenLabs API key
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
+- `RUNWAY_API_KEY` - Runway Gen-4 Turbo API key
+- `RUNWAY_API_BASE` - Runway API base URL (default: https://api.runwayml.com/v1)
+- `QWEN_MOCK_ENABLED` - Set to true for mock mode (default: true)
 
 ### 4. Run Database Migrations
 
@@ -145,7 +140,7 @@ This will verify all API keys and database tables are configured correctly.
 
 ```python
 import asyncio
-from workers.langgraph_orchestrator import create_and_run_job
+from workers.runway_orchestrator import create_and_run_job
 
 async def main():
     result = await create_and_run_job(
@@ -165,7 +160,7 @@ asyncio.run(main())
 
 ```bash
 cd workers
-python -m workers.langgraph_orchestrator "Your prompt here"
+python -m workers.runway_orchestrator "Your prompt here"
 ```
 
 ### Check Job Status (SQL)
@@ -186,12 +181,13 @@ alphogenai-mini/
 │   ├── auth/                    # Authentication pages
 │   ├── notes/                   # Notes feature (demo)
 │   └── uploads/                 # File upload feature (demo)
-├── workers/                      # Python LangGraph orchestrator
-│   ├── langgraph_orchestrator.py  # Main workflow (LangGraph)
-│   ├── api_services.py          # AI service wrappers
+├── workers/                      # Python async orchestrator
+│   ├── runway_orchestrator.py   # Main workflow (Runway)
+│   ├── runway_service.py        # Runway Gen-4 API wrapper
+│   ├── qwen_mock_service.py     # Mock script generator
+│   ├── music_selector.py        # Music selection logic
 │   ├── supabase_client.py       # Database client (jobs table)
 │   ├── worker.py                # Background job processor
-│   ├── test_setup.py            # Setup verification
 │   └── README.md                # Worker documentation
 ├── components/                   # React UI components
 ├── lib/                         # Utilities
@@ -209,8 +205,8 @@ alphogenai-mini/
 - `user_id` - Foreign key to auth.users
 - `prompt` - User's video generation prompt
 - `status` - pending | in_progress | completed | failed
-- `app_state` - **Complete LangGraph workflow state (JSONB)**
-- `current_stage` - Current pipeline stage (qwen, wan_image, pika, elevenlabs, remotion)
+- `app_state` - **Complete workflow state (JSONB)**
+- `current_stage` - Current pipeline stage (script_generation, video_generation, music_selection, completed)
 - `error_message` - Error details if failed
 - `retry_count` - Number of retry attempts
 - `video_url` - Final video URL when completed
@@ -218,10 +214,10 @@ alphogenai-mini/
 - `updated_at` - Last update timestamp
 
 **Why `app_state`?**  
-The complete LangGraph workflow state is saved at each step, enabling:
+The complete workflow state is saved at each step, enabling:
 - Resume after failures
 - Debugging with full context
-- Access to all intermediate results (script, key visual, clips, audio)
+- Access to all intermediate results (script, video, music)
 
 ## Deployment
 
@@ -247,7 +243,7 @@ Deploy to any platform that supports Python:
 1. **Frontend** - Add pages in `app/` directory
 2. **API Routes** - Create in `app/api/` directory
 3. **Components** - Add to `components/` directory
-4. **Worker Logic** - Modify `workers/langgraph_orchestrator.py`
+4. **Worker Logic** - Modify `workers/runway_orchestrator.py`
 
 ### Testing
 
@@ -278,9 +274,9 @@ AlphoGenAI Mini uses a hybrid architecture:
 - **Frontend**: Next.js 15 with Server Components
 - **Backend**: Next.js API Routes + Python Workers
 - **Database**: Supabase (PostgreSQL with RLS)
-- **Storage**: Supabase Storage (for uploads)
-- **Orchestration**: LangGraph (Python)
-- **AI Services**: External APIs (Qwen, WAN, Pika, ElevenLabs, Remotion)
+- **Storage**: Supabase Storage (music files)
+- **Orchestration**: Async Python worker
+- **AI Services**: Runway Gen-4 Turbo (text-to-video)
 
 ## Contributing
 
@@ -300,7 +296,7 @@ MIT License - feel free to use this project for your own purposes.
 Built with:
 - [Next.js](https://nextjs.org/)
 - [Supabase](https://supabase.com/)
-- [LangGraph](https://github.com/langchain-ai/langgraph)
+- [Runway Gen-4 Turbo](https://runwayml.com/)
 - [shadcn/ui](https://ui.shadcn.com/)
 - [Tailwind CSS](https://tailwindcss.com/)
 

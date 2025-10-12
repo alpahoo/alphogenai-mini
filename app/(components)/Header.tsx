@@ -19,7 +19,7 @@ export default function Header() {
           {/* Navigation */}
           <nav className="flex items-center gap-4">
             <Link
-              href="/generate"
+              href="/creator/generate"
               className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all shadow-sm hover:shadow-md"
             >
               Générer
