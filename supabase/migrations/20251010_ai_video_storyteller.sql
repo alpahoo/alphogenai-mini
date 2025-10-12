@@ -53,6 +53,7 @@ create table if not exists public.project_scenes (
   status text not null default 'queued' check (status in ('queued','running','completed','failed','timeout')),
   scene_checksum text not null,
   video_path text,
+  output_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(project_id, idx)
@@ -92,7 +93,7 @@ for delete using (
 -- daily_themes (admin-managed)
 create table if not exists public.daily_themes (
   id uuid primary key default gen_random_uuid(),
-  scheduled_for date not null,
+  scheduled_date date not null,
   title text not null,
   prompt text not null,
   tone text not null,
@@ -100,7 +101,7 @@ create table if not exists public.daily_themes (
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique(scheduled_for, title)
+  unique(scheduled_date, title)
 );
 
 alter table public.daily_themes enable row level security;
@@ -192,4 +193,4 @@ for select using (
 create index if not exists idx_project_scenes_project_id on public.project_scenes(project_id);
 create index if not exists idx_project_scenes_checksum on public.project_scenes(scene_checksum);
 create index if not exists idx_scheduled_posts_user on public.scheduled_posts(user_id);
-create index if not exists idx_daily_themes_scheduled_for on public.daily_themes(scheduled_for);
+create index if not exists idx_daily_themes_scheduled_date on public.daily_themes(scheduled_date);

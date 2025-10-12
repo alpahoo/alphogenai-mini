@@ -90,15 +90,18 @@ serve(async (req) => {
         const status = job?.status || job?.data?.status || 'queued'
 
         if (status === 'queued' || status === 'running') {
-          // exponential backoff hint: we do nothing here, runner can schedule again
+          // exponential backoff: compute next delay based on number of polls
+          const attempts = typeof scene.retry_count === 'number' ? scene.retry_count : 0
+          const delayMs = Math.min(30000, 1000 * Math.pow(2, attempts))
+          const nextPollAt = new Date(Date.now() + delayMs).toISOString()
           await supabase
             .from('project_scenes')
             .update({ status, updated_at: new Date().toISOString() })
             .eq('id', scene.id)
           await supabase
             .from('video_jobs_log')
-            .insert({ scene_id: scene.id, job_id: scene.runway_job_id, status, message: 'Polling status update', payload: job })
-          results.push({ scene_id: scene.id, status })
+            .insert({ scene_id: scene.id, job_id: scene.runway_job_id, status, message: 'Polling status update', payload: { next_poll_at: nextPollAt, delay_ms: delayMs } })
+          results.push({ scene_id: scene.id, status, next_poll_at: nextPollAt })
           continue
         }
 
@@ -130,7 +133,7 @@ serve(async (req) => {
 
         await supabase
           .from('project_scenes')
-          .update({ status: 'completed', video_path: path, updated_at: new Date().toISOString() })
+          .update({ status: 'completed', video_path: path, output_url: publicUrl, updated_at: new Date().toISOString() })
           .eq('id', scene.id)
         await supabase
           .from('video_jobs_log')

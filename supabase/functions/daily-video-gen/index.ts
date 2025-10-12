@@ -19,17 +19,8 @@ const supabase = createClient(SUPABASE_URL!, SERVICE_ROLE_KEY!, {
   auth: { persistSession: false }
 })
 
-async function getAnyAdminUserId(): Promise<string | null> {
-  try {
-    // Service role key required; returns paginated list
-    const { data } = await (supabase as any).auth.admin.listUsers({ perPage: 200 })
-    const users = (data?.users || []) as Array<any>
-    const admin = users.find((u) => (u?.app_metadata?.role) === 'admin')
-    return admin?.id ?? null
-  } catch (_) {
-    return null
-  }
-}
+// Owner selection: prefer theme.created_by, else DEFAULT_OWNER_USER_ID
+const DEFAULT_OWNER_USER_ID = Deno.env.get('DEFAULT_OWNER_USER_ID') || null
 
 async function callQwenToScenes(tone: string, topic: string) {
   if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY')
@@ -157,9 +148,9 @@ serve(async (req) => {
           .limit(1)
           .single()
 
-        // Assign project owner: prefer theme.created_by, else any admin user
-        let ownerId = (theme.created_by as string | null) || await getAnyAdminUserId()
-        if (!ownerId) throw new Error('No admin user available to own project')
+        // Assign project owner: prefer theme.created_by, else env fallback
+        let ownerId = (theme.created_by as string | null) || DEFAULT_OWNER_USER_ID
+        if (!ownerId) throw new Error('No owner available to own project')
 
         // Create project (owner is required by RLS; service role bypasses)
         const { data: project, error: projErr } = await supabase

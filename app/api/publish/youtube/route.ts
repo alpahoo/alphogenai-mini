@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { google } from "googleapis";
 import { createClient as createService } from "@supabase/supabase-js";
+import { Readable } from "stream";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -83,15 +84,17 @@ export async function POST(req: Request) {
 
     const youtube = google.youtube({ version: "v3", auth: oauth2Client });
 
+    const streamBody: any = typeof (file as any).stream === "function"
+      ? Readable.fromWeb((file as any).stream())
+      : (file as any);
+
     const res = await youtube.videos.insert({
       part: ["snippet", "status"],
       requestBody: {
         snippet: { title, description },
         status: { privacyStatus: privacyStatus || "unlisted" },
       },
-      media: {
-        body: file as any, // ReadableStream in edge may vary; in Node it’s a stream
-      },
+      media: { body: streamBody },
     } as any);
 
     return NextResponse.json({ ok: true, videoId: res.data.id, link: `https://youtu.be/${res.data.id}` });

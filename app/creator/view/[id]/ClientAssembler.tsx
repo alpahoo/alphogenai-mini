@@ -70,8 +70,8 @@ export default function ClientAssembler({ projectId, scenes, musicPath }: { proj
 
     const stream = canvas.captureStream(30);
     const dest = new AudioContext();
-    const destination = dest.createMediaStreamDestination();
-    const combinedStream = new MediaStream([...stream.getVideoTracks(), ...destination.stream.getAudioTracks()]);
+    const destinationNode = dest.createMediaStreamDestination();
+    const combinedStream = new MediaStream([...stream.getVideoTracks(), ...destinationNode.stream.getAudioTracks()]);
 
     const mediaRecorder = new MediaRecorder(combinedStream, { mimeType: "video/webm;codecs=vp9,opus" });
     mediaRecorderRef.current = mediaRecorder;
@@ -93,7 +93,8 @@ export default function ClientAssembler({ projectId, scenes, musicPath }: { proj
       const audio = new Audio(musicUrl);
       audio.crossOrigin = "anonymous";
       const audioSrc = dest.createMediaElementSource(audio);
-      audioSrc.connect(dest.destination);
+      // Route audio into the MediaStreamDestination so it is captured in the recording
+      audioSrc.connect(destinationNode);
       audioRef.current = audio;
       audio.play();
     }

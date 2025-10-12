@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, cookies } from "next/server";
 import { google } from "googleapis";
 import { createClient as createService } from "@supabase/supabase-js";
 
@@ -18,13 +18,18 @@ export async function GET(req: Request) {
     const userId = url.searchParams.get("user_id");
     if (!code || !userId) return NextResponse.json({ error: "Missing code or user_id" }, { status: 400 });
 
+    // Validate PKCE code_verifier from HttpOnly cookie
+    const cookieStore = await cookies();
+    const codeVerifier = cookieStore.get("yt_code_verifier")?.value;
+    if (!codeVerifier) return NextResponse.json({ error: "Missing PKCE code_verifier" }, { status: 400 });
+
     const oauth2Client = new google.auth.OAuth2(
       GOOGLE_OAUTH_CLIENT_ID,
       GOOGLE_OAUTH_CLIENT_SECRET,
       GOOGLE_OAUTH_REDIRECT_URI
     );
 
-    const { tokens } = await oauth2Client.getToken(code);
+    const { tokens } = await oauth2Client.getToken({ code, codeVerifier });
     if (!tokens.access_token || !tokens.refresh_token) {
       return NextResponse.json({ error: "Missing tokens from Google" }, { status: 400 });
     }
@@ -45,7 +50,10 @@ export async function GET(req: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    return NextResponse.json({ ok: true });
+    const res = NextResponse.json({ ok: true });
+    // Clean up verifier cookie
+    res.cookies.set("yt_code_verifier", "", { httpOnly: true, secure: true, sameSite: "strict", path: "/api/publish/youtube/auth", maxAge: 0 });
+    return res;
   } catch (e: any) {
     return NextResponse.json({ error: e.message || String(e) }, { status: 500 });
   }
