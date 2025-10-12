@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { AuthButton } from "@/components/auth-button";
 
-export default function Header() {
+export default async function Header() {
   const githubUrl = process.env.NEXT_PUBLIC_GITHUB_URL;
 
   return (
@@ -24,6 +25,8 @@ export default function Header() {
             >
               Générer
             </Link>
+
+            <AuthButton />
 
             {githubUrl && (
               <a
