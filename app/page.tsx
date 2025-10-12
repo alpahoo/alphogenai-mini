@@ -1,6 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import Link from "next/link";
 import VideoCard from "./(components)/VideoCard";
+import { createClient as createServerSupabase } from "@/lib/supabase/server";
 
 export const metadata = {
   title: "AlphoGenAI Mini — Générez des vidéos cohérentes à partir de texte",
@@ -31,7 +32,7 @@ async function getRecentVideos(): Promise<Video[]> {
       return [];
     }
     
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const supabase = createServiceClient(supabaseUrl, supabaseAnonKey);
     const { data, error } = await supabase
       .from("jobs")
       .select("id, prompt, final_url, created_at")
@@ -54,9 +55,51 @@ async function getRecentVideos(): Promise<Video[]> {
 
 export default async function HomePage() {
   const videos = await getRecentVideos();
+  const supabase = await createServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: claims } = await supabase.auth.getClaims();
+  const role = (claims?.claims as any)?.app_metadata?.role;
+  const isAdmin = role === "admin";
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+      {/* Simple header with auth-aware actions */}
+      <div className="border-b border-slate-200 dark:border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+          <Link href="/" className="font-semibold text-slate-900 dark:text-white">
+            AlphoGenAI Mini
+          </Link>
+          {user ? (
+            <div className="flex items-center gap-3">
+              <Link
+                href="/creator/generate"
+                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 py-1.5 rounded-md text-sm hover:from-blue-700 hover:to-purple-700"
+              >
+                Créer une vidéo
+              </Link>
+              {isAdmin && (
+                <Link
+                  href="/admin/dashboard"
+                  className="text-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-md text-sm hover:text-slate-900 dark:hover:text-white"
+                >
+                  Dashboard
+                </Link>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Link
+                href="/auth/login"
+                className="text-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-md text-sm hover:text-slate-900 dark:hover:text-white"
+              >
+                Se connecter
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
       {/* Hero Section */}
       <section className="relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-28">
