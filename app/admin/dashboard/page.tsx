@@ -20,7 +20,7 @@ export default async function AdminDashboardPage() {
   const supa = await createServerSupabase();
   const { data: scheduled } = await supa
     .from("scheduled_posts")
-    .select("*, projects(title)")
+    .select("*, projects(title, final_video_path)")
     .order("created_at", { ascending: false });
 
   return <AdminDashboardClient initialData={scheduled || []} />;

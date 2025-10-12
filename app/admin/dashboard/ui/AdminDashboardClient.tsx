@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { createClient as createSupabaseBrowser } from "@/lib/supabase/client";
 
 interface ScheduledPost {
   id: string;
@@ -12,17 +13,23 @@ interface ScheduledPost {
   published_urls: Record<string, string>;
   created_at: string;
   updated_at: string;
+  // Nested project fields when available from server-side fetch
+  projects?: { title: string; final_video_path: string | null } | null;
 }
 
 export default function AdminDashboardClient({ initialData }: { initialData: ScheduledPost[] }) {
   const [items, setItems] = useState<ScheduledPost[]>(initialData || []);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
 
   const refresh = async () => {
     const res = await fetch("/api/admin/scheduled", { cache: "no-store" });
     const data = await res.json();
-    setItems(data.items || []);
+    const next: ScheduledPost[] = data.items || [];
+    // Preserve nested project info if API does not include it
+    const byId = new Map(items.map((it) => [it.id, it.projects]));
+    setItems(next.map((it: ScheduledPost) => ({ ...it, projects: (it as any).projects ?? byId.get(it.id) ?? null })));
   };
 
   const approve = async (id: string) => {
@@ -65,6 +72,40 @@ export default function AdminDashboardClient({ initialData }: { initialData: Sch
     }
   };
 
+  const publishToYouTube = async (it: ScheduledPost) => {
+    try {
+      setPublishingId(it.id);
+      const supabase = createSupabaseBrowser();
+      const { data: userData, error } = await supabase.auth.getUser();
+      if (error || !userData?.user) throw new Error("Non authentifié");
+      const userId = userData.user.id;
+
+      const title = it.projects?.title || `Projet ${it.project_id}`;
+      const body = {
+        project_id: it.project_id,
+        title,
+        description: "Générée par AlphoGenAI Mini",
+        privacyStatus: "unlisted",
+        user_id: userId,
+      };
+      const res = await fetch("/api/publish/youtube", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || "Echec de la publication");
+      setMessage(`✅ Publié: ${json.link || json.videoId || "OK"}`);
+      alert(`Publication YouTube réussie${json.link ? `: ${json.link}` : ""}`);
+    } catch (e: any) {
+      console.error("publish error", e);
+      setMessage(`❌ ${e.message || String(e)}`);
+      alert(`Erreur publication: ${e.message || String(e)}`);
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
   return (
     <main className="min-h-screen p-6 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
       <div className="max-w-5xl mx-auto">
@@ -90,10 +131,32 @@ export default function AdminDashboardClient({ initialData }: { initialData: Sch
                   <div className="font-semibold">Projet: {it.project_id}</div>
                   <div className="text-xs text-slate-500">Cibles: {it.targets?.join(", ") || "-"}</div>
                   <div className="text-xs text-slate-500">Status: {it.status}</div>
+                  {it.projects?.title && (
+                    <div className="text-xs text-slate-500">Titre: {it.projects.title}</div>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button disabled={loading} onClick={() => approve(it.id)} className="px-3 py-1 rounded bg-green-600 text-white">Approuver</button>
                   <button disabled={loading} onClick={() => reject(it.id)} className="px-3 py-1 rounded bg-red-600 text-white">Rejeter</button>
+                  {/* Voir */}
+                  <a
+                    href={`/creator/view/${it.project_id}`}
+                    className="px-3 py-1 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-sm hover:bg-green-200 dark:hover:bg-green-900/50 transition-all"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Voir
+                  </a>
+                  {/* Publier sur YouTube - only when approved and final video exists */}
+                  {it.status === "approved" && it.projects?.final_video_path && (
+                    <button
+                      disabled={publishingId === it.id}
+                      onClick={() => publishToYouTube(it)}
+                      className="px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-60"
+                    >
+                      {publishingId === it.id ? "Publication..." : "Publier sur YouTube"}
+                    </button>
+                  )}
                 </div>
               </div>
             ))
