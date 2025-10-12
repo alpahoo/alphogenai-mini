@@ -32,20 +32,12 @@ export default async function Header() {
             </Link>
 
             {isAdmin && (
-              <>
-                <Link
-                  href="/admin/jobs"
-                  className="text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 font-medium transition-colors"
-                >
-                  Jobs
-                </Link>
-                <Link
-                  href="/admin/dashboard"
-                  className="text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 font-medium transition-colors"
-                >
-                  Dashboard
-                </Link>
-              </>
+              <Link
+                href="/admin/jobs"
+                className="text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 font-medium transition-colors"
+              >
+                Jobs
+              </Link>
             )}
 
             <AuthButton />
