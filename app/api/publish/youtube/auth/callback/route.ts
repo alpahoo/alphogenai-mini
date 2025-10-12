@@ -9,6 +9,8 @@ const GOOGLE_OAUTH_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID!;
 const GOOGLE_OAUTH_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET!;
 const GOOGLE_OAUTH_REDIRECT_URI = process.env.GOOGLE_OAUTH_REDIRECT_URI!; // https://your-domain.com/api/publish/youtube/auth/callback
 
+export const runtime = "nodejs";
+
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);

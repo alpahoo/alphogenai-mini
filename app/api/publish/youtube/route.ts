@@ -9,6 +9,8 @@ const STORAGE_BUCKET = process.env.STORAGE_BUCKET || "videos";
 const GOOGLE_OAUTH_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID!;
 const GOOGLE_OAUTH_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET!;
 
+export const runtime = "nodejs";
+
 async function getUserTokens(supabase: any, userId: string) {
   const { data, error } = await supabase
     .from("youtube_tokens")
