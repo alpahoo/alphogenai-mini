@@ -404,10 +404,15 @@ const SimpleToolPage: React.FC<{ name: string }> = ({ name }) => (
 
 export default function AlphoShellDemo() {
   const [route, setRoute] = useState<string>("home");
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    if (typeof window === 'undefined') return 'dark';
-    return (localStorage.getItem('alpho-theme') as 'dark' | 'light') || 'dark';
-  });
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('alpho-theme') as 'dark' | 'light';
+    if (savedTheme) {
+      setTheme(savedTheme);
+    }
+  }, []);
+  
   useEffect(() => {
     if (typeof document !== 'undefined') {
       document.documentElement.classList.toggle('dark', theme === 'dark');
