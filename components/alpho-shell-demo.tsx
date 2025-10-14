@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
+import type { User } from "@supabase/supabase-js";
 import {
   Home,
   Image,
@@ -14,7 +16,10 @@ import {
   PlayCircle,
   Wand2,
   Upload,
-  Eye
+  Eye,
+  History,
+  LogOut,
+  Shield
 } from "lucide-react";
 
 const Card: React.FC<{ className?: string; children?: React.ReactNode; onClick?: () => void }> = ({
@@ -36,19 +41,17 @@ const Chip: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   </span>
 );
 
-const Sidebar: React.FC<{ current: string; onNavigate: (key: string) => void }> = ({
+const Sidebar: React.FC<{ current: string; onNavigate: (key: string) => void; isAdmin: boolean }> = ({
   current,
   onNavigate,
+  isAdmin,
 }) => {
   const items = [
     { key: "home", label: "Home", Icon: Home },
     { key: "assets", label: "Assets", Icon: Upload },
-    { key: "story", label: "Story", Icon: Sparkles },
     { key: "video", label: "Video", Icon: Film },
-    { key: "image", label: "Image", Icon: Image },
-    { key: "character", label: "Character", Icon: Users },
-    { key: "audio", label: "Audio", Icon: Mic2 },
-    { key: "more", label: "More", Icon: Settings },
+    { key: "history", label: "History", Icon: History },
+    ...(isAdmin ? [{ key: "admin", label: "Admin", Icon: Shield }] : []),
   ];
   return (
     <aside className="fixed left-0 top-0 z-20 h-full w-60 border-r border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0b0c10] px-4 py-6">
@@ -83,43 +86,58 @@ const Sidebar: React.FC<{ current: string; onNavigate: (key: string) => void }> 
   );
 };
 
-const Topbar: React.FC<{ theme: "dark" | "light"; toggle: () => void }> = ({
+const Topbar: React.FC<{ theme: "dark" | "light"; toggle: () => void; user: User | null }> = ({
   theme,
   toggle,
-}) => (
-  <div className="flex h-16 items-center justify-between border-b border-zinc-200 dark:border-white/10 px-6">
-    <div className="flex items-center gap-4">
-      <h2 className="text-lg font-semibold text-zinc-800 dark:text-white/90">Create</h2>
-    </div>
-    <div className="flex items-center gap-3">
-      <button
-        onClick={toggle}
-        className="rounded-lg border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/5 p-2 text-zinc-600 dark:text-white/70 transition hover:bg-zinc-100 dark:hover:bg-white/10"
-      >
-        {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-      </button>
-      <button className="rounded-lg border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/5 px-3 py-2 text-sm text-zinc-600 dark:text-white/70 transition hover:bg-zinc-100 dark:hover:bg-white/10">
-        Profile
-      </button>
-    </div>
-  </div>
-);
+  user,
+}) => {
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    window.location.href = "/auth/login";
+  };
 
-const Hero: React.FC = () => (
+  return (
+    <div className="flex h-16 items-center justify-between border-b border-zinc-200 dark:border-white/10 px-6">
+      <div className="flex items-center gap-4">
+        <h2 className="text-lg font-semibold text-zinc-800 dark:text-white/90">Create</h2>
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={toggle}
+          className="rounded-lg border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/5 p-2 text-zinc-600 dark:text-white/70 transition hover:bg-zinc-100 dark:hover:bg-white/10"
+        >
+          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </button>
+        {user && (
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 rounded-lg border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/5 px-3 py-2 text-sm text-zinc-600 dark:text-white/70 transition hover:bg-zinc-100 dark:hover:bg-white/10"
+          >
+            <LogOut className="h-4 w-4" />
+            <span>Logout</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const Hero: React.FC<{ onGo: (route: string) => void }> = ({ onGo }) => (
   <Card className="relative overflow-hidden p-8">
     <div className="relative z-10">
       <h1 className="mb-3 bg-gradient-to-r from-indigo-400 to-cyan-300 bg-clip-text text-3xl font-bold text-transparent">
         Welcome to Alpho Gen AI
       </h1>
       <p className="mb-6 text-sm text-zinc-600 dark:text-white/60">
-        Create stunning stories, videos, images and more with AI-powered tools
+        Create stunning videos with AI-powered Runway Gen-4 technology
       </p>
       <div className="flex gap-3">
-        <button className="rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-white">
+        <button 
+          onClick={() => onGo('video')}
+          className="rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition"
+        >
           Start Creating
-        </button>
-        <button className="rounded-xl border border-zinc-300 dark:border-white/20 bg-zinc-50 dark:bg-white/5 px-4 py-2 text-sm text-zinc-900 dark:text-white">
-          Watch Tutorial
         </button>
       </div>
     </div>
@@ -168,27 +186,16 @@ const SectionTitle: React.FC<{ title: string; action?: string }> = ({ title, act
 
 const HomePage: React.FC<{ onGo: (key: string) => void }> = ({ onGo }) => (
   <div className="space-y-6">
-    <Hero />
-
-    <SectionTitle title="Create Story" />
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-      <CreateTile title="Music Video" description="Sync visuals to music in a click" icon={<PlayCircle className="h-5 w-5"/>} />
-      <CreateTile title="Explainer Video" description="Turn scripts into scenes" icon={<Sparkles className="h-5 w-5"/>} />
-      <CreateTile title="Character Vlog" description="Make your avatar speak" icon={<Wand2 className="h-5 w-5"/>} />
-      <CreateTile title="ASMR Video" description="Generate calm soundscapes" icon={<Mic2 className="h-5 w-5"/>} />
-    </div>
+    <Hero onGo={onGo} />
 
     <SectionTitle title="Video" />
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-      <CreateTile title="Image → Video (Gen‑4)" description="Runway Gen‑4 with ref images" icon={<Film className="h-5 w-5"/>} onClick={() => onGo('video-gen4')} />
-      <CreateTile title="Image → Video (Turbo)" description="Gen‑4 Turbo (fast, no refs)" icon={<Film className="h-5 w-5"/>} onClick={() => onGo('video-turbo')} />
-    </div>
-
-    <SectionTitle title="Community Stories" action="View All" />
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-      {Array.from({ length: 12 }).map((_, i) => (
-        <GalleryCard key={i} title={`Story ${i + 1}`} tag={i % 3 === 0 ? 'video' : undefined} />
-      ))}
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <CreateTile 
+        title="Image → Video (Gen‑4)" 
+        description="Runway Gen‑4 with reference images" 
+        icon={<Film className="h-5 w-5"/>} 
+        onClick={() => onGo('video')} 
+      />
     </div>
   </div>
 );
@@ -204,6 +211,219 @@ const AssetsPage = () => (
     </div>
   </div>
 );
+
+const MyJobsView: React.FC<{ userId: string | null }> = ({ userId }) => {
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const res = await fetch("/api/admin/list-jobs");
+        const data = await res.json();
+        const userJobs = userId ? data.jobs?.filter((job: any) => job.user_id === userId) : data.jobs || [];
+        setJobs(userJobs);
+      } catch (err) {
+        console.error("Error fetching jobs:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchJobs();
+    const interval = setInterval(fetchJobs, 5000);
+    return () => clearInterval(interval);
+  }, [userId]);
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+      case "failed":
+        return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
+      case "in_progress":
+      case "processing":
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+      default:
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <SectionTitle title="My Video Jobs" />
+      {loading ? (
+        <Card className="p-8 flex items-center justify-center">
+          <div className="animate-spin h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full"></div>
+        </Card>
+      ) : jobs.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-zinc-600 dark:text-white/60">
+          No jobs yet. Start creating videos!
+        </Card>
+      ) : (
+        jobs.map((job) => (
+          <Card key={job.id} className="p-4">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
+                    {job.status}
+                  </span>
+                  {job.current_stage && (
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      {job.current_stage}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-zinc-900 dark:text-white mb-2">{job.prompt}</p>
+                <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {new Date(job.created_at).toLocaleString("fr-FR")}
+                </div>
+              </div>
+              {job.video_url && (
+                <button className="ml-4 rounded-lg bg-zinc-100 dark:bg-white/10 px-3 py-2 text-sm text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-white/20">
+                  <Eye className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </Card>
+        ))
+      )}
+    </div>
+  );
+};
+
+const AdminJobsView: React.FC = () => {
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const fetchJobs = async () => {
+    try {
+      const res = await fetch("/api/admin/list-jobs");
+      const data = await res.json();
+      setJobs(data.jobs || []);
+    } catch (err) {
+      console.error("Error fetching jobs:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchJobs();
+    const interval = setInterval(fetchJobs, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleRetry = async (jobId: string) => {
+    if (!confirm("Retry this job?")) return;
+    try {
+      const res = await fetch("/api/admin/retry-job", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId }),
+      });
+      const data = await res.json();
+      setMessage(data.message || "✅ Job retried");
+      fetchJobs();
+    } catch (err: any) {
+      setMessage(`❌ Error: ${err.message}`);
+    }
+  };
+
+  const handleCancel = async (jobId: string) => {
+    if (!confirm("Cancel this job?")) return;
+    try {
+      const res = await fetch("/api/admin/cancel-job", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId }),
+      });
+      const data = await res.json();
+      setMessage(data.message || "✅ Job cancelled");
+      fetchJobs();
+    } catch (err: any) {
+      setMessage(`❌ Error: ${err.message}`);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+      case "failed":
+        return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
+      case "cancelled":
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300";
+      case "in_progress":
+      case "processing":
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+      default:
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <SectionTitle title="📊 Admin - All Jobs" />
+      {message && (
+        <Card className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+          <p className="text-sm text-blue-700 dark:text-blue-300">{message}</p>
+        </Card>
+      )}
+      {loading ? (
+        <Card className="p-8 flex items-center justify-center">
+          <div className="animate-spin h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full"></div>
+        </Card>
+      ) : jobs.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-zinc-600 dark:text-white/60">
+          No jobs found
+        </Card>
+      ) : (
+        jobs.map((job) => (
+          <Card key={job.id} className="p-4">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
+                    {job.status}
+                  </span>
+                  {job.current_stage && (
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      {job.current_stage}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-zinc-900 dark:text-white mb-1">{job.prompt}</p>
+                <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                  ID: {job.id} | Created: {new Date(job.created_at).toLocaleString("fr-FR")}
+                </div>
+              </div>
+              <div className="flex gap-2 ml-4">
+                {job.status === "failed" && (
+                  <button
+                    onClick={() => handleRetry(job.id)}
+                    className="rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-3 py-1 text-xs hover:bg-blue-200 dark:hover:bg-blue-900/50"
+                  >
+                    🔄 Retry
+                  </button>
+                )}
+                {(job.status === "pending" || job.status === "in_progress") && (
+                  <button
+                    onClick={() => handleCancel(job.id)}
+                    className="rounded-lg bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-3 py-1 text-xs hover:bg-red-200 dark:hover:bg-red-900/50"
+                  >
+                    🛑 Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+          </Card>
+        ))
+      )}
+    </div>
+  );
+};
 
 const YouTubeDrawer: React.FC<{ open: boolean; onClose: () => void; onPublish: (p: {title: string; description: string; tags: string[]; privacy: 'private'|'unlisted'|'public'}) => void }> = ({ open, onClose, onPublish }) => {
   const [title, setTitle] = useState('');
@@ -376,41 +596,28 @@ const VideoGen4Page: React.FC = () => {
   );
 };
 
-const SimpleToolPage: React.FC<{ name: string }> = ({ name }) => (
-  <div className="space-y-4">
-    <SectionTitle title={`${name} Creation`} />
-    <Card className="p-4">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div>
-          <label className="text-xs text-zinc-600 dark:text-white/60">Prompt</label>
-          <textarea className="mt-1 h-40 w-full resize-none rounded-xl border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/5 p-3 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-white/40" placeholder={`Describe your ${name.toLowerCase()}…`} />
-          <div className="mt-3 flex items-center gap-2">
-            <button className="rounded-xl bg-zinc-100 dark:bg-white/10 px-3 py-2 text-sm text-zinc-900 dark:text-white hover:bg-zinc-200 dark:hover:bg-white/20">Advanced</button>
-            <button className="rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-white">Create</button>
-          </div>
-        </div>
-        <div>
-          <label className="text-xs text-zinc-600 dark:text-white/60">Preview</label>
-          <Card className="mt-1 aspect-video w-full">
-            <div className="flex h-full items-center justify-center">
-              <span className="text-xs text-zinc-600 dark:text-white/60">Preview will appear here</span>
-            </div>
-          </Card>
-        </div>
-      </div>
-    </Card>
-  </div>
-);
 
 export default function AlphoShellDemo() {
   const [route, setRoute] = useState<string>("home");
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   
   useEffect(() => {
     const savedTheme = localStorage.getItem('alpho-theme') as 'dark' | 'light';
     if (savedTheme) {
       setTheme(savedTheme);
     }
+  }, []);
+  
+  useEffect(() => {
+    async function getUser() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+      setIsAdmin(user?.user_metadata?.role === 'admin');
+    }
+    getUser();
   }, []);
   
   useEffect(() => {
@@ -422,25 +629,16 @@ export default function AlphoShellDemo() {
 
   return (
     <div className="min-h-screen bg-white text-zinc-900 dark:bg-[#0b0c10] dark:text-white">
-      <Sidebar current={route} onNavigate={setRoute} />
+      <Sidebar current={route} onNavigate={setRoute} isAdmin={isAdmin} />
 
       <main className="ml-60">
-        <Topbar theme={theme} toggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
+        <Topbar theme={theme} toggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} user={user} />
         <div className="mx-auto max-w-7xl space-y-8 px-6 py-6">
           {route === "home" && <HomePage onGo={setRoute} />}
           {route === "assets" && <AssetsPage />}
-          {route === "story" && <SimpleToolPage name="Story" />}
-          {route === "video" && <SimpleToolPage name="Video" />}
-          {route === "video-gen4" && <VideoGen4Page />}
-          {route === "video-turbo" && <SimpleToolPage name="Video (Turbo)" />}
-          {route === "image" && <SimpleToolPage name="Image" />}
-          {route === "character" && <SimpleToolPage name="Character" />}
-          {route === "audio" && <SimpleToolPage name="Audio" />}
-          {route === "more" && (
-            <Card className="p-6 text-sm text-zinc-600 dark:text-white/70">
-              Settings & Labs coming soon.
-            </Card>
-          )}
+          {route === "video" && <VideoGen4Page />}
+          {route === "history" && <MyJobsView userId={user?.id || null} />}
+          {route === "admin" && isAdmin && <AdminJobsView />}
         </div>
       </main>
     </div>
