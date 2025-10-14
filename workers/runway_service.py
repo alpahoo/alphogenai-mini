@@ -122,7 +122,7 @@ class RunwayService:
                 error = data.get("error", "Unknown error")
                 raise RuntimeError(f"Runway generation failed: {error}")
             
-            elif status in ["PENDING", "PROCESSING"]:
+            elif status in ["PENDING", "PROCESSING", "RUNNING"]:
                 await asyncio.sleep(5)
                 continue
             
