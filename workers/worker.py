@@ -168,20 +168,6 @@ class AlphogenAIWorker:
 async def main():
     """Point d'entrée du worker"""
     
-    # Valider l'environnement au démarrage
-    print("🔍 Validation de l'environnement...")
-    from .validate_env import validate_environment
-    success, errors = validate_environment()
-    
-    if not success:
-        print("\n🚨 Configuration invalide - impossible de démarrer le worker")
-        print("Corrigez les variables d'environnement manquantes.\n")
-        sys.exit(1)
-    
-    print("\n" + "=" * 70)
-    print("✅ Configuration valide - Démarrage du worker...")
-    print("=" * 70 + "\n")
-    
     poll_interval = 10
     
     if len(sys.argv) > 1:
