@@ -12,7 +12,7 @@ class RunwayService:
     
     def __init__(self):
         self.api_key = os.getenv("RUNWAY_API_KEY")
-        self.base_url = os.getenv("RUNWAY_API_BASE", "https://api.runwayml.com/v1")
+        self.base_url = os.getenv("RUNWAY_API_BASE", "https://api.dev.runwayml.com/v1")
         
         if not self.api_key:
             raise ValueError("RUNWAY_API_KEY environment variable is required")
@@ -20,16 +20,16 @@ class RunwayService:
     async def generate_video(
         self,
         prompt: str,
-        duration: int = 10,
+        duration: int = 8,
         aspect_ratio: str = "16:9"
     ) -> Dict[str, Any]:
         """
-        Generate a video using Runway Gen-4 Turbo
+        Generate a video using Runway veo3 (text-to-video)
         
         Args:
             prompt: Text description of the video
-            duration: Video duration in seconds (default 10)
-            aspect_ratio: Video aspect ratio (default "16:9")
+            duration: Video duration in seconds (veo3 requires 8 seconds)
+            aspect_ratio: Video aspect ratio ("16:9" or "9:16")
             
         Returns:
             Dict with video_url and metadata
@@ -38,18 +38,20 @@ class RunwayService:
         print(f"[Runway] Duration: {duration}s | Aspect Ratio: {aspect_ratio}")
         
         async with httpx.AsyncClient(timeout=300.0) as client:
+            ratio = "1280:720" if aspect_ratio == "16:9" else "720:1280"
+            
             response = await client.post(
-                f"{self.base_url}/generations",
+                f"{self.base_url}/text_to_video",
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "X-Runway-Version": "2024-11-06"
                 },
                 json={
-                    "prompt": prompt,
-                    "model": "gen4-turbo",
-                    "duration": duration,
-                    "aspect_ratio": aspect_ratio,
-                    "output_format": "mp4"
+                    "promptText": prompt,
+                    "model": "veo3",
+                    "duration": 8,
+                    "ratio": ratio
                 }
             )
             response.raise_for_status()
@@ -63,9 +65,9 @@ class RunwayService:
             result = {
                 "video_url": video_url,
                 "task_id": task_id,
-                "duration": duration,
+                "duration": 8,
                 "prompt": prompt,
-                "model": "gen4-turbo"
+                "model": "veo3"
             }
             
             print(f"[Runway] ✓ Video ready: {video_url[:60]}...")
@@ -90,26 +92,37 @@ class RunwayService:
         """
         for attempt in range(max_attempts):
             response = await client.get(
-                f"{self.base_url}/generations/{task_id}",
-                headers={"Authorization": f"Bearer {self.api_key}"}
+                f"{self.base_url}/tasks/{task_id}",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "X-Runway-Version": "2024-11-06"
+                }
             )
             response.raise_for_status()
             data = response.json()
             
-            status = data.get("status")
+            status = data.get("status", "").upper()
             print(f"[Runway] Poll {attempt + 1}/{max_attempts}: {status}")
             
-            if status == "completed":
-                video_url = data.get("output", {}).get("url")
+            if status == "COMPLETED" or status == "SUCCEEDED":
+                video_url = None
+                if "output" in data:
+                    if isinstance(data["output"], dict):
+                        video_url = data["output"].get("url")
+                    elif isinstance(data["output"], list) and len(data["output"]) > 0:
+                        video_url = data["output"][0] if isinstance(data["output"][0], str) else data["output"][0].get("url")
+                elif "url" in data:
+                    video_url = data["url"]
+                
                 if not video_url:
-                    raise ValueError("No video URL in completed response")
+                    raise ValueError(f"No video URL in completed response: {data}")
                 return video_url
             
-            elif status == "failed":
+            elif status == "FAILED":
                 error = data.get("error", "Unknown error")
                 raise RuntimeError(f"Runway generation failed: {error}")
             
-            elif status in ["pending", "processing"]:
+            elif status in ["PENDING", "PROCESSING"]:
                 await asyncio.sleep(5)
                 continue
             
