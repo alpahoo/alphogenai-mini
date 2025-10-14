@@ -468,6 +468,7 @@ const YouTubeDrawer: React.FC<{ open: boolean; onClose: () => void; onPublish: (
 };
 
 async function createGen4(req: { prompt: string; references?: File[]; duration?: number; resolution?: '720p'|'1080p'; seed?: number; negativePrompt?: string; }) {
+  console.log('🚀 createGen4 called with:', req);
   const form = new FormData();
   form.append('prompt', req.prompt);
   if (req.duration) form.append('duration', String(req.duration));
@@ -475,9 +476,17 @@ async function createGen4(req: { prompt: string; references?: File[]; duration?:
   if (req.seed !== undefined) form.append('seed', String(req.seed));
   if (req.negativePrompt) form.append('negativePrompt', req.negativePrompt);
   req.references?.forEach((f) => form.append('references', f));
+  console.log('📤 Sending POST request to /api/runway/gen4');
   const res = await fetch('/api/runway/gen4', { method: 'POST', body: form });
-  if (!res.ok) throw new Error('Runway Gen‑4 request failed');
-  return res.json();
+  console.log('📥 Response status:', res.status, res.statusText);
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error('❌ API error response:', errorText);
+    throw new Error(`Runway Gen‑4 request failed: ${res.status} ${errorText}`);
+  }
+  const jsonData = await res.json();
+  console.log('✅ API response data:', jsonData);
+  return jsonData;
 }
 
 async function publishYouTube(req: { videoIdOrUrl: string; title: string; description: string; tags: string[]; privacy: 'private'|'unlisted'|'public'; }) {
@@ -497,22 +506,42 @@ const VideoGen4Page: React.FC = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [videoId, setVideoId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    console.log('VideoGen4Page state updated:', { prompt: prompt.substring(0, 50) + '...', loading, previewUrl: !!previewUrl, videoId });
+  }, [prompt, loading, previewUrl, videoId]);
+
   const onFiles = (files: FileList | null) => {
     if (!files) return;
     setRefs(Array.from(files));
   };
 
   const onCreate = async () => {
+    console.log('🎬 onCreate called - starting video generation');
+    console.log('Prompt:', prompt);
+    console.log('Negative Prompt:', negativePrompt);
+    console.log('Duration:', duration);
+    console.log('Resolution:', resolution);
+    
+    if (!prompt || prompt.trim().length === 0) {
+      alert('Please enter a prompt to generate a video.');
+      console.error('❌ Prompt is empty');
+      return;
+    }
+    
     try {
       setLoading(true);
+      console.log('⏳ Loading state set to true');
       const data = await createGen4({ prompt, negativePrompt, duration, resolution, seed, references: refs });
+      console.log('✅ Video generation response:', data);
       setPreviewUrl(data.videoUrl || null);
       setVideoId(data.videoId || null);
     } catch (e: unknown) {
-      console.error(e);
-      alert((e as Error).message);
+      console.error('❌ Video generation error:', e);
+      alert(`Error: ${(e as Error).message}`);
     } finally {
       setLoading(false);
+      console.log('✅ Loading state set to false');
     }
   };
 
