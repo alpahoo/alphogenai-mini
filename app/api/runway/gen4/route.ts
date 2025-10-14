@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { createClient as createAuthClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 
@@ -19,6 +20,13 @@ function getSupabaseClient() {
 
 export async function POST(req: Request) {
   try {
+    const authClient = await createAuthClient();
+    const { data: { user }, error: authError } = await authClient.auth.getUser();
+    
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    
     const supabase = getSupabaseClient();
     const formData = await req.formData();
     
@@ -46,6 +54,7 @@ export async function POST(req: Request) {
           prompt,
           status: "done",
           final_url: cached.video_url,
+          user_id: user.id,
           app_state: { cached: true, prompt, promptHash, duration, resolution },
         })
         .select()
@@ -63,6 +72,7 @@ export async function POST(req: Request) {
       .insert({
         prompt,
         status: "pending",
+        user_id: user.id,
         app_state: { 
           prompt, 
           promptHash, 
