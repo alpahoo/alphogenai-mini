@@ -56,7 +56,7 @@ class RunwayOrchestrator:
             
             video_result = await self.runway.generate_video(
                 prompt=video_prompt,
-                duration=16,
+                duration=10,
                 aspect_ratio="16:9"
             )
             
@@ -97,7 +97,7 @@ class RunwayOrchestrator:
                 prompt=prompt,
                 video_url=final_url,
                 metadata={
-                    "duration": 16,
+                    "duration": 10,
                     "model": self.runway.model,
                     "tone": tone,
                     "created_at": datetime.now(timezone.utc).isoformat(),
