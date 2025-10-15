@@ -47,16 +47,22 @@ export default async function Navbar() {
           {user ? (
             <>
               <Link
-                href="/notes"
+                href="/creator/generate"
                 className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
               >
-                Notes
+                🎬 Créer
               </Link>
               <Link
-                href="/uploads"
+                href="/history"
                 className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
               >
-                Uploads
+                📹 Mes Vidéos
+              </Link>
+              <Link
+                href="/assets"
+                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+              >
+                📁 Assets
               </Link>
             </>
           ) : null}

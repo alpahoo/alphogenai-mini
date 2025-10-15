@@ -15,7 +15,7 @@ export default function VideoCard({ id, final_url, prompt }: VideoCardProps) {
 
   const handleCopyLink = async (e: React.MouseEvent) => {
     e.preventDefault();
-    const url = `${window.location.origin}/v/${id}`;
+    const url = `${window.location.origin}/creator/view/${id}`;
 
     try {
       await navigator.clipboard.writeText(url);
@@ -32,7 +32,7 @@ export default function VideoCard({ id, final_url, prompt }: VideoCardProps) {
   return (
     <div className="group bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all border border-slate-200 dark:border-slate-700">
       {/* Miniature vidéo */}
-      <Link href={`/v/${id}`} className="block">
+      <Link href={`/creator/view/${id}`} className="block">
         <div className="relative aspect-video bg-slate-900 overflow-hidden">
           <video
             src={final_url}
@@ -64,7 +64,7 @@ export default function VideoCard({ id, final_url, prompt }: VideoCardProps) {
       {/* Contenu */}
       <div className="p-4 space-y-3">
         {/* Titre */}
-        <Link href={`/v/${id}`}>
+        <Link href={`/creator/view/${id}`}>
           <h3 className="font-medium text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2">
             {title}
           </h3>
@@ -73,7 +73,7 @@ export default function VideoCard({ id, final_url, prompt }: VideoCardProps) {
         {/* Actions */}
         <div className="flex gap-2">
           <Link
-            href={`/v/${id}`}
+            href={`/creator/view/${id}`}
             className="flex-1 bg-blue-600 text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors text-center"
           >
             Voir

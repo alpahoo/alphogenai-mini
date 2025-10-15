@@ -66,7 +66,29 @@ export async function POST(req: Request) {
       .single();
 
     if (error) throw error;
-    return NextResponse.json({ jobId: job.id, cached: false });
+
+    // Also create a project for the new pipeline
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .insert({
+        prompt,
+        title: prompt.split('.')[0] || prompt.substring(0, 50),
+        status: "pending",
+        model: "gen4_turbo",
+        cost_credits: 0,
+      })
+      .select()
+      .single();
+
+    if (projectError) {
+      console.warn("Failed to create project:", projectError);
+    }
+
+    return NextResponse.json({ 
+      jobId: job.id, 
+      projectId: project?.id,
+      cached: false 
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

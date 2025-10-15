@@ -186,7 +186,10 @@ export default function AdminJobsPage() {
                       )}
                       {job.final_url && (
                         <button
-                          onClick={() => router.push(`/v/${job.id}`)}
+                          onClick={() => {
+                            // Try to find corresponding project, otherwise fallback to job view
+                            router.push(`/v/${job.id}`);
+                          }}
                           className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-3 py-1 rounded text-sm hover:bg-green-200 dark:hover:bg-green-900/50 transition-all"
                         >
                           👁️ Voir
