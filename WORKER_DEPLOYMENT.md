@@ -103,7 +103,8 @@ Cliquez sur **"Add Environment Variable"** pour chaque variable ci-dessous :
 
 | Key | Value | Description |
 |-----|-------|-------------|
-| `RUNWAY_API_BASE` | `https://api.dev.runwayml.com/v1` | URL de l'API Runway |
+| `RUNWAY_API_BASE` | `https://api.runwayml.com/v1` | URL de l'API Runway |
+| `RUNWAY_MODEL` | `gen-4-turbo` | Modèle Runway à utiliser |
 | `QWEN_MOCK_ENABLED` | `true` | Mode mock pour génération de scripts |
 | `MAX_RETRIES` | `3` | Nombre de tentatives en cas d'erreur |
 | `RETRY_DELAY` | `5` | Délai entre tentatives (secondes) |
