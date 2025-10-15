@@ -13,7 +13,7 @@ class RunwayService:
     def __init__(self):
         self.api_key = os.getenv("RUNWAY_API_KEY")
         self.base_url = os.getenv("RUNWAY_API_BASE", "https://api.dev.runwayml.com/v1")
-        self.model = os.getenv("RUNWAY_MODEL", "gen4_turbo")
+        self.model = os.getenv("RUNWAY_MODEL", "veo3")
         
         if not self.api_key:
             raise ValueError("RUNWAY_API_KEY environment variable is required")
