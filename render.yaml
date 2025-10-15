@@ -18,7 +18,9 @@ services:
       - key: RUNWAY_API_KEY
         sync: false
       - key: RUNWAY_API_BASE
-        value: https://api.dev.runwayml.com/v1
+        value: https://api.runwayml.com/v1
+      - key: RUNWAY_MODEL
+        value: gen-4-turbo
       - key: QWEN_MOCK_ENABLED
         value: true
       - key: WEBHOOK_URL

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     
     RUNWAY_API_KEY: str
     RUNWAY_API_BASE: str = "https://api.runwayml.com/v1"
+    RUNWAY_MODEL: str = "gen-4-turbo"
     
     QWEN_MOCK_ENABLED: bool = True
     
