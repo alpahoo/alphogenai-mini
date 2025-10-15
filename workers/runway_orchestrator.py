@@ -97,8 +97,8 @@ class RunwayOrchestrator:
                 prompt=prompt,
                 video_url=final_url,
                 metadata={
-                    "duration": 8,
-                    "model": "veo3",
+                    "duration": 16,
+                    "model": self.runway.model,
                     "tone": tone,
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 }
