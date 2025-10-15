@@ -56,7 +56,7 @@ class RunwayOrchestrator:
             
             video_result = await self.runway.generate_video(
                 prompt=video_prompt,
-                duration=8,
+                duration=16,
                 aspect_ratio="16:9"
             )
             

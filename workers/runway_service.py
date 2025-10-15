@@ -13,7 +13,7 @@ class RunwayService:
     def __init__(self):
         self.api_key = os.getenv("RUNWAY_API_KEY")
         self.base_url = os.getenv("RUNWAY_API_BASE", "https://api.dev.runwayml.com/v1")
-        self.model = os.getenv("RUNWAY_MODEL", "veo3")
+        self.model = os.getenv("RUNWAY_MODEL", "gen3a_turbo")
         
         if not self.api_key:
             raise ValueError("RUNWAY_API_KEY environment variable is required")
@@ -21,15 +21,15 @@ class RunwayService:
     async def generate_video(
         self,
         prompt: str,
-        duration: int = 8,
+        duration: int = 16,
         aspect_ratio: str = "16:9"
     ) -> Dict[str, Any]:
         """
-        Generate a video using Runway veo3 (text-to-video)
+        Generate a video using Runway gen3a_turbo (text-to-video)
         
         Args:
             prompt: Text description of the video
-            duration: Video duration in seconds (veo3 requires 8 seconds)
+            duration: Video duration in seconds (gen3a_turbo supports up to 60s)
             aspect_ratio: Video aspect ratio ("16:9" or "9:16")
             
         Returns:
@@ -44,7 +44,7 @@ class RunwayService:
             payload = {
                 "promptText": prompt,
                 "model": self.model,
-                "duration": 8,
+                "duration": duration,
                 "ratio": ratio
             }
             
@@ -83,7 +83,7 @@ class RunwayService:
             result = {
                 "video_url": video_url,
                 "task_id": task_id,
-                "duration": 8,
+                "duration": duration,
                 "prompt": prompt,
                 "model": self.model
             }
