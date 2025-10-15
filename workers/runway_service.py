@@ -40,21 +40,38 @@ class RunwayService:
         async with httpx.AsyncClient(timeout=300.0) as client:
             ratio = "1280:720" if aspect_ratio == "16:9" else "720:1280"
             
-            response = await client.post(
-                f"{self.base_url}/text_to_video",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                    "X-Runway-Version": "2024-11-06"
-                },
-                json={
-                    "promptText": prompt,
-                    "model": "veo3",
-                    "duration": 8,
-                    "ratio": ratio
-                }
-            )
-            response.raise_for_status()
+            payload = {
+                "promptText": prompt,
+                "model": "veo3",
+                "duration": 8,
+                "ratio": ratio
+            }
+            
+            print(f"[Runway] Request payload:")
+            print(f"[Runway]   promptText: {prompt[:100]}... (length: {len(prompt)})")
+            print(f"[Runway]   model: {payload['model']}")
+            print(f"[Runway]   duration: {payload['duration']}")
+            print(f"[Runway]   ratio: {payload['ratio']}")
+            
+            try:
+                response = await client.post(
+                    f"{self.base_url}/text_to_video",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "X-Runway-Version": "2024-11-06"
+                    },
+                    json=payload
+                )
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                print(f"[Runway] HTTP {e.response.status_code} Error")
+                print(f"[Runway] Response body: {e.response.text}")
+                print(f"[Runway] Request URL: {e.request.url}")
+                raise RuntimeError(
+                    f"Runway API error ({e.response.status_code}): {e.response.text}"
+                )
+            
             task_data = response.json()
             task_id = task_data.get("id")
             
