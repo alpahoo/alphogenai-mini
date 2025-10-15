@@ -12,7 +12,8 @@ class RunwayService:
     
     def __init__(self):
         self.api_key = os.getenv("RUNWAY_API_KEY")
-        self.base_url = os.getenv("RUNWAY_API_BASE", "https://api.dev.runwayml.com/v1")
+        self.base_url = os.getenv("RUNWAY_API_BASE", "https://api.runwayml.com/v1")
+        self.model = os.getenv("RUNWAY_MODEL", "gen4_turbo")
         
         if not self.api_key:
             raise ValueError("RUNWAY_API_KEY environment variable is required")
@@ -42,7 +43,7 @@ class RunwayService:
             
             payload = {
                 "promptText": prompt,
-                "model": "veo3",
+                "model": self.model,
                 "duration": 8,
                 "ratio": ratio
             }
@@ -84,7 +85,7 @@ class RunwayService:
                 "task_id": task_id,
                 "duration": 8,
                 "prompt": prompt,
-                "model": "veo3"
+                "model": self.model
             }
             
             print(f"[Runway] ✓ Video ready: {video_url[:60]}...")
