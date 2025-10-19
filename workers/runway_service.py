@@ -15,6 +15,11 @@ class RunwayService:
         self.api_url = os.getenv("RUNWAY_API_URL", "https://api.dev.runwayml.com/v1/tasks")
         self.model = os.getenv("RUNWAY_MODEL", "gen4_turbo")
         
+        print(f"[Runway] Initialized with:")
+        print(f"[Runway]   API URL: {self.api_url}")
+        print(f"[Runway]   Model: {self.model}")
+        print(f"[Runway]   API Key: {'***' + self.api_key[-4:] if self.api_key else 'NOT SET'}")
+        
         if not self.api_key:
             raise ValueError("RUNWAY_API_KEY environment variable is required")
     
@@ -68,7 +73,10 @@ class RunwayService:
                 print(f"[Runway]   image.url: {payload['image']['url'][:60]}...")
             
             # Use the tasks endpoint directly - the payload determines the type
-            print(f"[Runway] Using endpoint: {self.api_url}")
+            print(f"[Runway] ===== FINAL URL CHECK =====")
+            print(f"[Runway] Target URL: {self.api_url}")
+            print(f"[Runway] Should be: https://api.dev.runwayml.com/v1/tasks")
+            print(f"[Runway] ===============================")
             
             try:
                 response = await client.post(
