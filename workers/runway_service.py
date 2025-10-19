@@ -67,8 +67,8 @@ class RunwayService:
             if "image" in payload:
                 print(f"[Runway]   image.url: {payload['image']['url'][:60]}...")
             
-            # Choose endpoint based on generation mode
-            endpoint = "image_to_video" if generation_mode == "i2v" else "text_to_video"
+            # Use the tasks endpoint directly - the payload determines the type
+            print(f"[Runway] Using endpoint: {self.api_url}")
             
             try:
                 response = await client.post(
