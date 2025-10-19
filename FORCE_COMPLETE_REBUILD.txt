@@ -1,0 +1,28 @@
+FORCE COMPLETE REBUILD - 2025-10-19 21:05:00
+
+CRITICAL CHANGES APPLIED:
+
+1. ✅ Fixed Runway API structure:
+   - URL: POST /v1/tasks (not /v1/tasks/text_to_video)
+   - Payload: {"type": "text_to_video", "model": "...", "input": {...}}
+
+2. ✅ Changed model to gen3a_turbo:
+   - gen4_turbo is not available according to API error
+   - gen3a_turbo is more likely to work
+
+3. ✅ Reduced duration to 5s:
+   - Lower cost and more likely to succeed
+   - Can increase later once working
+
+EXPECTED RESULT:
+- No more 404 errors on /v1/tasks/text_to_video
+- No more 403 "Model variant gen4_turbo is not available"
+- Successful video generation with gen3a_turbo
+
+ENVIRONMENT VARIABLES NEEDED:
+RUNWAY_API_URL=https://api.dev.runwayml.com/v1
+RUNWAY_MODEL=gen3a_turbo
+RUNWAY_API_KEY=your_api_key
+
+This file forces Render to use the corrected code.
+Timestamp: 2025-10-19T21:05:00Z

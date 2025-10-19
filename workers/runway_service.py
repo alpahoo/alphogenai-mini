@@ -16,7 +16,8 @@ class RunwayService:
         # Base URL without /tasks - we'll add it in the code
         base_url = os.getenv("RUNWAY_API_URL", "https://api.dev.runwayml.com/v1").rstrip("/")
         self.api_url = f"{base_url}/tasks"
-        self.model = os.getenv("RUNWAY_MODEL", "gen4_turbo")
+        # Try different model names - gen3a_turbo is more likely to be available
+        self.model = os.getenv("RUNWAY_MODEL", "gen3a_turbo")
         
         print(f"[Runway] FIXED VERSION Initialized with:")
         print(f"[Runway]   API URL: {self.api_url}")
@@ -29,7 +30,7 @@ class RunwayService:
     async def generate_video(
         self,
         prompt: str,
-        duration: int = 10,
+        duration: int = 5,
         aspect_ratio: str = "16:9",
         image_url: Optional[str] = None,
         generation_mode: str = "t2v"
