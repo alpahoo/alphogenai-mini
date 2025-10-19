@@ -41,7 +41,7 @@ serve(async (req) => {
 
     // Get Runway API configuration
     const runwayApiKey = Deno.env.get('RUNWAY_API_KEY');
-    const runwayApiBase = Deno.env.get('RUNWAY_API_BASE') || 'https://api.dev.runwayml.com/v1';
+    const runwayApiUrl = Deno.env.get('RUNWAY_API_URL') || 'https://api.dev.runwayml.com/v1/tasks';
     const runwayModel = Deno.env.get('RUNWAY_MODEL') || 'gen4_turbo';
 
     if (!runwayApiKey) {
@@ -116,7 +116,6 @@ serve(async (req) => {
 
     // Prepare Runway API payload
     const ratio = aspect_ratio === "16:9" ? "1280:720" : "720:1280";
-    const endpoint = generation_mode === "i2v" ? "image_to_video" : "text_to_video";
     
     const payload: any = {
       model: runwayModel,
@@ -130,7 +129,8 @@ serve(async (req) => {
       payload.image = { url: image_ref_url };
     }
 
-    console.log(`[Edge Function] Calling Runway ${endpoint} API`);
+    console.log(`[Edge Function] Calling Runway API (${generation_mode.toUpperCase()})`);
+    console.log(`[Edge Function] URL: ${runwayApiUrl}`);
     console.log(`[Edge Function] Payload:`, {
       model: payload.model,
       promptText: payload.promptText.substring(0, 100) + '...',
@@ -140,7 +140,7 @@ serve(async (req) => {
     });
 
     // Call Runway API to start generation
-    const runwayResponse = await fetch(`${runwayApiBase}/${endpoint}`, {
+    const runwayResponse = await fetch(runwayApiUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${runwayApiKey}`,
@@ -153,6 +153,7 @@ serve(async (req) => {
     if (!runwayResponse.ok) {
       const errorText = await runwayResponse.text();
       console.error(`[Edge Function] Runway API error: ${runwayResponse.status} - ${errorText}`);
+      console.error(`[Edge Function] Request URL: ${runwayApiUrl}`);
       
       // Update job with error
       await supabase
@@ -198,7 +199,11 @@ serve(async (req) => {
         await new Promise(resolve => setTimeout(resolve, 5000));
       }
 
-      const statusResponse = await fetch(`${runwayApiBase}/tasks/${taskId}`, {
+      // Build status check URL from the base API URL
+      const baseUrl = runwayApiUrl.replace('/tasks', '');
+      const statusUrl = `${baseUrl}/tasks/${taskId}`;
+      
+      const statusResponse = await fetch(statusUrl, {
         headers: {
           'Authorization': `Bearer ${runwayApiKey}`,
           'X-Runway-Version': '2024-11-06'
@@ -334,6 +339,6 @@ Environment Variables Required:
 - SUPABASE_URL
 - SUPABASE_SERVICE_ROLE_KEY
 - RUNWAY_API_KEY
-- RUNWAY_API_BASE (optional, defaults to https://api.dev.runwayml.com/v1)
+- RUNWAY_API_URL (optional, defaults to https://api.dev.runwayml.com/v1/tasks)
 - RUNWAY_MODEL (optional, defaults to gen4_turbo)
 */

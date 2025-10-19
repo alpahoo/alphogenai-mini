@@ -12,7 +12,7 @@ class RunwayService:
     
     def __init__(self):
         self.api_key = os.getenv("RUNWAY_API_KEY")
-        self.base_url = os.getenv("RUNWAY_API_BASE", "https://api.dev.runwayml.com/v1")
+        self.api_url = os.getenv("RUNWAY_API_URL", "https://api.dev.runwayml.com/v1/tasks")
         self.model = os.getenv("RUNWAY_MODEL", "gen4_turbo")
         
         if not self.api_key:
@@ -72,7 +72,7 @@ class RunwayService:
             
             try:
                 response = await client.post(
-                    f"{self.base_url}/{endpoint}",
+                    self.api_url,
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",
@@ -127,8 +127,10 @@ class RunwayService:
             URL of the generated video
         """
         for attempt in range(max_attempts):
+            # Use the same base URL but with task ID for status check
+            base_url = self.api_url.replace('/tasks', '')
             response = await client.get(
-                f"{self.base_url}/tasks/{task_id}",
+                f"{base_url}/tasks/{task_id}",
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "X-Runway-Version": "2024-11-06"

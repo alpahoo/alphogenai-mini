@@ -120,7 +120,7 @@ Ajouter/mettre à jour ces variables :
 ```bash
 # Runway API (OBLIGATOIRE)
 RUNWAY_API_KEY=your_runway_api_key_here
-RUNWAY_API_BASE=https://api.dev.runwayml.com/v1
+RUNWAY_API_URL=https://api.dev.runwayml.com/v1/tasks
 RUNWAY_MODEL=gen4_turbo
 
 # Supabase (OBLIGATOIRE)

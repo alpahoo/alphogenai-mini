@@ -55,7 +55,7 @@ Cette implémentation ajoute le **mode Image → Vidéo (i2v)** à AlphoGenAI Mi
 ```bash
 # Runway API
 RUNWAY_API_KEY=your_runway_api_key
-RUNWAY_API_BASE=https://api.dev.runwayml.com/v1
+RUNWAY_API_URL=https://api.dev.runwayml.com/v1/tasks
 RUNWAY_MODEL=gen4_turbo
 
 # Supabase
