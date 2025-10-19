@@ -1,6 +1,5 @@
 """
 Runway Gen-4 Turbo service for text-to-video generation
-FIXED VERSION - Uses correct API endpoint without concatenation
 """
 import os
 import asyncio
@@ -9,14 +8,14 @@ from typing import Dict, Any, Optional
 
 
 class RunwayService:
-    """Runway Gen-4 Turbo API wrapper for video generation - FIXED VERSION"""
+    """Runway Gen-4 Turbo API wrapper for video generation"""
     
     def __init__(self):
         self.api_key = os.getenv("RUNWAY_API_KEY")
         self.api_url = os.getenv("RUNWAY_API_URL", "https://api.dev.runwayml.com/v1/tasks")
         self.model = os.getenv("RUNWAY_MODEL", "gen4_turbo")
         
-        print(f"[Runway] FIXED VERSION Initialized with:")
+        print(f"[Runway] Initialized with:")
         print(f"[Runway]   API URL: {self.api_url}")
         print(f"[Runway]   Model: {self.model}")
         print(f"[Runway]   API Key: {'***' + self.api_key[-4:] if self.api_key else 'NOT SET'}")
@@ -34,9 +33,18 @@ class RunwayService:
     ) -> Dict[str, Any]:
         """
         Generate a video using Runway gen4_turbo (text-to-video or image-to-video)
-        FIXED VERSION - Uses direct API endpoint
+        
+        Args:
+            prompt: Text description of the video
+            duration: Video duration in seconds (gen4_turbo supports 5s or 10s)
+            aspect_ratio: Video aspect ratio ("16:9" or "9:16")
+            image_url: Reference image URL for i2v mode (optional)
+            generation_mode: "t2v" (text-to-video) or "i2v" (image-to-video)
+            
+        Returns:
+            Dict with video_url and metadata
         """
-        print(f"[Runway] FIXED - Generating video ({generation_mode}): {prompt[:60]}...")
+        print(f"[Runway] Generating video ({generation_mode}): {prompt[:60]}...")
         print(f"[Runway] Duration: {duration}s | Aspect Ratio: {aspect_ratio}")
         if image_url:
             print(f"[Runway] Reference image: {image_url[:60]}...")
@@ -56,7 +64,7 @@ class RunwayService:
             if generation_mode == "i2v" and image_url:
                 payload["image"] = {"url": image_url}
             
-            print(f"[Runway] FIXED - Request payload:")
+            print(f"[Runway] Request payload:")
             print(f"[Runway]   promptText: {prompt[:100]}... (length: {len(prompt)})")
             print(f"[Runway]   model: {payload['model']}")
             print(f"[Runway]   duration: {payload['duration']}")
@@ -64,17 +72,15 @@ class RunwayService:
             if "image" in payload:
                 print(f"[Runway]   image.url: {payload['image']['url'][:60]}...")
             
-            # FIXED: Use direct URL without any concatenation
-            final_url = self.api_url
-            print(f"[Runway] ===== FIXED VERSION URL CHECK =====")
-            print(f"[Runway] Final URL: {final_url}")
-            print(f"[Runway] Expected: https://api.dev.runwayml.com/v1/tasks")
-            print(f"[Runway] Match: {final_url == 'https://api.dev.runwayml.com/v1/tasks'}")
-            print(f"[Runway] =====================================")
+            # Use the tasks endpoint directly - the payload determines the type
+            print(f"[Runway] ===== FINAL URL CHECK =====")
+            print(f"[Runway] Target URL: {self.api_url}")
+            print(f"[Runway] Should be: https://api.dev.runwayml.com/v1/tasks")
+            print(f"[Runway] ===============================")
             
             try:
                 response = await client.post(
-                    final_url,  # Use the exact URL without modification
+                    self.api_url,
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",
@@ -119,15 +125,20 @@ class RunwayService:
     ) -> str:
         """
         Poll Runway API until video generation is complete
-        FIXED VERSION - Uses correct status endpoint
+        
+        Args:
+            client: HTTP client
+            task_id: Runway task ID
+            max_attempts: Maximum polling attempts (default 60 = 5 minutes)
+            
+        Returns:
+            URL of the generated video
         """
         for attempt in range(max_attempts):
-            # FIXED: Build status URL correctly
+            # Use the same base URL but with task ID for status check
             base_url = self.api_url.replace('/tasks', '')
-            status_url = f"{base_url}/tasks/{task_id}"
-            
             response = await client.get(
-                status_url,
+                f"{base_url}/tasks/{task_id}",
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "X-Runway-Version": "2024-11-06"
@@ -174,6 +185,13 @@ class RunwayService:
         """
         Add background music to a video (if Runway supports it)
         Otherwise, return original video_url
+        
+        Args:
+            video_url: URL of the video
+            music_url: URL of the music track
+            
+        Returns:
+            Dict with final_video_url
         """
         print(f"[Runway] Music overlay not yet implemented")
         print(f"[Runway] Video: {video_url[:60]}...")
