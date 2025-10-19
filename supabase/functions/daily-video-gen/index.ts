@@ -41,7 +41,8 @@ serve(async (req) => {
 
     // Get Runway API configuration
     const runwayApiKey = Deno.env.get('RUNWAY_API_KEY');
-    const runwayApiUrl = Deno.env.get('RUNWAY_API_URL') || 'https://api.dev.runwayml.com/v1/tasks';
+    const runwayApiBase = Deno.env.get('RUNWAY_API_URL') || 'https://api.dev.runwayml.com/v1';
+    const runwayApiUrl = `${runwayApiBase.replace(/\/$/, '')}/tasks`;
     const runwayModel = Deno.env.get('RUNWAY_MODEL') || 'gen4_turbo';
 
     if (!runwayApiKey) {
@@ -114,29 +115,45 @@ serve(async (req) => {
 
     console.log(`[Edge Function] Created job: ${job.id}`);
 
-    // Prepare Runway API payload
+    // Prepare Runway API payload with correct structure
     const ratio = aspect_ratio === "16:9" ? "1280:720" : "720:1280";
     
-    const payload: any = {
-      model: runwayModel,
-      promptText: prompt,
-      duration,
-      ratio
-    };
-
-    // Add image for i2v mode
+    let payload: any;
+    
     if (generation_mode === "i2v" && image_ref_url) {
-      payload.image = { url: image_ref_url };
+      // Image-to-Video payload
+      payload = {
+        type: "image_to_video",
+        model: runwayModel,
+        input: {
+          image: { url: image_ref_url },
+          promptText: prompt,
+          duration,
+          ratio
+        }
+      };
+    } else {
+      // Text-to-Video payload
+      payload = {
+        type: "text_to_video",
+        model: runwayModel,
+        input: {
+          promptText: prompt,
+          duration,
+          ratio
+        }
+      };
     }
 
     console.log(`[Edge Function] Calling Runway API (${generation_mode.toUpperCase()})`);
     console.log(`[Edge Function] URL: ${runwayApiUrl}`);
     console.log(`[Edge Function] Payload:`, {
+      type: payload.type,
       model: payload.model,
-      promptText: payload.promptText.substring(0, 100) + '...',
-      duration: payload.duration,
-      ratio: payload.ratio,
-      hasImage: !!payload.image
+      promptText: payload.input.promptText.substring(0, 100) + '...',
+      duration: payload.input.duration,
+      ratio: payload.input.ratio,
+      hasImage: !!payload.input.image
     });
 
     // Call Runway API to start generation
@@ -199,9 +216,8 @@ serve(async (req) => {
         await new Promise(resolve => setTimeout(resolve, 5000));
       }
 
-      // Build status check URL from the base API URL
-      const baseUrl = runwayApiUrl.replace('/tasks', '');
-      const statusUrl = `${baseUrl}/tasks/${taskId}`;
+      // Build status check URL 
+      const statusUrl = `${runwayApiBase.replace(/\/$/, '')}/tasks/${taskId}`;
       
       const statusResponse = await fetch(statusUrl, {
         headers: {

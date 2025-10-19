@@ -13,7 +13,9 @@ class RunwayService:
     
     def __init__(self):
         self.api_key = os.getenv("RUNWAY_API_KEY")
-        self.api_url = os.getenv("RUNWAY_API_URL", "https://api.dev.runwayml.com/v1/tasks")
+        # Base URL without /tasks - we'll add it in the code
+        base_url = os.getenv("RUNWAY_API_URL", "https://api.dev.runwayml.com/v1").rstrip("/")
+        self.api_url = f"{base_url}/tasks"
         self.model = os.getenv("RUNWAY_MODEL", "gen4_turbo")
         
         print(f"[Runway] FIXED VERSION Initialized with:")
@@ -44,37 +46,49 @@ class RunwayService:
         async with httpx.AsyncClient(timeout=300.0) as client:
             ratio = "1280:720" if aspect_ratio == "16:9" else "720:1280"
             
-            # Base payload for both modes
-            payload = {
-                "model": self.model,
-                "promptText": prompt,
-                "duration": duration,
-                "ratio": ratio
-            }
-            
-            # Add image for i2v mode
+            # Correct Runway API payload structure
             if generation_mode == "i2v" and image_url:
-                payload["image"] = {"url": image_url}
+                # Image-to-Video payload
+                payload = {
+                    "type": "image_to_video",
+                    "model": self.model,
+                    "input": {
+                        "image": {"url": image_url},
+                        "promptText": prompt,
+                        "duration": duration,
+                        "ratio": ratio
+                    }
+                }
+            else:
+                # Text-to-Video payload
+                payload = {
+                    "type": "text_to_video", 
+                    "model": self.model,
+                    "input": {
+                        "promptText": prompt,
+                        "duration": duration,
+                        "ratio": ratio
+                    }
+                }
             
             print(f"[Runway] FIXED - Request payload:")
-            print(f"[Runway]   promptText: {prompt[:100]}... (length: {len(prompt)})")
+            print(f"[Runway]   type: {payload['type']}")
             print(f"[Runway]   model: {payload['model']}")
-            print(f"[Runway]   duration: {payload['duration']}")
-            print(f"[Runway]   ratio: {payload['ratio']}")
-            if "image" in payload:
-                print(f"[Runway]   image.url: {payload['image']['url'][:60]}...")
+            print(f"[Runway]   input.promptText: {payload['input']['promptText'][:100]}... (length: {len(prompt)})")
+            print(f"[Runway]   input.duration: {payload['input']['duration']}")
+            print(f"[Runway]   input.ratio: {payload['input']['ratio']}")
+            if "image" in payload['input']:
+                print(f"[Runway]   input.image.url: {payload['input']['image']['url'][:60]}...")
             
-            # FIXED: Use direct URL without any concatenation
-            final_url = self.api_url
-            print(f"[Runway] ===== FIXED VERSION URL CHECK =====")
-            print(f"[Runway] Final URL: {final_url}")
-            print(f"[Runway] Expected: https://api.dev.runwayml.com/v1/tasks")
-            print(f"[Runway] Match: {final_url == 'https://api.dev.runwayml.com/v1/tasks'}")
-            print(f"[Runway] =====================================")
+            # FIXED: Use correct Runway API endpoint
+            print(f"[Runway] ===== CORRECT API CALL =====")
+            print(f"[Runway] URL: {self.api_url}")
+            print(f"[Runway] Type: {payload['type']}")
+            print(f"[Runway] ===============================")
             
             try:
                 response = await client.post(
-                    final_url,  # Use the exact URL without modification
+                    self.api_url,
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",
