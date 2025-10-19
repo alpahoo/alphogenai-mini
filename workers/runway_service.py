@@ -22,41 +22,57 @@ class RunwayService:
         self,
         prompt: str,
         duration: int = 10,
-        aspect_ratio: str = "16:9"
+        aspect_ratio: str = "16:9",
+        image_url: Optional[str] = None,
+        generation_mode: str = "t2v"
     ) -> Dict[str, Any]:
         """
-        Generate a video using Runway gen4_turbo (text-to-video)
+        Generate a video using Runway gen4_turbo (text-to-video or image-to-video)
         
         Args:
             prompt: Text description of the video
             duration: Video duration in seconds (gen4_turbo supports 5s or 10s)
             aspect_ratio: Video aspect ratio ("16:9" or "9:16")
+            image_url: Reference image URL for i2v mode (optional)
+            generation_mode: "t2v" (text-to-video) or "i2v" (image-to-video)
             
         Returns:
             Dict with video_url and metadata
         """
-        print(f"[Runway] Generating video: {prompt[:60]}...")
+        print(f"[Runway] Generating video ({generation_mode}): {prompt[:60]}...")
         print(f"[Runway] Duration: {duration}s | Aspect Ratio: {aspect_ratio}")
+        if image_url:
+            print(f"[Runway] Reference image: {image_url[:60]}...")
         
         async with httpx.AsyncClient(timeout=300.0) as client:
             ratio = "1280:720" if aspect_ratio == "16:9" else "720:1280"
             
+            # Base payload for both modes
             payload = {
-                "promptText": prompt,
                 "model": self.model,
+                "promptText": prompt,
                 "duration": duration,
                 "ratio": ratio
             }
+            
+            # Add image for i2v mode
+            if generation_mode == "i2v" and image_url:
+                payload["image"] = {"url": image_url}
             
             print(f"[Runway] Request payload:")
             print(f"[Runway]   promptText: {prompt[:100]}... (length: {len(prompt)})")
             print(f"[Runway]   model: {payload['model']}")
             print(f"[Runway]   duration: {payload['duration']}")
             print(f"[Runway]   ratio: {payload['ratio']}")
+            if "image" in payload:
+                print(f"[Runway]   image.url: {payload['image']['url'][:60]}...")
+            
+            # Choose endpoint based on generation mode
+            endpoint = "image_to_video" if generation_mode == "i2v" else "text_to_video"
             
             try:
                 response = await client.post(
-                    f"{self.base_url}/text_to_video",
+                    f"{self.base_url}/{endpoint}",
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",
@@ -85,7 +101,9 @@ class RunwayService:
                 "task_id": task_id,
                 "duration": duration,
                 "prompt": prompt,
-                "model": self.model
+                "model": self.model,
+                "generation_mode": generation_mode,
+                "image_url": image_url if generation_mode == "i2v" else None
             }
             
             print(f"[Runway] ✓ Video ready: {video_url[:60]}...")
