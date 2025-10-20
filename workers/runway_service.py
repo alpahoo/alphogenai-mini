@@ -54,7 +54,7 @@ class RunwayService:
             ratio = ratio_map.get(aspect_ratio, "1280:720")
             
             payload = {
-                "imageUrl": image_url,
+                "promptImage": image_url,
                 "model": self.model,
                 "duration": duration,
                 "ratio": ratio
@@ -67,7 +67,7 @@ class RunwayService:
                 payload["seed"] = seed
             
             print(f"[Runway Video] Request payload:")
-            print(f"[Runway Video]   imageUrl: {image_url[:60]}...")
+            print(f"[Runway Video]   promptImage: {image_url[:60]}...")
             print(f"[Runway Video]   model: {payload['model']}")
             print(f"[Runway Video]   duration: {payload['duration']}")
             print(f"[Runway Video]   ratio: {payload['ratio']}")
