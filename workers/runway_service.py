@@ -1,7 +1,6 @@
 """
-Runway API service - MINIMAL VERSION
-NO MODEL SPECIFIED - Uses Runway default
-CORRECT ENDPOINT - /v1/tasks only
+Runway API Client - COMPLETELY NEW FILE
+Forces Render to use the correct implementation
 """
 import os
 import asyncio
@@ -10,22 +9,20 @@ from typing import Dict, Any, Optional
 
 
 class RunwayService:
-    """Minimal Runway service - No model, correct endpoint"""
+    """NEW Runway service with correct endpoint and NO model"""
     
     def __init__(self):
         self.api_key = os.getenv("RUNWAY_API_KEY")
         
-        # CORRECT URL CONSTRUCTION
+        # FORCE CORRECT URL
         base_url = os.getenv("RUNWAY_API_URL", "https://api.dev.runwayml.com/v1").rstrip("/")
-        self.tasks_url = f"{base_url}/tasks"
+        self.endpoint = f"{base_url}/tasks"
         
-        print(f"[Runway MINIMAL] Initialized:")
-        print(f"[Runway MINIMAL]   URL: {self.tasks_url}")
-        print(f"[Runway MINIMAL]   No model specified - using Runway default")
-        print(f"[Runway MINIMAL]   API Key: {'SET' if self.api_key else 'NOT SET'}")
+        print(f"[NEW RUNWAY] Initialized with endpoint: {self.endpoint}")
+        print(f"[NEW RUNWAY] NO MODEL - Using Runway default")
         
         if not self.api_key:
-            raise ValueError("RUNWAY_API_KEY environment variable is required")
+            raise ValueError("RUNWAY_API_KEY required")
     
     async def generate_video(
         self,
@@ -35,14 +32,15 @@ class RunwayService:
         image_url: Optional[str] = None,
         generation_mode: str = "t2v"
     ) -> Dict[str, Any]:
-        """Generate video with MINIMAL payload - no model specified"""
+        """Generate video with NO MODEL SPECIFIED"""
         
-        print(f"[Runway MINIMAL] Generating {generation_mode}: {prompt[:50]}...")
+        print(f"[NEW RUNWAY] Starting {generation_mode} generation")
+        print(f"[NEW RUNWAY] Prompt: {prompt[:50]}...")
         
         async with httpx.AsyncClient(timeout=300.0) as client:
             ratio = "1280:720" if aspect_ratio == "16:9" else "720:1280"
             
-            # MINIMAL PAYLOAD - NO MODEL
+            # CORRECT payload structure - NO MODEL
             if generation_mode == "i2v" and image_url:
                 payload = {
                     "type": "image_to_video",
@@ -63,52 +61,42 @@ class RunwayService:
                     }
                 }
             
-            print(f"[Runway MINIMAL] === MINIMAL API CALL ===")
-            print(f"[Runway MINIMAL] URL: {self.tasks_url}")
-            print(f"[Runway MINIMAL] Type: {payload['type']}")
-            print(f"[Runway MINIMAL] NO MODEL - Using default")
-            print(f"[Runway MINIMAL] Duration: {duration}s")
-            print(f"[Runway MINIMAL] ========================")
-            
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "X-Runway-Version": "2024-11-06"
-            }
+            print(f"[NEW RUNWAY] === CORRECT CALL ===")
+            print(f"[NEW RUNWAY] URL: {self.endpoint}")
+            print(f"[NEW RUNWAY] Type: {payload['type']}")
+            print(f"[NEW RUNWAY] NO MODEL FIELD")
+            print(f"[NEW RUNWAY] ====================")
             
             try:
                 response = await client.post(
-                    self.tasks_url,  # CORRECT: /v1/tasks
-                    headers=headers,
+                    self.endpoint,  # CORRECT: /v1/tasks
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "X-Runway-Version": "2024-11-06"
+                    },
                     json=payload,
                     timeout=60.0
                 )
                 
-                print(f"[Runway MINIMAL] Response: {response.status_code}")
-                
-                if response.status_code != 200:
-                    error_text = response.text
-                    print(f"[Runway MINIMAL] Error response: {error_text}")
-                
+                print(f"[NEW RUNWAY] Response: {response.status_code}")
                 response.raise_for_status()
                 
             except httpx.HTTPStatusError as e:
-                error_text = e.response.text
-                print(f"[Runway MINIMAL] HTTP {e.response.status_code} Error")
-                print(f"[Runway MINIMAL] Response: {error_text}")
-                print(f"[Runway MINIMAL] URL used: {e.request.url}")
-                
-                raise RuntimeError(f"Runway API error ({e.response.status_code}): {error_text}")
+                print(f"[NEW RUNWAY] ERROR {e.response.status_code}")
+                print(f"[NEW RUNWAY] Response: {e.response.text}")
+                print(f"[NEW RUNWAY] URL used: {e.request.url}")
+                raise RuntimeError(f"API error: {e.response.text}")
             
-            task_data = response.json()
-            task_id = task_data.get("id")
+            data = response.json()
+            task_id = data.get("id")
             
             if not task_id:
-                raise ValueError(f"No task ID in response: {task_data}")
+                raise ValueError(f"No task ID: {data}")
             
-            print(f"[Runway MINIMAL] ✓ Task created: {task_id}")
+            print(f"[NEW RUNWAY] ✓ Task created: {task_id}")
             
-            # Simple polling
+            # Poll for result
             video_url = await self._poll_task(client, task_id)
             
             return {
@@ -121,28 +109,28 @@ class RunwayService:
             }
     
     async def _poll_task(self, client: httpx.AsyncClient, task_id: str) -> str:
-        """Simple task polling"""
-        base_url = self.tasks_url.replace('/tasks', '')
+        """Poll task status"""
+        base_url = self.endpoint.replace('/tasks', '')
         status_url = f"{base_url}/tasks/{task_id}"
         
-        for attempt in range(60):  # 5 minutes max
-            if attempt > 0:
+        for i in range(60):  # 5 minutes
+            if i > 0:
                 await asyncio.sleep(5)
             
             try:
-                response = await client.get(status_url, headers={
+                resp = await client.get(status_url, headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "X-Runway-Version": "2024-11-06"
                 })
-                response.raise_for_status()
+                resp.raise_for_status()
                 
-                data = response.json()
+                data = resp.json()
                 status = data.get("status", "").upper()
                 
-                print(f"[Runway MINIMAL] Status {attempt + 1}: {status}")
+                print(f"[NEW RUNWAY] Poll {i+1}: {status}")
                 
                 if status in ["COMPLETED", "SUCCEEDED"]:
-                    # Find video URL
+                    # Extract video URL
                     video_url = None
                     if "output" in data:
                         output = data["output"]
@@ -151,20 +139,15 @@ class RunwayService:
                         elif isinstance(output, list) and output:
                             video_url = output[0] if isinstance(output[0], str) else output[0].get("url")
                     
-                    if not video_url and "url" in data:
-                        video_url = data["url"]
-                    
                     if video_url:
                         return video_url
-                    else:
-                        raise ValueError(f"No video URL in response: {data}")
+                    raise ValueError(f"No video URL: {data}")
                 
                 elif status == "FAILED":
-                    error = data.get("error", "Unknown error")
-                    raise RuntimeError(f"Task failed: {error}")
-                
+                    raise RuntimeError(f"Task failed: {data.get('error')}")
+                    
             except httpx.HTTPStatusError:
-                if attempt < 3:
+                if i < 3:
                     continue
                 raise
         
