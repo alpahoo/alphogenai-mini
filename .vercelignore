@@ -1,0 +1,45 @@
+# Exclude Python worker files from Vercel deployment
+workers/
+*.py
+requirements.txt
+Dockerfile.worker
+Procfile
+railway.toml
+render.yaml
+
+# Exclude test and deployment files
+test_*.py
+*_test.py
+TEST_*.md
+DEPLOY_*.md
+RUNWAY_*.md
+FORCE_*.txt
+*_SUMMARY.md
+*_FIX.md
+*_DEBUG.md
+
+# Exclude documentation that's not needed for frontend
+ALPHOGENAI_*.md
+WORKER_*.md
+RENDER_*.md
+ELEVENLABS_*.md
+REMOTION_*.md
+QWEN_*.md
+WANX_*.md
+
+# Exclude logs and temporary files
+*.log
+*.txt
+STATUS.txt
+DEPLOY_LOG.txt
+render-redeploy.txt
+
+# Keep only essential files for Next.js frontend
+!package.json
+!package-lock.json
+!pnpm-lock.yaml
+!next.config.*
+!tailwind.config.*
+!tsconfig.json
+!components.json
+!middleware.ts
