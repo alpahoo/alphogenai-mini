@@ -1,5 +1,5 @@
 """
-Runway gen4_image_turbo service for text-to-image generation
+Runway gen4_image service for text-to-image generation
 """
 import os
 import asyncio
@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional
 
 
 class RunwayImageService:
-    """Runway gen4_image_turbo API wrapper for image generation"""
+    """Runway gen4_image API wrapper for image generation"""
     
     def __init__(self):
         self.api_key = os.getenv("RUNWAY_API_KEY")
@@ -24,7 +24,7 @@ class RunwayImageService:
         aspect_ratio: str = "16:9"
     ) -> Dict[str, Any]:
         """
-        Generate an image using Runway gen4_image_turbo
+        Generate an image using Runway gen4_image
         
         Args:
             prompt: Text description of the image
@@ -49,7 +49,7 @@ class RunwayImageService:
             
             payload = {
                 "promptText": prompt,
-                "model": "gen4_image_turbo",
+                "model": "gen4_image",
                 "ratio": ratio
             }
             
@@ -92,7 +92,7 @@ class RunwayImageService:
                 "task_id": task_id,
                 "prompt": prompt,
                 "seed": seed,
-                "model": "gen4_image_turbo",
+                "model": "gen4_image",
                 "aspect_ratio": aspect_ratio
             }
             
