@@ -20,12 +20,31 @@ function getSupabaseClient() {
 export async function POST(req: Request) {
   try {
     const supabase = getSupabaseClient();
-    const { prompt, webhookUrl } = await req.json();
+    const { 
+      prompt, 
+      webhookUrl, 
+      generation_mode = "t2v", 
+      image_ref_url 
+    } = await req.json();
 
     if (!prompt || prompt.length < 5)
       return NextResponse.json({ error: "Prompt required" }, { status: 400 });
 
-    const promptHash = crypto.createHash("sha256").update(prompt).digest("hex");
+    // Validate generation mode
+    if (!["t2v", "i2v"].includes(generation_mode)) {
+      return NextResponse.json({ error: "Invalid generation_mode. Must be 't2v' or 'i2v'" }, { status: 400 });
+    }
+
+    // Validate image_ref_url for i2v mode
+    if (generation_mode === "i2v" && !image_ref_url) {
+      return NextResponse.json({ error: "image_ref_url is required for i2v mode" }, { status: 400 });
+    }
+
+    // Create cache key including generation mode and image
+    const cacheKey = generation_mode === "i2v" 
+      ? `${prompt}|${generation_mode}|${image_ref_url}`
+      : `${prompt}|${generation_mode}`;
+    const promptHash = crypto.createHash("sha256").update(cacheKey).digest("hex");
 
     // Vérifie le cache
     const { data: cached } = await supabase
@@ -39,9 +58,17 @@ export async function POST(req: Request) {
         .from("jobs")
         .insert({
           prompt,
+          generation_mode,
+          image_ref_url,
           status: "done",
           final_url: cached.video_url,
-          app_state: { cached: true, prompt, promptHash },
+          app_state: { 
+            cached: true, 
+            prompt, 
+            promptHash,
+            generation_mode,
+            image_ref_url
+          },
         })
         .select()
         .single();
@@ -50,6 +77,7 @@ export async function POST(req: Request) {
         jobId: job.id,
         final_url: cached.video_url,
         cached: true,
+        generation_mode,
       });
     }
 
@@ -58,15 +86,28 @@ export async function POST(req: Request) {
       .from("jobs")
       .insert({
         prompt,
+        generation_mode,
+        image_ref_url,
         status: "pending",
-        app_state: { prompt, promptHash, cached: false },
+        app_state: { 
+          prompt, 
+          promptHash, 
+          cached: false,
+          generation_mode,
+          image_ref_url
+        },
         webhook_url: webhookUrl || null,
       })
       .select()
       .single();
 
     if (error) throw error;
-    return NextResponse.json({ jobId: job.id, cached: false });
+    return NextResponse.json({ 
+      jobId: job.id, 
+      cached: false,
+      generation_mode,
+      image_ref_url
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

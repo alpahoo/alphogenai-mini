@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import VideoPreview, { isCloudFrontUrl, isSupabaseStorageUrl } from "@/app/(components)/VideoPreview";
 
 interface Job {
   id: string;
@@ -11,8 +12,11 @@ interface Job {
   error_message: string | null;
   final_url: string | null;
   video_url: string | null;
+  generation_mode?: string;
+  image_ref_url?: string | null;
   created_at: string;
   updated_at: string;
+  app_state?: any;
 }
 
 interface VideoPlayerProps {
@@ -68,6 +72,14 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
 
   const isDone = job.status === "done" || job.status === "completed";
   const videoUrl = job.final_url || job.video_url;
+  
+  // Determine if video is from CloudFront (temporary) or Supabase Storage (permanent)
+  const isTemporaryUrl = videoUrl ? isCloudFrontUrl(videoUrl) : false;
+  const isStorageUrl = videoUrl ? isSupabaseStorageUrl(videoUrl) : false;
+  
+  // Get storage info from app_state if available
+  const storageInfo = job.app_state?.storage;
+  const storageVideoUrl = storageInfo?.signed_url;
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-6">
@@ -75,9 +87,21 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
         {/* En-tête */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            🎥 Votre Vidéo
+            {job.generation_mode === "i2v" ? "🎨 Votre Animation" : "🎥 Votre Vidéo"}
           </h1>
           <p className="text-slate-600 dark:text-slate-400">{job.prompt}</p>
+          {job.generation_mode === "i2v" && job.image_ref_url && (
+            <div className="mt-4 flex justify-center">
+              <div className="bg-white dark:bg-slate-800 rounded-lg p-2 shadow-sm">
+                <img 
+                  src={job.image_ref_url} 
+                  alt="Image de référence" 
+                  className="max-h-20 rounded object-contain"
+                />
+                <p className="text-xs text-slate-500 mt-1">Image de référence</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Contenu principal */}
@@ -98,6 +122,40 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
 
               {/* Actions */}
               <div className="p-6 space-y-4">
+                {/* Video Status Info */}
+                {(isTemporaryUrl || storageVideoUrl) && (
+                  <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="text-slate-600 dark:text-slate-400">
+                        {storageVideoUrl ? (
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                            Vidéo stockée de manière permanente
+                          </span>
+                        ) : isTemporaryUrl ? (
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
+                            Lien temporaire (copie en cours vers stockage permanent)
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                            Vidéo disponible
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <VideoPreview
+                          videoUrl={videoUrl}
+                          title={job.generation_mode === "i2v" ? "Animation générée" : "Vidéo générée"}
+                          isExpired={isTemporaryUrl && !storageVideoUrl}
+                          storageUrl={storageVideoUrl}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-3 flex-wrap">
                   <button
                     onClick={handleCopyLink}
@@ -106,7 +164,7 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
                     {copied ? "✅ Copié!" : "📋 Copier le lien"}
                   </button>
                   <a
-                    href={videoUrl}
+                    href={storageVideoUrl || videoUrl}
                     download
                     className="flex-1 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors text-center font-medium"
                   >
@@ -115,10 +173,10 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
                 </div>
 
                 <a
-                  href="/generate"
+                  href="/creator/generate"
                   className="block w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all text-center font-medium"
                 >
-                  ✨ Créer une autre vidéo
+                  {job.generation_mode === "i2v" ? "🎨 Créer une autre animation" : "✨ Créer une autre vidéo"}
                 </a>
               </div>
             </div>
@@ -147,7 +205,7 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
                   {job.error_message || "Une erreur est survenue lors de la génération"}
                 </p>
                 <a
-                  href="/generate"
+                  href="/creator/generate"
                   className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   🔄 Réessayer
@@ -202,7 +260,7 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
         {!isDone && (
           <div className="mt-6 text-center">
             <a
-              href="/generate"
+              href="/creator/generate"
               className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition-colors"
             >
               ← Retour au formulaire

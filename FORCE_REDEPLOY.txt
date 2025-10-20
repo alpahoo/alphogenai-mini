@@ -1,0 +1,13 @@
+FORCE REDEPLOY - 2025-10-19 20:50:00
+
+This file forces a complete redeployment to ensure the corrected Runway URL is used.
+
+Expected URL: https://api.dev.runwayml.com/v1/tasks
+Current issue: Worker still uses /v1/tasks/text_to_video
+
+Changes made:
+- Removed endpoint concatenation in runway_service.py
+- Fixed RUNWAY_API_URL variable usage
+- Added debug logs
+
+This deployment should fix the 404 error.

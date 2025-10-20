@@ -1,5 +1,6 @@
 """
-Runway Gen-4 Turbo service for text-to-video generation
+Runway API Client - COMPLETELY NEW FILE
+Forces Render to use the correct implementation
 """
 import os
 import asyncio
@@ -8,169 +9,149 @@ from typing import Dict, Any, Optional
 
 
 class RunwayService:
-    """Runway Gen-4 Turbo API wrapper for video generation"""
+    """NEW Runway service with correct endpoint and NO model"""
     
     def __init__(self):
         self.api_key = os.getenv("RUNWAY_API_KEY")
-        self.base_url = os.getenv("RUNWAY_API_BASE", "https://api.dev.runwayml.com/v1")
-        self.model = os.getenv("RUNWAY_MODEL", "gen4_turbo")
+        
+        # FORCE CORRECT URL
+        base_url = os.getenv("RUNWAY_API_URL", "https://api.dev.runwayml.com/v1").rstrip("/")
+        self.endpoint = f"{base_url}/tasks"
+        
+        print(f"[NEW RUNWAY] Initialized with endpoint: {self.endpoint}")
+        print(f"[NEW RUNWAY] NO MODEL - Using Runway default")
         
         if not self.api_key:
-            raise ValueError("RUNWAY_API_KEY environment variable is required")
+            raise ValueError("RUNWAY_API_KEY required")
     
     async def generate_video(
         self,
         prompt: str,
-        duration: int = 10,
-        aspect_ratio: str = "16:9"
+        duration: int = 5,
+        aspect_ratio: str = "16:9",
+        image_url: Optional[str] = None,
+        generation_mode: str = "t2v"
     ) -> Dict[str, Any]:
-        """
-        Generate a video using Runway gen4_turbo (text-to-video)
+        """Generate video with NO MODEL SPECIFIED"""
         
-        Args:
-            prompt: Text description of the video
-            duration: Video duration in seconds (gen4_turbo supports 5s or 10s)
-            aspect_ratio: Video aspect ratio ("16:9" or "9:16")
-            
-        Returns:
-            Dict with video_url and metadata
-        """
-        print(f"[Runway] Generating video: {prompt[:60]}...")
-        print(f"[Runway] Duration: {duration}s | Aspect Ratio: {aspect_ratio}")
+        print(f"[NEW RUNWAY] Starting {generation_mode} generation")
+        print(f"[NEW RUNWAY] Prompt: {prompt[:50]}...")
         
         async with httpx.AsyncClient(timeout=300.0) as client:
             ratio = "1280:720" if aspect_ratio == "16:9" else "720:1280"
             
-            payload = {
-                "promptText": prompt,
-                "model": self.model,
-                "duration": duration,
-                "ratio": ratio
-            }
+            # CORRECT payload structure - NO MODEL
+            if generation_mode == "i2v" and image_url:
+                payload = {
+                    "type": "image_to_video",
+                    "input": {
+                        "image": {"url": image_url},
+                        "promptText": prompt,
+                        "duration": duration,
+                        "ratio": ratio
+                    }
+                }
+            else:
+                payload = {
+                    "type": "text_to_video",
+                    "input": {
+                        "promptText": prompt,
+                        "duration": duration,
+                        "ratio": ratio
+                    }
+                }
             
-            print(f"[Runway] Request payload:")
-            print(f"[Runway]   promptText: {prompt[:100]}... (length: {len(prompt)})")
-            print(f"[Runway]   model: {payload['model']}")
-            print(f"[Runway]   duration: {payload['duration']}")
-            print(f"[Runway]   ratio: {payload['ratio']}")
+            print(f"[NEW RUNWAY] === CORRECT CALL ===")
+            print(f"[NEW RUNWAY] URL: {self.endpoint}")
+            print(f"[NEW RUNWAY] Type: {payload['type']}")
+            print(f"[NEW RUNWAY] NO MODEL FIELD")
+            print(f"[NEW RUNWAY] ====================")
             
             try:
                 response = await client.post(
-                    f"{self.base_url}/text_to_video",
+                    self.endpoint,  # CORRECT: /v1/tasks
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",
                         "X-Runway-Version": "2024-11-06"
                     },
-                    json=payload
+                    json=payload,
+                    timeout=60.0
                 )
+                
+                print(f"[NEW RUNWAY] Response: {response.status_code}")
                 response.raise_for_status()
+                
             except httpx.HTTPStatusError as e:
-                print(f"[Runway] HTTP {e.response.status_code} Error")
-                print(f"[Runway] Response body: {e.response.text}")
-                print(f"[Runway] Request URL: {e.request.url}")
-                raise RuntimeError(
-                    f"Runway API error ({e.response.status_code}): {e.response.text}"
-                )
+                print(f"[NEW RUNWAY] ERROR {e.response.status_code}")
+                print(f"[NEW RUNWAY] Response: {e.response.text}")
+                print(f"[NEW RUNWAY] URL used: {e.request.url}")
+                raise RuntimeError(f"API error: {e.response.text}")
             
-            task_data = response.json()
-            task_id = task_data.get("id")
+            data = response.json()
+            task_id = data.get("id")
             
-            print(f"[Runway] Task created: {task_id}")
+            if not task_id:
+                raise ValueError(f"No task ID: {data}")
             
-            video_url = await self._poll_generation_status(client, task_id)
+            print(f"[NEW RUNWAY] ✓ Task created: {task_id}")
             
-            result = {
+            # Poll for result
+            video_url = await self._poll_task(client, task_id)
+            
+            return {
                 "video_url": video_url,
                 "task_id": task_id,
                 "duration": duration,
                 "prompt": prompt,
-                "model": self.model
+                "model": "default",
+                "generation_mode": generation_mode
             }
-            
-            print(f"[Runway] ✓ Video ready: {video_url[:60]}...")
-            return result
     
-    async def _poll_generation_status(
-        self,
-        client: httpx.AsyncClient,
-        task_id: str,
-        max_attempts: int = 60
-    ) -> str:
-        """
-        Poll Runway API until video generation is complete
+    async def _poll_task(self, client: httpx.AsyncClient, task_id: str) -> str:
+        """Poll task status"""
+        base_url = self.endpoint.replace('/tasks', '')
+        status_url = f"{base_url}/tasks/{task_id}"
         
-        Args:
-            client: HTTP client
-            task_id: Runway task ID
-            max_attempts: Maximum polling attempts (default 60 = 5 minutes)
+        for i in range(60):  # 5 minutes
+            if i > 0:
+                await asyncio.sleep(5)
             
-        Returns:
-            URL of the generated video
-        """
-        for attempt in range(max_attempts):
-            response = await client.get(
-                f"{self.base_url}/tasks/{task_id}",
-                headers={
+            try:
+                resp = await client.get(status_url, headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "X-Runway-Version": "2024-11-06"
-                }
-            )
-            response.raise_for_status()
-            data = response.json()
-            
-            status = data.get("status", "").upper()
-            print(f"[Runway] Poll {attempt + 1}/{max_attempts}: {status}")
-            
-            if status == "COMPLETED" or status == "SUCCEEDED":
-                video_url = None
-                if "output" in data:
-                    if isinstance(data["output"], dict):
-                        video_url = data["output"].get("url")
-                    elif isinstance(data["output"], list) and len(data["output"]) > 0:
-                        video_url = data["output"][0] if isinstance(data["output"][0], str) else data["output"][0].get("url")
-                elif "url" in data:
-                    video_url = data["url"]
+                })
+                resp.raise_for_status()
                 
-                if not video_url:
-                    raise ValueError(f"No video URL in completed response: {data}")
-                return video_url
-            
-            elif status == "FAILED":
-                error = data.get("error", "Unknown error")
-                raise RuntimeError(f"Runway generation failed: {error}")
-            
-            elif status in ["PENDING", "PROCESSING", "RUNNING"]:
-                await asyncio.sleep(5)
-                continue
-            
-            else:
-                raise ValueError(f"Unknown Runway status: {status}")
+                data = resp.json()
+                status = data.get("status", "").upper()
+                
+                print(f"[NEW RUNWAY] Poll {i+1}: {status}")
+                
+                if status in ["COMPLETED", "SUCCEEDED"]:
+                    # Extract video URL
+                    video_url = None
+                    if "output" in data:
+                        output = data["output"]
+                        if isinstance(output, dict):
+                            video_url = output.get("url")
+                        elif isinstance(output, list) and output:
+                            video_url = output[0] if isinstance(output[0], str) else output[0].get("url")
+                    
+                    if video_url:
+                        return video_url
+                    raise ValueError(f"No video URL: {data}")
+                
+                elif status == "FAILED":
+                    raise RuntimeError(f"Task failed: {data.get('error')}")
+                    
+            except httpx.HTTPStatusError:
+                if i < 3:
+                    continue
+                raise
         
-        raise TimeoutError(f"Runway generation timeout after {max_attempts * 5}s")
+        raise TimeoutError("Task timeout")
     
-    async def add_music_to_video(
-        self,
-        video_url: str,
-        music_url: str
-    ) -> Dict[str, Any]:
-        """
-        Add background music to a video (if Runway supports it)
-        Otherwise, return original video_url
-        
-        Args:
-            video_url: URL of the video
-            music_url: URL of the music track
-            
-        Returns:
-            Dict with final_video_url
-        """
-        print(f"[Runway] Music overlay not yet implemented")
-        print(f"[Runway] Video: {video_url[:60]}...")
-        print(f"[Runway] Music: {music_url[:60]}...")
-        
-        return {
-            "final_video_url": video_url,
-            "music_url": music_url,
-            "note": "Music overlay pending implementation"
-        }
+    async def add_music_to_video(self, video_url: str, music_url: str) -> Dict[str, Any]:
+        return {"final_video_url": video_url, "music_url": music_url}

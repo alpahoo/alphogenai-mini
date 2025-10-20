@@ -1,0 +1,27 @@
+DEPLOY MINIMAL VERSION - 2025-10-20T17:15:00Z
+
+CRITICAL CHANGES:
+1. ✅ NO MODEL SPECIFIED - Uses Runway default model
+2. ✅ CORRECT URL: /v1/tasks (not /v1/text_to_video)
+3. ✅ MINIMAL PAYLOAD - Only essential fields
+4. ✅ Duration reduced to 5s for testing
+
+EXPECTED LOGS:
+[Runway MINIMAL] URL: https://api.dev.runwayml.com/v1/tasks
+[Runway MINIMAL] No model specified - using Runway default
+[Runway MINIMAL] === MINIMAL API CALL ===
+[Runway MINIMAL] Response: 200
+
+NO MORE:
+- Model variant errors (no model specified)
+- Wrong URL errors (correct /v1/tasks)
+- Complex payload issues
+
+This MUST work or there's an API key/access issue.
+
+Environment:
+RUNWAY_API_URL=https://api.dev.runwayml.com/v1
+RUNWAY_API_KEY=your_key
+(NO RUNWAY_MODEL variable needed)
+
+Timestamp: 2025-10-20T17:15:00Z

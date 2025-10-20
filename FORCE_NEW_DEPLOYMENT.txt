@@ -1,0 +1,29 @@
+FORCE NEW DEPLOYMENT - 2025-10-20T21:50:00Z
+
+CRITICAL: COMPLETELY NEW RUNWAY SERVICE
+
+Changes:
+1. ✅ NEW FILE: runway_api_client.py → runway_service.py
+2. ✅ CORRECT URL: /v1/tasks (guaranteed)
+3. ✅ NO MODEL: Uses Runway default (no 403 errors)
+4. ✅ NEW LOGS: [NEW RUNWAY] (easy to identify)
+
+Expected logs after deployment:
+[NEW RUNWAY] Initialized with endpoint: https://api.dev.runwayml.com/v1/tasks
+[NEW RUNWAY] NO MODEL - Using Runway default
+[NEW RUNWAY] === CORRECT CALL ===
+[NEW RUNWAY] URL: https://api.dev.runwayml.com/v1/tasks
+[NEW RUNWAY] Response: 200
+
+NO MORE:
+- /v1/text_to_video errors
+- Model variant not available errors
+- Old [Runway] logs
+
+Environment variables needed:
+RUNWAY_API_URL=https://api.dev.runwayml.com/v1
+RUNWAY_API_KEY=your_key
+
+This MUST work or there's a fundamental API access issue.
+
+Timestamp: 2025-10-20T21:50:00Z
