@@ -132,12 +132,17 @@ class RunwayOrchestrator:
             )
             
             if music_url:
-                print(f"\n[Orchestrator] Adding music overlay...")
-                final_path = await self.ffmpeg.assemble_clips(
-                    clip_urls=clip_urls,
-                    music_url=music_url,
-                    output_filename=f"{job_id}_final.mp4"
-                )
+                try:
+                    print(f"\n[Orchestrator] Adding music overlay...")
+                    final_path = await self.ffmpeg.assemble_clips(
+                        clip_urls=clip_urls,
+                        music_url=music_url,
+                        output_filename=f"{job_id}_final.mp4"
+                    )
+                except Exception as e:
+                    print(f"[Orchestrator] ⚠️  Music overlay failed: {str(e)}")
+                    print(f"[Orchestrator] Continuing with video without music")
+                    final_path = assembled_path
             else:
                 final_path = assembled_path
             
