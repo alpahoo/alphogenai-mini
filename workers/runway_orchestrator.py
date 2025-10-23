@@ -30,7 +30,8 @@ class RunwayOrchestrator:
         self.ffmpeg = FFmpegAssembler()
         self.script_service = OpenAIScriptService(
             api_key=self.settings.OPENAI_API_KEY,
-            model=self.settings.OPENAI_MODEL
+            model=self.settings.OPENAI_MODEL,
+            clip_duration=self.settings.CLIP_DURATION
         )
     
     async def run(

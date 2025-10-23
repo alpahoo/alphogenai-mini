@@ -11,15 +11,16 @@ from openai import AsyncOpenAI
 class OpenAIScriptService:
     """OpenAI-powered script generation for video workflows"""
     
-    def __init__(self, api_key: str = None, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: str = None, model: str = "gpt-4o-mini", clip_duration: int = 10):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY is required")
         
         self.client = AsyncOpenAI(api_key=self.api_key)
         self.model = model
+        self.clip_duration = clip_duration
         
-        print(f"[OpenAI Script] Service initialized (model: {self.model})")
+        print(f"[OpenAI Script] Service initialized (model: {self.model}, clip_duration: {self.clip_duration}s)")
     
     async def generate_script(self, prompt: str) -> Dict[str, Any]:
         """
@@ -33,9 +34,10 @@ class OpenAIScriptService:
         """
         print(f"[OpenAI Script] Generating 6-scene script for: {prompt[:60]}...")
         
-        system_prompt = """You are an expert video script writer for Runway Gen-4 video generation.
+        total_duration = self.clip_duration * 6
+        system_prompt = f"""You are an expert video script writer for Runway Gen-4 video generation.
 
-Your task is to create a 6-scene script for a 60-second video. Each scene should be 10 seconds long.
+Your task is to create a 6-scene script for a {total_duration}-second video. Each scene should be {self.clip_duration} seconds long.
 
 CRITICAL REQUIREMENTS:
 - Each scene description MUST be under 150 characters (Runway API limit is 1000, but we need margin)
@@ -46,23 +48,23 @@ CRITICAL REQUIREMENTS:
 - Avoid repeating the user's full prompt in every scene
 
 Output MUST be valid JSON with this exact structure:
-{
+{{
   "title": "Brief title",
   "tone": "inspiring|science|epic|dramatic|light",
-  "total_duration": 60,
+  "total_duration": {total_duration},
   "aspect_ratio": "16:9",
   "scenes": [
-    {
+    {{
       "scene_number": 1,
-      "duration": 10,
+      "duration": {self.clip_duration},
       "description": "Concise visual description under 150 chars",
       "visual_style": "Style keywords",
       "camera_movement": "Camera movement",
       "lighting": "Lighting setup"
-    },
+    }},
     ... 5 more scenes ...
   ]
-}
+}}
 
 Example scene description (good): "Wide shot: futuristic robot on beach at sunset, golden light, slow zoom"
 Example scene description (bad): "A futuristic robot discovers the ocean and feels amazed by the beauty of nature" (too abstract, too long)"""
@@ -96,8 +98,11 @@ Remember:
             
             script.setdefault("title", f"Video: {prompt[:30]}...")
             script.setdefault("tone", self._detect_tone(prompt))
-            script.setdefault("total_duration", 60)
+            script.setdefault("total_duration", self.clip_duration * 6)
             script.setdefault("aspect_ratio", "16:9")
+            
+            for scene in script["scenes"]:
+                scene.setdefault("duration", self.clip_duration)
             
             for i, scene in enumerate(script["scenes"]):
                 desc = scene.get("description", "")
@@ -106,7 +111,7 @@ Remember:
                     scene["description"] = desc[:150].rstrip()
             
             print(f"[OpenAI Script] ✓ Script generated: {script['title']}")
-            print(f"[OpenAI Script] Tone: {script['tone']} | Scenes: 6 | Duration: 60s")
+            print(f"[OpenAI Script] Tone: {script['tone']} | Scenes: 6 | Duration: {script['total_duration']}s")
             
             for i, scene in enumerate(script["scenes"]):
                 desc_len = len(scene.get("description", ""))

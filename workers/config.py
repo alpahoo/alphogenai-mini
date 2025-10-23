@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     # Job settings
     JOB_TIMEOUT: int = 3600  # 1 hour in seconds
     
+    CLIP_DURATION: int = 10  # Duration per clip in seconds (6-10)
+    
     class Config:
         env_file = ".env.local"
         case_sensitive = True
