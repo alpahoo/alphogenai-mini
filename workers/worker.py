@@ -139,7 +139,6 @@ class AlphogenAIWorker:
             if not result.data or len(result.data) == 0:
                 return
             
-            # JUSTE LOGGER - PAS DE RETRY AUTOMATIQUE
             for job in result.data:
                 job_id = job["id"]
                 retry_count = job.get("retry_count", 0)
@@ -147,15 +146,22 @@ class AlphogenAIWorker:
                 
                 print(f"\n⚠️  Job bloqué détecté: {job_id}")
                 print(f"    Stage: {current_stage}")
-                print(f"    Retry: {retry_count}")
-                print(f"    → AUCUN RETRY AUTOMATIQUE (contrôle manuel requis)")
+                print(f"    Retry: {retry_count}/{self.settings.MAX_RETRIES}")
                 
-                # Marquer comme failed (pas de retry automatique)
-                self.supabase.client.table("jobs").update({
-                    "status": "failed",
-                    "error_message": f"Job bloqué à '{current_stage}' (retry manuel requis)",
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }).eq("id", job_id).execute()
+                if retry_count < self.settings.MAX_RETRIES:
+                    print(f"    → RETRY AUTOMATIQUE ({retry_count + 1}/{self.settings.MAX_RETRIES})")
+                    self.supabase.client.table("jobs").update({
+                        "status": "pending",
+                        "retry_count": retry_count + 1,
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }).eq("id", job_id).execute()
+                else:
+                    print(f"    → MAX RETRIES ATTEINT - Job marqué comme échoué")
+                    self.supabase.client.table("jobs").update({
+                        "status": "failed",
+                        "error_message": f"Job bloqué à '{current_stage}' après {retry_count} tentatives",
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }).eq("id", job_id).execute()
         
         except Exception as e:
             print(f"[ERREUR] Récupération jobs bloqués: {str(e)}")
