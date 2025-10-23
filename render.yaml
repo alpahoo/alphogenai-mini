@@ -37,3 +37,5 @@ services:
         value: 3600
       - key: POLL_INTERVAL
         value: 10
+      - key: CLIP_DURATION
+        value: 6
