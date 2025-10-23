@@ -13,12 +13,13 @@ from .supabase_client import SupabaseClient
 from .runway_service import RunwayService
 from .runway_image_service import RunwayImageService
 from .ffmpeg_assembler import FFmpegAssembler
-from .qwen_mock_service import QwenMockService
+from .openai_script_service import OpenAIScriptService
 from .music_selector import select_music_for_job
+from .utils.prompt_utils import shorten_prompt
 
 
 class RunwayOrchestrator:
-    """Multi-clip orchestrator: Qwen → gen4_image_turbo → gen4_turbo → FFmpeg → Music → Done"""
+    """Multi-clip orchestrator: OpenAI → gen4_image → gen4_turbo → FFmpeg → Music → Done"""
     
     def __init__(self):
         self.settings = get_settings()
@@ -26,7 +27,10 @@ class RunwayOrchestrator:
         self.runway_video = RunwayService()
         self.runway_image = RunwayImageService()
         self.ffmpeg = FFmpegAssembler()
-        self.qwen = QwenMockService()
+        self.script_service = OpenAIScriptService(
+            api_key=self.settings.OPENAI_API_KEY,
+            model=self.settings.OPENAI_MODEL
+        )
     
     async def run(
         self,
@@ -39,18 +43,19 @@ class RunwayOrchestrator:
         Execute the complete 60-second video generation workflow
         
         Workflow:
-        1. Generate 6-scene script with Qwen
+        1. Generate 6-scene script with OpenAI (was Qwen Mock)
         2. For each scene:
-           a. Generate image with gen4_image_turbo (seed + scene_number)
+           a. Generate image with gen4_image (seed + scene_number)
            b. Animate image with gen4_turbo (seed + scene_number)
         3. Assemble all clips with FFmpeg
         4. Select and overlay music
         5. Upload final video to Supabase Storage
         6. Update job with final URL
         
-        Cost per 60s video: ~$3.12 (312 credits)
+        Cost per 60s video: ~$3.12 (312 Runway credits)
         - 6 images × 2 credits = 12 credits
         - 6 videos × 50 credits = 300 credits
+        - OpenAI script generation: ~$0.001 (negligible)
         """
         print(f"\n{'='*70}")
         print(f"🎬 Runway Multi-Clip Orchestrator - Starting workflow")
@@ -66,7 +71,7 @@ class RunwayOrchestrator:
             print(f"[Orchestrator] Base seed: {seed}")
             
             await self._update_stage(job_id, "script_generation", "in_progress")
-            script = await self.qwen.generate_script(prompt)
+            script = await self.script_service.generate_script(prompt)
             
             print(f"\n[Orchestrator] Script generated:")
             print(f"  Title: {script['title']}")
@@ -84,15 +89,17 @@ class RunwayOrchestrator:
                 print(f"Scene {i+1}/{len(script['scenes'])}: {scene['description'][:60]}...")
                 print(f"{'='*70}")
                 
+                clean_description = shorten_prompt(scene["description"])
+                
                 image_result = await self.runway_image.generate_image(
-                    prompt=scene["description"],
+                    prompt=clean_description,
                     seed=scene_seed,
                     aspect_ratio=script["aspect_ratio"]
                 )
                 
                 video_result = await self.runway_video.generate_video(
                     image_url=image_result["image_url"],
-                    prompt=scene["description"],
+                    prompt=clean_description,
                     duration=scene["duration"],
                     seed=scene_seed,
                     aspect_ratio=script["aspect_ratio"]
