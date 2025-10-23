@@ -19,8 +19,12 @@ services:
         sync: false
       - key: RUNWAY_API_BASE
         value: https://api.dev.runwayml.com/v1
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
       - key: QWEN_MOCK_ENABLED
-        value: true
+        value: false
       - key: WEBHOOK_URL
         sync: false
       - key: WEBHOOK_SECRET
