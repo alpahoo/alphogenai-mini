@@ -171,3 +171,35 @@ class RunwayService:
                 raise ValueError(f"Unknown Runway status: {status}")
         
         raise TimeoutError(f"Runway video generation timeout after {max_attempts * 5}s")
+    
+    async def resume_video_generation(
+        self,
+        task_id: str,
+        prompt: str = None
+    ) -> Dict[str, Any]:
+        """
+        Resume polling for an existing video generation task
+        
+        Args:
+            task_id: Existing Runway task ID
+            prompt: Original prompt (for logging only)
+            
+        Returns:
+            Dict with video_url and metadata
+        """
+        print(f"[Runway Video] Resuming existing task: {task_id}")
+        if prompt:
+            print(f"[Runway Video] Original prompt: {prompt[:60]}...")
+        
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            video_url = await self._poll_generation_status(client, task_id)
+            
+            result = {
+                "video_url": video_url,
+                "task_id": task_id,
+                "prompt": prompt,
+                "resumed": True
+            }
+            
+            print(f"[Runway Video] ✓ Resumed video ready: {video_url[:60]}...")
+            return result

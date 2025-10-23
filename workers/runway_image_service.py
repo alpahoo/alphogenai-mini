@@ -156,3 +156,35 @@ class RunwayImageService:
                 raise ValueError(f"Unknown Runway status: {status}")
         
         raise TimeoutError(f"Runway image generation timeout after {max_attempts * 5}s")
+    
+    async def resume_image_generation(
+        self,
+        task_id: str,
+        prompt: str = None
+    ) -> Dict[str, Any]:
+        """
+        Resume polling for an existing image generation task
+        
+        Args:
+            task_id: Existing Runway task ID
+            prompt: Original prompt (for logging only)
+            
+        Returns:
+            Dict with image_url and metadata
+        """
+        print(f"[Runway Image] Resuming existing task: {task_id}")
+        if prompt:
+            print(f"[Runway Image] Original prompt: {prompt[:60]}...")
+        
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            image_url = await self._poll_generation_status(client, task_id)
+            
+            result = {
+                "image_url": image_url,
+                "task_id": task_id,
+                "prompt": prompt,
+                "resumed": True
+            }
+            
+            print(f"[Runway Image] ✓ Resumed image ready: {image_url[:60]}...")
+            return result

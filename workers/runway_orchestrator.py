@@ -16,6 +16,7 @@ from .ffmpeg_assembler import FFmpegAssembler
 from .openai_script_service import OpenAIScriptService
 from .music_selector import select_music_for_job
 from .utils.prompt_utils import shorten_prompt
+from .utils.seed_utils import derive_seed
 
 
 class RunwayOrchestrator:
@@ -84,26 +85,91 @@ class RunwayOrchestrator:
             clip_metadata = []
             
             for i, scene in enumerate(script["scenes"]):
-                scene_seed = seed + i
+                scene_seed = derive_seed(seed, i)
                 print(f"\n{'='*70}")
                 print(f"Scene {i+1}/{len(script['scenes'])}: {scene['description'][:60]}...")
+                print(f"Seed: {scene_seed} (derived from base {seed})")
                 print(f"{'='*70}")
                 
                 clean_description = shorten_prompt(scene["description"])
                 
-                image_result = await self.runway_image.generate_image(
-                    prompt=clean_description,
-                    seed=scene_seed,
-                    aspect_ratio=script["aspect_ratio"]
-                )
+                existing_image = await self._get_existing_task(job_id, i + 1, "image")
                 
-                video_result = await self.runway_video.generate_video(
-                    image_url=image_result["image_url"],
-                    prompt=clean_description,
-                    duration=scene["duration"],
-                    seed=scene_seed,
-                    aspect_ratio=script["aspect_ratio"]
-                )
+                if existing_image and existing_image["status"] == "succeeded":
+                    print(f"[Orchestrator] ♻️  Reusing existing image: {existing_image['task_id']}")
+                    image_result = {
+                        "image_url": existing_image["url"],
+                        "task_id": existing_image["task_id"],
+                        "resumed": True
+                    }
+                elif existing_image and existing_image["status"] in ["pending", "running"]:
+                    print(f"[Orchestrator] ♻️  Resuming image task: {existing_image['task_id']}")
+                    image_result = await self.runway_image.resume_image_generation(
+                        task_id=existing_image["task_id"],
+                        prompt=clean_description
+                    )
+                    await self._persist_task_id(
+                        job_id=job_id,
+                        scene_number=i + 1,
+                        task_type="image",
+                        task_id=image_result["task_id"],
+                        task_status="succeeded",
+                        result_url=image_result["image_url"]
+                    )
+                else:
+                    image_result = await self.runway_image.generate_image(
+                        prompt=clean_description,
+                        seed=scene_seed,
+                        aspect_ratio=script["aspect_ratio"]
+                    )
+                    await self._persist_task_id(
+                        job_id=job_id,
+                        scene_number=i + 1,
+                        task_type="image",
+                        task_id=image_result["task_id"],
+                        task_status="succeeded",
+                        result_url=image_result["image_url"]
+                    )
+                
+                existing_video = await self._get_existing_task(job_id, i + 1, "video")
+                
+                if existing_video and existing_video["status"] == "succeeded":
+                    print(f"[Orchestrator] ♻️  Reusing existing video: {existing_video['task_id']}")
+                    video_result = {
+                        "video_url": existing_video["url"],
+                        "task_id": existing_video["task_id"],
+                        "resumed": True
+                    }
+                elif existing_video and existing_video["status"] in ["pending", "running"]:
+                    print(f"[Orchestrator] ♻️  Resuming video task: {existing_video['task_id']}")
+                    video_result = await self.runway_video.resume_video_generation(
+                        task_id=existing_video["task_id"],
+                        prompt=clean_description
+                    )
+                    await self._persist_task_id(
+                        job_id=job_id,
+                        scene_number=i + 1,
+                        task_type="video",
+                        task_id=video_result["task_id"],
+                        task_status="succeeded",
+                        result_url=video_result["video_url"]
+                    )
+                else:
+                    video_result = await self.runway_video.generate_video(
+                        image_url=image_result["image_url"],
+                        prompt=clean_description,
+                        duration=scene["duration"],
+                        seed=scene_seed,
+                        aspect_ratio=script["aspect_ratio"]
+                    )
+                    await self._persist_task_id(
+                        job_id=job_id,
+                        scene_number=i + 1,
+                        task_type="video",
+                        task_id=video_result["task_id"],
+                        task_status="succeeded",
+                        result_url=video_result["video_url"]
+                    )
                 
                 clip_urls.append(video_result["video_url"])
                 clip_metadata.append({
@@ -257,6 +323,93 @@ class RunwayOrchestrator:
         print(f"[Orchestrator] ✓ Uploaded to: {public_url}")
         
         return public_url
+    
+    async def _persist_task_id(
+        self,
+        job_id: str,
+        scene_number: int,
+        task_type: str,
+        task_id: str,
+        task_status: str,
+        result_url: str = None
+    ) -> None:
+        """
+        Persist Runway task ID to database for stateless recovery
+        
+        Args:
+            job_id: Job ID
+            scene_number: Scene number (1-based)
+            task_type: 'image' or 'video'
+            task_id: Runway task ID
+            task_status: Task status (pending/running/succeeded/failed)
+            result_url: URL of generated asset (if succeeded)
+        """
+        result = self.supabase.client.table("jobs") \
+            .select("app_state") \
+            .eq("id", job_id) \
+            .single() \
+            .execute()
+        
+        app_state = result.data.get("app_state", {}) if result.data else {}
+        
+        if "runway_tasks" not in app_state:
+            app_state["runway_tasks"] = {}
+        
+        scene_key = str(scene_number)
+        if scene_key not in app_state["runway_tasks"]:
+            app_state["runway_tasks"][scene_key] = {}
+        
+        app_state["runway_tasks"][scene_key][f"{task_type}_task_id"] = task_id
+        app_state["runway_tasks"][scene_key][f"{task_type}_status"] = task_status
+        if result_url:
+            app_state["runway_tasks"][scene_key][f"{task_type}_url"] = result_url
+        
+        await self.supabase.update_job_state(
+            job_id=job_id,
+            app_state=app_state
+        )
+    
+    async def _get_existing_task(
+        self,
+        job_id: str,
+        scene_number: int,
+        task_type: str
+    ) -> dict:
+        """
+        Check if task already exists for this scene
+        
+        Returns:
+            Dict with task_id, status, and url if exists, otherwise None
+        """
+        result = self.supabase.client.table("jobs") \
+            .select("app_state") \
+            .eq("id", job_id) \
+            .single() \
+            .execute()
+        
+        if not result.data:
+            return None
+        
+        app_state = result.data.get("app_state", {})
+        runway_tasks = app_state.get("runway_tasks", {})
+        scene_key = str(scene_number)
+        
+        if scene_key not in runway_tasks:
+            return None
+        
+        scene_tasks = runway_tasks[scene_key]
+        task_id_key = f"{task_type}_task_id"
+        status_key = f"{task_type}_status"
+        url_key = f"{task_type}_url"
+        
+        if task_id_key not in scene_tasks:
+            return None
+        
+        return {
+            "task_id": scene_tasks[task_id_key],
+            "status": scene_tasks.get(status_key),
+            "url": scene_tasks.get(url_key)
+        }
 
 
 async def create_and_run_job(
