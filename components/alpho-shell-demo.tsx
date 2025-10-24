@@ -97,13 +97,7 @@ const Sidebar: React.FC<{ current: string; onNavigate: (key: string) => void; is
           return (
             <div key={key}>
               <button
-                onClick={() => {
-                  if (hasChildren) {
-                    toggleMenu(key);
-                  } else {
-                    onNavigate(key);
-                  }
-                }}
+                onClick={() => onNavigate(key)}
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
                   active
                     ? "bg-zinc-100 dark:bg-white/10 text-zinc-900 dark:text-white"
@@ -113,11 +107,19 @@ const Sidebar: React.FC<{ current: string; onNavigate: (key: string) => void; is
                 <Icon className="h-4 w-4" />
                 <span className="flex-1 text-left">{label}</span>
                 {hasChildren && (
-                  isExpanded ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleMenu(key);
+                    }}
+                    className="p-1 hover:bg-zinc-200 dark:hover:bg-white/20 rounded transition"
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </button>
                 )}
               </button>
               
