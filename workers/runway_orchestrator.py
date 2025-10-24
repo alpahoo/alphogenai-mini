@@ -299,6 +299,34 @@ class RunwayOrchestrator:
             current_stage=stage
         )
     
+    async def _ensure_bucket_exists(self, bucket_name: str) -> None:
+        """
+        Ensure a Supabase Storage bucket exists, creating it if necessary
+        
+        Args:
+            bucket_name: Name of the bucket to check/create
+        """
+        try:
+            buckets = self.supabase.client.storage.list_buckets()
+            bucket_exists = any(b['id'] == bucket_name for b in buckets)
+            
+            if not bucket_exists:
+                print(f"[Storage] Bucket '{bucket_name}' not found, creating...")
+                self.supabase.client.storage.create_bucket(
+                    bucket_name,
+                    options={
+                        "public": True,
+                        "fileSizeLimit": 104857600,
+                        "allowedMimeTypes": ["video/mp4", "video/quicktime"]
+                    }
+                )
+                print(f"[Storage] ✓ Bucket '{bucket_name}' created")
+            else:
+                print(f"[Storage] ✓ Bucket '{bucket_name}' exists")
+        except Exception as e:
+            print(f"[Storage] Warning: Could not verify/create bucket: {e}")
+            print(f"[Storage] Proceeding with upload anyway...")
+    
     async def _upload_to_storage(
         self,
         file_path: str,
@@ -307,6 +335,8 @@ class RunwayOrchestrator:
     ) -> str:
         """Upload final video to Supabase Storage and return public URL"""
         print(f"[Orchestrator] Uploading to Supabase Storage...")
+        
+        await self._ensure_bucket_exists('videos')
         
         with open(file_path, 'rb') as f:
             file_content = f.read()
