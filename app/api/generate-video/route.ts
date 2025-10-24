@@ -20,7 +20,7 @@ function getSupabaseClient() {
 export async function POST(req: Request) {
   try {
     const supabase = getSupabaseClient();
-    const { prompt, webhookUrl } = await req.json();
+    const { prompt, webhookUrl, source_job_id } = await req.json();
 
     if (!prompt || prompt.length < 5)
       return NextResponse.json({ error: "Prompt required" }, { status: 400 });
@@ -59,7 +59,12 @@ export async function POST(req: Request) {
       .insert({
         prompt,
         status: "pending",
-        app_state: { prompt, promptHash, cached: false },
+        app_state: { 
+          prompt, 
+          promptHash, 
+          cached: false,
+          source_job_id: source_job_id || null
+        },
         webhook_url: webhookUrl || null,
       })
       .select()

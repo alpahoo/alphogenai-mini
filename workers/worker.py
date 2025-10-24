@@ -96,11 +96,14 @@ class AlphogenAIWorker:
                 {}
             )
             
-            # Exécuter l'orchestrateur
+            app_state = job.get("app_state", {})
+            source_job_id = app_state.get("source_job_id")
+            
             result = await self.orchestrator.run(
                 job_id=job["id"],
                 user_id=job["user_id"],
-                prompt=job["prompt"]
+                prompt=job["prompt"],
+                source_job_id=source_job_id
             )
             
             if result["status"] == "success":

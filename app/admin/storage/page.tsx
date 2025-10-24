@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useDropzone } from "react-dropzone";
 import {
@@ -13,6 +13,8 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
+
+export const dynamic = 'force-dynamic';
 
 type MusicTone =
   | "inspiring"
@@ -44,7 +46,12 @@ export default function AdminStoragePage() {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const supabase = createClient();
+  const supabase = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return null as any;
+    }
+    return createClient();
+  }, []);
 
   const tones: MusicTone[] = [
     "inspiring",
