@@ -1,8 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 
-function getSupabaseClient() {
+function getSupabaseServiceClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.SUPABASE_NEXT_PUBLIC_SUPABASE_URL ||
     process.env.SUPABASE_SUPABASE_URL;
@@ -14,16 +15,36 @@ function getSupabaseClient() {
     throw new Error("Missing Supabase environment variables");
   }
   
-  return createClient(supabaseUrl, supabaseKey);
+  return createServiceClient(supabaseUrl, supabaseKey);
 }
 
 export async function POST(req: Request) {
   try {
-    const supabase = getSupabaseClient();
+    const supabase = getSupabaseServiceClient();
     const { prompt, webhookUrl, source_job_id } = await req.json();
 
     if (!prompt || prompt.length < 5)
       return NextResponse.json({ error: "Prompt required" }, { status: 400 });
+
+    if (source_job_id) {
+      const authClient = await createClient();
+      const { data: { user }, error: authError } = await authClient.auth.getUser();
+
+      if (authError || !user) {
+        return NextResponse.json(
+          { error: "Authentication required to reuse assets" },
+          { status: 401 }
+        );
+      }
+
+      const isAdmin = user.user_metadata?.role === 'admin';
+      if (!isAdmin) {
+        return NextResponse.json(
+          { error: "Admin access required to reuse assets from previous jobs" },
+          { status: 403 }
+        );
+      }
+    }
 
     const promptHash = crypto.createHash("sha256").update(prompt).digest("hex");
 
@@ -78,7 +99,7 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseServiceClient();
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
