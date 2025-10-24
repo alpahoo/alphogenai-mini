@@ -6,7 +6,7 @@ import hashlib
 from typing import Optional, List, Dict, Any
 
 
-# Mapping ton → sous-dossier dans Supabase Storage
+# Mapping ton → sous-dossier (conservé pour compatibilité cache)
 TONE_DIR = {
     "inspirant": "inspiring",
     "science": "synth",
@@ -15,32 +15,30 @@ TONE_DIR = {
     "épique": "epic",
 }
 
-# Liste statique des pistes (à adapter selon vos uploads)
-# Format: {"tone": "inspiring", "filename": "uplifting-ambient-1.mp3"}
 MUSIC_LIBRARY = [
-    # Inspirant
-    {"tone": "inspiring", "filename": "uplifting-ambient-1.mp3"},
-    {"tone": "inspiring", "filename": "hopeful-piano-2.mp3"},
-    {"tone": "inspiring", "filename": "motivational-strings-3.mp3"},
+    # Inspirant / Uplifting
+    {"tone": "inspiring", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Inspired.mp3", "title": "Inspired"},
+    {"tone": "inspiring", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Wishful%20Thinking.mp3", "title": "Wishful Thinking"},
+    {"tone": "inspiring", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Acoustic%20Breeze.mp3", "title": "Acoustic Breeze"},
     
-    # Science / Synth
-    {"tone": "synth", "filename": "electronic-research-1.mp3"},
-    {"tone": "synth", "filename": "futuristic-synth-2.mp3"},
-    {"tone": "synth", "filename": "tech-ambient-3.mp3"},
+    # Science / Synth / Tech
+    {"tone": "synth", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Ultralounge.mp3", "title": "Ultralounge"},
+    {"tone": "synth", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Cipher.mp3", "title": "Cipher"},
+    {"tone": "synth", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Arcadia.mp3", "title": "Arcadia"},
     
-    # Léger / Fun
-    {"tone": "light", "filename": "playful-ukulele-1.mp3"},
-    {"tone": "light", "filename": "cheerful-piano-2.mp3"},
-    {"tone": "light", "filename": "happy-whistling-3.mp3"},
+    # Léger / Fun / Light
+    {"tone": "light", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Fluffing%20a%20Duck.mp3", "title": "Fluffing a Duck"},
+    {"tone": "light", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Wallpaper.mp3", "title": "Wallpaper"},
+    {"tone": "light", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Quirky%20Dog.mp3", "title": "Quirky Dog"},
     
-    # Dramatique
-    {"tone": "dramatic", "filename": "tense-strings-1.mp3"},
-    {"tone": "dramatic", "filename": "suspense-piano-2.mp3"},
+    # Dramatique / Tense
+    {"tone": "dramatic", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Cut%20and%20Run.mp3", "title": "Cut and Run"},
+    {"tone": "dramatic", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Volatile%20Reaction.mp3", "title": "Volatile Reaction"},
+    {"tone": "dramatic", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Crypto.mp3", "title": "Crypto"},
     
-    # Épique
-    {"tone": "epic", "filename": "cinematic-orchestra-1.mp3"},
-    {"tone": "epic", "filename": "heroic-brass-2.mp3"},
-    {"tone": "epic", "filename": "epic-drums-3.mp3"},
+    {"tone": "epic", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Impact%20Prelude.mp3", "title": "Impact Prelude"},
+    {"tone": "epic", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Organic%20Meditations%20Two.mp3", "title": "Organic Meditations Two"},
+    {"tone": "epic", "url": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Clash%20Defiant.mp3", "title": "Clash Defiant"},
 ]
 
 
@@ -53,7 +51,7 @@ def build_prompt_hash(prompt: str, tone: str = "") -> str:
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 
-def pick_music_track(tone: str) -> Optional[str]:
+def pick_music_track(tone: str) -> Optional[Dict[str, str]]:
     """
     Sélectionne aléatoirement une piste musicale selon le ton.
     
@@ -61,8 +59,7 @@ def pick_music_track(tone: str) -> Optional[str]:
         tone: Ton détecté (inspirant, science, léger, dramatique, épique)
     
     Returns:
-        Nom du fichier relatif (ex: "uplifting-ambient-1.mp3")
-        ou None si aucune piste trouvée
+        Dict avec "url" et "title" de la piste, ou None si aucune piste trouvée
     """
     # Normaliser le ton
     tone_key = tone.lower().strip()
@@ -88,7 +85,7 @@ def pick_music_track(tone: str) -> Optional[str]:
     
     # Sélection aléatoire
     selected = random.choice(matching_tracks)
-    return selected["filename"]
+    return {"url": selected["url"], "title": selected["title"]}
 
 
 def get_music_url_from_storage(
@@ -97,39 +94,38 @@ def get_music_url_from_storage(
     tone: str = "inspiring"
 ) -> str:
     """
-    Construit l'URL publique Supabase Storage pour une piste.
+    DEPRECATED: Fonction conservée pour compatibilité mais non utilisée.
+    Les URLs de musique sont maintenant directes depuis MUSIC_LIBRARY.
     
     Args:
-        supabase_url: URL de base Supabase (ex: https://xxx.supabase.co)
-        filename: Nom du fichier (ex: "uplifting-ambient-1.mp3")
-        tone: Ton pour le sous-dossier
+        supabase_url: Non utilisé
+        filename: Non utilisé
+        tone: Non utilisé
     
     Returns:
-        URL publique complète
+        URL vide (deprecated)
     """
-    subdir = TONE_DIR.get(tone.lower().strip(), "inspiring")
-    
-    # Format: https://xxx.supabase.co/storage/v1/object/public/assets/music/inspiring/file.mp3
-    return f"{supabase_url}/storage/v1/object/public/assets/music/{subdir}/{filename}"
+    return ""
 
 
 async def select_music_for_job(
     supabase_client,
     prompt: str,
     tone: str,
-    supabase_url: str
+    supabase_url: str = None
 ) -> Optional[str]:
     """
-    Sélectionne une musique avec cache.
+    Sélectionne une musique gratuite avec cache.
+    Utilise maintenant des URLs directes vers incompetech.com et autres sources libres.
     
     Args:
         supabase_client: Client Supabase
         prompt: Prompt utilisateur
         tone: Ton détecté ou forcé
-        supabase_url: URL Supabase pour construire l'URL publique
+        supabase_url: Non utilisé (conservé pour compatibilité)
     
     Returns:
-        URL publique de la piste musicale ou None
+        URL directe de la piste musicale ou None
     """
     # Vérifier le cache
     prompt_hash = build_prompt_hash(prompt, tone)
@@ -141,20 +137,20 @@ async def select_music_for_job(
         
         if cache_result.data and len(cache_result.data) > 0:
             cached_url = cache_result.data[0].get("music_track_url")
-            if cached_url:
+            if cached_url and cached_url.startswith("http"):
                 print(f"[Music] ✓ Cache hit: {cached_url[:80]}...")
                 return cached_url
     except Exception as e:
         print(f"[Music] ⚠️  Cache read error: {e}")
     
     # Sélection aléatoire
-    filename = pick_music_track(tone)
-    if not filename:
+    track = pick_music_track(tone)
+    if not track:
         print(f"[Music] ✗ Aucune piste trouvée pour tone: {tone}")
         return None
     
-    # Construire URL publique
-    music_url = get_music_url_from_storage(supabase_url, filename, tone)
+    music_url = track["url"]
+    music_title = track["title"]
     
     # Sauvegarder dans le cache
     try:
@@ -164,9 +160,10 @@ async def select_music_for_job(
             "music_track_url": music_url,
             "tone": tone
         }).execute()
-        print(f"[Music] ✓ Cache saved: {tone} → {filename}")
+        print(f"[Music] ✓ Cache saved: {tone} → {music_title}")
     except Exception as e:
         print(f"[Music] ⚠️  Cache write error: {e}")
     
-    print(f"[Music] ✓ Sélection: {tone} → {filename}")
+    print(f"[Music] ✓ Sélection: {tone} → {music_title} ({music_url})")
+    print(f"[Music] ℹ️  Attribution: Music by Kevin MacLeod (incompetech.com)")
     return music_url
