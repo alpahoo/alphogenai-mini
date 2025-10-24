@@ -11,6 +11,9 @@ export default function GeneratePage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [reuseMode, setReuseMode] = useState(false);
+  const [sourceJobId, setSourceJobId] = useState("");
+  const [previousJobs, setPreviousJobs] = useState<any[]>([]);
   const router = useRouter();
 
   useEffect(() => {
@@ -24,9 +27,36 @@ export default function GeneratePage() {
       }
       
       setIsAuthenticated(true);
-      setIsAdmin(user?.user_metadata?.role === 'admin');
+      const adminStatus = user?.user_metadata?.role === 'admin';
+      setIsAdmin(adminStatus);
       setCheckingAuth(false);
+      
+      if (adminStatus) {
+        fetchPreviousJobs();
+      }
     }
+    
+    async function fetchPreviousJobs() {
+      try {
+        const supabase = createClient();
+        const { data: jobs } = await supabase
+          .from('jobs')
+          .select('id, prompt, created_at, status, app_state')
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false })
+          .limit(20);
+        
+        const jobsWithAssets = jobs?.filter(job => 
+          job.app_state?.runway_tasks && 
+          Object.keys(job.app_state.runway_tasks).length > 0
+        ) || [];
+        
+        setPreviousJobs(jobsWithAssets);
+      } catch (err) {
+        console.error('Failed to fetch previous jobs:', err);
+      }
+    }
+    
     checkAuth();
   }, [router]);
 
@@ -36,14 +66,24 @@ export default function GeneratePage() {
       return;
     }
 
+    if (reuseMode && !sourceJobId) {
+      setError("Veuillez sélectionner un job source pour réutiliser les assets");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
+      const requestBody: any = { prompt: prompt.trim() };
+      if (reuseMode && sourceJobId) {
+        requestBody.source_job_id = sourceJobId;
+      }
+      
       const res = await fetch("/api/generate-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt.trim() }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!res.ok) {
@@ -107,6 +147,50 @@ export default function GeneratePage() {
         </div>
 
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 mb-6">
+          {isAdmin && (
+            <div className="mb-6 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+              <label className="flex items-center space-x-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={reuseMode}
+                  onChange={(e) => setReuseMode(e.target.checked)}
+                  className="w-5 h-5 text-orange-600 bg-white dark:bg-slate-700 border-orange-300 dark:border-orange-700 rounded focus:ring-orange-500"
+                  disabled={loading}
+                />
+                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  ♻️ Réutiliser des assets existants (admin uniquement)
+                </span>
+              </label>
+              
+              {reuseMode && (
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Choisir un job précédent :
+                  </label>
+                  <select
+                    value={sourceJobId}
+                    onChange={(e) => setSourceJobId(e.target.value)}
+                    className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                    disabled={loading}
+                  >
+                    <option value="">-- Sélectionner un job --</option>
+                    {previousJobs.map(job => {
+                      const sceneCount = Object.keys(job.app_state?.runway_tasks || {}).length;
+                      return (
+                        <option key={job.id} value={job.id}>
+                          {job.prompt.substring(0, 60)}... ({sceneCount} scènes) - {new Date(job.created_at).toLocaleDateString()}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                    ⚠️ Le nombre de scènes doit correspondre exactement au job source
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          
           <textarea
             className="w-full h-40 border-2 border-slate-300 dark:border-slate-600 rounded-lg p-4 mb-4 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all resize-none"
             value={prompt}
@@ -125,7 +209,7 @@ export default function GeneratePage() {
 
           <button
             onClick={handleGenerate}
-            disabled={loading || !prompt.trim()}
+            disabled={loading || !prompt.trim() || (reuseMode && !sourceJobId)}
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold py-4 px-6 rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:from-slate-400 disabled:to-slate-400 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0"
           >
             {loading ? (
@@ -152,6 +236,8 @@ export default function GeneratePage() {
                 </svg>
                 Génération en cours...
               </span>
+            ) : reuseMode ? (
+              "♻️ Réutiliser et assembler"
             ) : (
               "🎬 Générer ma vidéo"
             )}

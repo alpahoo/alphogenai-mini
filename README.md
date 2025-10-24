@@ -45,6 +45,41 @@
 - Protected routes with middleware
 - Secure API key management
 
+## 🔄 Asset Reuse Feature (Admin Only)
+
+To conserve Runway API credits and avoid hitting daily task limits, admins can reuse images and videos from previous generations:
+
+### Using the Admin Assets Page:
+1. Go to `/admin/assets` to browse all jobs with generated assets
+2. Click "📋 Copier le Job ID pour réutilisation" to copy a job ID
+3. Go to `/creator/generate` 
+4. Check "♻️ Réutiliser des assets existants (admin uniquement)"
+5. Paste or select the job ID from the dropdown
+6. Enter your prompt (scene count must match source job)
+7. Click "♻️ Réutiliser et assembler"
+
+### Using the API:
+```bash
+curl -X POST https://your-app.com/api/generate-video \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Your prompt here",
+    "source_job_id": "8aa22ed8-394a-4d7e-80bd-da9a07d9c4ef"
+  }'
+```
+
+### How it works:
+- When you specify a `source_job_id`, the system copies all `runway_tasks` from that job
+- The orchestrator reuses the existing image and video URLs without calling the Runway API
+- **Zero credits consumed** for the reused assets ✨
+- Scene count must match exactly - if source has 6 scenes, new prompt must generate 6 scenes
+
+### Important Notes:
+- ⚠️ **Admin only feature** - requires admin role in user metadata
+- ⚠️ **Scene count must match** - job will fail if scene counts don't match
+- ✅ **Zero API calls** = zero credit consumption
+- ✅ **Perfect for testing** - reuse the same assets with different music or assembly
+
 ## How It Works
 
 1. **User submits a prompt** via the web interface at `/creator/generate`

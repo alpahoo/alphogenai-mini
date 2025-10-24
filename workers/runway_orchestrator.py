@@ -39,7 +39,8 @@ class RunwayOrchestrator:
         job_id: str,
         user_id: str,
         prompt: str,
-        seed: int = None
+        seed: int = None,
+        source_job_id: str = None
     ) -> Dict[str, Any]:
         """
         Execute the complete 60-second video generation workflow
@@ -74,6 +75,18 @@ class RunwayOrchestrator:
             
             await self._update_stage(job_id, "script_generation", "in_progress")
             script = await self.script_service.generate_script(prompt)
+            
+            if source_job_id:
+                try:
+                    source_tasks = await self._copy_tasks_from_source_job(
+                        source_job_id, 
+                        job_id,
+                        required_scene_count=len(script["scenes"])
+                    )
+                    print(f"[Orchestrator] ♻️  Will reuse assets from source job {source_job_id}")
+                except Exception as e:
+                    print(f"[Orchestrator] ⚠️  Failed to copy from source job: {e}")
+                    raise
             
             print(f"\n[Orchestrator] Script generated:")
             print(f"  Title: {script['title']}")
@@ -443,20 +456,88 @@ class RunwayOrchestrator:
             "status": scene_tasks.get(status_key),
             "url": scene_tasks.get(url_key)
         }
+    
+    async def _copy_tasks_from_source_job(
+        self,
+        source_job_id: str,
+        target_job_id: str,
+        required_scene_count: int = None
+    ) -> Dict[str, Any]:
+        """
+        Copy all runway_tasks from source job to target job
+        
+        Args:
+            source_job_id: Job ID to copy tasks from
+            target_job_id: Current job ID to copy tasks to
+            required_scene_count: Required number of scenes (for validation)
+            
+        Returns:
+            Dictionary of runway_tasks copied from source job
+        """
+        print(f"[Orchestrator] ♻️  Copying assets from source job: {source_job_id}")
+        
+        result = self.supabase.client.table("jobs") \
+            .select("app_state") \
+            .eq("id", source_job_id) \
+            .single() \
+            .execute()
+        
+        if not result.data:
+            raise ValueError(f"Source job {source_job_id} not found")
+        
+        source_app_state = result.data.get("app_state", {})
+        source_runway_tasks = source_app_state.get("runway_tasks", {})
+        
+        if not source_runway_tasks:
+            raise ValueError(f"Source job {source_job_id} has no runway_tasks to reuse")
+        
+        scene_count = len(source_runway_tasks)
+        print(f"[Orchestrator] ♻️  Found {scene_count} scenes in source job")
+        
+        if required_scene_count and scene_count != required_scene_count:
+            raise ValueError(
+                f"Scene count mismatch: source job has {scene_count} scenes "
+                f"but current job requires {required_scene_count} scenes"
+            )
+        
+        target_result = self.supabase.client.table("jobs") \
+            .select("app_state") \
+            .eq("id", target_job_id) \
+            .single() \
+            .execute()
+        
+        target_app_state = target_result.data.get("app_state", {}) if target_result.data else {}
+        target_app_state["runway_tasks"] = source_runway_tasks
+        
+        await self.supabase.update_job_state(
+            job_id=target_job_id,
+            app_state=target_app_state
+        )
+        
+        print(f"[Orchestrator] ♻️  Successfully copied runway_tasks to current job")
+        return source_runway_tasks
 
 
 async def create_and_run_job(
     user_id: str,
     prompt: str,
-    seed: int = None
+    seed: int = None,
+    source_job_id: str = None
 ) -> Dict[str, Any]:
     """
     High-level function to create and execute a job
     
+    Args:
+        user_id: User ID
+        prompt: Video generation prompt
+        seed: Optional seed for reproducibility
+        source_job_id: Optional job ID to copy and reuse assets from
+    
     Usage:
         result = await create_and_run_job(
             user_id="user_123",
-            prompt="Un robot découvre la mer"
+            prompt="Un robot découvre la mer",
+            source_job_id="8aa22ed8-394a-4d7e-80bd-da9a07d9c4ef"
         )
     """
     supabase = SupabaseClient()
@@ -468,7 +549,7 @@ async def create_and_run_job(
     )
     
     orchestrator = RunwayOrchestrator()
-    result = await orchestrator.run(job_id, user_id, prompt, seed)
+    result = await orchestrator.run(job_id, user_id, prompt, seed, source_job_id)
     
     return result
 
