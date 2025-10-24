@@ -308,7 +308,7 @@ class RunwayOrchestrator:
         """
         try:
             buckets = self.supabase.client.storage.list_buckets()
-            bucket_exists = any(b['id'] == bucket_name for b in buckets)
+            bucket_exists = any(b.id == bucket_name for b in buckets)
             
             if not bucket_exists:
                 print(f"[Storage] Bucket '{bucket_name}' not found, creating...")
