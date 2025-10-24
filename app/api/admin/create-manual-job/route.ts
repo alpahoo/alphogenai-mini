@@ -1,10 +1,26 @@
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
+function getSupabaseServiceClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_SUPABASE_URL;
+  
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE;
+  
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error("Missing Supabase environment variables");
+  }
+  
+  return createServiceClient(supabaseUrl, supabaseKey);
+}
+
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const authClient = await createClient();
+    const { data: { user }, error: authError } = await authClient.auth.getUser();
 
     if (authError || !user) {
       return NextResponse.json(
@@ -38,6 +54,7 @@ export async function POST(req: Request) {
       );
     }
 
+    const supabase = getSupabaseServiceClient();
     const { data: job, error: insertError } = await supabase
       .from('jobs')
       .insert({
