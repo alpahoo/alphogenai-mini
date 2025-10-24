@@ -166,20 +166,42 @@ class FFmpegAssembler:
             
             print(f"[FFmpeg] ✓ Music downloaded ({len(response.content) / 1024 / 1024:.2f} MB)")
         
+        has_audio = await self._video_has_audio(video_path)
+        print(f"[FFmpeg] Video has audio stream: {has_audio}")
+        
         output_path = assembly_dir / output_filename
         
-        cmd = [
-            'ffmpeg',
-            '-i', str(video_path),
-            '-i', str(music_path),
-            '-filter_complex',
-            '[1:a]volume=0.3[music];[0:a][music]amix=inputs=2:duration=shortest',
-            '-c:v', 'copy',
-            '-c:a', 'aac',
-            '-b:a', '192k',
-            '-y',
-            str(output_path)
-        ]
+        if has_audio:
+            cmd = [
+                'ffmpeg',
+                '-i', str(video_path),
+                '-i', str(music_path),
+                '-filter_complex',
+                '[1:a]volume=0.3[music];[0:a][music]amix=inputs=2:duration=shortest[a]',
+                '-map', '0:v',
+                '-map', '[a]',
+                '-c:v', 'copy',
+                '-c:a', 'aac',
+                '-b:a', '192k',
+                '-y',
+                str(output_path)
+            ]
+        else:
+            cmd = [
+                'ffmpeg',
+                '-i', str(video_path),
+                '-i', str(music_path),
+                '-filter_complex',
+                '[1:a]volume=0.3[a]',
+                '-map', '0:v',
+                '-map', '[a]',
+                '-c:v', 'copy',
+                '-c:a', 'aac',
+                '-b:a', '192k',
+                '-shortest',
+                '-y',
+                str(output_path)
+            ]
         
         print(f"[FFmpeg] Running: {' '.join(cmd)}")
         
@@ -198,6 +220,27 @@ class FFmpegAssembler:
         print(f"[FFmpeg] ✓ Music added ({os.path.getsize(output_path) / 1024 / 1024:.2f} MB)")
         
         return output_path
+    
+    async def _video_has_audio(self, video_path: Path) -> bool:
+        """Check if video has an audio stream using ffprobe"""
+        cmd = [
+            'ffprobe',
+            '-v', 'error',
+            '-select_streams', 'a',
+            '-show_entries', 'stream=codec_type',
+            '-of', 'default=noprint_wrappers=1:nokey=1',
+            str(video_path)
+        ]
+        
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        
+        stdout, stderr = await process.communicate()
+        
+        return bool(stdout.strip())
     
     def cleanup(self, assembly_dir: Path):
         """Clean up temporary files"""
