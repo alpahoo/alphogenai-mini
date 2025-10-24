@@ -115,7 +115,7 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
                 </div>
 
                 <a
-                  href="/generate"
+                  href="/creator/generate"
                   className="block w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all text-center font-medium"
                 >
                   ✨ Créer une autre vidéo
@@ -147,7 +147,7 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
                   {job.error_message || "Une erreur est survenue lors de la génération"}
                 </p>
                 <a
-                  href="/generate"
+                  href="/creator/generate"
                   className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   🔄 Réessayer
@@ -202,7 +202,7 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
         {!isDone && (
           <div className="mt-6 text-center">
             <a
-              href="/generate"
+              href="/creator/generate"
               className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition-colors"
             >
               ← Retour au formulaire

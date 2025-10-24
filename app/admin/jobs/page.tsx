@@ -105,7 +105,7 @@ export default function AdminJobsPage() {
             </p>
           </div>
           <button
-            onClick={() => router.push("/generate")}
+            onClick={() => router.push("/creator/generate")}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all"
           >
             ← Retour

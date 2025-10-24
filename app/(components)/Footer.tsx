@@ -34,7 +34,7 @@ export default function Footer() {
 
             <span className="text-slate-300 dark:text-slate-700">•</span>
             <a
-              href="/generate"
+              href="/creator/generate"
               className="text-slate-500 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 transition-colors"
             >
               Créer une vidéo
