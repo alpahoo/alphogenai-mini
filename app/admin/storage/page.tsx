@@ -136,7 +136,10 @@ export default function AdminStoragePage() {
                 upsert: true,
               });
 
-            if (updateError) throw updateError;
+            if (updateError) {
+              console.error(`Update error for ${file.name}:`, updateError);
+              throw new Error(`Erreur mise à jour: ${updateError.message}`);
+            }
           } else {
             const { error: uploadError } = await supabase.storage
               .from("assets")
@@ -145,12 +148,16 @@ export default function AdminStoragePage() {
                 upsert: false,
               });
 
-            if (uploadError) throw uploadError;
+            if (uploadError) {
+              console.error(`Upload error for ${file.name}:`, uploadError);
+              throw new Error(`Erreur upload: ${uploadError.message}`);
+            }
           }
 
           successCount++;
-        } catch (error) {
+        } catch (error: any) {
           console.error(`Error uploading ${file.name}:`, error);
+          showMessage("error", error.message || "Erreur inconnue");
           errorCount++;
         }
 
@@ -166,10 +173,6 @@ export default function AdminStoragePage() {
           `✓ ${successCount} fichier(s) uploadé(s) avec succès`
         );
         await loadFiles();
-      }
-
-      if (errorCount > 0) {
-        showMessage("error", `✗ ${errorCount} fichier(s) en erreur`);
       }
     },
     [selectedTone, supabase, loadFiles]
