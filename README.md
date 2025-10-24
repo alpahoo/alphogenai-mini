@@ -291,6 +291,15 @@ Contributions are welcome! Please:
 
 MIT License - feel free to use this project for your own purposes.
 
+## Music Attribution
+
+Background music provided by:
+- **Kevin MacLeod** ([incompetech.com](https://incompetech.com))
+- Licensed under Creative Commons: By Attribution 4.0 License
+- All music tracks are royalty-free and available for commercial use
+
+Music is automatically selected based on video tone and downloaded directly from incompetech.com during video generation.
+
 ## Acknowledgments
 
 Built with:
