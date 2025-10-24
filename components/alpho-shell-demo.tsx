@@ -506,10 +506,48 @@ const VideoGen4Page: React.FC = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [videoId, setVideoId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [reuseMode, setReuseMode] = useState(false);
+  const [sourceJobId, setSourceJobId] = useState("");
+  const [previousJobs, setPreviousJobs] = useState<any[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(false);
 
   useEffect(() => {
     console.log('VideoGen4Page state updated:', { prompt: prompt.substring(0, 50) + '...', loading, previewUrl: !!previewUrl, videoId });
   }, [prompt, loading, previewUrl, videoId]);
+
+  useEffect(() => {
+    async function checkAdminAndFetchJobs() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const adminStatus = user?.user_metadata?.role === 'admin';
+      setIsAdmin(adminStatus);
+      
+      if (adminStatus) {
+        setLoadingJobs(true);
+        try {
+          const { data: jobs } = await supabase
+            .from('jobs')
+            .select('id, prompt, created_at, status, app_state')
+            .eq('status', 'completed')
+            .order('created_at', { ascending: false })
+            .limit(20);
+          
+          const jobsWithAssets = jobs?.filter(job => 
+            job.app_state?.runway_tasks && 
+            Object.keys(job.app_state.runway_tasks).length > 0
+          ) || [];
+          
+          setPreviousJobs(jobsWithAssets);
+        } catch (err) {
+          console.error('Failed to fetch previous jobs:', err);
+        } finally {
+          setLoadingJobs(false);
+        }
+      }
+    }
+    checkAdminAndFetchJobs();
+  }, []);
 
   const onFiles = (files: FileList | null) => {
     if (!files) return;
@@ -522,20 +560,53 @@ const VideoGen4Page: React.FC = () => {
     console.log('Negative Prompt:', negativePrompt);
     console.log('Duration:', duration);
     console.log('Resolution:', resolution);
+    console.log('Reuse Mode:', reuseMode);
+    console.log('Source Job ID:', sourceJobId);
     
     if (!prompt || prompt.trim().length === 0) {
-      alert('Please enter a prompt to generate a video.');
+      alert('Veuillez entrer un prompt pour générer une vidéo.');
       console.error('❌ Prompt is empty');
+      return;
+    }
+    
+    if (reuseMode && !sourceJobId) {
+      alert('Veuillez sélectionner un job source pour réutiliser les assets.');
       return;
     }
     
     try {
       setLoading(true);
       console.log('⏳ Loading state set to true');
-      const data = await createGen4({ prompt, negativePrompt, duration, resolution, seed, references: refs });
-      console.log('✅ Video generation response:', data);
-      setPreviewUrl(data.videoUrl || null);
-      setVideoId(data.videoId || null);
+      
+      if (reuseMode && sourceJobId) {
+        const requestBody: any = { prompt: prompt.trim(), source_job_id: sourceJobId };
+        
+        const res = await fetch('/api/generate-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
+        
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.error || 'Erreur lors de la génération');
+        }
+        
+        const data = await res.json();
+        console.log('✅ Video generation response:', data);
+        
+        if (data.jobId) {
+          alert(`Job créé avec succès! ID: ${data.jobId}\nRedirection vers la page de suivi...`);
+          window.location.href = `/v/${data.jobId}`;
+        } else {
+          throw new Error('Aucun jobId reçu du serveur');
+        }
+      } else {
+        const data = await createGen4({ prompt, negativePrompt, duration, resolution, seed, references: refs });
+        console.log('✅ Video generation response:', data);
+        setPreviewUrl(data.videoUrl || null);
+        setVideoId(data.videoId || null);
+      }
     } catch (e: unknown) {
       console.error('❌ Video generation error:', e);
       alert(`Error: ${(e as Error).message}`);
@@ -562,8 +633,61 @@ const VideoGen4Page: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <SectionTitle title="Image → Video (Runway Gen‑4)" />
+      <SectionTitle title="Génération Vidéo IA Multi-Clips (Runway Gen‑4)" />
       <Card className="p-4">
+        {isAdmin && (
+          <div className="mb-4 p-4 rounded-xl border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20">
+            <label className="flex items-center space-x-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={reuseMode}
+                onChange={(e) => setReuseMode(e.target.checked)}
+                className="w-5 h-5 text-orange-600 bg-white dark:bg-slate-700 border-orange-300 dark:border-orange-700 rounded focus:ring-orange-500"
+                disabled={loading}
+              />
+              <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                ♻️ Réutiliser des assets existants (admin uniquement)
+              </span>
+            </label>
+            
+            {reuseMode && (
+              <div className="mt-3">
+                <label className="block text-xs text-zinc-600 dark:text-white/60 mb-2">
+                  Choisir un job précédent :
+                </label>
+                {loadingJobs ? (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Chargement des jobs...</p>
+                ) : previousJobs.length === 0 ? (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Aucun job complété trouvé. Générez d'abord une vidéo complète pour pouvoir réutiliser ses assets.
+                  </p>
+                ) : (
+                  <>
+                    <select
+                      value={sourceJobId}
+                      onChange={(e) => setSourceJobId(e.target.value)}
+                      className="w-full rounded-xl border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/5 px-3 py-2 text-sm text-zinc-900 dark:text-white"
+                      disabled={loading}
+                    >
+                      <option value="">-- Sélectionner un job --</option>
+                      {previousJobs.map(job => {
+                        const sceneCount = Object.keys(job.app_state?.runway_tasks || {}).length;
+                        return (
+                          <option key={job.id} value={job.id}>
+                            {job.prompt.substring(0, 60)}... ({sceneCount} scènes) - {new Date(job.created_at).toLocaleDateString()}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                      ⚠️ Le nombre de scènes doit correspondre exactement au job source
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label className="text-xs text-zinc-600 dark:text-white/60">Prompt</label>
@@ -601,7 +725,9 @@ const VideoGen4Page: React.FC = () => {
               </div>
             </div>
             <div className="mt-3 flex items-center gap-2">
-              <button onClick={onCreate} disabled={loading} className="rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{loading ? 'Creating…' : 'Create'}</button>
+              <button onClick={onCreate} disabled={loading || (reuseMode && !sourceJobId)} className="rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                {loading ? 'Création en cours…' : reuseMode ? '♻️ Réutiliser et assembler' : 'Créer la vidéo'}
+              </button>
             </div>
           </div>
           <div>
