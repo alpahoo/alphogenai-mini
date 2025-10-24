@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
+import { useRouter } from "next/navigation";
 import {
   Home,
   Image,
@@ -19,7 +20,10 @@ import {
   Eye,
   History,
   LogOut,
-  Shield
+  Shield,
+  ChevronDown,
+  ChevronRight,
+  FileText
 } from "lucide-react";
 
 const Card: React.FC<{ className?: string; children?: React.ReactNode; onClick?: () => void }> = ({
@@ -46,13 +50,34 @@ const Sidebar: React.FC<{ current: string; onNavigate: (key: string) => void; is
   onNavigate,
   isAdmin,
 }) => {
+  const router = useRouter();
+  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
+
+  const toggleMenu = (key: string) => {
+    const newExpanded = new Set(expandedMenus);
+    if (newExpanded.has(key)) {
+      newExpanded.delete(key);
+    } else {
+      newExpanded.add(key);
+    }
+    setExpandedMenus(newExpanded);
+  };
+
   const items = [
     { key: "home", label: "Home", Icon: Home },
     { key: "assets", label: "Assets", Icon: Upload },
     { key: "video", label: "Video", Icon: Film },
     { key: "history", label: "History", Icon: History },
-    ...(isAdmin ? [{ key: "admin", label: "Admin", Icon: Shield }] : []),
+    ...(isAdmin ? [{ 
+      key: "admin", 
+      label: "Admin", 
+      Icon: Shield,
+      children: [
+        { key: "manual-job", label: "Manual Jobs", Icon: FileText }
+      ]
+    }] : []),
   ];
+
   return (
     <aside className="fixed left-0 top-0 z-20 h-full w-60 border-r border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0b0c10] px-4 py-6">
       <div className="mb-8 flex items-center gap-2 px-2">
@@ -64,21 +89,53 @@ const Sidebar: React.FC<{ current: string; onNavigate: (key: string) => void; is
         </h1>
       </div>
       <nav className="space-y-1">
-        {items.map(({ key, label, Icon }) => {
+        {items.map(({ key, label, Icon, children }) => {
           const active = key === current;
+          const isExpanded = expandedMenus.has(key);
+          const hasChildren = children && children.length > 0;
+          
           return (
-            <button
-              key={key}
-              onClick={() => onNavigate(key)}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                active
-                  ? "bg-zinc-100 dark:bg-white/10 text-zinc-900 dark:text-white"
-                  : "text-zinc-600 dark:text-white/60 hover:bg-zinc-50 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white"
-              }`}
-            >
-              <Icon className="h-4 w-4" />
-              <span>{label}</span>
-            </button>
+            <div key={key}>
+              <button
+                onClick={() => {
+                  if (hasChildren) {
+                    toggleMenu(key);
+                  } else {
+                    onNavigate(key);
+                  }
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                  active
+                    ? "bg-zinc-100 dark:bg-white/10 text-zinc-900 dark:text-white"
+                    : "text-zinc-600 dark:text-white/60 hover:bg-zinc-50 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white"
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="flex-1 text-left">{label}</span>
+                {hasChildren && (
+                  isExpanded ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )
+                )}
+              </button>
+              
+              {hasChildren && isExpanded && (
+                <div className="mt-1 space-y-1">
+                  {children.map((child) => (
+                    <button
+                      key={child.key}
+                      onClick={() => router.push(`/admin/${child.key}`)}
+                      className="flex w-full items-center gap-3 rounded-xl pl-8 pr-3 py-2 text-sm font-medium transition text-zinc-600 dark:text-white/60 hover:bg-zinc-50 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-white"
+                    >
+                      <child.Icon className="h-4 w-4" />
+                      <span>{child.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
