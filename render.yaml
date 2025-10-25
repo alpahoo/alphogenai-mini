@@ -1,5 +1,5 @@
 services:
-  - type: worker
+  - type: web
     name: alphogenai-worker
     env: python
     region: oregon
@@ -39,3 +39,9 @@ services:
         value: 10
       - key: CLIP_DURATION
         value: 6
+      - key: NO_STORAGE_UPLOAD
+        value: true
+      - key: MUSIC_SOURCE
+        value: external
+      - key: ASSEMBLER_SHARED_SECRET
+        sync: false

@@ -570,6 +570,8 @@ const VideoGen4Page: React.FC = () => {
   const [sourceJobId, setSourceJobId] = useState("");
   const [previousJobs, setPreviousJobs] = useState<any[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(false);
+  const [selectedMusic, setSelectedMusic] = useState("");
+  const [assembling, setAssembling] = useState(false);
 
   useEffect(() => {
     console.log('VideoGen4Page state updated:', { prompt: prompt.substring(0, 50) + '...', loading, previewUrl: !!previewUrl, videoId });
@@ -741,6 +743,80 @@ const VideoGen4Page: React.FC = () => {
                     <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
                       ⚠️ Le nombre de scènes doit correspondre exactement au job source
                     </p>
+                    
+                    {sourceJobId && (
+                      <>
+                        <div className="mt-4">
+                          <label className="block text-xs text-zinc-600 dark:text-white/60 mb-2">
+                            Musique (optionnelle) :
+                          </label>
+                          <select
+                            value={selectedMusic}
+                            onChange={(e) => setSelectedMusic(e.target.value)}
+                            className="w-full rounded-xl border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/5 px-3 py-2 text-sm text-zinc-900 dark:text-white"
+                          >
+                            <option value="">-- Aucune musique --</option>
+                            <option value="https://incompetech.com/music/royalty-free/mp3-royaltyfree/Carefree.mp3">Uplifting Ambient</option>
+                            <option value="https://incompetech.com/music/royalty-free/mp3-royaltyfree/Wallpaper.mp3">Inspiring Piano</option>
+                            <option value="https://incompetech.com/music/royalty-free/mp3-royaltyfree/Fluffing%20a%20Duck.mp3">Energetic Corporate</option>
+                            <option value="https://incompetech.com/music/royalty-free/mp3-royaltyfree/Heroic%20Adventure.mp3">Cinematic Adventure</option>
+                            <option value="https://incompetech.com/music/royalty-free/mp3-royaltyfree/Laid%20Back%20Guitars.mp3">Peaceful Ambient</option>
+                            <option value="https://incompetech.com/music/royalty-free/mp3-royaltyfree/Pamgaea.mp3">Upbeat Positive</option>
+                            <option value="https://incompetech.com/music/royalty-free/mp3-royaltyfree/Prelude%20and%20Action.mp3">Dramatic Cinematic</option>
+                            <option value="https://incompetech.com/music/royalty-free/mp3-royaltyfree/Take%20a%20Chance.mp3">Cheerful Light</option>
+                          </select>
+                          <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+                            Musique par Kevin MacLeod (incompetech.com) - CC BY 4.0
+                          </p>
+                        </div>
+                        
+                        <div className="mt-4 p-3 rounded-xl bg-gradient-to-r from-cyan-500/10 to-indigo-500/10 border border-cyan-500/20">
+                          <p className="text-xs text-zinc-600 dark:text-white/60 mb-2">
+                            💡 Téléchargement direct (aucun crédit Runway utilisé)
+                          </p>
+                          <button
+                            onClick={async () => {
+                              if (!sourceJobId) return;
+                              try {
+                                setAssembling(true);
+                                const res = await fetch('/api/assemble/reuse', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    job_id: sourceJobId,
+                                    music_url: selectedMusic || undefined,
+                                  }),
+                                });
+                                
+                                if (!res.ok) {
+                                  const errorText = await res.text();
+                                  throw new Error(errorText || 'Assembly failed');
+                                }
+                                
+                                const blob = await res.blob();
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `${sourceJobId}_assembled.mp4`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                                
+                                alert('✅ Vidéo téléchargée avec succès!');
+                              } catch (err: any) {
+                                console.error('Assembly error:', err);
+                                alert(`❌ Erreur: ${err.message}`);
+                              } finally {
+                                setAssembling(false);
+                              }
+                            }}
+                            disabled={assembling || !sourceJobId}
+                            className="w-full rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:from-cyan-600 hover:to-indigo-600 transition-all"
+                          >
+                            {assembling ? '⏳ Assemblage en cours...' : '📥 Télécharger l\'assemblage'}
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>
