@@ -42,8 +42,7 @@ export async function POST(req: Request) {
     const { data: jobsToFix, error: selectError } = await supabase
       .from('jobs')
       .select('id, prompt, created_at, status, app_state')
-      .eq('status', 'completed')
-      .not('app_state->runway_tasks', 'is', null);
+      .eq('status', 'completed');
     
     if (selectError) {
       console.error('Failed to fetch jobs to fix:', selectError);
