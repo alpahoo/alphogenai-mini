@@ -277,7 +277,7 @@ export default function ManualJobPage() {
             🔧 Corriger les anciens jobs manuels
           </h3>
           <p className="text-xs text-blue-800 dark:text-blue-200 mb-3">
-            Si des jobs manuels créés avant le 25 octobre 2025 n&apos;apparaissent pas dans le dropdown de réutilisation, cliquez sur ce bouton pour les corriger.
+            Si des jobs manuels créés avant le 12 octobre 2025 n&apos;apparaissent pas dans le dropdown de réutilisation, cliquez sur ce bouton pour les corriger.
           </p>
           <button
             onClick={handleFixOldJobs}
