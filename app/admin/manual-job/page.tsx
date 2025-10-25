@@ -12,6 +12,8 @@ export default function ManualJobPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [fixing, setFixing] = useState(false);
+  const [fixResult, setFixResult] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -89,6 +91,34 @@ export default function ManualJobPage() {
       setError(err.message || 'Une erreur est survenue');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFixOldJobs = async () => {
+    setFixing(true);
+    setFixResult(null);
+    
+    try {
+      const res = await fetch('/api/admin/fix-manual-jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(data.error || 'Erreur lors de la correction des jobs');
+      }
+      
+      if (data.fixed === 0) {
+        setFixResult('ℹ️ Aucun job à corriger trouvé.');
+      } else {
+        setFixResult(`✅ ${data.fixed} job(s) corrigé(s) avec succès ! Ils apparaîtront maintenant dans le dropdown de réutilisation.`);
+      }
+    } catch (err: any) {
+      setFixResult(`❌ Erreur: ${err.message || 'Une erreur est survenue'}`);
+    } finally {
+      setFixing(false);
     }
   };
 
@@ -242,13 +272,34 @@ export default function ManualJobPage() {
           </div>
         </div>
 
+        <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
+            🔧 Corriger les anciens jobs manuels
+          </h3>
+          <p className="text-xs text-blue-800 dark:text-blue-200 mb-3">
+            Si des jobs manuels créés avant le 12 octobre 2025 n&apos;apparaissent pas dans le dropdown de réutilisation, cliquez sur ce bouton pour les corriger.
+          </p>
+          <button
+            onClick={handleFixOldJobs}
+            disabled={fixing}
+            className="w-full bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all"
+          >
+            {fixing ? 'Correction en cours...' : '🔧 Corriger les anciens jobs'}
+          </button>
+          {fixResult && (
+            <div className="mt-3 text-xs text-blue-800 dark:text-blue-200">
+              {fixResult}
+            </div>
+          )}
+        </div>
+
         <div className="mt-6 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
           <h3 className="text-sm font-semibold text-yellow-900 dark:text-yellow-100 mb-2">
             ⚠️ Important
           </h3>
           <ul className="text-xs text-yellow-800 dark:text-yellow-200 space-y-1">
             <li>• Cette page est strictement réservée aux administrateurs</li>
-            <li>• Les jobs créés manuellement auront le status "completed"</li>
+            <li>• Les jobs créés manuellement auront le status &quot;done&quot;</li>
             <li>• Ils apparaîtront immédiatement dans le dropdown de réutilisation</li>
             <li>• Assurez-vous que les task IDs Runway existent et sont valides</li>
           </ul>
