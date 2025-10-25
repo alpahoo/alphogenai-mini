@@ -60,7 +60,7 @@ export async function POST(req: Request) {
       .insert({
         user_id: user.id,
         prompt: prompt,
-        status: 'completed',
+        status: 'done',
         app_state: {
           prompt: prompt,
           runway_tasks: runway_tasks,

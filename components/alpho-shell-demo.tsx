@@ -588,7 +588,7 @@ const VideoGen4Page: React.FC = () => {
           const { data: jobs } = await supabase
             .from('jobs')
             .select('id, prompt, created_at, status, app_state')
-            .eq('status', 'completed')
+            .eq('status', 'done')
             .order('created_at', { ascending: false })
             .limit(20);
           
