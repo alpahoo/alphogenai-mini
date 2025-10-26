@@ -526,22 +526,25 @@ const YouTubeDrawer: React.FC<{ open: boolean; onClose: () => void; onPublish: (
   );
 };
 
-async function createGen4(req: { prompt: string; references?: File[]; duration?: number; resolution?: '720p'|'1080p'; seed?: number; negativePrompt?: string; }) {
-  console.log('🚀 createGen4 called with:', req);
-  const form = new FormData();
-  form.append('prompt', req.prompt);
-  if (req.duration) form.append('duration', String(req.duration));
-  if (req.resolution) form.append('resolution', req.resolution);
-  if (req.seed !== undefined) form.append('seed', String(req.seed));
-  if (req.negativePrompt) form.append('negativePrompt', req.negativePrompt);
-  req.references?.forEach((f) => form.append('references', f));
-  console.log('📤 Sending POST request to /api/runway/gen4');
-  const res = await fetch('/api/runway/gen4', { method: 'POST', body: form });
+async function createSVIJob(req: { prompt: string; duration?: number; resolution?: '720p'|'1080p'; seed?: number; }) {
+  console.log('🚀 createSVIJob called with:', req);
+  const body = {
+    prompt: req.prompt,
+    duration: req.duration || 60,
+    resolution: req.resolution || '1080p',
+    seed: req.seed
+  };
+  console.log('📤 Sending POST request to /api/jobs');
+  const res = await fetch('/api/jobs', { 
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
   console.log('📥 Response status:', res.status, res.statusText);
   if (!res.ok) {
     const errorText = await res.text();
     console.error('❌ API error response:', errorText);
-    throw new Error(`Runway Gen‑4 request failed: ${res.status} ${errorText}`);
+    throw new Error(`SVI job creation failed: ${res.status} ${errorText}`);
   }
   const jsonData = await res.json();
   console.log('✅ API response data:', jsonData);
@@ -595,8 +598,8 @@ const VideoGen4Page: React.FC = () => {
             .limit(20);
           
           const jobsWithAssets = jobs?.filter(job => 
-            job.app_state?.runway_tasks && 
-            Object.keys(job.app_state.runway_tasks).length > 0
+            job.app_state?.video_clips && 
+            Object.keys(job.app_state.video_clips).length > 0
           ) || [];
           
           setPreviousJobs(jobsWithAssets);
@@ -694,7 +697,7 @@ const VideoGen4Page: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <SectionTitle title="Génération Vidéo IA Multi-Clips (Runway Gen‑4)" />
+      <SectionTitle title="Génération Vidéo IA avec SVI (Stable Video Infinity)" />
       <Card className="p-4">
         {isAdmin && (
           <div className="mb-4 p-4 rounded-xl border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20">
@@ -732,10 +735,10 @@ const VideoGen4Page: React.FC = () => {
                     >
                       <option value="">-- Sélectionner un job --</option>
                       {previousJobs.map(job => {
-                        const sceneCount = Object.keys(job.app_state?.runway_tasks || {}).length;
+                        const clipCount = Object.keys(job.app_state?.video_clips || {}).length;
                         return (
                           <option key={job.id} value={job.id}>
-                            {job.prompt.substring(0, 60)}... ({sceneCount} scènes) - {new Date(job.created_at).toLocaleDateString()}
+                            {job.prompt.substring(0, 60)}... ({clipCount} clips) - {new Date(job.created_at).toLocaleDateString()}
                           </option>
                         );
                       })}
@@ -772,7 +775,7 @@ const VideoGen4Page: React.FC = () => {
                         
                         <div className="mt-4 p-3 rounded-xl bg-gradient-to-r from-cyan-500/10 to-indigo-500/10 border border-cyan-500/20">
                           <p className="text-xs text-zinc-600 dark:text-white/60 mb-2">
-                            💡 Téléchargement direct (aucun crédit Runway utilisé)
+                            💡 Téléchargement direct des assets existants
                           </p>
                           <button
                             onClick={async () => {
