@@ -43,10 +43,12 @@ RUN pip3 install torch torchvision torchaudio --index-url https://download.pytor
 RUN pip3 install -r requirements.txt
 
 # Pre-download models to reduce cold-start time
-RUN python3 -c "from transformers import ClapModel, ClapProcessor; \
-    ClapProcessor.from_pretrained('laion/clap-htsat-unfused'); \
-    ClapModel.from_pretrained('laion/clap-htsat-unfused'); \
-    print('CLAP model cached')"
+# Note: CLAP model pre-caching disabled due to PyTorch 2.6+ requirement (CVE-2025-32434)
+# Models will be downloaded on first use instead
+# RUN python3 -c "from transformers import ClapModel, ClapProcessor; \
+#     ClapProcessor.from_pretrained('laion/clap-htsat-unfused'); \
+#     ClapModel.from_pretrained('laion/clap-htsat-unfused'); \
+#     print('CLAP model cached')"
 
 # Note: AudioLDM2 models are large (~5GB), uncomment to pre-cache
 # RUN python3 -c "from diffusers import AudioLDM2Pipeline; \

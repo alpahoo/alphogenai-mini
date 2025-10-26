@@ -22,11 +22,11 @@ import httpx
 from typing import Dict, Any
 from datetime import datetime
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'workers'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from supabase_client import SupabaseClient
-from audio_orchestrator import AudioOrchestrator
-from budget_guard import BudgetGuard, BudgetGuardMiddleware
+from workers.supabase_client import SupabaseClient
+from workers.audio_orchestrator import AudioOrchestrator
+from workers.budget_guard import BudgetGuard, BudgetGuardMiddleware
 
 logging.basicConfig(
     level=logging.INFO,
