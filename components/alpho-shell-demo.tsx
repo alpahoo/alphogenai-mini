@@ -189,7 +189,7 @@ const Hero: React.FC<{ onGo: (route: string) => void }> = ({ onGo }) => (
         Welcome to Alpho Gen AI
       </h1>
       <p className="mb-6 text-sm text-zinc-600 dark:text-white/60">
-        Create stunning videos with AI-powered Runway Gen-4 technology
+        Create stunning videos with AI-powered SVI technology
       </p>
       <div className="flex gap-3">
         <button 
@@ -250,8 +250,8 @@ const HomePage: React.FC<{ onGo: (key: string) => void }> = ({ onGo }) => (
     <SectionTitle title="Video" />
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       <CreateTile 
-        title="Image → Video (Gen‑4)" 
-        description="Runway Gen‑4 with reference images" 
+        title="Text → Video (SVI)" 
+        description="SVI text-to-video generation" 
         icon={<Film className="h-5 w-5"/>} 
         onClick={() => onGo('video')} 
       />
