@@ -24,6 +24,7 @@ RUN git clone --depth=1 https://github.com/yihao-meng/HoloCine /app/HoloCine
 # Copy service code
 COPY app /app/app
 COPY scripts /app/scripts
+COPY start.sh /app/start.sh
 
 # Runtime env
 ENV CHECKPOINTS_PATH=/checkpoints \
@@ -36,10 +37,10 @@ ENV CHECKPOINTS_PATH=/checkpoints \
     PYTHONUNBUFFERED=1
 
 # Create mount points
-RUN mkdir -p /checkpoints /outputs && chown -R app:app /app /checkpoints /outputs
+RUN mkdir -p /checkpoints /outputs && chown -R app:app /app /checkpoints /outputs && chmod +x /app/start.sh
 USER app
 
-# Optional: sync checkpoints at container start when AUTO_DOWNLOAD=1
-ENTRYPOINT ["bash", "-lc", "python3 /app/scripts/sync_checkpoints.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# Start via wrapper that can run FastAPI HTTP or Runpod handler
+ENTRYPOINT ["/app/start.sh"]
 
 EXPOSE 8000

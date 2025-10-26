@@ -48,9 +48,18 @@ jobs:
     runs-on: ubuntu-22.04
     if: ${{ success() }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Deploy/Update Runpod Serverless
         env:
           RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          IMAGE: ghcr.io/${{ github.repository }}/holocine-service:latest
         run: |
-          echo "Deploy via Runpod API call here (placeholder)." 
-          echo "Use RUNPOD_API_KEY to create/update endpoint with the built image."
+          pip install httpx
+          python holocine-service/scripts/deploy_runpod.py
