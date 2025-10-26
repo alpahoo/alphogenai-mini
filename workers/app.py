@@ -103,9 +103,6 @@ async def assemble_reuse(req: AssembleRequest, request: Request):
         video_clips = app_state.get("video_clips", {})
         
         if not video_clips:
-            video_clips = app_state.get("runway_tasks", {})
-        
-        if not video_clips:
             raise HTTPException(
                 status_code=400,
                 detail="Job has no video_clips in app_state"
