@@ -4,6 +4,8 @@
 
 The Audio Ambience module adds AI-powered audio generation and mixing capabilities to AlphoGenAI. It generates ambient audio for videos using AudioLDM2 and Diff-Foley, selects the best audio using CLAP scoring, and mixes it with video content.
 
+**Pipeline**: 🎬 100% SVI (Stable Video Infinity) - No Runway dependencies
+
 **Status**: ✅ Implementation Complete (Ready for Deployment)
 
 **Implementation Date**: October 26, 2025
