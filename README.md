@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>Qwen Mock</strong> → <strong>Runway Gen-4 Turbo</strong> → <strong>Free Music</strong>
+  <strong>SVI (Stable Video Infinity)</strong> → <strong>AudioLDM2</strong> → <strong>Audio Mixing</strong>
 </p>
 
 <p align="center">
@@ -21,9 +21,9 @@
 ## Features
 
 ### 🎬 AI Video Generation Pipeline
-- **Qwen Mock** - Script structure generation (no API calls)
-- **Runway Gen-4 Turbo** - Direct text-to-video generation (10s, 16:9)
-- **Free Music** - YouTube Audio Library tracks from Supabase Storage
+- **SVI (Stable Video Infinity)** - Text-to-video generation on Runpod A100 80GB
+- **AudioLDM2** - Text-to-audio generation with CLAP scoring
+- **Audio Mixing** - ffmpeg-based audio/video mixing with normalization
 
 ### 🔄 Simplified Orchestration
 - **Async Workflow** - Minimal worker with direct job processing
@@ -45,52 +45,18 @@
 - Protected routes with middleware
 - Secure API key management
 
-## 🔄 Asset Reuse Feature (Admin Only)
-
-To conserve Runway API credits and avoid hitting daily task limits, admins can reuse images and videos from previous generations:
-
-### Using the Admin Assets Page:
-1. Go to `/admin/assets` to browse all jobs with generated assets
-2. Click "📋 Copier le Job ID pour réutilisation" to copy a job ID
-3. Go to `/creator/generate` 
-4. Check "♻️ Réutiliser des assets existants (admin uniquement)"
-5. Paste or select the job ID from the dropdown
-6. Enter your prompt (scene count must match source job)
-7. Click "♻️ Réutiliser et assembler"
-
-### Using the API:
-```bash
-curl -X POST https://your-app.com/api/generate-video \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "Your prompt here",
-    "source_job_id": "8aa22ed8-394a-4d7e-80bd-da9a07d9c4ef"
-  }'
-```
-
-### How it works:
-- When you specify a `source_job_id`, the system copies all `runway_tasks` from that job
-- The orchestrator reuses the existing image and video URLs without calling the Runway API
-- **Zero credits consumed** for the reused assets ✨
-- Scene count must match exactly - if source has 6 scenes, new prompt must generate 6 scenes
-
-### Important Notes:
-- ⚠️ **Admin only feature** - requires admin role in user metadata
-- ⚠️ **Scene count must match** - job will fail if scene counts don't match
-- ✅ **Zero API calls** = zero credit consumption
-- ✅ **Perfect for testing** - reuse the same assets with different music or assembly
-
 ## How It Works
 
-1. **User submits a prompt** via the web interface at `/creator/generate`
+1. **User submits a prompt** via the web interface at `/generate`
 2. **Job created** in Supabase with status tracking
-3. **Runway orchestrator** processes the job:
-   - Qwen Mock generates script structure
-   - Runway Gen-4 Turbo creates video (10s, 16:9)
-   - Music selected from Supabase Storage by tone
-   - State saved in `jobs.app_state` after each step
-4. **Webhook notification** sent when video is ready (optional)
-5. **User views** their AI-generated video at `/v/[jobId]`
+3. **SVI + Audio orchestrator** processes the job:
+   - SVI generates video from text prompt (60s, 1920x1080, 24fps)
+   - AudioLDM2 generates ambient audio from prompt
+   - CLAP scoring selects best audio match
+   - ffmpeg mixes video and audio with normalization (-16 LUFS)
+   - State saved in `jobs` table after each step
+4. **User tracks progress** at `/jobs/[jobId]` with real-time polling
+5. **User views** their AI-generated video with audio
 
 ## Quick Start
 
@@ -99,7 +65,7 @@ curl -X POST https://your-app.com/api/generate-video \
 - Node.js 18+ and npm
 - Python 3.9+ and pip
 - Supabase account ([create one here](https://database.new))
-- Runway Gen-4 Turbo API key
+- Runpod account with SVI and Audio endpoints deployed
 
 ### 2. Clone and Install
 
@@ -130,9 +96,9 @@ Required variables:
 - `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anonymous key
 - `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
-- `RUNWAY_API_KEY` - Runway Gen-4 Turbo API key
-- `RUNWAY_API_BASE` - Runway API base URL (default: https://api.runwayml.com/v1)
-- `QWEN_MOCK_ENABLED` - Set to true for mock mode (default: true)
+- `RUNPOD_API_KEY` - Your Runpod API key
+- `SVI_ENDPOINT_URL` - SVI endpoint URL (e.g., https://xxx.api.runpod.ai/)
+- `AUDIO_BACKEND_URL` - Audio service endpoint URL (e.g., https://xxx.api.runpod.ai/)
 
 ### 4. Run Database Migrations
 
@@ -171,31 +137,26 @@ This will verify all API keys and database tables are configured correctly.
 
 ## Usage
 
-### Generate a Video via Python
+### Generate a Video via Web Interface
 
-```python
-import asyncio
-from workers.runway_orchestrator import create_and_run_job
+1. Navigate to `/generate`
+2. Enter your prompt
+3. Configure video settings (duration, resolution, fps)
+4. Click "Générer"
+5. Track progress at `/jobs/[jobId]`
+6. View final video with audio when complete
 
-async def main():
-    result = await create_and_run_job(
-        user_id="user_123",
-        prompt="Create a video about AI innovations in 2024"
-    )
-    
-    if result['status'] == 'success':
-        print(f"Video ready: {result['video_url']}")
-    else:
-        print(f"Error: {result['error']}")
-
-asyncio.run(main())
-```
-
-### Generate a Video via CLI
+### Generate a Video via API
 
 ```bash
-cd workers
-python -m workers.runway_orchestrator "Your prompt here"
+curl -X POST https://your-app.com/api/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Create a video about AI innovations in 2024",
+    "duration_sec": 60,
+    "resolution": "1920x1080",
+    "fps": 24
+  }'
 ```
 
 ### Check Job Status (SQL)
@@ -217,13 +178,13 @@ alphogenai-mini/
 │   ├── notes/                   # Notes feature (demo)
 │   └── uploads/                 # File upload feature (demo)
 ├── workers/                      # Python async orchestrator
-│   ├── runway_orchestrator.py   # Main workflow (Runway)
-│   ├── runway_service.py        # Runway Gen-4 API wrapper
-│   ├── qwen_mock_service.py     # Mock script generator
-│   ├── music_selector.py        # Music selection logic
-│   ├── supabase_client.py       # Database client (jobs table)
 │   ├── worker.py                # Background job processor
-│   └── README.md                # Worker documentation
+│   ├── svi_client.py            # SVI video generation client
+│   ├── audio_orchestrator.py   # Audio generation orchestrator
+│   ├── budget_guard.py          # Cost control and budget guards
+│   ├── supabase_client.py       # Database client (jobs table)
+│   ├── config.py                # Configuration management
+│   └── app.py                   # FastAPI assembly service
 ├── components/                   # React UI components
 ├── lib/                         # Utilities
 ├── supabase/
@@ -278,7 +239,7 @@ Deploy to any platform that supports Python:
 1. **Frontend** - Add pages in `app/` directory
 2. **API Routes** - Create in `app/api/` directory
 3. **Components** - Add to `components/` directory
-4. **Worker Logic** - Modify `workers/runway_orchestrator.py`
+4. **Worker Logic** - Modify `workers/worker.py` or orchestrators
 
 ### Testing
 
@@ -309,9 +270,9 @@ AlphoGenAI Mini uses a hybrid architecture:
 - **Frontend**: Next.js 15 with Server Components
 - **Backend**: Next.js API Routes + Python Workers
 - **Database**: Supabase (PostgreSQL with RLS)
-- **Storage**: Supabase Storage (music files)
+- **Storage**: Supabase Storage + Cloudflare R2
 - **Orchestration**: Async Python worker
-- **AI Services**: Runway Gen-4 Turbo (text-to-video)
+- **AI Services**: SVI (text-to-video) + AudioLDM2 (text-to-audio)
 
 ## Contributing
 
@@ -340,7 +301,7 @@ Music is automatically selected based on video tone and downloaded directly from
 Built with:
 - [Next.js](https://nextjs.org/)
 - [Supabase](https://supabase.com/)
-- [Runway Gen-4 Turbo](https://runwayml.com/)
+- [Runpod](https://runpod.io/) - SVI and Audio endpoints
 - [shadcn/ui](https://ui.shadcn.com/)
 - [Tailwind CSS](https://tailwindcss.com/)
 

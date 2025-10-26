@@ -1,6 +1,6 @@
 """
-Prompt utilities for Runway API compliance
-Ensures all prompts stay under 1000-character limit
+Prompt utilities for video generation API compliance
+Ensures all prompts stay under reasonable character limits
 """
 import json
 import re
@@ -31,7 +31,7 @@ def _squash_whitespace(text: str) -> str:
 
 def shorten_prompt(text: str, max_len: int = MAX_PROMPT_LENGTH) -> str:
     """
-    Sanitize and truncate prompt to fit Runway API limits
+    Sanitize and truncate prompt to fit video generation API limits
     
     Args:
         text: Raw prompt text
