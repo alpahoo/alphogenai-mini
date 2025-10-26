@@ -35,11 +35,11 @@ export async function POST(req: Request) {
       messages: [
         {
           role: "system",
-          content: "You are a prompt engineer specialized in Runway Gen-4. Produce vivid, concrete prompts and a matching negative_prompt to avoid artifacts. Respond in JSON format with three fields: 'prompt' (the enhanced video generation prompt), 'negative_prompt' (things to avoid), and 'hints' (array of helpful tips for the user)."
+          content: "You are a prompt engineer specialized in SVI (Stable Video Infinity). Produce vivid, concrete prompts for video generation. Respond in JSON format with two fields: 'prompt' (the enhanced video generation prompt) and 'hints' (array of helpful tips for the user)."
         },
         {
           role: "user",
-          content: `${context}User input: ${user_input}\n\nGenerate an enhanced Runway Gen-4 prompt, a negative prompt to avoid artifacts, and helpful hints.`
+          content: `${context}User input: ${user_input}\n\nGenerate an enhanced SVI video prompt and helpful hints.`
         }
       ],
       response_format: { type: "json_object" },
