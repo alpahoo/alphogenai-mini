@@ -19,10 +19,16 @@ class Settings(BaseSettings):
         """Get Supabase service key with fallback"""
         return self.SUPABASE_SERVICE_ROLE_KEY or self.SUPABASE_SERVICE_KEY or ""
     
-    RUNWAY_API_KEY: str
+    SVI_ENDPOINT_URL: Optional[str] = None
+    
+    AUDIO_BACKEND_URL: Optional[str] = None
+    AUDIO_MODE: str = "auto"
+    CLAP_ENABLE: bool = True
+    
+    RUNWAY_API_KEY: Optional[str] = None
     RUNWAY_API_BASE: str = "https://api.runwayml.com/v1"
     
-    OPENAI_API_KEY: str
+    OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o-mini"
     
     QWEN_MOCK_ENABLED: bool = True

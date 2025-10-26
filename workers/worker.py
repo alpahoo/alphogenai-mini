@@ -8,7 +8,8 @@ from datetime import datetime
 from typing import Optional
 
 from .supabase_client import SupabaseClient
-from .runway_orchestrator import RunwayOrchestrator
+from .svi_client import SVIClient
+from .audio_orchestrator import AudioOrchestrator
 from .config import get_settings
 
 
@@ -18,7 +19,8 @@ class AlphogenAIWorker:
     def __init__(self, poll_interval: int = 10):
         self.settings = get_settings()
         self.supabase = SupabaseClient()
-        self.orchestrator = RunwayOrchestrator()
+        self.svi_client = SVIClient() if self.settings.SVI_ENDPOINT_URL else None
+        self.audio_orchestrator = AudioOrchestrator() if self.settings.AUDIO_BACKEND_URL else None
         self.poll_interval = poll_interval
         self.running = False
         self.current_job_id: Optional[str] = None
@@ -96,21 +98,57 @@ class AlphogenAIWorker:
                 {}
             )
             
-            app_state = job.get("app_state", {})
-            source_job_id = app_state.get("source_job_id")
+            video_url = None
+            if self.svi_client:
+                print("🎬 Génération vidéo avec SVI...")
+                video_result = self.svi_client.generate_video(
+                    prompt=job["prompt"],
+                    duration_sec=60,
+                    resolution="1920x1080",
+                    fps=24
+                )
+                video_url = video_result.get("video_url")
+                print(f"✅ Vidéo générée: {video_url}")
+                
+                await self.supabase.update_job_state(
+                    job["id"],
+                    app_state={"stage": "video_generated"},
+                    video_url=video_url,
+                    current_stage="video_generated"
+                )
             
-            result = await self.orchestrator.run(
-                job_id=job["id"],
-                user_id=job["user_id"],
-                prompt=job["prompt"],
-                source_job_id=source_job_id
+            # Generate audio with Audio Orchestrator
+            audio_url = None
+            output_url_final = video_url
+            if self.audio_orchestrator and video_url and self.settings.AUDIO_MODE == "auto":
+                print("🎵 Génération audio...")
+                audio_result = await self.audio_orchestrator.process_audio(
+                    job_id=job["id"],
+                    video_url=video_url,
+                    prompt=job["prompt"],
+                    duration=60.0
+                )
+                audio_url = audio_result.get("audio_url")
+                output_url_final = audio_result.get("output_url_final", video_url)
+                audio_score = audio_result.get("audio_score", 0.0)
+                print(f"✅ Audio généré: {audio_url} (score: {audio_score:.3f})")
+            
+            await self.supabase.update_job_state(
+                job["id"],
+                app_state={"stage": "completed"},
+                status="done",
+                video_url=video_url,
+                audio_url=audio_url,
+                output_url_final=output_url_final,
+                final_url=output_url_final,
+                current_stage="completed"
             )
             
-            if result["status"] == "success":
-                print(f"\n✅ Job {job['id']} terminé avec succès!")
-                print(f"Vidéo: {result.get('video_url', 'N/A')}\n")
-            else:
-                print(f"\n❌ Job {job['id']} échoué: {result.get('error', 'Erreur inconnue')}\n")
+            print(f"\n✅ Job {job['id']} terminé avec succès!")
+            print(f"Vidéo: {video_url}")
+            if audio_url:
+                print(f"Audio: {audio_url}")
+            print(f"Final: {output_url_final}\n")
             
         except Exception as e:
             print(f"\n❌ Job {job['id']} échoué avec exception: {str(e)}\n")
