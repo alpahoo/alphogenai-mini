@@ -60,11 +60,11 @@ async def health_check():
 @app.post("/assemble/reuse")
 async def assemble_reuse(req: AssembleRequest, request: Request):
     """
-    Assemble video from existing clip URLs without any Runway API calls
+    Assemble video from existing clip URLs
     
     This endpoint:
     1. Fetches job from database
-    2. Extracts existing clip URLs from app_state.runway_tasks
+    2. Extracts existing clip URLs from app_state
     3. Downloads and concatenates clips with FFmpeg
     4. Adds music overlay from external URL
     5. Returns MP4 as binary response (no storage upload)
@@ -100,15 +100,18 @@ async def assemble_reuse(req: AssembleRequest, request: Request):
             )
         
         app_state = job.get("app_state", {})
-        runway_tasks = app_state.get("runway_tasks", {})
+        video_clips = app_state.get("video_clips", {})
         
-        if not runway_tasks:
+        if not video_clips:
+            video_clips = app_state.get("runway_tasks", {})
+        
+        if not video_clips:
             raise HTTPException(
                 status_code=400,
-                detail="Job has no runway_tasks in app_state"
+                detail="Job has no video_clips in app_state"
             )
         
-        scene_keys = sorted(runway_tasks.keys(), key=lambda x: int(x.replace("scene_", "")))
+        scene_keys = sorted(video_clips.keys(), key=lambda x: int(x.replace("scene_", "")))
         
         if req.clip_indices:
             if any(i >= len(scene_keys) for i in req.clip_indices):
@@ -120,7 +123,7 @@ async def assemble_reuse(req: AssembleRequest, request: Request):
         
         clip_urls = []
         for scene_key in scene_keys:
-            scene_data = runway_tasks[scene_key]
+            scene_data = video_clips[scene_key]
             video_url = scene_data.get("video_url")
             if not video_url:
                 raise HTTPException(
