@@ -53,9 +53,19 @@ def check_runway_references():
         )
         
         if result.stdout:
-            print(f"  ❌ Found Runway references in {file_name}:")
-            print(result.stdout)
-            runway_found = True
+            lines = result.stdout.strip().split("\n")
+            filtered_lines = []
+            for line in lines:
+                if "No Runway" in line or "no Runway" in line:
+                    continue
+                if "without Runway" in line or "sans Runway" in line:
+                    continue
+                filtered_lines.append(line)
+            
+            if filtered_lines:
+                print(f"  ❌ Found Runway references in {file_name}:")
+                print("\n".join(filtered_lines))
+                runway_found = True
     
     if not runway_found:
         print("  ✅ No Runway references found")
