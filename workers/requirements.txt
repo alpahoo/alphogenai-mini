@@ -31,3 +31,7 @@ tenacity>=8.2.0
 
 # OpenAI for script generation
 openai>=1.0.0
+
+# Web server for assembly endpoint
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0

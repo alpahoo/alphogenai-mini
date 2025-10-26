@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     
     CLIP_DURATION: int = 10  # Duration per clip in seconds (6-10)
     
+    NO_STORAGE_UPLOAD: bool = False
+    MUSIC_SOURCE: str = "external"
+    ASSEMBLER_SHARED_SECRET: Optional[str] = None
+    PORT: int = 8000
+    
     class Config:
         env_file = ".env.local"
         case_sensitive = True
