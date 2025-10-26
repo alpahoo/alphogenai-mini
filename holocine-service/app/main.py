@@ -85,6 +85,14 @@ async def generate(req: GenerateRequest) -> GenerateResponse:
             if sb:
                 sb.set_running(job_id)
 
+            def on_progress(p: float) -> None:
+                try:
+                    jobs_status[job_id] = StatusResponse(status="running", progress=max(0.0, min(1.0, p)))
+                    if sb:
+                        sb.set_progress(job_id, p)
+                except Exception:
+                    pass
+
             vr = generate_video(
                 cfg=cfg,
                 global_caption=req.global_caption,
@@ -92,6 +100,7 @@ async def generate(req: GenerateRequest) -> GenerateResponse:
                 num_frames=num_frames,
                 mode=mode,
                 seed=req.seed,
+                on_progress=on_progress,
             )
 
             # Upload to R2

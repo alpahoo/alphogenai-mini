@@ -54,6 +54,13 @@ docker compose up --build
 # Open http://localhost:8000/docs
 ```
 
+For smoke tests without full model setup, enable a fake MP4 output:
+
+```bash
+export ALLOW_FAKE_OUTPUT=1
+docker compose up --build
+```
+
 ## API
 
 ```http
@@ -73,6 +80,10 @@ GET /status/{job_id}
 GET /healthz
 → GPU/VRAM, torch/cuda, flash_attn version, license, checkpoints
 ```
+
+Notes:
+- Inference timeout is controlled via `INFERENCE_TIMEOUT_S` (default 720s). On timeout, job returns error.
+- When real generation is enabled (no `ALLOW_FAKE_OUTPUT`), a wrapper script `/app/scripts/run_holocine.py` is invoked with the configured timeout.
 
 ## Runpod
 

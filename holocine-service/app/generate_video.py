@@ -4,7 +4,9 @@ import os
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
+import subprocess
+import shlex
 
 import torch
 
@@ -64,6 +66,7 @@ def generate_video(
     num_frames: int,
     mode: str,
     seed: Optional[int],
+    on_progress: Optional[Callable[[float], None]] = None,
 ) -> VideoResult:
     ensure_vram(cfg, mode, num_frames)
 
@@ -80,13 +83,46 @@ def generate_video(
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
 
+    # Progress: start
+    if on_progress:
+        try:
+            on_progress(0.05)
+        except Exception:
+            pass
+
     if cfg.allow_fake_output:
         local_path = _fake_generate(cfg, global_caption, num_frames)
     else:
-        # Placeholder: integrate HoloCine pipeline here
-        # Load WAN 2.2 + HoloCine models, assemble pipeline, generate frames/video
-        # Write MP4 to cfg.outputs_path and set local_path
-        local_path = _fake_generate(cfg, global_caption, num_frames)
+        # Attempt to run external HoloCine wrapper with timeout
+        os.makedirs(cfg.outputs_path, exist_ok=True)
+        out_path = os.path.join(cfg.outputs_path, f"{uuid.uuid4()}.mp4")
+        cmd = (
+            f"python3 /app/scripts/run_holocine.py"
+            f" --caption {shlex.quote(global_caption)}"
+            f" --num-frames {int(num_frames)}"
+            f" --mode {shlex.quote(mode)}"
+            f" --output {shlex.quote(out_path)}"
+        )
+        if seed is not None:
+            cmd += f" --seed {int(seed)}"
+
+        env = os.environ.copy()
+        env["CHECKPOINTS_PATH"] = cfg.checkpoints_path
+        env["OUTPUTS_PATH"] = cfg.outputs_path
+
+        try:
+            subprocess.run(
+                cmd,
+                shell=True,
+                check=True,
+                timeout=max(60, int(cfg.inference_timeout_s)),
+                env=env,
+            )
+            local_path = out_path
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(f"inference timed out after {cfg.inference_timeout_s}s") from e
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError("inference process failed") from e
 
     elapsed = time.time() - start
     vram_peak_gb = 0.0
@@ -94,6 +130,14 @@ def generate_video(
         vram_peak_gb = torch.cuda.max_memory_allocated() / (1024 ** 3)
 
     vr = VideoResult(job_id=str(uuid.uuid4()), local_path=local_path, time_s=elapsed, vram_peak_gb=vram_peak_gb)
+
+    # Progress: end
+    if on_progress:
+        try:
+            on_progress(0.9)
+        except Exception:
+            pass
+
     logger.info(
         "generated",
         extra={

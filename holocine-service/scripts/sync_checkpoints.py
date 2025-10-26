@@ -40,7 +40,8 @@ def main() -> int:
         logger.info("R2 sync failed, fallback HF", extra={"error": str(e)})
 
     # Fallback: delegate to upstream script if available
-    script_path = os.path.join(os.getcwd(), "scripts", "download_checkpoints.py")
+    # Try HoloCine repo's script if available
+    script_path = os.path.join("/app", "HoloCine", "scripts", "download_checkpoints.py")
     if os.path.isfile(script_path):
         logger.info("Running upstream download_checkpoints.py")
         # We avoid importing to keep same behavior; run as module
