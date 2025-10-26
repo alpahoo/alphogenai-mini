@@ -1,0 +1,65 @@
+name: build-and-deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      smoke:
+        description: "Run smoke test after deploy"
+        required: false
+        default: "false"
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./holocine-service
+          push: true
+          tags: ghcr.io/${{ github.repository }}/holocine-service:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-runpod:
+    needs: build
+    runs-on: ubuntu-22.04
+    if: ${{ success() }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Deploy/Update Runpod Serverless
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          IMAGE: ghcr.io/${{ github.repository }}/holocine-service:latest
+        run: |
+          pip install httpx
+          python holocine-service/scripts/deploy_runpod.py

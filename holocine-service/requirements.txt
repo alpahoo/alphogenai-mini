@@ -1,0 +1,13 @@
+fastapi==0.115.2
+uvicorn[standard]==0.31.1
+pydantic==1.10.18
+boto3==1.35.36
+supabase==2.9.1
+httpx==0.27.2
+python-dotenv==1.0.1
+runpod==1.5.6
+numpy==1.26.4
+torch==2.4.1+cu121 --extra-index-url https://download.pytorch.org/whl/cu121
+# FlashAttention: prefer prebuilt; allow optional failure at build time
+# pip will try; we can handle absence at runtime
+flash-attn==2.6.3

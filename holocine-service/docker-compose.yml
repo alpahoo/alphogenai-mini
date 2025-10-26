@@ -1,0 +1,29 @@
+version: "3.9"
+services:
+  holocine:
+    build: .
+    image: ghcr.io/alphogenai/holocine-service:latest
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CHECKPOINTS_PATH=/checkpoints
+      - OUTPUTS_PATH=/outputs
+      - LICENSE_MODE=${LICENSE_MODE:-research}
+      - AUTO_DOWNLOAD=${AUTO_DOWNLOAD:-0}
+      - DEFAULT_MODE=${DEFAULT_MODE:-sparse}
+      - DEFAULT_NUM_FRAMES=${DEFAULT_NUM_FRAMES:-121}
+      - INFERENCE_TIMEOUT_S=${INFERENCE_TIMEOUT_S:-720}
+      - SUPABASE_URL
+      - SUPABASE_SERVICE_ROLE_KEY
+      - R2_ACCOUNT_ID
+      - R2_ACCESS_KEY_ID
+      - R2_SECRET_ACCESS_KEY
+      - R2_ENDPOINT_URL
+      - R2_BUCKET_MODELS
+      - R2_BUCKET_OUTPUTS
+      - R2_PUBLIC_BASE_URL
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/checkpoints:/checkpoints
+      - ./data/outputs:/outputs
