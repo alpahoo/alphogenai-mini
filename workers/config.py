@@ -25,9 +25,6 @@ class Settings(BaseSettings):
     AUDIO_MODE: str = "auto"
     CLAP_ENABLE: bool = True
     
-    RUNWAY_API_KEY: Optional[str] = None
-    RUNWAY_API_BASE: str = "https://api.runwayml.com/v1"
-    
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o-mini"
     
