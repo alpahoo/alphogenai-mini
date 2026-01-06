@@ -2,11 +2,11 @@
 
 ## ✅ État actuel (main)
 
-### Pipeline
-- **Vidéo**: **SVI (Stable Video Infinity)** via endpoint Runpod (`SVI_ENDPOINT_URL`)
-- **Audio**: **Audio Ambience Service** (AudioLDM2 + CLAP, Diff-Foley optionnel) via (`AUDIO_BACKEND_URL`)
-- **Mix**: normalisation **-16 LUFS** + intégration audio dans la vidéo (service audio)
-- **Persistance**: Supabase Postgres (`jobs` + `video_cache`) + Supabase Storage / R2
+### Pipeline (V1 — stable)
+- **Vidéo**: **Modal** (serverless) via `MODAL_VIDEO_ENDPOINT_URL`
+- **Local/CI**: **MockBackend** (mp4 dummy 1s + upload Supabase) via `VIDEO_BACKEND=mock`
+- **Audio**: ❌ désactivé (pas d’audio pour l’instant)
+- **Persistance**: Supabase Postgres (`jobs` + `video_cache`) + Supabase Storage (bucket `generated`, public read)
 - **Traitement**: worker Python (poll `jobs.status=pending`)
 
 ### Flux utilisateur (canonique)
@@ -14,20 +14,18 @@
 2. **Suivi**: `/jobs/[id]` (poll `GET /api/jobs/[id]`)
 3. **Worker**:
    - cache HIT (table `video_cache`) → job `done` immédiatement
-   - sinon génération SVI → audio → mix → upload → job `done`
+   - sinon génération vidéo via backend (Modal ou Mock) → job `done`
 
 ### Statuts & champs DB
 - **status**: `pending` | `in_progress` | `done` | `failed` | `cancelled`
 - **URLs**:
   - `video_url`: vidéo générée (source)
-  - `audio_url`: audio généré (optionnel)
-  - `output_url_final`: vidéo finale (audio intégré si activé)
+  - `output_url_final`: vidéo finale (MP4 publique)
   - `final_url`: alias historique (souvent = `output_url_final`)
 
 ### Variables d’environnement (minimum)
 - **Supabase**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (ou `SUPABASE_SERVICE_KEY`)
-- **Runpod**: `RUNPOD_API_KEY`, `SVI_ENDPOINT_URL`, `AUDIO_BACKEND_URL`
-- **Audio (optionnel)**: `AUDIO_MODE=auto|off`, `AUDIO_MOCK=true|false`, `CLAP_ENABLE=true|false`
+- **Video**: `VIDEO_BACKEND=mock|modal`, `MODAL_VIDEO_ENDPOINT_URL` (si modal), `SUPABASE_BUCKET=generated`
 
 ### Remarque importante (nettoyage)
-- Une partie des anciens fichiers `.md` décrivent un **pipeline legacy** (Qwen/WAN/Pika/ElevenLabs/Remotion). Ils seront **archivés / marqués comme obsolètes** au profit de ce status + `README.md`.
+- Tout ce qui est historique/expérimental a été déplacé dans `legacy/` (non utilisé).

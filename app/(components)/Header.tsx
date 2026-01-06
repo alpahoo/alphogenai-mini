@@ -6,8 +6,7 @@ export default async function Header() {
   const githubUrl = process.env.NEXT_PUBLIC_GITHUB_URL;
   
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const isAdmin = user?.user_metadata?.role === 'admin';
+  await supabase.auth.getUser();
 
   return (
     <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800">
@@ -25,20 +24,11 @@ export default async function Header() {
           {/* Navigation */}
           <nav className="flex items-center gap-4">
             <Link
-              href="/creator/generate"
+              href="/generate"
               className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all shadow-sm hover:shadow-md"
             >
               Générer
             </Link>
-
-            {isAdmin && (
-              <Link
-                href="/admin/jobs"
-                className="text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 font-medium transition-colors"
-              >
-                Jobs
-              </Link>
-            )}
 
             <AuthButton />
 

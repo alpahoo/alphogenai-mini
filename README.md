@@ -1,11 +1,11 @@
 <h1 align="center">AlphoGenAI Mini</h1>
 
 <p align="center">
- AI-powered video generation SaaS built with Next.js, Supabase, and LangGraph
+ AI-powered video generation SaaS built with Next.js, Supabase, and a Python worker
 </p>
 
 <p align="center">
-  <strong>SVI (Stable Video Infinity)</strong> → <strong>Audio (AudioLDM2/CLAP)</strong> → <strong>Mix (-16 LUFS)</strong>
+  <strong>UI</strong> → <strong>Jobs</strong> → <strong>Worker</strong> → <strong>Modal Video Backend</strong> → <strong>Storage</strong> → <strong>Playback</strong>
 </p>
 
 <p align="center">
@@ -21,16 +21,15 @@
 ## Features
 
 ### 🎬 AI Video Generation Pipeline
-- **SVI (Stable Video Infinity)** - Text-to-video generation on Runpod A100 80GB
-- **AudioLDM2** - Text-to-audio generation with CLAP scoring
-- **Audio Mixing** - ffmpeg-based audio/video mixing with normalization
+- **Single Video Backend (Modal)** - one happy path, no experimental backends
+- **MockBackend by default (local/CI)** - uploads a 1s dummy MP4 to validate plumbing
+- **Supabase Storage (public read)** - bucket `generated` (V1)
 
 ### 🔄 Simplified Orchestration
-- **Async Workflow** - Minimal worker with direct job processing
+- **Worker = brain** - minimal orchestration, no video generation in Next.js
 - **Job Persistence** - Supabase-backed job tracking
-- **Smart Caching** - Avoid regenerating identical videos
+- **Smart Caching** - Avoid regenerating identical videos (hash includes prompt + params)
 - **Retry Logic** - Robust error handling
-- **Webhook Notifications** - Optional real-time updates
 
 ### 🔐 Full-Stack Foundation
 - **Next.js 15** - App Router, Server Components, API Routes
@@ -50,11 +49,9 @@
 1. **User submits a prompt** via `/generate` (auth)
 2. **Job created** in Supabase (`jobs.status=pending`)
 3. **Worker** processes:
-   - cache lookup (`video_cache` via SHA-256(prompt))
-   - SVI generates video (duration/resolution/fps from `jobs.app_state`)
-   - audio service generates audio + CLAP selection
-   - audio service mixes audio into video (target -16 LUFS)
-   - worker updates `jobs` (`video_url`, `audio_url`, `output_url_final`, `final_url`)
+   - cache lookup (`video_cache` via SHA-256(stable JSON: prompt+duration+fps+resolution+seed))
+   - video generation via **Modal backend** (or MockBackend locally)
+   - worker updates `jobs` (`output_url_final`, `final_url`)
 4. **User tracks progress** at `/jobs/[id]` (polling)
 
 ## Quick Start
@@ -64,7 +61,7 @@
 - Node.js 18+ and npm
 - Python 3.9+ and pip
 - Supabase account ([create one here](https://database.new))
-- Runpod account with SVI and Audio endpoints deployed
+- Modal account (for production video backend)
 
 ### 2. Clone and Install
 
@@ -95,9 +92,9 @@ Required variables:
 - `NEXT_PUBLIC_SUPABASE_URL` - Your Supabase project URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anonymous key
 - `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
-- `RUNPOD_API_KEY` - Your Runpod API key
-- `SVI_ENDPOINT_URL` - SVI endpoint URL (e.g., https://xxx.api.runpod.ai/)
-- `AUDIO_BACKEND_URL` - Audio service endpoint URL (e.g., https://xxx.api.runpod.ai/)
+- `SUPABASE_BUCKET` - Storage bucket (default: `generated`)
+- `VIDEO_BACKEND` - `mock` (default local/CI) or `modal` (production)
+- `MODAL_VIDEO_ENDPOINT_URL` - Modal web endpoint URL (required when `VIDEO_BACKEND=modal`)
 
 ### 4. Run Database Migrations
 
@@ -106,7 +103,7 @@ Open your [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql) an
 ```sql
 -- File: supabase/migrations/20251002_add_notes.sql (notes table)
 -- File: supabase/migrations/20251004_jobs_table.sql (jobs table avec app_state)
--- File: supabase/migrations/20251026_add_audio_ambience_columns.sql (audio columns)
+-- File: supabase/migrations/20260106_create_generated_bucket.sql (Storage bucket "generated" public read)
 ```
 
 ### 5. Start the Application
@@ -129,11 +126,10 @@ The app will be available at [http://localhost:3000](http://localhost:3000)
 ### 6. Verify Setup
 
 ```bash
-cd workers
-python -m workers.test_setup
+python3 tools/e2e_test_v1.py
 ```
 
-This will verify all API keys and database tables are configured correctly.
+This will create a job, run the worker once, and verify the final MP4 URL is accessible.
 
 ## Usage
 
@@ -144,7 +140,7 @@ This will verify all API keys and database tables are configured correctly.
 3. Configure video settings (duration, resolution, fps)
 4. Click "Générer"
 5. Track progress at `/jobs/[id]`
-6. View final video with audio when complete
+6. View final video when complete
 
 ### Generate a Video via API
 
@@ -175,16 +171,15 @@ alphogenai-mini/
 ├── app/                          # Next.js App Router
 │   ├── api/                     # API routes
 │   ├── auth/                    # Authentication pages
-│   ├── notes/                   # Notes feature (demo)
-│   └── uploads/                 # File upload feature (demo)
+│   └── generate/                # Video generation UI
 ├── workers/                      # Python async orchestrator
 │   ├── worker.py                # Background job processor
-│   ├── svi_client.py            # SVI video generation client
-│   ├── audio_orchestrator.py   # Audio generation orchestrator
-│   ├── budget_guard.py          # Cost control and budget guards
+│   ├── video_backend/           # VideoBackend (mock|modal)
 │   ├── supabase_client.py       # Database client (jobs table)
 │   ├── config.py                # Configuration management
-│   └── app.py                   # FastAPI assembly service
+│   └── requirements.txt
+├── services/
+│   └── video_modal/             # Modal video backend (serverless)
 ├── components/                   # React UI components
 ├── lib/                         # Utilities
 ├── supabase/
@@ -206,8 +201,7 @@ alphogenai-mini/
 - `error_message` - Error details if failed
 - `retry_count` - Number of retry attempts
 - `video_url` - Generated video URL (source)
-- `audio_url` - Generated audio URL (optional)
-- `output_url_final` - Final mixed video URL (audio integrated when enabled)
+- `output_url_final` - Final video URL (public MP4)
 - `final_url` - Legacy alias (usually equals `output_url_final`)
 - `created_at` - Job creation timestamp
 - `updated_at` - Last update timestamp
@@ -251,9 +245,8 @@ Deploy to any platform that supports Python:
 npm run lint
 npm run build
 
-# Worker
-cd workers
-python -m pytest tests/
+# E2E (no GPU, MockBackend)
+python3 tools/e2e_test_v1.py
 ```
 
 ## Troubleshooting
@@ -273,9 +266,9 @@ AlphoGenAI Mini uses a hybrid architecture:
 - **Frontend**: Next.js 15 with Server Components
 - **Backend**: Next.js API Routes + Python Workers
 - **Database**: Supabase (PostgreSQL with RLS)
-- **Storage**: Supabase Storage + Cloudflare R2
+- **Storage**: Supabase Storage (bucket `generated`, public read in V1)
 - **Orchestration**: Async Python worker
-- **AI Services**: SVI (text-to-video) + AudioLDM2 (text-to-audio)
+- **AI Services**: Modal video backend (serverless)
 
 ## Contributing
 
@@ -290,21 +283,12 @@ Contributions are welcome! Please:
 
 MIT License - feel free to use this project for your own purposes.
 
-## Music Attribution
-
-Background music provided by:
-- **Kevin MacLeod** ([incompetech.com](https://incompetech.com))
-- Licensed under Creative Commons: By Attribution 4.0 License
-- All music tracks are royalty-free and available for commercial use
-
-Music is automatically selected based on video tone and downloaded directly from incompetech.com during video generation.
-
 ## Acknowledgments
 
 Built with:
 - [Next.js](https://nextjs.org/)
 - [Supabase](https://supabase.com/)
-- [Runpod](https://runpod.io/) - SVI and Audio endpoints
+- [Modal](https://modal.com/) - video backend (serverless)
 - [shadcn/ui](https://ui.shadcn.com/)
 - [Tailwind CSS](https://tailwindcss.com/)
 

@@ -38,13 +38,15 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
     setPolling(true);
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/generate-video?id=${job.id}`);
+        const res = await fetch(`/api/jobs/${job.id}`);
         if (res.ok) {
           const data = await res.json();
-          setJob(data);
+          // /api/jobs/[id] returns { success, job }
+          setJob(data.job ?? data);
           
           // Arrêter le polling si terminé
-          if (data.status === "done" || data.status === "failed") {
+          const status = (data.job ?? data).status;
+          if (status === "done" || status === "failed") {
             setPolling(false);
             clearInterval(interval);
             router.refresh();

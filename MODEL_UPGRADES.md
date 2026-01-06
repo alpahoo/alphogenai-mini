@@ -1,31 +1,26 @@
-# Model upgrades (2026+) — guide pratique
+# Model upgrades (2026+) — guide pratique (Modal only)
 
 Ce projet est conçu pour **changer de modèles sans casser l’app** en conservant des **contrats d’API stables**.
 
 ## Principe
 
-- Le frontend/worker ne “connaît” pas les modèles exacts.
-- Il parle à **2 backends** via HTTP:
-  - **SVI backend** (vidéo): `SVI_ENDPOINT_URL`
-  - **Audio backend** (audio + mix): `AUDIO_BACKEND_URL`
-- Pour passer à des modèles plus récents, tu as 2 options:
-  1. **Remplacer le modèle derrière l’endpoint** (même routes, meilleure perf/qualité).
-  2. **Créer un nouveau backend** + adapter le client (ex: nouveau `*_client.py`) tout en gardant les mêmes champs DB.
+- Le frontend/worker ne “connaît” pas le modèle exact.
+- Il parle à **un seul backend vidéo** via HTTP (Modal) : `MODAL_VIDEO_ENDPOINT_URL`
+- Local/CI: **MockBackend** (même interface) pour tester sans GPU.
 
-## Contrat attendu — Vidéo (SVI backend)
+## Contrat attendu — Vidéo (Modal backend)
 
 Le worker appelle:
-- `POST {SVI_ENDPOINT_URL}/generate_film`
-- `POST {SVI_ENDPOINT_URL}/generate_shot`
-- `GET  {SVI_ENDPOINT_URL}/healthz`
+- `GET  {MODAL_VIDEO_ENDPOINT_URL}/healthz`
+- `POST {MODAL_VIDEO_ENDPOINT_URL}/generate_film`
 
 Payload minimum:
 ```json
 {
   "prompt": "…",
+  "fps": 24,
   "duration": 60,
   "resolution": "1920x1080",
-  "fps": 24,
   "seed": 42
 }
 ```
@@ -33,54 +28,23 @@ Payload minimum:
 Réponse attendue:
 ```json
 {
-  "video_url": "https://…/video.mp4",
-  "metadata": { "model": "…", "latency_sec": 123 }
+  "video_url": "https://…/video.mp4"
 }
 ```
 
-Si tu changes de modèle (ex: SVI vNext, Wan2.x, HunyuanVideo, etc.), l’idéal est de **conserver cette shape**.
-
-## Contrat attendu — Audio (Audio backend)
-
-Le worker appelle:
-- `POST {AUDIO_BACKEND_URL}/audio/audioldm2`
-- `POST {AUDIO_BACKEND_URL}/audio/difffoley` (optionnel)
-- `POST {AUDIO_BACKEND_URL}/audio/clap/select`
-- `POST {AUDIO_BACKEND_URL}/video/mix` (obligatoire pour produire `output_url_final`)
-- `GET  {AUDIO_BACKEND_URL}/healthz`
-
-Objectif: produire une **vidéo finale avec audio intégré**.
-
-Payload du mix:
-```json
-{
-  "video_url": "https://…/video.mp4",
-  "audio_url": "https://…/audio.wav",
-  "target_lufs": -16.0,
-  "mode": "replace"
-}
-```
-
-Réponse attendue:
-```json
-{
-  "output_url_final": "https://…/final.mp4"
-}
-```
+Si tu changes de modèle (ex: SVI vNext, Wan2.x, HunyuanVideo, etc.), le plus simple est de **remplacer le modèle derrière l’endpoint Modal** en conservant cette réponse.
 
 ## Où brancher des modèles plus récents
 
-- **Vidéo**: remplacer le moteur du backend SVI (ou le backend complet) tant que tu renvoies `video_url`.
-- **Audio**:
-  - remplacer AudioLDM2 par un modèle plus récent (ou “music model”),
-  - garder CLAP (ou remplacer par un scorer plus récent),
-  - garder le endpoint `/video/mix` (c’est lui qui garantit la compat “app”).
+- **Vidéo**: intégrer/mettre à jour le modèle dans `services/video_modal/modal_app.py` et garder:
+  - `GET /healthz`
+  - `POST /generate_film` → `{ video_url }`
 
 ## Champs DB à préserver (compat)
 
 Dans `jobs`:
 - `status`, `current_stage`, `error_message`, `retry_count`
-- `video_url`, `audio_url`, `output_url_final`, `final_url`
+- `video_url`, `output_url_final`, `final_url`
 - `app_state` (paramètres + traces d’exécution)
 
 Dans `video_cache`:

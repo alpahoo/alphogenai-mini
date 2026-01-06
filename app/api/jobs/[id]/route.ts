@@ -63,10 +63,11 @@ export async function GET(
         app_state: job.app_state
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in GET /api/jobs/[id]:", error);
+    const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json(
-      { error: error.message || "Internal server error" },
+      { error: message },
       { status: 500 }
     );
   }

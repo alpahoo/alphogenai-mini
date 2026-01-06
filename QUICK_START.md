@@ -1,12 +1,13 @@
-# 🚀 AlphoGenAI Mini — Démarrage rapide
+# 🚀 AlphoGenAI Mini — Démarrage rapide (V1)
 
-Ce dépôt est désormais **SVI (vidéo)** + **Audio Ambience Service (audio + mix)**.
+V1 = **un seul pipeline** + **un seul backend vidéo** (Modal en prod).  
+En local/CI, on utilise **MockBackend** par défaut (mp4 dummy 1s + upload Supabase).
 
 ## Prérequis
 - Node.js 18+
 - Python 3.10+ (pour le worker)
 - Un projet Supabase (DB + Storage)
-- 2 endpoints Runpod: **SVI** + **Audio Service**
+- Un endpoint Modal (prod) OU MockBackend (local/CI)
 
 ## 1) Installation
 
@@ -26,9 +27,11 @@ NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
 
-RUNPOD_API_KEY=...
-SVI_ENDPOINT_URL=https://api.runpod.ai/v2/...
-AUDIO_BACKEND_URL=https://api.runpod.ai/v2/...
+SUPABASE_BUCKET=generated
+VIDEO_BACKEND=mock
+# En prod:
+# VIDEO_BACKEND=modal
+# MODAL_VIDEO_ENDPOINT_URL=https://...
 ```
 
 ## 3) Base de données
@@ -36,7 +39,7 @@ AUDIO_BACKEND_URL=https://api.runpod.ai/v2/...
 Dans Supabase SQL Editor, exécuter :
 ```sql
 -- supabase/migrations/20251004_jobs_table.sql
--- supabase/migrations/20251026_add_audio_ambience_columns.sql
+-- supabase/migrations/20260106_create_generated_bucket.sql
 ```
 
 ## 4) Démarrer
@@ -62,5 +65,5 @@ pip install -r requirements.txt
 3. Suivre le job sur `http://localhost:3000/jobs/<jobId>`
 
 ## Notes
-- **Cache**: le worker déduplique via `video_cache` (SHA-256 du prompt).
-- **Audio**: activer/désactiver via `AUDIO_MODE=auto|off` (et `AUDIO_MOCK=true` en dev).
+- **Cache**: le worker déduplique via `video_cache` (hash stable sur prompt + params).
+- **E2E sans GPU**: `python3 tools/e2e_test_v1.py` (MockBackend).

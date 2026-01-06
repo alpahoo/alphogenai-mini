@@ -1,115 +1,103 @@
-import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import crypto from "crypto";
-
-function getSupabaseServiceClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 
-    process.env.SUPABASE_SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SERVICE_ROLE;
-  
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error("Missing Supabase environment variables");
-  }
-  
-  return createServiceClient(supabaseUrl, supabaseKey);
-}
 
 export async function POST(req: Request) {
   try {
-    const supabase = getSupabaseServiceClient();
-    const { prompt, webhookUrl, source_job_id } = await req.json();
+    // Legacy endpoint kept for backward compatibility.
+    // V1 rule: Next.js does NOT generate videos. It only creates jobs.
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-    if (!prompt || prompt.length < 5)
-      return NextResponse.json({ error: "Prompt required" }, { status: 400 });
-
-    if (source_job_id) {
-      const authClient = await createClient();
-      const { data: { user }, error: authError } = await authClient.auth.getUser();
-
-      if (authError || !user) {
-        return NextResponse.json(
-          { error: "Authentication required to reuse assets" },
-          { status: 401 }
-        );
-      }
-
-      const isAdmin = user.user_metadata?.role === 'admin';
-      if (!isAdmin) {
-        return NextResponse.json(
-          { error: "Admin access required to reuse assets from previous jobs" },
-          { status: 403 }
-        );
-      }
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
     }
 
-    const promptHash = crypto.createHash("sha256").update(prompt).digest("hex");
+    const body = await req.json();
+    const { prompt, duration_sec, resolution, fps, seed } = body;
 
-    // Vérifie le cache
-    const { data: cached } = await supabase
-      .from("video_cache")
-      .select("video_url")
-      .eq("prompt_hash", promptHash)
-      .single();
-
-    if (cached?.video_url) {
-      const { data: job } = await supabase
-        .from("jobs")
-        .insert({
-          prompt,
-          status: "done",
-          final_url: cached.video_url,
-          app_state: { cached: true, prompt, promptHash },
-        })
-        .select()
-        .single();
-
-      return NextResponse.json({
-        jobId: job.id,
-        final_url: cached.video_url,
-        cached: true,
-      });
+    if (!prompt || prompt.length < 3) {
+      return NextResponse.json(
+        { error: "prompt is required (min 3 chars)" },
+        { status: 400 }
+      );
     }
 
-    // Crée un nouveau job
-    const { data: job, error } = await supabase
+    const { data: job, error: insertError } = await supabase
       .from("jobs")
       .insert({
-        prompt,
+        user_id: user.id,
+        prompt: prompt,
         status: "pending",
-        app_state: { 
-          prompt, 
-          promptHash, 
-          cached: false,
-          source_job_id: source_job_id || null
+        app_state: {
+          prompt: prompt,
+          duration_sec: duration_sec || 60,
+          resolution: resolution || "1920x1080",
+          fps: fps || 24,
+          seed: seed ?? null,
+          created_via: "api_generate_video_legacy",
         },
-        webhook_url: webhookUrl || null,
       })
       .select()
       .single();
 
-    if (error) throw error;
-    return NextResponse.json({ jobId: job.id, cached: false });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    if (insertError) {
+      return NextResponse.json({ error: insertError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, jobId: job.id });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
 export async function GET(req: Request) {
-  const supabase = getSupabaseServiceClient();
-  const { searchParams } = new URL(req.url);
-  const id = searchParams.get("id");
-  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+  // Legacy endpoint kept for backward compatibility.
+  // V1 rule: Next.js only reads jobs.
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-  const { data, error } = await supabase
-    .from("jobs")
-    .select()
-    .eq("id", id)
-    .single();
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
+    }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 404 });
-  return NextResponse.json(data);
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+    const { data: job, error } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error || !job) {
+      return NextResponse.json(
+        { error: error?.message || "Job not found" },
+        { status: 404 }
+      );
+    }
+
+    if (job.user_id !== user.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    return NextResponse.json(job);
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

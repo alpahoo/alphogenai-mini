@@ -9,9 +9,8 @@ interface Job {
   status: string;
   current_stage: string | null;
   video_url: string | null;
-  audio_url: string | null;
   output_url_final: string | null;
-  audio_score: number | null;
+  final_url?: string | null;
   error_message: string | null;
   created_at: string;
   updated_at: string;
@@ -24,7 +23,7 @@ export default function JobPage({ params }: { params: { id: string } }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let polling: ReturnType<typeof setInterval> | null = null;
 
     const fetchJob = async () => {
       try {
@@ -39,21 +38,28 @@ export default function JobPage({ params }: { params: { id: string } }) {
         setLoading(false);
 
         if (data.job.status === 'done' || data.job.status === 'failed') {
-          if (interval) clearInterval(interval);
+          if (polling) {
+            clearInterval(polling);
+            polling = null;
+          }
         }
-      } catch (err: any) {
-        setError(err.message || 'Une erreur est survenue');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Une erreur est survenue';
+        setError(message);
         setLoading(false);
-        if (interval) clearInterval(interval);
+        if (polling) {
+          clearInterval(polling);
+          polling = null;
+        }
       }
     };
 
     fetchJob();
 
-    interval = setInterval(fetchJob, 5000);
+    polling = setInterval(fetchJob, 5000);
 
     return () => {
-      if (interval) clearInterval(interval);
+      if (polling) clearInterval(polling);
     };
   }, [params.id]);
 
@@ -65,7 +71,7 @@ export default function JobPage({ params }: { params: { id: string } }) {
         <div className="flex items-center gap-3">
           <div className="animate-spin h-6 w-6 border-4 border-blue-500 border-t-transparent rounded-full"></div>
           <span className="text-lg font-medium text-blue-600 dark:text-blue-400">
-            En file d'attente...
+            En file d’attente...
           </span>
         </div>
       );
@@ -196,55 +202,39 @@ export default function JobPage({ params }: { params: { id: string } }) {
 
           {job.error_message && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-              <h2 className="text-sm font-medium text-red-900 dark:text-red-100 mb-2">Message d'erreur</h2>
+              <h2 className="text-sm font-medium text-red-900 dark:text-red-100 mb-2">Message d’erreur</h2>
               <p className="text-red-600 dark:text-red-400 text-sm">
                 {job.error_message}
               </p>
             </div>
           )}
 
-          {job.status === 'done' && job.output_url_final && (
+          {job.status === 'done' && (job.output_url_final || job.final_url || job.video_url) && (
             <div>
-              <h2 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4">Vidéo finale (avec audio)</h2>
+              <h2 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4">Vidéo finale</h2>
               <video
                 controls
                 className="w-full rounded-lg shadow-lg mb-4"
-                src={job.output_url_final}
+                src={(job.output_url_final || job.final_url || job.video_url) as string}
               >
                 Votre navigateur ne supporte pas la lecture vidéo.
               </video>
               
               <div className="flex gap-3">
                 <a
-                  href={job.output_url_final}
+                  href={(job.output_url_final || job.final_url || job.video_url) as string}
                   download
                   className="flex-1 bg-blue-600 text-white text-center py-3 px-4 rounded-lg hover:bg-blue-700 transition-all font-medium"
                 >
                   📥 Télécharger
                 </a>
                 <button
-                  onClick={() => copyToClipboard(job.output_url_final!)}
+                  onClick={() => copyToClipboard((job.output_url_final || job.final_url || job.video_url) as string)}
                   className="flex-1 bg-slate-600 text-white py-3 px-4 rounded-lg hover:bg-slate-700 transition-all font-medium"
                 >
                   📋 Copier le lien
                 </button>
               </div>
-            </div>
-          )}
-
-          {job.audio_url && (
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <h2 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
-                Audio généré
-                {job.audio_score && (
-                  <span className="ml-2 text-xs">
-                    (Score CLAP: {job.audio_score.toFixed(3)})
-                  </span>
-                )}
-              </h2>
-              <audio controls className="w-full" src={job.audio_url}>
-                Votre navigateur ne supporte pas la lecture audio.
-              </audio>
             </div>
           )}
 

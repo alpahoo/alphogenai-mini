@@ -8,9 +8,8 @@ from datetime import datetime
 from typing import Optional
 
 from .supabase_client import SupabaseClient
-from .svi_client import SVIClient
-from .audio_orchestrator import AudioOrchestrator
 from .config import get_settings
+from .video_backend import VideoRequest, get_video_backend
 
 
 class AlphogenAIWorker:
@@ -19,8 +18,7 @@ class AlphogenAIWorker:
     def __init__(self, poll_interval: int = 10):
         self.settings = get_settings()
         self.supabase = SupabaseClient()
-        self.svi_client = SVIClient() if self.settings.SVI_ENDPOINT_URL else None
-        self.audio_orchestrator = AudioOrchestrator() if self.settings.AUDIO_BACKEND_URL else None
+        self.video_backend = get_video_backend()
         self.poll_interval = poll_interval
         self.running = False
         self.current_job_id: Optional[str] = None
@@ -99,79 +97,64 @@ class AlphogenAIWorker:
                 current_stage="starting",
             )
 
-            # Cache prompt -> video_url final (évite de régénérer)
-            cached = await self.supabase.get_from_cache(job["prompt"])
+            # Lire les paramètres depuis app_state (si fournis par l'API)
+            app_state = job.get("app_state") or {}
+            duration_sec = int(app_state.get("duration_sec") or 60)
+            resolution = str(app_state.get("resolution") or "1920x1080")
+            fps = int(app_state.get("fps") or 24)
+            seed = app_state.get("seed")
+
+            cache_key = self.supabase.compute_cache_key(
+                job["prompt"],
+                duration_sec=duration_sec,
+                fps=fps,
+                resolution=resolution,
+                seed=None if seed is None else int(seed),
+            )
+
+            # Cache prompt + params -> final_url
+            cached = await self.supabase.get_from_cache(cache_key)
             if cached and cached.get("video_url"):
                 cached_url = cached["video_url"]
                 print(f"⚡ Cache HIT: {cached_url}")
                 await self.supabase.update_job_state(
                     job_id=job["id"],
-                    app_state={**(job.get("app_state") or {}), "stage": "cached_hit", "cached": True, "prompt_hash": cached.get("prompt_hash")},
+                    app_state={**app_state, "stage": "cached_hit", "cached": True, "cache_key": cache_key},
                     status="done",
                     current_stage="completed",
                     video_url=cached_url,
                     final_url=cached_url,
-                    output_url_final=cached_url,
                 )
                 print(f"\n✅ Job {job['id']} terminé (cache)!")
                 print(f"Final: {cached_url}\n")
                 return
-            
-            # Lire les paramètres depuis app_state (si fournis par l'API)
-            app_state = job.get("app_state") or {}
-            duration_sec = int(app_state.get("duration_sec") or self.settings.SVI_DURATION_SEC if hasattr(self.settings, "SVI_DURATION_SEC") else 60)
-            resolution = str(app_state.get("resolution") or "1920x1080")
-            fps = int(app_state.get("fps") or 24)
-            seed = app_state.get("seed")
 
-            video_url = None
-            if self.svi_client:
-                print("🎬 Génération vidéo avec SVI...")
-                video_result = self.svi_client.generate_video(
+            print(f"🎬 Génération vidéo via backend='{self.settings.VIDEO_BACKEND}'...")
+            video_url = self.video_backend.generate_video(
+                VideoRequest(
                     prompt=job["prompt"],
                     duration_sec=duration_sec,
-                    resolution=resolution,
                     fps=fps,
-                    seed=seed,
-                    mode=(self.settings.SVI_MODE if hasattr(self.settings, "SVI_MODE") and self.settings.SVI_MODE else "film"),
+                    resolution=resolution,
+                    seed=None if seed is None else int(seed),
                 )
-                video_url = video_result.get("video_url")
-                print(f"✅ Vidéo générée: {video_url}")
-                
-                await self.supabase.update_job_state(
-                    job_id=job["id"],
-                    app_state={**app_state, "stage": "video_generated"},
-                    status="in_progress",
-                    video_url=video_url,
-                    current_stage="video_generated",
-                )
-            
-            # Generate audio with Audio Orchestrator
-            audio_url = None
+            )
             output_url_final = video_url
-            audio_score = None
-            if self.audio_orchestrator and video_url and self.settings.AUDIO_MODE == "auto":
-                print("🎵 Génération audio...")
-                audio_result = await self.audio_orchestrator.process_audio(
-                    job_id=job["id"],
-                    video_url=video_url,
-                    prompt=job["prompt"],
-                    duration=float(duration_sec)
-                )
-                audio_url = audio_result.get("audio_url")
-                output_url_final = audio_result.get("output_url_final", video_url)
-                audio_score = audio_result.get("audio_score")
-                if audio_url:
-                    score_disp = f"{float(audio_score):.3f}" if audio_score is not None else "N/A"
-                    print(f"✅ Audio généré: {audio_url} (score: {score_disp})")
+            print(f"✅ Vidéo générée: {output_url_final}")
+
+            await self.supabase.update_job_state(
+                job_id=job["id"],
+                app_state={**app_state, "stage": "video_generated"},
+                status="in_progress",
+                video_url=output_url_final,
+                current_stage="video_generated",
+            )
             
             await self.supabase.update_job_state(
                 job_id=job["id"],
                 app_state={**app_state, "stage": "completed"},
                 status="done",
-                video_url=video_url,
-                audio_url=audio_url,
-                audio_score=audio_score,
+                video_url=output_url_final,
                 output_url_final=output_url_final,
                 final_url=output_url_final,
                 current_stage="completed",
@@ -180,20 +163,18 @@ class AlphogenAIWorker:
             # Sauvegarder dans le cache (on cache l'output final)
             if output_url_final:
                 await self.supabase.save_to_cache(
-                    prompt=job["prompt"],
+                    cache_key=cache_key,
                     video_url=output_url_final,
                     metadata={
+                        "prompt": job["prompt"],
                         "resolution": resolution,
                         "fps": fps,
                         "duration_sec": duration_sec,
-                        "has_audio": bool(audio_url),
+                        "seed": seed,
                     },
                 )
             
             print(f"\n✅ Job {job['id']} terminé avec succès!")
-            print(f"Vidéo: {video_url}")
-            if audio_url:
-                print(f"Audio: {audio_url}")
             print(f"Final: {output_url_final}\n")
             
         except Exception as e:
@@ -264,18 +245,28 @@ async def main():
     
     poll_interval = 10
     
+    run_once = False
+    if "--once" in sys.argv:
+        run_once = True
+        sys.argv = [a for a in sys.argv if a != "--once"]
+
     if len(sys.argv) > 1:
         try:
             poll_interval = int(sys.argv[1])
         except ValueError:
             print(f"Intervalle invalide: {sys.argv[1]}")
-            print("Usage: python -m workers.worker [intervalle_secondes]")
+            print("Usage: python -m workers.worker [intervalle_secondes] [--once]")
             sys.exit(1)
     
     worker = AlphogenAIWorker(poll_interval=poll_interval)
     
     try:
-        await worker.start()
+        if run_once:
+            worker.running = True
+            await worker._process_pending_jobs()
+            worker.running = False
+        else:
+            await worker.start()
     except KeyboardInterrupt:
         print("\nArrêt en cours...")
         worker.stop()

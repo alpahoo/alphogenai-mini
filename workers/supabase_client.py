@@ -4,6 +4,9 @@ Supabase client pour la persistance des jobs et état LangGraph
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 import hashlib
+import json
+import os
+from pathlib import Path
 from supabase import create_client, Client
 from .config import get_settings
 
@@ -107,16 +110,15 @@ class SupabaseClient:
     
     async def save_to_cache(
         self,
-        prompt: str,
+        cache_key: str,
         video_url: str,
         metadata: Optional[Dict[str, Any]] = None
     ) -> None:
-        """Sauvegarde une vidéo dans le cache avec hash du prompt"""
-        prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
+        """Sauvegarde une vidéo dans le cache avec clé (SHA-256 stable JSON)."""
         
         cache_data = {
-            "prompt": prompt,
-            "prompt_hash": prompt_hash,
+            "prompt": (metadata or {}).get("prompt", ""),
+            "prompt_hash": cache_key,
             "video_url": video_url,
             "metadata": metadata or {},
         }
@@ -124,13 +126,12 @@ class SupabaseClient:
         # Upsert basé sur prompt_hash
         self.client.table("video_cache").upsert(cache_data, on_conflict="prompt_hash").execute()
 
-    async def get_from_cache(self, prompt: str) -> Optional[Dict[str, Any]]:
-        """Récupère une entrée de cache pour un prompt (via SHA-256)."""
-        prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
+    async def get_from_cache(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        """Récupère une entrée de cache par clé (prompt_hash)."""
         result = (
             self.client.table("video_cache")
             .select("video_url, metadata, prompt_hash, created_at")
-            .eq("prompt_hash", prompt_hash)
+            .eq("prompt_hash", cache_key)
             .limit(1)
             .execute()
         )
@@ -143,3 +144,53 @@ class SupabaseClient:
             "metadata": row.get("metadata") or {},
             "created_at": row.get("created_at"),
         }
+
+    def compute_cache_key(
+        self,
+        prompt: str,
+        *,
+        duration_sec: int,
+        fps: int,
+        resolution: str,
+        seed: Optional[int],
+    ) -> str:
+        """
+        Cache key = sha256(stable_json(prompt + parameters)).
+
+        Non-negotiable: must include prompt + duration/fps/resolution/seed.
+        """
+        payload = {
+            "duration_sec": int(duration_sec),
+            "fps": int(fps),
+            "prompt": str(prompt),
+            "resolution": str(resolution),
+            "seed": seed if seed is None else int(seed),
+        }
+        stable = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return hashlib.sha256(stable.encode("utf-8")).hexdigest()
+
+    def upload_video_file(self, *, file_path: str, prefix: str = "videos") -> str:
+        """
+        Upload a local MP4 file to Supabase Storage bucket `generated` and return a public URL.
+
+        V1 rule: bucket is public read. No signed URLs.
+        """
+        bucket_name_str = os.getenv("SUPABASE_BUCKET", "generated")
+
+        p = Path(file_path)
+        if not p.exists():
+            raise FileNotFoundError(file_path)
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        storage_path = f"{prefix}/{timestamp}_{p.name}"
+
+        with open(p, "rb") as f:
+            data = f.read()
+
+        self.client.storage.from_(bucket_name_str).upload(
+            path=storage_path,
+            file=data,
+            file_options={"content-type": "video/mp4"},
+        )
+
+        return self.client.storage.from_(bucket_name_str).get_public_url(storage_path)

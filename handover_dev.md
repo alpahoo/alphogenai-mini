@@ -6,10 +6,9 @@ Ce document est la **source unique** pour reprendre le projet sans doublons.
 
 AlphoGenAI Mini est un **SaaS de génération vidéo** à partir d’un prompt utilisateur, avec:
 - création et suivi de jobs,
-- génération vidéo via backend GPU (SVI),
-- génération audio (AudioLDM2 + CLAP, Diff-Foley optionnel),
-- **mix audio/vidéo** avec normalisation (-16 LUFS),
-- stockage (Supabase Storage, R2 optionnel côté service audio),
+- génération vidéo via backend unique **Modal** (prod),
+- **MockBackend** par défaut en local/CI (mp4 dummy 1s + upload Supabase),
+- stockage (Supabase Storage, bucket `generated` public read),
 - cache par prompt (SHA-256) pour éviter de régénérer.
 
 ## 2) Sources de vérité (à lire en premier)
@@ -17,7 +16,6 @@ AlphoGenAI Mini est un **SaaS de génération vidéo** à partir d’un prompt u
 - `STATUS.txt` — **source de vérité** sur le pipeline actuel
 - `README.md` — vue d’ensemble + quick start
 - `QUICK_START.md` — démarrage local
-- `AUDIO_AMBIENCE_README.md` — détails module audio
 - `MODEL_UPGRADES.md` — stratégie pour upgrader les modèles sans casser l’app
 
 > Beaucoup de `.md` historiques (Qwen/WAN/Pika/ElevenLabs/Remotion/Replicate/Runway) sont **ARCHIVED / LEGACY**. Ils existent pour l’historique mais ne doivent pas guider les décisions.
@@ -31,15 +29,14 @@ AlphoGenAI Mini est un **SaaS de génération vidéo** à partir d’un prompt u
 - **Storage**: Supabase Storage (bucket `generated` par défaut)
 - **Worker**: Python (polling `jobs.status=pending`, orchestration)
 - **Backends IA externes (HTTP)**:
-  - **Vidéo**: SVI via `SVI_ENDPOINT_URL`
-  - **Audio + mix**: audio-service via `AUDIO_BACKEND_URL`
+  - **Vidéo**: Modal via `MODAL_VIDEO_ENDPOINT_URL`
 
 ### Schéma de flux (canonique)
 1. UI: `GET /generate` → `POST /api/jobs` (auth requise) → retourne `jobId`
 2. UI: `GET /jobs/[id]` → polling `GET /api/jobs/[id]`
 3. Worker:
-   - cache lookup (`video_cache` via SHA-256(prompt))
-   - sinon: SVI → audio → `/video/mix` → upload → update `jobs`
+   - cache lookup (`video_cache` via hash stable prompt+params)
+   - sinon: Modal (ou Mock) → update `jobs`
 
 Routes legacy conservées:
 - `GET /creator/generate` → redirection vers `/generate`
@@ -67,52 +64,36 @@ Fichier principal: `workers/worker.py`
 2. **cache**: `video_cache` (SHA-256 du prompt)
    - si HIT → job `done` immédiat (final = cached)
 3. génération vidéo:
-   - appel SVI via `workers/svi_client.py` (`/generate_film` ou `/generate_shot`)
-4. génération audio:
-   - `workers/audio_orchestrator.py` appelle le service audio:
-     - `/audio/audioldm2` (et Diff-Foley optionnel)
-     - `/audio/clap/select`
-     - `/video/mix` → obtient `output_url_final`
-5. update Supabase:
-   - `video_url`, `audio_url`, `audio_score`, `output_url_final`, `final_url`
-6. sauvegarde cache:
+   - appel backend via `workers/video_backend` (Modal ou Mock) → retourne une URL mp4 publique
+4. update Supabase:
+   - `output_url_final`, `final_url`
+5. sauvegarde cache:
    - `video_cache.video_url = output_url_final`
 
-## 6) Service audio (FastAPI)
+## 6) Backend vidéo (Modal)
 
-Dossier: `services/audio-service/`
+Dossier: `services/video_modal/`
 
 Endpoints importants:
 - `GET /healthz`
-- `POST /audio/audioldm2`
-- `POST /audio/difffoley` (optionnel)
-- `POST /audio/clap/select`
-- `POST /video/mix` (**obligatoire pour produire la vidéo finale avec audio**)
-
-Le endpoint `/video/mix`:
-- télécharge vidéo+audio,
-- normalise à `target_lufs`,
-- remplace (ou mixe) l’audio,
-- upload mp4 final,
-- renvoie `output_url_final`.
+- `POST /generate_film` → `{ "video_url": "https://.../file.mp4" }`
 
 ## 7) Base de données (Supabase)
 
 Migrations à appliquer:
 - `supabase/migrations/20251004_jobs_table.sql`
-- `supabase/migrations/20251026_add_audio_ambience_columns.sql`
+- `supabase/migrations/20260106_create_generated_bucket.sql`
 
 ### Table `jobs` (champs clés)
 - `status`: `pending | in_progress | done | failed | cancelled`
 - `current_stage`: ex `starting`, `video_generated`, `completed`
 - `app_state`: paramètres & traces (JSONB)
 - `video_url`: URL vidéo générée (source)
-- `audio_url`: URL audio généré (optionnel)
-- `output_url_final`: URL finale (audio intégré si activé)
+- `output_url_final`: URL finale mp4 (publique)
 - `final_url`: alias historique (souvent = `output_url_final`)
 
 ### Table `video_cache`
-- `prompt_hash`: SHA-256(prompt)
+- `prompt_hash`: SHA-256(JSON stable: prompt + duration_sec + fps + resolution + seed)
 - `video_url`: URL finale mise en cache
 - `metadata`: infos (durée, fps, etc.)
 
@@ -126,30 +107,24 @@ NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=... # ou SUPABASE_SERVICE_KEY
 
-RUNPOD_API_KEY=...
-SVI_ENDPOINT_URL=https://api.runpod.ai/v2/...
-AUDIO_BACKEND_URL=https://api.runpod.ai/v2/...
-```
-
-Audio (optionnel):
-```bash
-AUDIO_MODE=auto # ou off
-AUDIO_MOCK=false
-CLAP_ENABLE=true
+SUPABASE_BUCKET=generated
+VIDEO_BACKEND=mock
+# En prod:
+# VIDEO_BACKEND=modal
+# MODAL_VIDEO_ENDPOINT_URL=https://...
 ```
 
 ## 9) Déploiement (vision pratique)
 
 - **Next.js**: Vercel (recommandé) ou autre hébergeur Node
 - **Worker**: un service Python long-running (Render/Railway/VM/Docker) qui exécute `python -m workers.worker`
-- **SVI backend**: endpoint Runpod Serverless (GPU)
-- **Audio backend**: endpoint Runpod Serverless (GPU) ou service dédié
+- **Backend vidéo**: Modal (serverless GPU) via `services/video_modal/`
 - **Supabase**: DB + Storage
 
 ## 10) Stratégie “modèles plus récents” (important)
 
 Objectif: upgrader les modèles sans casser l’app.
-- Conserver **les contrats HTTP** (retour `video_url`, endpoint `/video/mix` → `output_url_final`)
+- Conserver **le contrat HTTP** du backend vidéo (Modal): `POST /generate_film` → `{ video_url }`
 - Conserver **les champs DB** (notamment `output_url_final` + cache)
 
 Détails: `MODEL_UPGRADES.md`.
@@ -159,13 +134,13 @@ Détails: `MODEL_UPGRADES.md`.
 ## Plan de reprise (10 étapes, sans doublons)
 
 1. **Lire `STATUS.txt` + `MODEL_UPGRADES.md`** pour comprendre le pipeline canonique et la stratégie d’upgrade.
-2. **Vérifier Supabase**: migrations appliquées (jobs + audio columns), bucket `generated` présent, RLS OK.
-3. **Vérifier env**: `.env.local` complet (notamment `SVI_ENDPOINT_URL`, `AUDIO_BACKEND_URL`, service role key).
+2. **Vérifier Supabase**: migrations appliquées (jobs + generated bucket), bucket `generated` présent et public read, RLS OK.
+3. **Vérifier env**: `.env.local` complet (notamment `VIDEO_BACKEND`, `MODAL_VIDEO_ENDPOINT_URL` si prod, service role key).
 4. **Démarrer local**: `npm run dev` + worker (`python -m workers.worker`) et créer un job via `/generate`.
 5. **Valider le job**: suivre `/jobs/[id]`, vérifier `jobs.output_url_final` rempli et jouable.
 6. **Valider cache**: relancer le même prompt, vérifier que le job passe rapidement en `done` (HIT).
-7. **Normaliser les “stages”**: définir une liste stable de `current_stage` (ex: `starting`, `video_generating`, `video_generated`, `audio_generating`, `mixing`, `completed`, `failed`) et l’appliquer UI + worker.
+7. **Normaliser les “stages”**: définir une liste stable de `current_stage` (ex: `starting`, `video_generating`, `video_generated`, `completed`, `failed`) et l’appliquer UI + worker.
 8. **Décider de la compat API**: soit déprécier/supprimer `/api/generate-video`, soit la faire pointer vers `/api/jobs` (compat).
 9. **Observabilité**: logs structurés côté worker + timeouts; optionnel: Sentry/metrics; alerte budget si activée.
-10. **Upgrade modèles**: remplacer les modèles **derrière les endpoints** (SVI/audio) en conservant les contrats; tester; ajuster cache (prompt seul vs prompt+params) si nécessaire.
+10. **Upgrade modèles**: remplacer le modèle **derrière Modal** en conservant le contrat `{ video_url }`; tester; ajuster cache (prompt+params) si nécessaire.
 
