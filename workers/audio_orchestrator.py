@@ -86,14 +86,20 @@ class AudioOrchestrator:
                 }
             
             best_audio = await self._select_best_audio(prompt, candidates)
-            
-            
-            logger.info(f"Audio generation completed for job {job_id}: {best_audio['url']}")
-            
+
+            # Mix audio into video (delegated to the audio service)
+            output_url_final = await self._mix_audio_with_video(
+                video_url=video_url,
+                audio_url=best_audio["url"],
+                target_lufs=-16.0,
+            )
+
+            logger.info(f"Audio processing completed for job {job_id}: audio={best_audio['url']}, final={output_url_final}")
+
             return {
                 "audio_url": best_audio["url"],
                 "audio_score": best_audio["score"],
-                "output_url_final": video_url  # Will be updated after mixing
+                "output_url_final": output_url_final or video_url,
             }
             
         except Exception as e:
@@ -104,6 +110,41 @@ class AudioOrchestrator:
                 "output_url_final": video_url,
                 "error": str(e)
             }
+
+    async def _mix_audio_with_video(
+        self,
+        video_url: str,
+        audio_url: str,
+        target_lufs: float = -16.0,
+    ) -> Optional[str]:
+        """
+        Ask audio backend to mix (or replace) the audio track in the video.
+
+        Returns:
+            URL of the final mixed video, or None on failure.
+        """
+        if not self.audio_backend_url:
+            return None
+
+        try:
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                response = await client.post(
+                    f"{self.audio_backend_url}/video/mix",
+                    json={
+                        "video_url": video_url,
+                        "audio_url": audio_url,
+                        "target_lufs": target_lufs,
+                        "mode": "replace",
+                    },
+                )
+                if response.status_code != 200:
+                    logger.error(f"Mix endpoint failed: {response.status_code} {response.text}")
+                    return None
+                data = response.json()
+                return data.get("output_url_final") or data.get("final_url")
+        except Exception as e:
+            logger.error(f"Mix request failed: {e}")
+            return None
     
     async def _generate_audio_candidates(
         self,

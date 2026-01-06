@@ -47,7 +47,10 @@ class SupabaseClient:
         current_stage: Optional[str] = None,
         error_message: Optional[str] = None,
         video_url: Optional[str] = None,
-        final_url: Optional[str] = None
+        final_url: Optional[str] = None,
+        audio_url: Optional[str] = None,
+        audio_score: Optional[float] = None,
+        output_url_final: Optional[str] = None
     ) -> None:
         """Met à jour l'état complet du job (app_state LangGraph)"""
         update_data: Dict[str, Any] = {
@@ -65,6 +68,12 @@ class SupabaseClient:
             update_data["video_url"] = video_url
         if final_url:
             update_data["final_url"] = final_url
+        if audio_url is not None:
+            update_data["audio_url"] = audio_url
+        if audio_score is not None:
+            update_data["audio_score"] = audio_score
+        if output_url_final is not None:
+            update_data["output_url_final"] = output_url_final
         
         self.client.table("jobs").update(update_data).eq("id", job_id).execute()
     
@@ -114,3 +123,23 @@ class SupabaseClient:
         
         # Upsert basé sur prompt_hash
         self.client.table("video_cache").upsert(cache_data, on_conflict="prompt_hash").execute()
+
+    async def get_from_cache(self, prompt: str) -> Optional[Dict[str, Any]]:
+        """Récupère une entrée de cache pour un prompt (via SHA-256)."""
+        prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
+        result = (
+            self.client.table("video_cache")
+            .select("video_url, metadata, prompt_hash, created_at")
+            .eq("prompt_hash", prompt_hash)
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            return None
+        row = result.data[0]
+        return {
+            "prompt_hash": row.get("prompt_hash"),
+            "video_url": row.get("video_url"),
+            "metadata": row.get("metadata") or {},
+            "created_at": row.get("created_at"),
+        }

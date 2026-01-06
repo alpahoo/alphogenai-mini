@@ -1,62 +1,33 @@
-# AlphoGenAI Mini - Status
+# AlphoGenAI Mini — Status (source de vérité)
 
-## ✅ ARCHITECTURE MIGRATION COMPLETE
+## ✅ État actuel (main)
 
-### Stack
-- **Video Generation**: Runway Gen-4 Turbo
-- **Script Generation**: Qwen Mock (no API calls)
-- **Music**: Free tracks from Supabase Storage (YouTube Audio Library)
-- **Worker**: Simplified async orchestrator (no LangGraph)
+### Pipeline
+- **Vidéo**: **SVI (Stable Video Infinity)** via endpoint Runpod (`SVI_ENDPOINT_URL`)
+- **Audio**: **Audio Ambience Service** (AudioLDM2 + CLAP, Diff-Foley optionnel) via (`AUDIO_BACKEND_URL`)
+- **Mix**: normalisation **-16 LUFS** + intégration audio dans la vidéo (service audio)
+- **Persistance**: Supabase Postgres (`jobs` + `video_cache`) + Supabase Storage / R2
+- **Traitement**: worker Python (poll `jobs.status=pending`)
 
-### Workflow
-1. User submits prompt → Job created in Supabase
-2. Worker polls jobs table
-3. Orchestrator executes:
-   - Qwen Mock generates script structure
-   - Runway Gen-4 generates video (10s, 16:9)
-   - Music selected from Supabase Storage by tone
-   - Job marked as completed with final video URL
-4. User views video at /v/{jobId}
+### Flux utilisateur (canonique)
+1. **UI**: `/generate` (auth requise) → crée un job via `POST /api/jobs`
+2. **Suivi**: `/jobs/[id]` (poll `GET /api/jobs/[id]`)
+3. **Worker**:
+   - cache HIT (table `video_cache`) → job `done` immédiatement
+   - sinon génération SVI → audio → mix → upload → job `done`
 
-### Files Structure
-- `workers/runway_orchestrator.py` - Main workflow orchestrator
-- `workers/runway_service.py` - Runway Gen-4 API wrapper
-- `workers/qwen_mock_service.py` - Mock script generator
-- `workers/music_selector.py` - Music selection from Storage
-- `workers/worker.py` - Background job processor
-- `workers/supabase_client.py` - Database operations
-- `workers/config.py` - Configuration management
+### Statuts & champs DB
+- **status**: `pending` | `in_progress` | `done` | `failed` | `cancelled`
+- **URLs**:
+  - `video_url`: vidéo générée (source)
+  - `audio_url`: audio généré (optionnel)
+  - `output_url_final`: vidéo finale (audio intégré si activé)
+  - `final_url`: alias historique (souvent = `output_url_final`)
 
-### Removed Services
-- ❌ Replicate (SD, WAN Video)
-- ❌ Pika
-- ❌ HuggingFace FLUX
-- ❌ ElevenLabs
-- ❌ Remotion
-- ❌ LangGraph orchestration
+### Variables d’environnement (minimum)
+- **Supabase**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (ou `SUPABASE_SERVICE_KEY`)
+- **Runpod**: `RUNPOD_API_KEY`, `SVI_ENDPOINT_URL`, `AUDIO_BACKEND_URL`
+- **Audio (optionnel)**: `AUDIO_MODE=auto|off`, `AUDIO_MOCK=true|false`, `CLAP_ENABLE=true|false`
 
-### Frontend Updates
-- ✅ Route moved from `/generate` to `/creator/generate`
-- ✅ Authentication required for video generation
-- ✅ Admin controls hidden behind auth check
-- ✅ `/protected` demo page removed
-- ✅ Admin routes protected by middleware
-
-### Environment Variables
-Required:
-- `RUNWAY_API_KEY` - Runway Gen-4 Turbo API key
-- `SUPABASE_URL` - Supabase project URL
-- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
-
-Optional:
-- `QWEN_MOCK_ENABLED=true` - Use mock mode (default)
-- `WEBHOOK_URL` - Webhook for job completion notifications
-
-### Testing
-Run: `python -m workers.runway_orchestrator "Test prompt"`
-
-## 🚀 Performance
-
-- Temps moyen de génération : **2-3 minutes** (Runway Gen-4 Turbo)
-- Durée vidéo : **10 secondes** (16:9)
-- Cache actif pour éviter les régénérations
+### Remarque importante (nettoyage)
+- Une partie des anciens fichiers `.md` décrivent un **pipeline legacy** (Qwen/WAN/Pika/ElevenLabs/Remotion). Ils seront **archivés / marqués comme obsolètes** au profit de ce status + `README.md`.

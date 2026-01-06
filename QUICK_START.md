@@ -1,116 +1,66 @@
-# 🚀 AlphoGenAI Mini - Démarrage Rapide
+# 🚀 AlphoGenAI Mini — Démarrage rapide
 
-## En 5 minutes
+Ce dépôt est désormais **SVI (vidéo)** + **Audio Ambience Service (audio + mix)**.
 
-### 1. Installation (2 min)
+## Prérequis
+- Node.js 18+
+- Python 3.10+ (pour le worker)
+- Un projet Supabase (DB + Storage)
+- 2 endpoints Runpod: **SVI** + **Audio Service**
+
+## 1) Installation
 
 ```bash
-# Dépendances Next.js
 npm install
-
-# Dépendances Python
-cd workers
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-cd ..
 ```
 
-### 2. Configuration (1 min)
+## 2) Configuration
 
 ```bash
-# Copier et éditer .env.local
 cp .env.example .env.local
 ```
 
-**Minimum requis:**
+Variables minimum (voir `.env.example` pour la liste complète) :
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_SERVICE_ROLE=your-service-key
-DASHSCOPE_API_KEY=sk-xxx
-ELEVENLABS_API_KEY=el-xxx
-REMOTION_SITE_ID=site-xxx
-REMOTION_SECRET_KEY=sk-xxx
-VIDEO_ENGINE=wan
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+
+RUNPOD_API_KEY=...
+SVI_ENDPOINT_URL=https://api.runpod.ai/v2/...
+AUDIO_BACKEND_URL=https://api.runpod.ai/v2/...
 ```
 
-### 3. Base de Données (1 min)
+## 3) Base de données
 
-Ouvrir Supabase SQL Editor et exécuter:
+Dans Supabase SQL Editor, exécuter :
 ```sql
--- Fichier: supabase/migrations/20251004_jobs_table.sql
+-- supabase/migrations/20251004_jobs_table.sql
+-- supabase/migrations/20251026_add_audio_ambience_columns.sql
 ```
 
-### 4. Démarrage (1 min)
+## 4) Démarrer
 
 ```bash
 # Terminal 1
 npm run dev
+```
 
+```bash
 # Terminal 2
 cd workers
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ./start_worker.sh
 ```
 
-### 5. Premier Test (< 1 min)
+## 5) Utiliser
 
-```
-1. Ouvrir: http://localhost:3000/generate
-2. Saisir: "Un robot explique la lune à un enfant"
-3. Cliquer: "Générer ma vidéo"
-4. Attendre: 4-9 minutes
-5. Regarder: Votre vidéo ! 🎉
-```
+1. Ouvrir `http://localhost:3000/generate`
+2. Créer un job
+3. Suivre le job sur `http://localhost:3000/jobs/<jobId>`
 
----
-
-## ⚡ Démarrage Express (avec test)
-
-```bash
-# One-liner
-npm install && cd workers && pip install -r requirements.txt && cd .. && npm run dev
-```
-
-Puis dans un autre terminal:
-```bash
-cd workers && ./start_worker.sh
-```
-
----
-
-## 📖 Documentation Complète
-
-- **Installation:** `FINAL_SYSTEM_COMPLETE.md`
-- **Architecture:** `INTEGRATION_COMPLETE.md`
-- **Workers:** `workers/README.md`
-- **UI:** `UI_PAGES_INTEGRATION.md`
-
----
-
-## 🆘 Aide Rapide
-
-**Problème:** Worker ne démarre pas  
-**Solution:** `cd workers && python -m workers.test_setup`
-
-**Problème:** Vidéo ne se génère pas  
-**Solution:** Vérifier logs worker et job status dans Supabase
-
-**Problème:** Erreur API  
-**Solution:** Vérifier toutes les clés dans `.env.local`
-
----
-
-## 🎯 Fonctionnalités
-
-- ✅ Génération vidéo IA complète
-- ✅ Interface utilisateur moderne
-- ✅ Cache intelligent
-- ✅ Polling temps réel
-- ✅ Sous-titres français
-- ✅ Multi-engine vidéo
-
-**Temps total:** 4-9 minutes (ou < 1s si cache)
-
----
-
-Bon développement ! 🚀
+## Notes
+- **Cache**: le worker déduplique via `video_cache` (SHA-256 du prompt).
+- **Audio**: activer/désactiver via `AUDIO_MODE=auto|off` (et `AUDIO_MOCK=true` en dev).

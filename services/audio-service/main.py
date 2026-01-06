@@ -110,6 +110,23 @@ class CLAPSelectResponse(BaseModel):
     selection_time: float
 
 
+class VideoMixRequest(BaseModel):
+    """Request to mix/replace audio in a video."""
+    video_url: HttpUrl
+    audio_url: HttpUrl
+    target_lufs: float = Field(-16.0, description="Target loudness for audio normalization (LUFS)")
+    mode: str = Field("replace", description="replace|mix (replace audio track or mix with existing)")
+    audio_volume: float = Field(1.0, ge=0.0, le=2.0, description="Volume multiplier when mode=mix")
+
+
+class VideoMixResponse(BaseModel):
+    """Response with final mixed video URL."""
+    output_url_final: str
+    audio_url: str
+    mode: str
+    processing_time: float
+
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize models and services on startup."""
@@ -328,6 +345,83 @@ async def select_with_clap(request: CLAPSelectRequest):
     except Exception as e:
         logger.error(f"CLAP selection failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/video/mix", response_model=VideoMixResponse)
+async def mix_video_with_audio(request: VideoMixRequest):
+    """
+    Mix (or replace) an audio track into a video, then upload the final video.
+
+    This endpoint:
+    - downloads `video_url` and `audio_url`
+    - normalizes the audio to `target_lufs`
+    - either replaces the video's audio track (mode=replace) or mixes it (mode=mix)
+    - uploads the resulting mp4 and returns a public URL
+    """
+    if audio_mixer is None or storage_manager is None:
+        raise HTTPException(status_code=503, detail="Service not initialized")
+
+    start_time = datetime.utcnow()
+
+    try:
+        import tempfile
+        from pathlib import Path
+
+        temp_dir = Path(tempfile.gettempdir()) / "audio-service"
+        temp_dir.mkdir(exist_ok=True)
+
+        video_path = temp_dir / f"video_{os.urandom(8).hex()}.mp4"
+        audio_path = temp_dir / f"audio_{os.urandom(8).hex()}.wav"
+
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            v = await client.get(str(request.video_url))
+            v.raise_for_status()
+            video_path.write_bytes(v.content)
+
+            a = await client.get(str(request.audio_url))
+            a.raise_for_status()
+            audio_path.write_bytes(a.content)
+
+        normalized_audio_path = await audio_mixer.normalize_audio(
+            str(audio_path),
+            target_lufs=request.target_lufs,
+        )
+
+        if request.mode == "mix":
+            mixed_path = await audio_mixer.mix_audio_with_video(
+                video_path=str(video_path),
+                audio_path=normalized_audio_path,
+                audio_volume=request.audio_volume,
+            )
+            mode = "mix"
+        else:
+            mixed_path = await audio_mixer.replace_audio_in_video(
+                video_path=str(video_path),
+                audio_path=normalized_audio_path,
+            )
+            mode = "replace"
+
+        output_url_final = await storage_manager.upload_video(
+            mixed_path,
+            prefix="videos/final",
+            public=True,
+        )
+
+        processing_time = (datetime.utcnow() - start_time).total_seconds()
+
+        return VideoMixResponse(
+            output_url_final=output_url_final,
+            audio_url=str(request.audio_url),
+            mode=mode,
+            processing_time=processing_time,
+        )
+
+    except (MixingError, StorageError) as e:
+        logger.error(f"Mixing failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error in /video/mix: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/")

@@ -93,56 +93,102 @@ class AlphogenAIWorker:
         try:
             # Marquer comme in_progress
             await self.supabase.update_job_state(
-                job["id"],
-                "in_progress",
-                {}
+                job_id=job["id"],
+                app_state={**(job.get("app_state") or {}), "stage": "starting"},
+                status="in_progress",
+                current_stage="starting",
             )
+
+            # Cache prompt -> video_url final (évite de régénérer)
+            cached = await self.supabase.get_from_cache(job["prompt"])
+            if cached and cached.get("video_url"):
+                cached_url = cached["video_url"]
+                print(f"⚡ Cache HIT: {cached_url}")
+                await self.supabase.update_job_state(
+                    job_id=job["id"],
+                    app_state={**(job.get("app_state") or {}), "stage": "cached_hit", "cached": True, "prompt_hash": cached.get("prompt_hash")},
+                    status="done",
+                    current_stage="completed",
+                    video_url=cached_url,
+                    final_url=cached_url,
+                    output_url_final=cached_url,
+                )
+                print(f"\n✅ Job {job['id']} terminé (cache)!")
+                print(f"Final: {cached_url}\n")
+                return
             
+            # Lire les paramètres depuis app_state (si fournis par l'API)
+            app_state = job.get("app_state") or {}
+            duration_sec = int(app_state.get("duration_sec") or self.settings.SVI_DURATION_SEC if hasattr(self.settings, "SVI_DURATION_SEC") else 60)
+            resolution = str(app_state.get("resolution") or "1920x1080")
+            fps = int(app_state.get("fps") or 24)
+            seed = app_state.get("seed")
+
             video_url = None
             if self.svi_client:
                 print("🎬 Génération vidéo avec SVI...")
                 video_result = self.svi_client.generate_video(
                     prompt=job["prompt"],
-                    duration_sec=60,
-                    resolution="1920x1080",
-                    fps=24
+                    duration_sec=duration_sec,
+                    resolution=resolution,
+                    fps=fps,
+                    seed=seed,
+                    mode=(self.settings.SVI_MODE if hasattr(self.settings, "SVI_MODE") and self.settings.SVI_MODE else "film"),
                 )
                 video_url = video_result.get("video_url")
                 print(f"✅ Vidéo générée: {video_url}")
                 
                 await self.supabase.update_job_state(
-                    job["id"],
-                    app_state={"stage": "video_generated"},
+                    job_id=job["id"],
+                    app_state={**app_state, "stage": "video_generated"},
+                    status="in_progress",
                     video_url=video_url,
-                    current_stage="video_generated"
+                    current_stage="video_generated",
                 )
             
             # Generate audio with Audio Orchestrator
             audio_url = None
             output_url_final = video_url
+            audio_score = None
             if self.audio_orchestrator and video_url and self.settings.AUDIO_MODE == "auto":
                 print("🎵 Génération audio...")
                 audio_result = await self.audio_orchestrator.process_audio(
                     job_id=job["id"],
                     video_url=video_url,
                     prompt=job["prompt"],
-                    duration=60.0
+                    duration=float(duration_sec)
                 )
                 audio_url = audio_result.get("audio_url")
                 output_url_final = audio_result.get("output_url_final", video_url)
-                audio_score = audio_result.get("audio_score", 0.0)
-                print(f"✅ Audio généré: {audio_url} (score: {audio_score:.3f})")
+                audio_score = audio_result.get("audio_score")
+                if audio_url:
+                    score_disp = f"{float(audio_score):.3f}" if audio_score is not None else "N/A"
+                    print(f"✅ Audio généré: {audio_url} (score: {score_disp})")
             
             await self.supabase.update_job_state(
-                job["id"],
-                app_state={"stage": "completed"},
+                job_id=job["id"],
+                app_state={**app_state, "stage": "completed"},
                 status="done",
                 video_url=video_url,
                 audio_url=audio_url,
+                audio_score=audio_score,
                 output_url_final=output_url_final,
                 final_url=output_url_final,
-                current_stage="completed"
+                current_stage="completed",
             )
+
+            # Sauvegarder dans le cache (on cache l'output final)
+            if output_url_final:
+                await self.supabase.save_to_cache(
+                    prompt=job["prompt"],
+                    video_url=output_url_final,
+                    metadata={
+                        "resolution": resolution,
+                        "fps": fps,
+                        "duration_sec": duration_sec,
+                        "has_audio": bool(audio_url),
+                    },
+                )
             
             print(f"\n✅ Job {job['id']} terminé avec succès!")
             print(f"Vidéo: {video_url}")
@@ -153,10 +199,11 @@ class AlphogenAIWorker:
         except Exception as e:
             print(f"\n❌ Job {job['id']} échoué avec exception: {str(e)}\n")
             await self.supabase.update_job_state(
-                job["id"],
-                "failed",
-                {},
-                error_message=str(e)
+                job_id=job["id"],
+                app_state={**(job.get("app_state") or {}), "stage": "failed"},
+                status="failed",
+                current_stage="failed",
+                error_message=str(e),
             )
         
         finally:

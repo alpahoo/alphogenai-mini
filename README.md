@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>SVI (Stable Video Infinity)</strong> → <strong>AudioLDM2</strong> → <strong>Audio Mixing</strong>
+  <strong>SVI (Stable Video Infinity)</strong> → <strong>Audio (AudioLDM2/CLAP)</strong> → <strong>Mix (-16 LUFS)</strong>
 </p>
 
 <p align="center">
@@ -47,16 +47,15 @@
 
 ## How It Works
 
-1. **User submits a prompt** via the web interface at `/generate`
-2. **Job created** in Supabase with status tracking
-3. **SVI + Audio orchestrator** processes the job:
-   - SVI generates video from text prompt (60s, 1920x1080, 24fps)
-   - AudioLDM2 generates ambient audio from prompt
-   - CLAP scoring selects best audio match
-   - ffmpeg mixes video and audio with normalization (-16 LUFS)
-   - State saved in `jobs` table after each step
-4. **User tracks progress** at `/jobs/[jobId]` with real-time polling
-5. **User views** their AI-generated video with audio
+1. **User submits a prompt** via `/generate` (auth)
+2. **Job created** in Supabase (`jobs.status=pending`)
+3. **Worker** processes:
+   - cache lookup (`video_cache` via SHA-256(prompt))
+   - SVI generates video (duration/resolution/fps from `jobs.app_state`)
+   - audio service generates audio + CLAP selection
+   - audio service mixes audio into video (target -16 LUFS)
+   - worker updates `jobs` (`video_url`, `audio_url`, `output_url_final`, `final_url`)
+4. **User tracks progress** at `/jobs/[id]` (polling)
 
 ## Quick Start
 
@@ -107,6 +106,7 @@ Open your [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql) an
 ```sql
 -- File: supabase/migrations/20251002_add_notes.sql (notes table)
 -- File: supabase/migrations/20251004_jobs_table.sql (jobs table avec app_state)
+-- File: supabase/migrations/20251026_add_audio_ambience_columns.sql (audio columns)
 ```
 
 ### 5. Start the Application
@@ -143,7 +143,7 @@ This will verify all API keys and database tables are configured correctly.
 2. Enter your prompt
 3. Configure video settings (duration, resolution, fps)
 4. Click "Générer"
-5. Track progress at `/jobs/[jobId]`
+5. Track progress at `/jobs/[id]`
 6. View final video with audio when complete
 
 ### Generate a Video via API
@@ -200,12 +200,15 @@ alphogenai-mini/
 - `id` - UUID primary key
 - `user_id` - Foreign key to auth.users
 - `prompt` - User's video generation prompt
-- `status` - pending | in_progress | completed | failed
+- `status` - pending | in_progress | done | failed | cancelled
 - `app_state` - **Complete workflow state (JSONB)**
-- `current_stage` - Current pipeline stage (script_generation, video_generation, music_selection, completed)
+- `current_stage` - Current stage (e.g. starting, video_generated, completed)
 - `error_message` - Error details if failed
 - `retry_count` - Number of retry attempts
-- `video_url` - Final video URL when completed
+- `video_url` - Generated video URL (source)
+- `audio_url` - Generated audio URL (optional)
+- `output_url_final` - Final mixed video URL (audio integrated when enabled)
+- `final_url` - Legacy alias (usually equals `output_url_final`)
 - `created_at` - Job creation timestamp
 - `updated_at` - Last update timestamp
 

@@ -1,17 +1,15 @@
-# AlphoGenAI Mini - Orchestrateur LangGraph
+# AlphoGenAI Mini — Worker (pipeline actuel)
 
-Orchestrateur Python basé sur LangGraph pour gérer le pipeline de génération vidéo AI.
+> Note: ce dépôt a évolué. Ce `README` décrit le **pipeline actuel SVI + Audio**.
+> Pour la stratégie “modèles plus récents”, voir `MODEL_UPGRADES.md`.
 
-## 🎬 Pipeline
+Le worker Python poll la table `jobs` et exécute le pipeline:
 
-L'orchestrateur gère le flux suivant:
-
-1. **Qwen** - Génération du script (4 scènes exactement)
-2. **WAN Image** - Création de l'image clé (1920x1080 cinématique)
-3. **Pika** - Génération de 4 clips vidéo (4 secondes chacun, avec --image + seed)
-4. **ElevenLabs** - Génération de la voix + sous-titres SRT
-5. **Remotion** - Assemblage final de la vidéo
-6. **Webhook** - Notification quand la vidéo est prête
+1. **Cache** (table `video_cache`, SHA-256(prompt)) — si HIT: job `done` immédiat
+2. **SVI** — génération vidéo via `SVI_ENDPOINT_URL`
+3. **Audio service** — génération audio + sélection CLAP via `AUDIO_BACKEND_URL`
+4. **Mix** — intégration audio dans la vidéo via `POST /video/mix`
+5. **Update Supabase** — mise à jour `jobs.video_url`, `jobs.audio_url`, `jobs.output_url_final`, `jobs.final_url`
 
 ## 🗄️ Structure de données
 
@@ -22,12 +20,14 @@ CREATE TABLE jobs (
     id UUID PRIMARY KEY,
     user_id UUID REFERENCES auth.users(id),
     prompt TEXT NOT NULL,
-    status TEXT,  -- pending, in_progress, completed, failed
+    status TEXT,  -- pending, in_progress, done, failed, cancelled
     app_state JSONB,  -- État complet du workflow LangGraph
-    current_stage TEXT,  -- qwen, wan_image, pika, elevenlabs, remotion
+    current_stage TEXT,  -- e.g. starting, video_generated, completed
     error_message TEXT,
     retry_count INTEGER,
     video_url TEXT,
+    audio_url TEXT,
+    output_url_final TEXT,
     created_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ
 );
@@ -55,34 +55,24 @@ CREATE TABLE jobs (
 
 ```bash
 cd workers
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
 ### 2. Configurer `.env.local`
 
-Créer `.env.local` à la racine du projet:
+Créer `.env.local` à la racine du projet (ou remplir depuis `.env.example`):
 
 ```bash
 # Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_SERVICE_KEY=your-service-key
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-# AI Services
-QWEN_API_KEY=your-qwen-key
-QWEN_API_BASE=https://dashscope.aliyuncs.com/compatible-mode/v1
-
-WAN_IMAGE_API_KEY=your-wan-key
-WAN_IMAGE_API_BASE=https://api.wan.ai/v1
-
-PIKA_API_KEY=your-pika-key
-PIKA_API_BASE=https://api.pika.art/v1
-
-ELEVENLABS_API_KEY=your-elevenlabs-key
-ELEVENLABS_API_BASE=https://api.elevenlabs.io/v1
-
-REMOTION_RENDERER_URL=http://localhost:3001
+# Runpod
+RUNPOD_API_KEY=your-runpod-api-key
+SVI_ENDPOINT_URL=https://api.runpod.ai/v2/YOUR_SVI_ENDPOINT_ID
+AUDIO_BACKEND_URL=https://api.runpod.ai/v2/YOUR_AUDIO_ENDPOINT_ID
 
 # Webhook (optionnel)
 WEBHOOK_URL=https://your-domain.com/api/webhook
@@ -132,22 +122,20 @@ python -m workers.worker
 
 ## 📡 Utilisation
 
-### Via l'API Next.js
+### Via l'API Next.js (auth requise)
 
 **Créer un job:**
 
 ```bash
-curl -X POST http://localhost:3000/api/generate-video \
+curl -X POST http://localhost:3000/api/jobs \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <token>" \
-  -d '{"prompt": "Créer une vidéo sur l'\''IA en 2024"}'
+  -d '{"prompt":"Créer une vidéo sur l’IA en 2026","duration_sec":60,"resolution":"1920x1080","fps":24}'
 ```
 
 **Vérifier le statut:**
 
 ```bash
-curl http://localhost:3000/api/generate-video?job_id=<uuid> \
-  -H "Authorization: Bearer <token>"
+curl http://localhost:3000/api/jobs/<uuid>
 ```
 
 ### Directement en Python
@@ -197,79 +185,25 @@ Headers:
 - `Content-Type: application/json`
 - `X-Webhook-Secret: <WEBHOOK_SECRET>` (si configuré)
 
-## 🎥 Détails Pika
-
-Les 4 clips sont générés avec ces paramètres:
-
-- **Duration:** 4 secondes par clip
-- **--image:** Le premier clip utilise l'image clé de WAN Image
-- **seed:** Chaque clip a un seed unique (base_seed + index) pour cohérence visuelle
-
-```python
-base_seed = random.randint(1000, 9999)
-
-# Clip 1: avec image clé
-pika.generate_clip(
-    prompt=scene1,
-    image_url=key_visual_url,
-    duration=4,
-    seed=base_seed
-)
-
-# Clips 2-4: seed incrémenté
-for i in range(1, 4):
-    pika.generate_clip(
-        prompt=scene,
-        image_url=None,
-        duration=4,
-        seed=base_seed + i
-    )
-```
-
-Les 4 clips sont générés **en parallèle** avec `asyncio.gather()`.
-
 ## 📊 Performance
 
 | Étape | Temps | Notes |
 |-------|-------|-------|
-| Qwen | 5-10s | LLM generation |
-| WAN Image | 10-20s | 1 image 1920x1080 |
-| Pika | 2-5min | 4 clips en parallèle |
-| ElevenLabs | 10-30s | TTS + SRT |
-| Remotion | 1-3min | Assemblage final |
-| **Total** | **4-9min** | Pipeline complet |
+| Cache HIT | < 1s | `video_cache` |
+| SVI | 2-8 min | selon durée/résolution |
+| Audio + CLAP | 1-3 min | selon backend |
+| Mix + upload | 1-2 min | dépend du stockage |
+| **Total (MISS)** | **~4-12 min** | pipeline complet |
 
-## 🏗️ Architecture
+## 🏗️ Architecture (workers/)
 
 ```
 workers/
-├── langgraph_orchestrator.py
-│   └── AlphogenAIOrchestrator
-│       ├── _build_workflow()        # Construit le graph LangGraph
-│       ├── _node_qwen_script()      # Étape 1
-│       ├── _node_wan_image()        # Étape 2
-│       ├── _node_pika_clips()       # Étape 3 (4 clips 4s)
-│       ├── _node_elevenlabs_audio() # Étape 4
-│       ├── _node_remotion_assembly()# Étape 5
-│       ├── _node_webhook_notify()   # Étape 6
-│       └── _save_state()            # Sauvegarde app_state
-│
-├── api_services.py
-│   ├── QwenService
-│   ├── WANImageService
-│   ├── PikaService               # Supporte --image + seed
-│   ├── ElevenLabsService
-│   └── RemotionService
-│
-├── supabase_client.py
-│   ├── create_job()
-│   ├── update_job_state()        # Sauvegarde dans app_state
-│   ├── increment_retry()
-│   └── get_pending_jobs()
-│
-├── worker.py                     # Worker background
-├── config.py                     # Configuration
-└── test_setup.py                 # Tests de setup
+├── worker.py              # boucle de polling + orchestration
+├── svi_client.py          # client HTTP SVI (generate_film / generate_shot)
+├── audio_orchestrator.py  # audio + CLAP + appel /video/mix
+├── supabase_client.py     # jobs + video_cache
+└── config.py              # variables d’env (pydantic)
 ```
 
 ## 🐛 Debugging

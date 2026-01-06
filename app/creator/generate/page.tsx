@@ -7,12 +7,13 @@ export default function GeneratePage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/dashboard');
+    // Legacy route kept for backward compatibility.
+    router.replace('/generate');
   }, [router]);
   
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <p className="text-zinc-600 dark:text-zinc-400">Redirection vers le dashboard...</p>
+      <p className="text-zinc-600 dark:text-zinc-400">Redirection vers /generate...</p>
     </div>
   );
 }
