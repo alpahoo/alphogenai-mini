@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED / LEGACY (déploiement historique)**
+>
+> Ce document contient des instructions de déploiement liées à des pipelines anciens.
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # 🚀 Déploiement du Worker AlphogenAI Mini
 
 Le worker Python doit tourner en permanence pour traiter les jobs de génération vidéo.

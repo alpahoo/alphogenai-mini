@@ -1,3 +1,13 @@
+> ⚠️ **ARCHIVED / LEGACY (fix historique)**
+>
+> Ce fichier concerne un incident lié au pipeline historique (ex: ElevenLabs).
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `MODEL_UPGRADES.md`
+
 # ✅ FIX COMPLET - DÉPLOIEMENT PRÊT
 
 ## 🙏 Mes excuses

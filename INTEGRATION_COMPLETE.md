@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED / LEGACY (documentation historique)**
+>
+> Ce document décrit une implémentation historique (Remotion/ElevenLabs, ancienne API `/api/generate-video`, etc.).
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # AlphoGenAI Mini - Intégration Complète ✅
 
 ## 📋 Résumé de l'implémentation

@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED / LEGACY (tests historiques)**
+>
+> Ces résultats concernent un pipeline/API plus ancienne (`/api/generate-video`, Remotion/ElevenLabs, etc.).
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # 🧪 Résultats des Tests API - AlphoGenAI Mini
 
 ## 📋 Tests Exécutés

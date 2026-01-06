@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED / LEGACY**
+>
+> Ce document concerne Qwen/DashScope (pipeline historique).
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # ✅ Migration vers l'API native DashScope Qwen
 
 ## 🎉 Changements effectués

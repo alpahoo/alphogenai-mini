@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED / LEGACY (pipeline historique)**
+>
+> Ce document valide un pipeline plus ancien (Replicate/WAN/ElevenLabs/Remotion).
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # ✅ VALIDATION COMPLÈTE DU WORKFLOW - AUCUN CRÉDIT CONSOMMÉ
 
 ## 🎯 RÉSULTAT : PRÊT POUR PRODUCTION

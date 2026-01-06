@@ -1,3 +1,14 @@
+> ⚠️ **ARCHIVED / LEGACY**
+>
+> Remotion n’est plus la voie “canonique” du projet.
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # Remotion - AlphogenAI Mini
 
 Composition vidéo Remotion pour assembler les clips générés par le pipeline.

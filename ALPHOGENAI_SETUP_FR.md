@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED / LEGACY (LangGraph historique, FR)**
+>
+> Ce document décrit un setup d’orchestrateur LangGraph historique.
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # AlphogenAI Mini - Configuration Orchestrateur LangGraph ✅
 
 Documentation complète de l'orchestrateur LangGraph en Python pour AlphogenAI Mini.

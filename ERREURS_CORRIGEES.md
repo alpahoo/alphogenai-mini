@@ -1,3 +1,14 @@
+> ⚠️ **ARCHIVED / LEGACY (notes historiques)**
+>
+> Ce document liste des corrections d’un pipeline plus ancien (admin/pages/pipelines historiques).
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `MODEL_UPGRADES.md`
+
 # ✅ TOUTES LES ERREURS CORRIGÉES
 
 ## 🔴 ERREURS TROUVÉES

@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED / LEGACY**
+>
+> Ce document concerne la suppression d’ElevenLabs (pipeline historique).
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # ✅ ELEVENLABS SUPPRIMÉ DÉFINITIVEMENT
 
 ## 🎯 CHANGEMENTS APPLIQUÉS

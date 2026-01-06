@@ -1,3 +1,8 @@
+> ⚠️ **ARCHIVED / LEGACY (FR)**
+>
+> Cette version FR décrit un état historique (services/variables possiblement obsolètes).
+> Référence canonique: `QUICK_START.md` + `.env.example` + `STATUS.txt`.
+
 # 🚀 Démarrage Rapide - AlphoGenAI Mini
 
 ## ✅ Ce qui est prêt

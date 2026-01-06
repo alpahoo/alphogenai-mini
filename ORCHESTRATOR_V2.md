@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED / LEGACY (LangGraph v2)**
+>
+> Ce document décrit l’orchestrateur LangGraph historique (Qwen/WAN/Pika/ElevenLabs/Remotion).
+> Le projet a depuis convergé vers un pipeline **SVI + Audio**.
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # Orchestrateur LangGraph v2 - Résumé des modifications ✅
 
 ## 📋 Ce qui a été fait

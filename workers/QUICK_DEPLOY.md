@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED / LEGACY (pipeline historique)**
+>
+> Ce guide de déploiement mentionne des clés et services d’un pipeline plus ancien.
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # 🚀 Déploiement Rapide du Worker (5 min)
 
 ## Option Railway (Recommandée - Plus Simple)

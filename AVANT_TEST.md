@@ -1,3 +1,8 @@
+> ⚠️ **ARCHIVED / LEGACY (checklist historique)**
+>
+> Cette checklist correspond à une phase antérieure du projet.
+> Référence canonique: `STATUS.txt` + `QUICK_START.md`.
+
 # ✅ PRÊT POUR TEST - CHECKLIST
 
 ## 🔍 Code vérifié

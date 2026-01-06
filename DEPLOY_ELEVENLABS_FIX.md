@@ -1,3 +1,14 @@
+> ⚠️ **ARCHIVED / LEGACY**
+>
+> Ce document concerne un fix ElevenLabs (pipeline historique).
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # 🚀 DÉPLOIEMENT - FIX ELEVENLABS COMPLET
 
 ## ✅ Commit poussé : `b0b0ee2`

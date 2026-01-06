@@ -1,3 +1,8 @@
+> ⚠️ **ARCHIVED / LEGACY (procédure historique)**
+>
+> Ce document est lié à des choix du pipeline historique (ex: retrys, ElevenLabs).
+> Référence canonique: `STATUS.txt` + `README.md`.
+
 # ✅ CONTRÔLE MANUEL COMPLET - RETRIES DÉSACTIVÉS
 
 ## 🎯 CHANGEMENTS APPLIQUÉS

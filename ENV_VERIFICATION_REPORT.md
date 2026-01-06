@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED / LEGACY (configuration historique)**
+>
+> Ce rapport mentionne des variables d’un pipeline précédent.
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `.env.example`
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `MODEL_UPGRADES.md`
+
 # Rapport de Vérification des Variables d'Environnement - AlphoGenAI Mini
 
 **Date**: 2025-10-05  

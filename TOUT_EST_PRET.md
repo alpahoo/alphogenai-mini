@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED / LEGACY (notes historiques)**
+>
+> Ce fichier reflète des décisions d’un pipeline précédent (avec/sans ElevenLabs, etc.).
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # ✅ TOUS LES CHANGEMENTS APPLIQUÉS - PRÊT !
 
 ## 🎯 3 DEMANDES RÉALISÉES

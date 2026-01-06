@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED / LEGACY (tests historiques)**
+>
+> Ce résumé concerne un pipeline/API plus ancienne.
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # 🎯 Résumé d'Exécution des Tests - AlphoGenAI Mini
 
 ## ✅ Mission Accomplie

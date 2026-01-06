@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED / LEGACY (pipeline historique)**
+>
+> Ce document décrit un workflow basé sur Replicate/WAN/ElevenLabs/Remotion.
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # 🚀 AlphogenAI - Workflow Replicate Complet
 
 ## ✅ NOUVEAU WORKFLOW PRODUCTION-READY

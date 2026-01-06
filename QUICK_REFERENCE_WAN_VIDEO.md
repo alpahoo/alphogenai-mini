@@ -1,3 +1,14 @@
+> ⚠️ **ARCHIVED / LEGACY**
+>
+> Ce document concerne WAN Video (pipeline historique).
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `MODEL_UPGRADES.md`
+
 # 🚀 WAN Video - Référence Rapide
 
 ## Configuration (`.env.local`)

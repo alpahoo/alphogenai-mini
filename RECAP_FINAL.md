@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED / LEGACY (récap historique)**
+>
+> Ce récap concerne un pipeline plus ancien (Qwen/WAN/Pika/Remotion/ElevenLabs).
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # 🎉 RÉCAPITULATIF FINAL - Worker Production-Ready
 
 ## ✅ CE QUI A ÉTÉ FAIT

@@ -1,3 +1,14 @@
+> ⚠️ **ARCHIVED / LEGACY (déploiement historique)**
+>
+> Ce document peut contenir des variables/étapes liées à un pipeline ancien.
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `README.md`
+> - `QUICK_START.md`
+> - `.env.example`
+> - `MODEL_UPGRADES.md`
+
 # Déploiement du Worker Python sur Render
 
 ## Configuration

@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED / LEGACY**
+>
+> ElevenLabs n’est plus la voie “canonique” du projet.
+> **Pipeline actuel**: SVI (vidéo) + Audio Ambience Service (audio + mix).
+>
+> Références à utiliser:
+> - `STATUS.txt` (source de vérité)
+> - `README.md`
+> - `QUICK_START.md`
+> - `AUDIO_AMBIENCE_README.md`
+> - `MODEL_UPGRADES.md`
+
 # 🎙️ Intégration ElevenLabs Voice + SRT - AlphoGenAI Mini
 
 ## ✅ Mission Accomplie
