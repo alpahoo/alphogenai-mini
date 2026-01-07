@@ -1,10 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
+import { insertJob } from "@/lib/jobs";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
     // Legacy endpoint kept for backward compatibility.
-    // V1 rule: Next.js does NOT generate videos. It only creates jobs.
+    // V1 rule: strict wrapper around /api/jobs (create job only).
     const supabase = await createClient();
     const {
       data: { user },
@@ -28,27 +29,14 @@ export async function POST(req: Request) {
       );
     }
 
-    const { data: job, error: insertError } = await supabase
-      .from("jobs")
-      .insert({
-        user_id: user.id,
-        prompt: prompt,
-        status: "pending",
-        app_state: {
-          prompt: prompt,
-          duration_sec: duration_sec || 60,
-          resolution: resolution || "1920x1080",
-          fps: fps || 24,
-          seed: seed ?? null,
-          created_via: "api_generate_video_legacy",
-        },
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
-    }
+    const job = await insertJob(supabase, user.id, {
+      prompt,
+      duration_sec,
+      resolution,
+      fps,
+      seed: seed ?? null,
+      created_via: "api_generate_video_legacy",
+    });
 
     return NextResponse.json({ success: true, jobId: job.id });
   } catch (e: unknown) {
@@ -59,7 +47,7 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   // Legacy endpoint kept for backward compatibility.
-  // V1 rule: Next.js only reads jobs.
+  // V1 rule: strict wrapper around /api/jobs/[id] (read job only).
   try {
     const supabase = await createClient();
     const {
@@ -95,7 +83,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    return NextResponse.json(job);
+    return NextResponse.json({ success: true, job });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });

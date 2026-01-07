@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { insertJob } from "@/lib/jobs";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
@@ -23,31 +24,14 @@ export async function POST(req: Request) {
       );
     }
 
-    const { data: job, error: insertError } = await supabase
-      .from("jobs")
-      .insert({
-        user_id: user.id,
-        prompt: prompt,
-        status: "pending",
-        app_state: {
-          prompt: prompt,
-          duration_sec: duration_sec || 60,
-          resolution: resolution || "1920x1080",
-          fps: fps || 24,
-          seed: seed,
-          created_via: "api"
-        }
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error("Failed to create job:", insertError);
-      return NextResponse.json(
-        { error: insertError.message },
-        { status: 500 }
-      );
-    }
+    const job = await insertJob(supabase, user.id, {
+      prompt,
+      duration_sec,
+      resolution,
+      fps,
+      seed,
+      created_via: "api",
+    });
 
     return NextResponse.json({
       success: true,
