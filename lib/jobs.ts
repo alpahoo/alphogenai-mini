@@ -11,7 +11,7 @@ export type CreateJobInput = {
 
 export async function insertJob(
   supabase: SupabaseClient,
-  userId: string,
+  userId: string | null,
   input: CreateJobInput,
 ) {
   const { prompt, duration_sec, resolution, fps, seed, created_via } = input;

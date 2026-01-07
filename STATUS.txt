@@ -1,31 +1,19 @@
-# AlphoGenAI Mini — Status (source de vérité)
+# AlphoGenAI Mini — STATUS (V1 — source de vérité)
 
-## ✅ État actuel (main)
+## Pipeline (happy path only)
+- **UI**: `/generate` → crée un job (POST `/api/jobs`)
+- **Worker**: poll `jobs.status=pending` → génère la vidéo → update `jobs.output_url_final` → `done`
+- **Video backend (unique)**:
+  - **Prod**: `ModalBackend` via `MODAL_VIDEO_ENDPOINT_URL`
+  - **Local/CI**: `MockBackend` (`VIDEO_BACKEND=mock`) → MP4 dummy ~1s + upload Supabase
+- **Storage**: Supabase Storage bucket **`generated`** en **public read** (V1, pas de signed URL)
+- **Cache**: `video_cache.prompt_hash = sha256(JSON stable prompt+duration_sec+fps+resolution+seed)`
 
-### Pipeline (V1 — stable)
-- **Vidéo**: **Modal** (serverless) via `MODAL_VIDEO_ENDPOINT_URL`
-- **Local/CI**: **MockBackend** (mp4 dummy 1s + upload Supabase) via `VIDEO_BACKEND=mock`
-- **Audio**: ❌ désactivé (pas d’audio pour l’instant)
-- **Persistance**: Supabase Postgres (`jobs` + `video_cache`) + Supabase Storage (bucket `generated`, public read)
-- **Traitement**: worker Python (poll `jobs.status=pending`)
+## Off / Legacy
+- **Audio**: OFF (archivé dans `legacy/`)
+- **Runpod / SVI / Runway / Replicate / Remotion / musique**: LEGACY uniquement (dans `legacy/`)
 
-### Flux utilisateur (canonique)
-1. **UI**: `/generate` (auth requise) → crée un job via `POST /api/jobs`
-2. **Suivi**: `/jobs/[id]` (poll `GET /api/jobs/[id]`)
-3. **Worker**:
-   - cache HIT (table `video_cache`) → job `done` immédiatement
-   - sinon génération vidéo via backend (Modal ou Mock) → job `done`
-
-### Statuts & champs DB
-- **status**: `pending` | `in_progress` | `done` | `failed` | `cancelled`
-- **URLs**:
-  - `video_url`: vidéo générée (source)
-  - `output_url_final`: vidéo finale (MP4 publique)
-  - `final_url`: alias historique (souvent = `output_url_final`)
-
-### Variables d’environnement (minimum)
-- **Supabase**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (ou `SUPABASE_SERVICE_KEY`)
-- **Video**: `VIDEO_BACKEND=mock|modal`, `MODAL_VIDEO_ENDPOINT_URL` (si modal), `SUPABASE_BUCKET=generated`
-
-### Remarque importante (nettoyage)
-- Tout ce qui est historique/expérimental a été déplacé dans `legacy/` (non utilisé).
+## Routes actives (V1)
+- Pages: `/`, `/generate`, `/jobs/[id]`
+- Redirections legacy: `/creator/generate` → `/generate`, `/v/[id]` → `/jobs/[id]`, `/dashboard` → `/generate`
+- API: `POST /api/jobs`, `GET /api/jobs/[id]`, compat `POST/GET /api/generate-video` (wrapper strict)

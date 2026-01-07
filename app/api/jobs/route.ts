@@ -5,14 +5,6 @@ import { NextResponse } from "next/server";
 export async function POST(req: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
 
     const body = await req.json();
     const { prompt, duration_sec, resolution, fps, seed } = body;
@@ -24,7 +16,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const job = await insertJob(supabase, user.id, {
+    // V1: no auth requirement. Jobs are created with user_id = NULL.
+    const job = await insertJob(supabase, null, {
       prompt,
       duration_sec,
       resolution,

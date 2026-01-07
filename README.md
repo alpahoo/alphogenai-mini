@@ -33,20 +33,19 @@
 
 ### 🔐 Full-Stack Foundation
 - **Next.js 15** - App Router, Server Components, API Routes
-- **Supabase** - Authentication, Database (Postgres), Storage
+- **Supabase** - Database (Postgres), Storage
 - **TypeScript** - Type-safe development
 - **shadcn/ui** - Beautiful, accessible UI components
 - **Tailwind CSS** - Modern styling system
 
-### 🛡️ Security & Auth
-- Email-based authentication with confirmation
-- Row Level Security (RLS) on all tables
-- Protected routes with middleware
-- Secure API key management
+### 🛡️ Security (V1)
+- Row Level Security (RLS) on tables
+- V1 jobs are created with `user_id = NULL` (happy path public)
+- Supabase Storage bucket `generated` is **public read** (V1)
 
 ## How It Works
 
-1. **User submits a prompt** via `/generate` (auth)
+1. **User submits a prompt** via `/generate`
 2. **Job created** in Supabase (`jobs.status=pending`)
 3. **Worker** processes:
    - cache lookup (`video_cache` via SHA-256(stable JSON: prompt+duration+fps+resolution+seed))
@@ -101,7 +100,6 @@ Required variables:
 Open your [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql) and run:
 
 ```sql
--- File: supabase/migrations/20251002_add_notes.sql (notes table)
 -- File: supabase/migrations/20251004_jobs_table.sql (jobs table avec app_state)
 -- File: supabase/migrations/20260106_create_generated_bucket.sql (Storage bucket "generated" public read)
 ```
@@ -130,6 +128,12 @@ python3 tools/e2e_test_v1.py
 ```
 
 This will create a job, run the worker once, and verify the final MP4 URL is accessible.
+
+You can also verify Storage public-read (V1):
+
+```bash
+python3 tools/verify_storage_public.py
+```
 
 ## Usage
 
@@ -170,7 +174,6 @@ ORDER BY created_at DESC;
 alphogenai-mini/
 ├── app/                          # Next.js App Router
 │   ├── api/                     # API routes
-│   ├── auth/                    # Authentication pages
 │   └── generate/                # Video generation UI
 ├── workers/                      # Python async orchestrator
 │   ├── worker.py                # Background job processor
@@ -193,7 +196,7 @@ alphogenai-mini/
 
 ### `jobs` Table
 - `id` - UUID primary key
-- `user_id` - Foreign key to auth.users
+- `user_id` - Optional (V1 uses NULL for public jobs)
 - `prompt` - User's video generation prompt
 - `status` - pending | in_progress | done | failed | cancelled
 - `app_state` - **Complete workflow state (JSONB)**

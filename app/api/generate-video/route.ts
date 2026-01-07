@@ -7,17 +7,6 @@ export async function POST(req: Request) {
     // Legacy endpoint kept for backward compatibility.
     // V1 rule: strict wrapper around /api/jobs (create job only).
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
 
     const body = await req.json();
     const { prompt, duration_sec, resolution, fps, seed } = body;
@@ -29,7 +18,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const job = await insertJob(supabase, user.id, {
+    const job = await insertJob(supabase, null, {
       prompt,
       duration_sec,
       resolution,
@@ -50,17 +39,6 @@ export async function GET(req: Request) {
   // V1 rule: strict wrapper around /api/jobs/[id] (read job only).
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
@@ -77,10 +55,6 @@ export async function GET(req: Request) {
         { error: error?.message || "Job not found" },
         { status: 404 }
       );
-    }
-
-    if (job.user_id !== user.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
     return NextResponse.json({ success: true, job });
