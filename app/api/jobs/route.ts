@@ -32,8 +32,35 @@ export async function POST(req: Request) {
       );
     }
 
-    // TODO: trigger Modal pipeline here
-    // await modal.Function.lookup("video-pipeline", "run_pipeline").remote(job.id, prompt, webhookUrl)
+    // Trigger Modal pipeline (async - returns immediately)
+    const modalUrl = process.env.MODAL_WEBHOOK_URL;
+    if (modalUrl) {
+      const modalRes = await fetch(`${modalUrl}/webhook`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-webhook-secret": process.env.MODAL_WEBHOOK_SECRET ?? "",
+        },
+        body: JSON.stringify({
+          job_id: job.id,
+          prompt: prompt.trim(),
+        }),
+      });
+
+      if (!modalRes.ok) {
+        console.error(
+          "Failed to trigger Modal pipeline:",
+          await modalRes.text()
+        );
+        // Job is already created in Supabase - mark it as failed
+        await supabase
+          .from("jobs")
+          .update({ status: "failed", error_message: "Failed to start pipeline" })
+          .eq("id", job.id);
+      }
+    } else {
+      console.warn("MODAL_WEBHOOK_URL not set - pipeline not triggered");
+    }
 
     return NextResponse.json({
       success: true,
