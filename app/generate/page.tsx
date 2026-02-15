@@ -1,193 +1,150 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import { Wand2, ArrowLeft, Loader2 } from "lucide-react";
+import Link from "next/link";
+
+const EXAMPLE_PROMPTS = [
+  "A rocket launching into a starry night sky with smoke trails",
+  "Ocean waves crashing on a tropical beach at sunset",
+  "A futuristic city with flying cars and neon lights",
+  "Northern lights dancing over a snowy mountain landscape",
+];
 
 export default function GeneratePage() {
   const router = useRouter();
-  const [prompt, setPrompt] = useState('');
-  const [duration, setDuration] = useState(60);
-  const [resolution, setResolution] = useState('1080p');
-  const [fps, setFps] = useState(24);
+  const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    
-    if (!prompt.trim()) {
-      setError('Le prompt est requis');
+    const trimmed = prompt.trim();
+    if (!trimmed || trimmed.length < 3) {
+      setError("Prompt must be at least 3 characters");
       return;
     }
-    
+
+    setError(null);
     setLoading(true);
-    
+
     try {
-      const res = await fetch('/api/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: prompt.trim(),
-          duration_sec: duration,
-          resolution: resolution === '1080p' ? '1920x1080' : '1280x720',
-          fps: fps
-        })
+      const res = await fetch("/api/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: trimmed }),
       });
-      
+
       const data = await res.json();
-      
+
       if (!res.ok) {
-        throw new Error(data.error || 'Erreur lors de la création du job');
+        throw new Error(data.error || "Failed to create job");
       }
-      
+
       router.push(`/jobs/${data.jobId}`);
-    } catch (err: any) {
-      setError(err.message || 'Une erreur est survenue');
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Something went wrong";
+      setError(message);
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-6">
-      <div className="max-w-2xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">
-            🎬 Générer une Vidéo
+    <div className="min-h-screen px-4 py-12 relative overflow-hidden">
+      {/* Background gradient orbs */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute top-1/3 left-1/3 h-96 w-96 rounded-full bg-indigo-500/10 blur-3xl" />
+        <div className="absolute bottom-1/3 right-1/4 h-96 w-96 rounded-full bg-purple-500/10 blur-3xl" />
+      </div>
+
+      <div className="relative z-10 mx-auto max-w-2xl">
+        <Link
+          href="/"
+          className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </Link>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          <h1 className="mb-2 text-3xl font-bold tracking-tight">
+            Generate a Video
           </h1>
-          <p className="text-slate-600 dark:text-slate-400">
-            Créez une vidéo avec SVI (Stable Video Infinity) et AudioLDM2
+          <p className="mb-8 text-muted-foreground">
+            Describe the scene you want. AI will generate video with
+            synchronized audio.
           </p>
-        </div>
 
-        <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Prompt
-            </label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Décrivez la vidéo que vous souhaitez générer..."
-              className="w-full h-32 border-2 border-slate-300 dark:border-slate-600 rounded-lg p-4 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all resize-none"
-              disabled={loading}
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Durée
-              </label>
-              <select
-                value={duration}
-                onChange={(e) => setDuration(Number(e.target.value))}
-                className="w-full border-2 border-slate-300 dark:border-slate-600 rounded-lg p-3 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                disabled={loading}
+          <form onSubmit={handleSubmit}>
+            {/* Prompt textarea — glassmorphism card */}
+            <div className="rounded-2xl border border-border/50 bg-card/80 p-6 backdrop-blur-sm">
+              <label
+                htmlFor="prompt"
+                className="mb-2 block text-sm font-medium text-muted-foreground"
               >
-                <option value={10}>10 secondes</option>
-                <option value={30}>30 secondes</option>
-                <option value={60}>60 secondes</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                Résolution
+                Your prompt
               </label>
-              <select
-                value={resolution}
-                onChange={(e) => setResolution(e.target.value)}
-                className="w-full border-2 border-slate-300 dark:border-slate-600 rounded-lg p-3 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+              <textarea
+                id="prompt"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="A rocket launching into a starry night sky..."
+                className="h-32 w-full resize-none rounded-xl border border-border bg-background/50 p-4 text-foreground placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                 disabled={loading}
-              >
-                <option value="720p">720p (1280x720)</option>
-                <option value="1080p">1080p (1920x1080)</option>
-              </select>
+              />
+
+              {/* Example prompts */}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {EXAMPLE_PROMPTS.map((example) => (
+                  <button
+                    key={example}
+                    type="button"
+                    onClick={() => setPrompt(example)}
+                    disabled={loading}
+                    className="rounded-lg border border-border/50 bg-background/50 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground disabled:opacity-50"
+                  >
+                    {example.length > 40
+                      ? example.slice(0, 40) + "..."
+                      : example}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                FPS
-              </label>
-              <select
-                value={fps}
-                onChange={(e) => setFps(Number(e.target.value))}
-                className="w-full border-2 border-slate-300 dark:border-slate-600 rounded-lg p-3 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                disabled={loading}
-              >
-                <option value={24}>24 FPS</option>
-                <option value={30}>30 FPS</option>
-              </select>
-            </div>
-          </div>
-
-          {error && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-              <p className="text-red-600 dark:text-red-400 text-sm">
-                ⚠️ {error}
-              </p>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading || !prompt.trim()}
-            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold py-4 px-6 rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:from-slate-400 disabled:to-slate-400 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg
-                  className="animate-spin h-5 w-5"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
-                Création en cours...
-              </span>
-            ) : (
-              '🎬 Générer'
+            {/* Error */}
+            {error && (
+              <div className="mt-4 rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+                {error}
+              </div>
             )}
-          </button>
 
-          <div className="text-center">
+            {/* Submit */}
             <button
-              type="button"
-              onClick={() => router.push('/dashboard')}
-              className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 underline"
-              disabled={loading}
+              type="submit"
+              disabled={loading || !prompt.trim()}
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-4 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              ← Retour au dashboard
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating job...
+                </>
+              ) : (
+                <>
+                  <Wand2 className="h-4 w-4" />
+                  Generate Video
+                </>
+              )}
             </button>
-          </div>
-        </form>
-
-        <div className="mt-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
-            ℹ️ À propos
-          </h3>
-          <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
-            <li>• Génération vidéo avec SVI (Stable Video Infinity)</li>
-            <li>• Audio généré automatiquement avec AudioLDM2</li>
-            <li>• Mixage audio/vidéo avec normalisation -16 LUFS</li>
-            <li>• Temps de génération: ~2-5 minutes selon la durée</li>
-          </ul>
-        </div>
+          </form>
+        </motion.div>
       </div>
     </div>
   );

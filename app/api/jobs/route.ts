@@ -4,19 +4,10 @@ import { NextResponse } from "next/server";
 export async function POST(req: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
-
     const body = await req.json();
-    const { prompt, duration_sec, resolution, fps, seed } = body;
+    const { prompt } = body;
 
-    if (!prompt || prompt.length < 3) {
+    if (!prompt || prompt.trim().length < 3) {
       return NextResponse.json(
         { error: "prompt is required (min 3 chars)" },
         { status: 400 }
@@ -26,17 +17,9 @@ export async function POST(req: Request) {
     const { data: job, error: insertError } = await supabase
       .from("jobs")
       .insert({
-        user_id: user.id,
-        prompt: prompt,
+        prompt: prompt.trim(),
         status: "pending",
-        app_state: {
-          prompt: prompt,
-          duration_sec: duration_sec || 60,
-          resolution: resolution || "1920x1080",
-          fps: fps || 24,
-          seed: seed,
-          created_via: "api"
-        }
+        current_stage: "queued",
       })
       .select()
       .single();
@@ -49,16 +32,18 @@ export async function POST(req: Request) {
       );
     }
 
+    // TODO: trigger Modal pipeline here
+    // await modal.Function.lookup("video-pipeline", "run_pipeline").remote(job.id, prompt, webhookUrl)
+
     return NextResponse.json({
       success: true,
       jobId: job.id,
-      job: job
+      job,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in POST /api/jobs:", error);
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 }
-    );
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

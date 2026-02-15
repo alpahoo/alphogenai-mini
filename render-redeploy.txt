@@ -1,3 +1,0 @@
-Render redeploy trigger
-Timestamp: $(date -Iseconds)
-Commit: $(git rev-parse HEAD)
