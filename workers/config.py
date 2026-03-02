@@ -14,16 +14,17 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_KEY: Optional[str] = None
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
     SUPABASE_ANON_KEY: Optional[str] = None
+    SUPABASE_BUCKET: str = "generated"
     
     def get_service_key(self) -> str:
         """Get Supabase service key with fallback"""
         return self.SUPABASE_SERVICE_ROLE_KEY or self.SUPABASE_SERVICE_KEY or ""
-    
-    SVI_ENDPOINT_URL: Optional[str] = None
-    
-    AUDIO_BACKEND_URL: Optional[str] = None
-    AUDIO_MODE: str = "auto"
-    CLAP_ENABLE: bool = True
+
+    # Video backend selection (V1)
+    # mock = default local/CI (uploads a 1s dummy mp4)
+    # modal = production backend (Modal serverless GPU)
+    VIDEO_BACKEND: str = "mock"
+    MODAL_VIDEO_ENDPOINT_URL: Optional[str] = None
     
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o-mini"
@@ -40,8 +41,6 @@ class Settings(BaseSettings):
     
     # Job settings
     JOB_TIMEOUT: int = 3600  # 1 hour in seconds
-    
-    CLIP_DURATION: int = 10  # Duration per clip in seconds (6-10)
     
     NO_STORAGE_UPLOAD: bool = False
     MUSIC_SOURCE: str = "external"

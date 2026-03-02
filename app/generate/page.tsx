@@ -1,7 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+
+interface Job {
+  id: string;
+  prompt: string;
+  status: string;
+  current_stage: string | null;
+  output_url_final: string | null;
+  final_url: string | null;
+  video_url: string | null;
+  error_message: string | null;
+}
 
 export default function GeneratePage() {
   const router = useRouter();
@@ -11,10 +22,12 @@ export default function GeneratePage() {
   const [fps, setFps] = useState(24);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [job, setJob] = useState<Job | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setJob(null);
     
     if (!prompt.trim()) {
       setError('Le prompt est requis');
@@ -40,13 +53,69 @@ export default function GeneratePage() {
       if (!res.ok) {
         throw new Error(data.error || 'Erreur lors de la création du job');
       }
-      
-      router.push(`/jobs/${data.jobId}`);
-    } catch (err: any) {
-      setError(err.message || 'Une erreur est survenue');
+
+      // Start polling on /generate (happy path V1)
+      const createdJob: Job = {
+        id: data.jobId,
+        prompt: prompt.trim(),
+        status: 'pending',
+        current_stage: 'starting',
+        output_url_final: null,
+        final_url: null,
+        video_url: null,
+        error_message: null,
+      };
+      setJob(createdJob);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Une erreur est survenue';
+      setError(message);
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!job?.id) return;
+    if (job.status === 'done' || job.status === 'failed') return;
+
+    let polling: ReturnType<typeof setInterval> | null = null;
+
+    const fetchJob = async () => {
+      try {
+        const res = await fetch(`/api/jobs/${job.id}`);
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Erreur lors de la récupération du job');
+        }
+        const fresh: Job = data.job;
+        setJob(fresh);
+        setLoading(false);
+
+        if (fresh.status === 'done' || fresh.status === 'failed') {
+          if (polling) {
+            clearInterval(polling);
+            polling = null;
+          }
+        }
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : 'Erreur de polling';
+        setError(message);
+        setLoading(false);
+        if (polling) {
+          clearInterval(polling);
+          polling = null;
+        }
+      }
+    };
+
+    fetchJob();
+    polling = setInterval(fetchJob, 5000);
+
+    return () => {
+      if (polling) clearInterval(polling);
+    };
+  }, [job?.id, job?.status]);
+
+  const finalUrl = job?.output_url_final || job?.final_url || job?.video_url || null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-6">
@@ -56,7 +125,7 @@ export default function GeneratePage() {
             🎬 Générer une Vidéo
           </h1>
           <p className="text-slate-600 dark:text-slate-400">
-            Créez une vidéo avec SVI (Stable Video Infinity) et AudioLDM2
+            Créez une vidéo via un seul backend (Modal en prod, Mock en local/CI)
           </p>
         </div>
 
@@ -131,9 +200,59 @@ export default function GeneratePage() {
             </div>
           )}
 
+          {job && (
+            <div className="bg-slate-50 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-600 rounded-lg p-4 space-y-2">
+              <p className="text-xs text-slate-600 dark:text-slate-300">
+                Job: <span className="font-mono">{job.id}</span>
+              </p>
+              <p className="text-sm text-slate-800 dark:text-slate-200">
+                Statut: <span className="font-medium">{job.status}</span>
+                {job.current_stage ? (
+                  <span className="text-slate-500 dark:text-slate-400"> — {job.current_stage}</span>
+                ) : null}
+              </p>
+              {job.status === 'failed' && job.error_message ? (
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  {job.error_message}
+                </p>
+              ) : null}
+            </div>
+          )}
+
+          {job?.status === 'done' && finalUrl && (
+            <div className="space-y-3">
+              <video controls className="w-full rounded-lg shadow" src={finalUrl}>
+                Votre navigateur ne supporte pas la lecture vidéo.
+              </video>
+              <div className="flex gap-3">
+                <a
+                  href={finalUrl}
+                  download
+                  className="flex-1 bg-blue-600 text-white text-center py-3 px-4 rounded-lg hover:bg-blue-700 transition-all font-medium"
+                >
+                  📥 Télécharger
+                </a>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(finalUrl)}
+                  className="flex-1 bg-slate-600 text-white py-3 px-4 rounded-lg hover:bg-slate-700 transition-all font-medium"
+                >
+                  📋 Copier le lien
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => router.push(`/jobs/${job.id}`)}
+                className="w-full text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 underline"
+              >
+                Voir la page du job
+              </button>
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={loading || !prompt.trim()}
+            disabled={loading || !prompt.trim() || (job?.status === 'in_progress' || job?.status === 'pending')}
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold py-4 px-6 rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:from-slate-400 disabled:to-slate-400 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0"
           >
             {loading ? (
@@ -161,7 +280,7 @@ export default function GeneratePage() {
                 Création en cours...
               </span>
             ) : (
-              '🎬 Générer'
+              job ? '⏳ En cours...' : '🎬 Générer'
             )}
           </button>
 
@@ -182,10 +301,9 @@ export default function GeneratePage() {
             ℹ️ À propos
           </h3>
           <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
-            <li>• Génération vidéo avec SVI (Stable Video Infinity)</li>
-            <li>• Audio généré automatiquement avec AudioLDM2</li>
-            <li>• Mixage audio/vidéo avec normalisation -16 LUFS</li>
-            <li>• Temps de génération: ~2-5 minutes selon la durée</li>
+            <li>• Un seul pipeline, un seul happy path</li>
+            <li>• Aucun audio pour l’instant</li>
+            <li>• Stockage: Supabase bucket public “generated”</li>
           </ul>
         </div>
       </div>

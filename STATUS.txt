@@ -1,62 +1,19 @@
-# AlphoGenAI Mini - Status
+# AlphoGenAI Mini — STATUS (V1 — source de vérité)
 
-## ✅ ARCHITECTURE MIGRATION COMPLETE
+## Pipeline (happy path only)
+- **UI**: `/generate` → crée un job (POST `/api/jobs`)
+- **Worker**: poll `jobs.status=pending` → génère la vidéo → update `jobs.output_url_final` → `done`
+- **Video backend (unique)**:
+  - **Prod**: `ModalBackend` via `MODAL_VIDEO_ENDPOINT_URL`
+  - **Local/CI**: `MockBackend` (`VIDEO_BACKEND=mock`) → MP4 dummy ~1s + upload Supabase
+- **Storage**: Supabase Storage bucket **`generated`** en **public read** (V1, pas de signed URL)
+- **Cache**: `video_cache.prompt_hash = sha256(JSON stable prompt+duration_sec+fps+resolution+seed)`
 
-### Stack
-- **Video Generation**: Runway Gen-4 Turbo
-- **Script Generation**: Qwen Mock (no API calls)
-- **Music**: Free tracks from Supabase Storage (YouTube Audio Library)
-- **Worker**: Simplified async orchestrator (no LangGraph)
+## Off / Legacy
+- **Audio**: OFF (archivé dans `legacy/`)
+- **Runpod / SVI / Runway / Replicate / Remotion / musique**: LEGACY uniquement (dans `legacy/`)
 
-### Workflow
-1. User submits prompt → Job created in Supabase
-2. Worker polls jobs table
-3. Orchestrator executes:
-   - Qwen Mock generates script structure
-   - Runway Gen-4 generates video (10s, 16:9)
-   - Music selected from Supabase Storage by tone
-   - Job marked as completed with final video URL
-4. User views video at /v/{jobId}
-
-### Files Structure
-- `workers/runway_orchestrator.py` - Main workflow orchestrator
-- `workers/runway_service.py` - Runway Gen-4 API wrapper
-- `workers/qwen_mock_service.py` - Mock script generator
-- `workers/music_selector.py` - Music selection from Storage
-- `workers/worker.py` - Background job processor
-- `workers/supabase_client.py` - Database operations
-- `workers/config.py` - Configuration management
-
-### Removed Services
-- ❌ Replicate (SD, WAN Video)
-- ❌ Pika
-- ❌ HuggingFace FLUX
-- ❌ ElevenLabs
-- ❌ Remotion
-- ❌ LangGraph orchestration
-
-### Frontend Updates
-- ✅ Route moved from `/generate` to `/creator/generate`
-- ✅ Authentication required for video generation
-- ✅ Admin controls hidden behind auth check
-- ✅ `/protected` demo page removed
-- ✅ Admin routes protected by middleware
-
-### Environment Variables
-Required:
-- `RUNWAY_API_KEY` - Runway Gen-4 Turbo API key
-- `SUPABASE_URL` - Supabase project URL
-- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
-
-Optional:
-- `QWEN_MOCK_ENABLED=true` - Use mock mode (default)
-- `WEBHOOK_URL` - Webhook for job completion notifications
-
-### Testing
-Run: `python -m workers.runway_orchestrator "Test prompt"`
-
-## 🚀 Performance
-
-- Temps moyen de génération : **2-3 minutes** (Runway Gen-4 Turbo)
-- Durée vidéo : **10 secondes** (16:9)
-- Cache actif pour éviter les régénérations
+## Routes actives (V1)
+- Pages: `/`, `/generate`, `/jobs/[id]`
+- Redirections legacy: `/creator/generate` → `/generate`, `/v/[id]` → `/jobs/[id]`, `/dashboard` → `/generate`
+- API: `POST /api/jobs`, `GET /api/jobs/[id]`, compat `POST/GET /api/generate-video` (wrapper strict)

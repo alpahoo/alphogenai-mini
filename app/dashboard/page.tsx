@@ -1,4 +1,4 @@
-import AlphoShellDemo from "@/components/alpho-shell-demo";
+import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "Dashboard - Alpho Gen AI",
@@ -6,5 +6,7 @@ export const metadata = {
 };
 
 export default function DashboardPage() {
-  return <AlphoShellDemo />;
+  // V1: UI minimale — le flow canonique est /generate.
+  // On garde /dashboard pour compat, mais on redirige.
+  redirect("/generate");
 }

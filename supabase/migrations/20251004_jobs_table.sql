@@ -95,7 +95,7 @@ CREATE TRIGGER update_jobs_updated_at
 COMMENT ON TABLE public.jobs IS 'Video generation jobs with LangGraph state';
 COMMENT ON COLUMN public.jobs.app_state IS 'Complete LangGraph workflow state (JSON)';
 COMMENT ON COLUMN public.jobs.status IS 'Job status: pending, in_progress, done, failed, cancelled';
-COMMENT ON COLUMN public.jobs.current_stage IS 'Current pipeline stage: qwen, wan_image, pika, elevenlabs, remotion';
+COMMENT ON COLUMN public.jobs.current_stage IS 'Current pipeline stage (implementation-defined): e.g. starting, video_generated, completed, failed';
 COMMENT ON COLUMN public.jobs.final_url IS 'Final video URL when completed';
 COMMENT ON COLUMN public.jobs.webhook_url IS 'Optional webhook URL for completion notification';
 

@@ -27,7 +27,7 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
 
   // Polling pour les jobs en cours
   useEffect(() => {
-    const isDone = job.status === "done" || job.status === "completed";
+    const isDone = job.status === "done";
     
     if (isDone || job.status === "failed" || job.status === "cancelled") {
       setPolling(false);
@@ -38,14 +38,15 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
     setPolling(true);
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/generate-video?id=${job.id}`);
+        const res = await fetch(`/api/jobs/${job.id}`);
         if (res.ok) {
           const data = await res.json();
-          setJob(data);
+          // /api/jobs/[id] returns { success, job }
+          setJob(data.job ?? data);
           
           // Arrêter le polling si terminé
-          const isComplete = data.status === "done" || data.status === "completed";
-          if (isComplete || data.status === "failed") {
+          const status = (data.job ?? data).status;
+          if (status === "done" || status === "failed") {
             setPolling(false);
             clearInterval(interval);
             router.refresh();
@@ -66,7 +67,7 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isDone = job.status === "done" || job.status === "completed";
+  const isDone = job.status === "done";
   const videoUrl = job.final_url || job.video_url;
 
   return (
@@ -115,7 +116,7 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
                 </div>
 
                 <a
-                  href="/creator/generate"
+                  href="/generate"
                   className="block w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all text-center font-medium"
                 >
                   ✨ Créer une autre vidéo
@@ -147,7 +148,7 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
                   {job.error_message || "Une erreur est survenue lors de la génération"}
                 </p>
                 <a
-                  href="/creator/generate"
+                  href="/generate"
                   className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   🔄 Réessayer
@@ -202,7 +203,7 @@ export default function VideoPlayer({ initialJob }: VideoPlayerProps) {
         {!isDone && (
           <div className="mt-6 text-center">
             <a
-              href="/creator/generate"
+              href="/generate"
               className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition-colors"
             >
               ← Retour au formulaire
