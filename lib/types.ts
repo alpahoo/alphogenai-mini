@@ -1,5 +1,7 @@
 export type JobStatus = "pending" | "in_progress" | "done" | "failed";
 
+export type JobPlan = "free" | "pro" | "premium";
+
 export type JobStage =
   | "queued"
   | "generating_video"
@@ -12,6 +14,7 @@ export interface Job {
   id: string;
   prompt: string;
   status: JobStatus;
+  plan: JobPlan;
   current_stage: JobStage | null;
   video_url: string | null;
   audio_url: string | null;
@@ -23,6 +26,7 @@ export interface Job {
 
 export interface CreateJobRequest {
   prompt: string;
+  plan?: JobPlan;
 }
 
 export interface CreateJobResponse {
@@ -57,3 +61,15 @@ export const STAGE_ORDER: JobStage[] = [
   "uploading",
   "completed",
 ];
+
+export const PLAN_LABELS: Record<JobPlan, string> = {
+  free: "Free",
+  pro: "Pro",
+  premium: "Premium",
+};
+
+export const PLAN_MAX_DURATION: Record<JobPlan, number> = {
+  free: 90,
+  pro: 60,
+  premium: 15,
+};
