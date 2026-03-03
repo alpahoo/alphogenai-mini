@@ -374,7 +374,7 @@ def webhook():
 
     @web.post("/webhook")
     async def trigger(req: JobRequest, x_webhook_secret: str = Header(None)):
-        expected = os.environ.get("WEBHOOK_SECRET")
+        expected = os.environ.get("MODAL_WEBHOOK_SECRET")
         if expected and x_webhook_secret != expected:
             raise HTTPException(status_code=401, detail="Unauthorized")
         generate_video_complete.spawn(req.job_id, req.prompt, req.plan, req.user_id)

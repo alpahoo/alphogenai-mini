@@ -10,7 +10,7 @@ import { NextResponse } from "next/server";
 export async function POST(req: Request) {
   try {
     const secret = req.headers.get("x-webhook-secret");
-    if (secret !== process.env.WEBHOOK_SECRET) {
+    if (secret !== process.env.MODAL_WEBHOOK_SECRET) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
