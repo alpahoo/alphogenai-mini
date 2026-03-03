@@ -1,17 +1,14 @@
 """
 AlphoGenAI Mini — Modal Video Pipeline
 Architecture multi-plan :
-  Free    : FLUX.1-schnell (T2I) + Wan 2.2 I2V + SVI 2.0 Pro LoRA (max 90s)
-  Pro     : LTX-Video 13B (T2V natif, 60s streaming)
-  Premium : Seedance 2.0 API (15s, qualité cinématique)
+  Free    : FLUX.1-schnell (T2I) + Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA (max 90s, A10G)
+  Pro     : LTX-Video 13B (T2V natif, 60s streaming, A10G)
+  Premium : Seedance 2.0 API (15s, qualité cinématique, A10G)
 """
 import modal
 import os
 from typing import Optional, Literal
 
-# ---------------------------------------------------------------------------
-# App & base image
-# ---------------------------------------------------------------------------
 app = modal.App("alphogenai-v2")
 
 Plan = Literal["free", "pro", "premium"]
@@ -26,44 +23,34 @@ base_image = (
         "accelerate>=0.33.0",
         "safetensors",
         "sentencepiece",
-        "peft",                    # LoRA support (SVI)
+        "peft",
         "imageio[ffmpeg]",
         "ffmpeg-python",
         "pillow",
         "numpy",
         "scipy",
         "supabase",
-        "boto3",                   # R2 upload (S3-compatible)
+        "boto3",
         "httpx",
     )
     .apt_install("ffmpeg", "git")
 )
 
-# ---------------------------------------------------------------------------
-# Secrets & volumes
-# ---------------------------------------------------------------------------
 secrets = modal.Secret.from_name("alphogenai-secrets")
+models_volume = modal.Volume.from_name("alphogenai-models", create_if_missing=True)
 
-models_volume = modal.Volume.from_name(
-    "alphogenai-models", create_if_missing=True
-)
-
-# ---------------------------------------------------------------------------
-# GPU configs per plan
-# ---------------------------------------------------------------------------
-GPU_FREE    = modal.gpu.A100(size="40GB")   # Wan 2.2 I2V 14B needs A100
-GPU_PRO     = modal.gpu.A10G()              # LTX-Video 13B fits on A10G
-GPU_PREMIUM = modal.gpu.A10G()              # Seedance via API, no heavy local model
+# All plans run on A10G (24GB VRAM)
+GPU_A10G = modal.gpu.A10G()
 
 
 # ===========================================================================
-# FREE PLAN — FLUX.1-schnell (T2I) + Wan 2.2 I2V + SVI 2.0 Pro LoRA
+# FREE PLAN — FLUX.1-schnell (T2I) + Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA
 # ===========================================================================
 
 @app.function(
     image=base_image,
-    gpu=GPU_FREE,
-    timeout=900,          # 15 min max (90s video needs several segments)
+    gpu=GPU_A10G,
+    timeout=900,
     retries=1,
     volumes={"/models": models_volume},
     secrets=[secrets],
@@ -71,25 +58,24 @@ GPU_PREMIUM = modal.gpu.A10G()              # Seedance via API, no heavy local m
 def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     """
     Free plan pipeline:
-    1. FLUX.1-schnell → initial image (T2I)
-    2. Wan 2.2 I2V + SVI 2.0 Pro LoRA → video segments (iterative)
-    3. ffmpeg concat → final video
+    1. FLUX.1-schnell  → initial image (T2I, 4 steps)
+    2. Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA → iterative video segments
+    3. ffmpeg concat   → final MP4
+    GPU: A10G (24GB) — Wan2.2 5B fits comfortably
     """
     import torch
-    from diffusers import FluxPipeline, AutoencoderKLWan, WanImageToVideoPipeline
+    from diffusers import FluxPipeline, WanImageToVideoPipeline, AutoencoderKLWan
     from diffusers.utils import export_to_video
-    from peft import PeftModel
     from PIL import Image
-    import tempfile
+    import tempfile, subprocess, random
     from pathlib import Path
-    import subprocess
 
-    print(f"[{job_id}][FREE] Starting pipeline — max {max_duration}s")
+    print(f"[{job_id}][FREE] Starting — max {max_duration}s | GPU: A10G")
 
     MODEL_DIR = "/models"
     FLUX_ID   = "black-forest-labs/FLUX.1-schnell"
-    WAN_ID    = "Wan-AI/Wan2.2-I2V-14B-480P"      # Wan 2.2 I2V base model
-    SVI_LORA  = "Kijai/WanVideo_comfy"             # SVI 2.0 Pro LoRA weights
+    WAN_ID    = "Wan-AI/Wan2.2-TI2V-5B"           # 5B — fits on A10G
+    SVI_LORA  = "Kijai/WanVideo_comfy"
     SVI_LORA_PATH = "LoRAs/Stable-Video-Infinity/v2.0/svi_2.0_pro_wan22_high.safetensors"
 
     # ------------------------------------------------------------------
@@ -105,7 +91,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
 
     image: Image.Image = flux(
         prompt=prompt,
-        num_inference_steps=4,      # schnell is optimised for 4 steps
+        num_inference_steps=4,
         guidance_scale=0.0,
         height=480,
         width=832,
@@ -113,12 +99,12 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
 
     del flux
     torch.cuda.empty_cache()
-    print(f"[{job_id}] Initial image generated ✓")
+    print(f"[{job_id}] Initial image ✓")
 
     # ------------------------------------------------------------------
-    # Step 2: Wan 2.2 I2V + SVI 2.0 Pro LoRA — iterative segments
+    # Step 2: Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA — iterative segments
     # ------------------------------------------------------------------
-    print(f"[{job_id}] Step 2/3 — Loading Wan 2.2 I2V + SVI LoRA...")
+    print(f"[{job_id}] Step 2/3 — Loading Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA...")
 
     vae = AutoencoderKLWan.from_pretrained(
         WAN_ID, subfolder="vae", torch_dtype=torch.float32, cache_dir=MODEL_DIR
@@ -130,7 +116,6 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
         cache_dir=MODEL_DIR,
     ).to("cuda")
 
-    # Load SVI 2.0 Pro LoRA
     pipe.load_lora_weights(
         SVI_LORA,
         weight_name=SVI_LORA_PATH,
@@ -138,23 +123,20 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     )
     pipe.set_adapters(["default"], adapter_weights=[0.9])
 
-    # Segment params
-    SEGMENT_FRAMES = 81        # ~5s at 16fps per segment (SVI optimal)
-    FPS            = 16
-    segment_duration = SEGMENT_FRAMES / FPS   # ~5.06s
-    num_segments   = max(1, min(int(max_duration / segment_duration), 18))  # max 18 segments ≈ 90s
+    SEGMENT_FRAMES   = 81       # ~5s at 16fps
+    FPS              = 16
+    segment_duration = SEGMENT_FRAMES / FPS
+    num_segments     = max(1, min(int(max_duration / segment_duration), 18))
 
-    print(f"[{job_id}] Generating {num_segments} segments × {segment_duration:.1f}s = {num_segments*segment_duration:.0f}s")
+    print(f"[{job_id}] {num_segments} segments × {segment_duration:.1f}s ≈ {num_segments*segment_duration:.0f}s")
 
     segment_paths = []
     current_image = image
-    import random
 
     with tempfile.TemporaryDirectory() as tmpdir:
         for i in range(num_segments):
-            seed = random.randint(0, 2**32 - 1)   # Different seed per segment (SVI requirement!)
+            seed = random.randint(0, 2**32 - 1)   # Different seed per segment!
             generator = torch.Generator(device="cuda").manual_seed(seed)
-
             print(f"[{job_id}] Segment {i+1}/{num_segments} (seed={seed})...")
 
             frames = pipe(
@@ -170,19 +152,18 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
             export_to_video(frames, str(seg_path), fps=FPS)
             segment_paths.append(str(seg_path))
 
-            # Last frame of this segment = first frame of next (SVI Film approach)
-            current_image = frames[-1] if isinstance(frames[-1], Image.Image) else Image.fromarray(frames[-1])
-
-            print(f"[{job_id}] Segment {i+1} done ✓")
+            # Last frame becomes first frame of next segment
+            last = frames[-1]
+            current_image = last if isinstance(last, Image.Image) else Image.fromarray(last)
+            print(f"[{job_id}] Segment {i+1} ✓")
 
         del pipe
         torch.cuda.empty_cache()
 
         # ------------------------------------------------------------------
-        # Step 3: ffmpeg concat all segments
+        # Step 3: ffmpeg concat
         # ------------------------------------------------------------------
         print(f"[{job_id}] Step 3/3 — Concatenating {len(segment_paths)} segments...")
-
         concat_list = Path(tmpdir) / "concat.txt"
         concat_list.write_text("\n".join(f"file '{p}'" for p in segment_paths))
 
@@ -199,28 +180,26 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
 
 
 # ===========================================================================
-# PRO PLAN — LTX-Video 13B (T2V natif, 60s)
+# PRO PLAN — LTX-Video 13B (T2V natif, 60s, A10G)
 # ===========================================================================
 
 @app.function(
     image=base_image,
-    gpu=GPU_PRO,
+    gpu=GPU_A10G,
     timeout=600,
     retries=1,
     volumes={"/models": models_volume},
     secrets=[secrets],
 )
 def generate_pro(prompt: str, job_id: str):
-    """
-    Pro plan: LTX-Video 13B — native text-to-video, up to 60s.
-    """
+    """Pro plan: LTX-Video 13B — native T2V, up to 60s. GPU: A10G"""
     import torch
     from diffusers import LTXPipeline
     from diffusers.utils import export_to_video
     import tempfile
     from pathlib import Path
 
-    print(f"[{job_id}][PRO] LTX-Video 13B pipeline...")
+    print(f"[{job_id}][PRO] LTX-Video 13B | GPU: A10G")
 
     pipe = LTXPipeline.from_pretrained(
         "Lightricks/LTX-Video",
@@ -229,14 +208,12 @@ def generate_pro(prompt: str, job_id: str):
     ).to("cuda")
     pipe.enable_model_cpu_offload()
 
-    print(f"[{job_id}] Generating ~60s video with LTX-Video...")
-
     frames = pipe(
         prompt=prompt,
         negative_prompt="worst quality, inconsistent motion, blurry, jittery, distorted",
         width=768,
         height=512,
-        num_frames=241,       # ~60s at 4fps (LTX native output)
+        num_frames=241,         # ~60s at 4fps (LTX native)
         num_inference_steps=50,
         guidance_scale=3.0,
     ).frames[0]
@@ -249,34 +226,29 @@ def generate_pro(prompt: str, job_id: str):
 
 
 # ===========================================================================
-# PREMIUM PLAN — Seedance 2.0 API (15s, qualité cinématique)
+# PREMIUM PLAN — Seedance 2.0 API (15s, cinématique, A10G)
 # ===========================================================================
 
 @app.function(
     image=base_image,
-    gpu=GPU_PREMIUM,
+    gpu=GPU_A10G,
     timeout=300,
     retries=2,
     secrets=[secrets],
 )
 def generate_premium(prompt: str, job_id: str):
-    """
-    Premium plan: Seedance 2.0 via API (15s, cinematic quality).
-    TODO: Replace with official Seedance 2.0 API endpoint when available.
-    """
-    import httpx
-    import time
+    """Premium plan: Seedance 2.0 via API (15s). GPU: A10G"""
+    import httpx, time
 
     print(f"[{job_id}][PREMIUM] Seedance 2.0 API...")
 
-    api_key  = os.environ.get("SEEDANCE_API_KEY", "")
-    api_url  = os.environ.get("SEEDANCE_API_URL", "")
+    api_key = os.environ.get("SEEDANCE_API_KEY", "")
+    api_url = os.environ.get("SEEDANCE_API_URL", "")
 
     if not api_key or not api_url:
         raise ValueError("SEEDANCE_API_KEY / SEEDANCE_API_URL not configured")
 
     with httpx.Client(timeout=240) as client:
-        # Submit generation
         resp = client.post(
             f"{api_url}/v1/video/generate",
             headers={"Authorization": f"Bearer {api_key}"},
@@ -286,17 +258,14 @@ def generate_premium(prompt: str, job_id: str):
         task_id = resp.json()["task_id"]
         print(f"[{job_id}] Seedance task: {task_id}")
 
-        # Poll until done
         for _ in range(60):
             time.sleep(5)
-            status_resp = client.get(
+            data = client.get(
                 f"{api_url}/v1/video/{task_id}",
                 headers={"Authorization": f"Bearer {api_key}"},
-            )
-            data = status_resp.json()
+            ).json()
             if data["status"] == "completed":
-                video_resp = client.get(data["video_url"])
-                return video_resp.content
+                return client.get(data["video_url"]).content
             elif data["status"] == "failed":
                 raise RuntimeError(f"Seedance failed: {data.get('error')}")
 
@@ -304,11 +273,10 @@ def generate_premium(prompt: str, job_id: str):
 
 
 # ===========================================================================
-# R2 Upload helper
+# R2 Upload
 # ===========================================================================
 
 def upload_to_r2(video_bytes: bytes, job_id: str) -> str:
-    """Upload video to Cloudflare R2, return public URL."""
     import boto3
     from botocore.config import Config
 
@@ -330,29 +298,20 @@ def upload_to_r2(video_bytes: bytes, job_id: str) -> str:
     )
 
     public_url = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")
-    return f"{public_url}/{key}" if public_url else f"{os.environ['R2_ENDPOINT']}/{os.environ['R2_BUCKET_NAME']}/{key}"
+    return f"{public_url}/{key}"
 
 
 # ===========================================================================
-# Main orchestrator — routes by plan
+# Main orchestrator
 # ===========================================================================
 
-@app.function(
-    image=base_image,
-    secrets=[secrets],
-    timeout=1200,
-    retries=1,
-)
+@app.function(image=base_image, secrets=[secrets], timeout=1200, retries=1)
 def generate_video_complete(
     job_id: str,
     prompt: str,
     plan: Plan = "free",
     user_id: Optional[str] = None,
 ):
-    """
-    Main entry point. Routes to the correct pipeline based on plan.
-    Updates Supabase at each stage.
-    """
     from supabase import create_client
 
     supabase = create_client(
@@ -360,57 +319,43 @@ def generate_video_complete(
         os.environ["SUPABASE_SERVICE_KEY"],
     )
 
-    def update_job(status=None, stage=None, **kwargs):
-        payload = {"updated_at": "now()"}
-        if status: payload["status"] = status
-        if stage:  payload["current_stage"] = stage
-        payload.update(kwargs)
-        supabase.table("jobs").update(payload).eq("id", job_id).execute()
+    def update_job(**kwargs):
+        supabase.table("jobs").update(kwargs).eq("id", job_id).execute()
 
     try:
-        update_job(status="processing", stage="generating_video")
-        print(f"[{job_id}] Plan: {plan} | Prompt: {prompt[:60]}...")
+        update_job(status="processing", current_stage="generating_video")
+        print(f"[{job_id}] Plan={plan} | {prompt[:60]}...")
 
-        # Route to plan-specific generator
         if plan == "free":
-            update_job(stage="generating_video")
             video_bytes = generate_free.remote(prompt, job_id, max_duration=90)
-
         elif plan == "pro":
-            update_job(stage="generating_video")
             video_bytes = generate_pro.remote(prompt, job_id)
-
         elif plan == "premium":
-            update_job(stage="generating_video")
             video_bytes = generate_premium.remote(prompt, job_id)
-
         else:
             raise ValueError(f"Unknown plan: {plan}")
 
-        # Upload to R2
-        update_job(stage="uploading")
-        print(f"[{job_id}] Uploading to R2...")
+        update_job(current_stage="uploading")
         video_url = upload_to_r2(video_bytes, job_id)
         print(f"[{job_id}] Uploaded: {video_url}")
 
-        # Done
         update_job(
             status="done",
-            stage="completed",
+            current_stage="completed",
             video_url=video_url,
             output_url_final=video_url,
         )
-        print(f"[{job_id}] ✅ Pipeline complete!")
+        print(f"[{job_id}] ✅ Done!")
         return {"success": True, "job_id": job_id, "video_url": video_url}
 
     except Exception as e:
-        print(f"[{job_id}] ❌ Error: {e}")
-        update_job(status="failed", stage="failed", error_message=str(e))
+        print(f"[{job_id}] ❌ {e}")
+        update_job(status="failed", current_stage="failed", error_message=str(e))
         raise
 
 
 # ===========================================================================
-# FastAPI webhook — triggered by Next.js POST /api/jobs
+# FastAPI webhook
 # ===========================================================================
 
 @app.function(image=base_image, secrets=[secrets])
@@ -432,25 +377,15 @@ def webhook():
         expected = os.environ.get("WEBHOOK_SECRET")
         if expected and x_webhook_secret != expected:
             raise HTTPException(status_code=401, detail="Unauthorized")
-
         generate_video_complete.spawn(req.job_id, req.prompt, req.plan, req.user_id)
-
-        return {
-            "success": True,
-            "message": f"Pipeline started for job {req.job_id}",
-            "plan": req.plan,
-        }
+        return {"success": True, "message": f"Pipeline started for job {req.job_id}", "plan": req.plan}
 
     @web.get("/health")
     async def health():
-        return {"status": "ok", "plans": ["free", "pro", "premium"]}
+        return {"status": "ok", "plans": ["free", "pro", "premium"], "gpu": "A10G"}
 
     return web
 
-
-# ===========================================================================
-# Local test
-# ===========================================================================
 
 @app.local_entrypoint()
 def test():
