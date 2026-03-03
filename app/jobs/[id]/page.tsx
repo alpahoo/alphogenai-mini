@@ -1,273 +1,266 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import {
+  ArrowLeft,
+  Download,
+  Copy,
+  Check,
+  Loader2,
+  AlertCircle,
+  Wand2,
+} from "lucide-react";
+import Link from "next/link";
+import type { Job, JobStage } from "@/lib/types";
+import { STAGE_LABELS, STAGE_ORDER } from "@/lib/types";
 
-interface Job {
-  id: string;
-  prompt: string;
-  status: string;
-  current_stage: string | null;
-  video_url: string | null;
-  audio_url: string | null;
-  output_url_final: string | null;
-  audio_score: number | null;
-  error_message: string | null;
-  created_at: string;
-  updated_at: string;
-}
+const POLL_INTERVAL = 5000;
 
-export default function JobPage({ params }: { params: { id: string } }) {
+export default function JobPage() {
+  const params = useParams<{ id: string }>();
   const router = useRouter();
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const fetchJob = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/jobs/${params.id}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch job");
+      }
+
+      setJob(data.job);
+      setLoading(false);
+      return data.job.status;
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Something went wrong";
+      setError(message);
+      setLoading(false);
+      return "error";
+    }
+  }, [params.id]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: NodeJS.Timeout | null = null;
 
-    const fetchJob = async () => {
-      try {
-        const res = await fetch(`/api/jobs/${params.id}`);
-        const data = await res.json();
+    const startPolling = async () => {
+      const status = await fetchJob();
+      if (status === "done" || status === "failed" || status === "error") {
+        return;
+      }
 
-        if (!res.ok) {
-          throw new Error(data.error || 'Erreur lors de la récupération du job');
-        }
-
-        setJob(data.job);
-        setLoading(false);
-
-        if (data.job.status === 'done' || data.job.status === 'failed') {
+      interval = setInterval(async () => {
+        const s = await fetchJob();
+        if (s === "done" || s === "failed" || s === "error") {
           if (interval) clearInterval(interval);
         }
-      } catch (err: any) {
-        setError(err.message || 'Une erreur est survenue');
-        setLoading(false);
-        if (interval) clearInterval(interval);
-      }
+      }, POLL_INTERVAL);
     };
 
-    fetchJob();
-
-    interval = setInterval(fetchJob, 5000);
-
+    startPolling();
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [params.id]);
+  }, [fetchJob]);
 
-  const getStatusDisplay = () => {
-    if (!job) return null;
-
-    if (job.status === 'pending') {
-      return (
-        <div className="flex items-center gap-3">
-          <div className="animate-spin h-6 w-6 border-4 border-blue-500 border-t-transparent rounded-full"></div>
-          <span className="text-lg font-medium text-blue-600 dark:text-blue-400">
-            En file d'attente...
-          </span>
-        </div>
-      );
-    }
-
-    if (job.status === 'in_progress') {
-      const stage = job.current_stage || 'processing';
-      let stageText = 'Traitement en cours...';
-      
-      if (stage.includes('video')) {
-        stageText = '🎬 Génération vidéo...';
-      } else if (stage.includes('audio')) {
-        stageText = '🎵 Génération audio...';
-      } else if (stage.includes('mix')) {
-        stageText = '🎚️ Mixage...';
-      }
-
-      return (
-        <div className="flex items-center gap-3">
-          <div className="animate-spin h-6 w-6 border-4 border-purple-500 border-t-transparent rounded-full"></div>
-          <span className="text-lg font-medium text-purple-600 dark:text-purple-400">
-            {stageText}
-          </span>
-        </div>
-      );
-    }
-
-    if (job.status === 'done') {
-      return (
-        <div className="flex items-center gap-3">
-          <div className="h-6 w-6 bg-green-500 rounded-full flex items-center justify-center">
-            <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <span className="text-lg font-medium text-green-600 dark:text-green-400">
-            Terminé ✅
-          </span>
-        </div>
-      );
-    }
-
-    if (job.status === 'failed') {
-      return (
-        <div className="flex items-center gap-3">
-          <div className="h-6 w-6 bg-red-500 rounded-full flex items-center justify-center">
-            <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </div>
-          <span className="text-lg font-medium text-red-600 dark:text-red-400">
-            Échec ❌
-          </span>
-        </div>
-      );
-    }
-
-    return null;
+  const copyLink = (url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-  };
+  const currentStageIndex = job?.current_stage
+    ? STAGE_ORDER.indexOf(job.current_stage as JobStage)
+    : 0;
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-        <div className="text-center">
-          <div className="animate-spin h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-slate-600 dark:text-slate-400">Chargement...</p>
-        </div>
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-6">
-        <div className="max-w-md w-full bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8">
-          <div className="text-center">
-            <div className="h-12 w-12 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </div>
-            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">Erreur</h2>
-            <p className="text-slate-600 dark:text-slate-400 mb-6">{error}</p>
-            <button
-              onClick={() => router.push('/generate')}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-all"
-            >
-              Retour
-            </button>
-          </div>
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <div className="max-w-md text-center">
+          <AlertCircle className="mx-auto mb-4 h-12 w-12 text-destructive" />
+          <h2 className="mb-2 text-xl font-bold">Error</h2>
+          <p className="mb-6 text-muted-foreground">{error}</p>
+          <button
+            onClick={() => router.push("/generate")}
+            className="rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground"
+          >
+            Try Again
+          </button>
         </div>
       </div>
     );
   }
 
-  if (!job) {
-    return null;
-  }
+  if (!job) return null;
+
+  const isActive = job.status === "pending" || job.status === "in_progress";
+  const isDone = job.status === "done";
+  const isFailed = job.status === "failed";
+  const videoUrl = job.output_url_final || job.video_url;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">
-            Job de Génération
-          </h1>
-          <p className="text-slate-600 dark:text-slate-400">
-            ID: {job.id}
-          </p>
-        </div>
+    <div className="min-h-screen px-4 py-12 relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute top-1/4 left-1/4 h-96 w-96 rounded-full bg-indigo-500/10 blur-3xl" />
+      </div>
 
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-8 space-y-6">
-          <div>
-            <h2 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">Statut</h2>
-            {getStatusDisplay()}
+      <div className="relative z-10 mx-auto max-w-3xl">
+        <Link
+          href="/generate"
+          className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          New generation
+        </Link>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          {/* Prompt card */}
+          <div className="mb-6 rounded-2xl border border-border/50 bg-card/80 p-6 backdrop-blur-sm">
+            <p className="text-sm text-muted-foreground">Prompt</p>
+            <p className="mt-1 font-medium">{job.prompt}</p>
           </div>
 
-          <div>
-            <h2 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">Prompt</h2>
-            <p className="text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-slate-700 rounded-lg p-4">
-              {job.prompt}
-            </p>
-          </div>
+          {/* Progress */}
+          {isActive && (
+            <div className="mb-6 rounded-2xl border border-border/50 bg-card/80 p-6 backdrop-blur-sm">
+              <div className="mb-4 flex items-center gap-3">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <span className="font-semibold">
+                  {job.current_stage
+                    ? STAGE_LABELS[job.current_stage as JobStage] ||
+                      "Processing..."
+                    : "In queue..."}
+                </span>
+              </div>
 
-          {job.error_message && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-              <h2 className="text-sm font-medium text-red-900 dark:text-red-100 mb-2">Message d'erreur</h2>
-              <p className="text-red-600 dark:text-red-400 text-sm">
-                {job.error_message}
-              </p>
+              {/* Stage progress bar */}
+              <div className="flex gap-1.5">
+                {STAGE_ORDER.map((stage, i) => (
+                  <div
+                    key={stage}
+                    className={`h-1.5 flex-1 rounded-full transition-colors ${
+                      i <= currentStageIndex ? "bg-primary" : "bg-muted"
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <div className="mt-3 flex justify-between text-xs text-muted-foreground">
+                <span>
+                  Step {Math.max(currentStageIndex + 1, 1)} of{" "}
+                  {STAGE_ORDER.length}
+                </span>
+                <span>Polling every 5s</span>
+              </div>
             </div>
           )}
 
-          {job.status === 'done' && job.output_url_final && (
-            <div>
-              <h2 className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4">Vidéo finale (avec audio)</h2>
+          {/* Failed */}
+          {isFailed && (
+            <div className="mb-6 rounded-2xl border border-destructive/50 bg-destructive/10 p-6">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-5 w-5 text-destructive" />
+                <div>
+                  <p className="font-semibold text-destructive">
+                    Generation failed
+                  </p>
+                  {job.error_message && (
+                    <p className="mt-1 text-sm text-destructive/80">
+                      {job.error_message}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => router.push("/generate")}
+                className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground"
+              >
+                <Wand2 className="h-4 w-4" />
+                Try Again
+              </button>
+            </div>
+          )}
+
+          {/* Done — Video player */}
+          {isDone && videoUrl && (
+            <div className="mb-6 rounded-2xl border border-border/50 bg-card/80 p-6 backdrop-blur-sm">
+              <div className="mb-4 flex items-center gap-2">
+                <Check className="h-5 w-5 text-green-500" />
+                <span className="font-semibold text-green-500">Complete</span>
+              </div>
+
               <video
                 controls
-                className="w-full rounded-lg shadow-lg mb-4"
-                src={job.output_url_final}
+                autoPlay
+                className="w-full rounded-xl"
+                src={videoUrl}
               >
-                Votre navigateur ne supporte pas la lecture vidéo.
+                Your browser does not support video playback.
               </video>
-              
-              <div className="flex gap-3">
+
+              <div className="mt-4 flex gap-3">
                 <a
-                  href={job.output_url_final}
+                  href={videoUrl}
                   download
-                  className="flex-1 bg-blue-600 text-white text-center py-3 px-4 rounded-lg hover:bg-blue-700 transition-all font-medium"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110"
                 >
-                  📥 Télécharger
+                  <Download className="h-4 w-4" />
+                  Download
                 </a>
                 <button
-                  onClick={() => copyToClipboard(job.output_url_final!)}
-                  className="flex-1 bg-slate-600 text-white py-3 px-4 rounded-lg hover:bg-slate-700 transition-all font-medium"
+                  onClick={() => copyLink(videoUrl)}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-card py-3 text-sm font-semibold transition-colors hover:bg-muted"
                 >
-                  📋 Copier le lien
+                  {copied ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4" />
+                      Copy Link
+                    </>
+                  )}
                 </button>
               </div>
             </div>
           )}
 
-          {job.audio_url && (
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <h2 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
-                Audio généré
-                {job.audio_score && (
-                  <span className="ml-2 text-xs">
-                    (Score CLAP: {job.audio_score.toFixed(3)})
-                  </span>
-                )}
-              </h2>
-              <audio controls className="w-full" src={job.audio_url}>
-                Votre navigateur ne supporte pas la lecture audio.
-              </audio>
+          {/* Meta info */}
+          <div className="rounded-xl border border-border/50 bg-card/30 p-4 text-xs text-muted-foreground">
+            <div className="flex flex-wrap gap-x-6 gap-y-1">
+              <span>ID: {job.id.slice(0, 8)}...</span>
+              <span>
+                Created:{" "}
+                {new Date(job.created_at).toLocaleString("en-US", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </span>
+              {job.current_stage && <span>Stage: {job.current_stage}</span>}
             </div>
-          )}
-
-          <div className="text-center pt-4">
-            <button
-              onClick={() => router.push('/generate')}
-              className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 underline"
-            >
-              ← Générer une nouvelle vidéo
-            </button>
           </div>
-        </div>
-
-        <div className="mt-6 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">
-            ℹ️ Informations
-          </h3>
-          <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
-            <p>Créé: {new Date(job.created_at).toLocaleString('fr-FR')}</p>
-            <p>Mis à jour: {new Date(job.updated_at).toLocaleString('fr-FR')}</p>
-            {job.current_stage && <p>Étape: {job.current_stage}</p>}
-          </div>
-        </div>
+        </motion.div>
       </div>
     </div>
   );

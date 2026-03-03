@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
 
@@ -9,15 +8,11 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "AlphoGenAI Mini — Générez des vidéos cohérentes",
-  description: "Transformez vos idées en vidéos professionnelles avec IA. Script, voix, sous-titres et montage automatiques.",
+  title: "AlphoGenAI — AI Video Generation",
+  description:
+    "Transform text prompts into stunning AI-generated videos with synchronized audio.",
+  keywords: "AI video, text to video, video generation, generative AI",
 };
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  display: "swap",
-  subsets: ["latin"],
-});
 
 export default function RootLayout({
   children,
@@ -26,11 +21,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.className} antialiased`}>
+      <body className="font-sans antialiased">
         <ThemeProvider
           attribute="class"
-          defaultTheme="light"
-          enableSystem={true}
+          defaultTheme="dark"
+          enableSystem={false}
           disableTransitionOnChange
         >
           {children}

@@ -1,24 +1,25 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import type { JobPlan } from "@/lib/types";
+
+const VALID_PLANS: JobPlan[] = ["free", "pro", "premium"];
 
 export async function POST(req: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const body = await req.json();
+    const { prompt, plan = "free" } = body as { prompt: string; plan?: JobPlan };
 
-    if (authError || !user) {
+    if (!prompt || prompt.trim().length < 3) {
       return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
+        { error: "prompt is required (min 3 chars)" },
+        { status: 400 }
       );
     }
 
-    const body = await req.json();
-    const { prompt, duration_sec, resolution, fps, seed } = body;
-
-    if (!prompt || prompt.length < 3) {
+    if (!VALID_PLANS.includes(plan)) {
       return NextResponse.json(
-        { error: "prompt is required (min 3 chars)" },
+        { error: `plan must be one of: ${VALID_PLANS.join(", ")}` },
         { status: 400 }
       );
     }
@@ -26,17 +27,10 @@ export async function POST(req: Request) {
     const { data: job, error: insertError } = await supabase
       .from("jobs")
       .insert({
-        user_id: user.id,
-        prompt: prompt,
+        prompt: prompt.trim(),
+        plan,
         status: "pending",
-        app_state: {
-          prompt: prompt,
-          duration_sec: duration_sec || 60,
-          resolution: resolution || "1920x1080",
-          fps: fps || 24,
-          seed: seed,
-          created_via: "api"
-        }
+        current_stage: "queued",
       })
       .select()
       .single();
@@ -49,16 +43,41 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      jobId: job.id,
-      job: job
-    });
-  } catch (error: any) {
+    // Trigger Modal pipeline (async — returns immediately)
+    const modalUrl = process.env.MODAL_WEBHOOK_URL;
+    if (modalUrl) {
+      const modalRes = await fetch(`${modalUrl}/webhook`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-webhook-secret": process.env.MODAL_WEBHOOK_SECRET ?? "",
+        },
+        body: JSON.stringify({
+          job_id: job.id,
+          prompt: prompt.trim(),
+          plan,
+        }),
+      });
+
+      if (!modalRes.ok) {
+        console.error(
+          "Failed to trigger Modal pipeline:",
+          await modalRes.text()
+        );
+        await supabase
+          .from("jobs")
+          .update({ status: "failed", error_message: "Failed to start pipeline" })
+          .eq("id", job.id);
+      }
+    } else {
+      console.warn("MODAL_WEBHOOK_URL not set — pipeline not triggered");
+    }
+
+    return NextResponse.json({ success: true, jobId: job.id, job });
+  } catch (error: unknown) {
     console.error("Error in POST /api/jobs:", error);
-    return NextResponse.json(
-      { error: error.message || "Internal server error" },
-      { status: 500 }
-    );
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
