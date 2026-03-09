@@ -40,7 +40,7 @@ secrets = modal.Secret.from_name("alphogenai-secrets")
 models_volume = modal.Volume.from_name("alphogenai-models", create_if_missing=True)
 
 # All plans run on A10G (24GB VRAM)
-GPU_A10G = modal.gpu.A10G()
+GPU_A10G = "A10G"
 
 
 # ===========================================================================
