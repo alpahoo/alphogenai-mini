@@ -69,7 +69,7 @@ export const PLAN_LABELS: Record<JobPlan, string> = {
 };
 
 export const PLAN_MAX_DURATION: Record<JobPlan, number> = {
-  free: 90,
+  free: 15,
   pro: 60,
-  premium: 15,
+  premium: 120,
 };
