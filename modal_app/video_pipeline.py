@@ -380,7 +380,36 @@ def webhook():
         expected = os.environ.get("MODAL_WEBHOOK_SECRET")
         if expected and x_webhook_secret != expected:
             raise HTTPException(status_code=401, detail="Unauthorized")
-        generate_video_complete.spawn(req.job_id, req.prompt, req.plan, req.user_id)
+
+        # Update job status immediately from webhook (don't rely on spawn)
+        try:
+            from supabase import create_client as _create_client
+            _url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+            _key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+            if _url and _key:
+                _sb = _create_client(_url, _key)
+                _sb.table("jobs").update({
+                    "status": "in_progress",
+                    "current_stage": "spawning_pipeline",
+                }).eq("id", req.job_id).execute()
+        except Exception as e:
+            print(f"[webhook] Failed to update job {req.job_id}: {e}")
+
+        try:
+            generate_video_complete.spawn(req.job_id, req.prompt, req.plan, req.user_id)
+        except Exception as e:
+            # If spawn fails, mark job as failed
+            print(f"[webhook] spawn() failed for {req.job_id}: {e}")
+            try:
+                _sb.table("jobs").update({
+                    "status": "failed",
+                    "current_stage": "failed",
+                    "error_message": f"Failed to spawn pipeline: {e}",
+                }).eq("id", req.job_id).execute()
+            except Exception:
+                pass
+            raise HTTPException(status_code=500, detail=f"Spawn failed: {e}")
+
         return {"success": True, "message": f"Pipeline started for job {req.job_id}", "plan": req.plan}
 
     @web.get("/health")
