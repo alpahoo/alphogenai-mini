@@ -70,7 +70,14 @@ export async function POST(req: Request) {
           .eq("id", job.id);
       }
     } else {
-      console.warn("MODAL_WEBHOOK_URL not set — pipeline not triggered");
+      console.error("MODAL_WEBHOOK_URL not set — pipeline not triggered");
+      await supabase
+        .from("jobs")
+        .update({
+          status: "failed",
+          error_message: "Pipeline not configured (MODAL_WEBHOOK_URL missing)",
+        })
+        .eq("id", job.id);
     }
 
     return NextResponse.json({ success: true, jobId: job.id, job });
