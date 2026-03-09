@@ -1,9 +1,10 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 
 /**
  * POST /api/webhooks/modal
  * Called by the Modal pipeline to update job progress.
+ * Uses service client to bypass RLS (external webhook, no user session).
  *
  * Body: { job_id, status?, current_stage?, video_url?, audio_url?, output_url_final?, error_message? }
  */
@@ -24,7 +25,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const supabase = await createClient();
+    const supabase = createServiceClient();
 
     const { error: updateError } = await supabase
       .from("jobs")

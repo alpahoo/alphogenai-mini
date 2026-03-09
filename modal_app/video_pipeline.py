@@ -314,10 +314,13 @@ def generate_video_complete(
 ):
     from supabase import create_client
 
-    supabase = create_client(
-        os.environ["SUPABASE_URL"],
-        os.environ["SUPABASE_SERVICE_KEY"],
-    )
+    supabase_url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+    supabase_key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+
+    if not supabase_url or not supabase_key:
+        raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY (or their aliases) must be set in Modal secrets")
+
+    supabase = create_client(supabase_url, supabase_key)
 
     def update_job(**kwargs):
         supabase.table("jobs").update(kwargs).eq("id", job_id).execute()

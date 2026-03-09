@@ -1,13 +1,26 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 
+/**
+ * GET /api/jobs/[id]
+ * Fetch a single job by ID for status polling.
+ * Uses service client to bypass RLS (jobs may not have user_id set).
+ */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient();
     const { id } = await params;
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "Job ID is required" },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createServiceClient();
 
     const { data: job, error: selectError } = await supabase
       .from("jobs")
@@ -27,6 +40,7 @@ export async function GET(
       job: {
         id: job.id,
         prompt: job.prompt,
+        plan: job.plan,
         status: job.status,
         current_stage: job.current_stage,
         video_url: job.video_url,
