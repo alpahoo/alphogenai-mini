@@ -326,7 +326,7 @@ def generate_video_complete(
         supabase.table("jobs").update(kwargs).eq("id", job_id).execute()
 
     try:
-        update_job(status="processing", current_stage="generating_video")
+        update_job(status="in_progress", current_stage="generating_video")
         print(f"[{job_id}] Plan={plan} | {prompt[:60]}...")
 
         if plan == "free":
