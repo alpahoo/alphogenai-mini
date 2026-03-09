@@ -52,28 +52,53 @@ export async function POST(req: Request) {
     // Trigger Modal pipeline (async — returns immediately)
     const modalUrl = process.env.MODAL_WEBHOOK_URL;
     if (modalUrl) {
-      const modalRes = await fetch(`${modalUrl}/webhook`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-webhook-secret": process.env.MODAL_WEBHOOK_SECRET ?? "",
-        },
-        body: JSON.stringify({
-          job_id: job.id,
-          prompt: prompt.trim(),
-          plan,
-          user_id: user?.id ?? null,
-        }),
-      });
+      // Strip trailing slash and avoid double /webhook
+      const baseUrl = modalUrl.replace(/\/+$/, "");
+      const webhookEndpoint = baseUrl.endsWith("/webhook")
+        ? baseUrl
+        : `${baseUrl}/webhook`;
+
+      let modalRes: Response;
+      try {
+        modalRes = await fetch(webhookEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-webhook-secret": process.env.MODAL_WEBHOOK_SECRET ?? "",
+          },
+          body: JSON.stringify({
+            job_id: job.id,
+            prompt: prompt.trim(),
+            plan,
+            user_id: user?.id ?? null,
+          }),
+        });
+      } catch (fetchError) {
+        const errMsg =
+          fetchError instanceof Error ? fetchError.message : String(fetchError);
+        console.error(`Failed to reach Modal at ${webhookEndpoint}:`, errMsg);
+        await supabase
+          .from("jobs")
+          .update({
+            status: "failed",
+            error_message: `Cannot reach Modal pipeline: ${errMsg}`,
+          })
+          .eq("id", job.id);
+        return NextResponse.json({ success: true, jobId: job.id, job });
+      }
 
       if (!modalRes.ok) {
+        const detail = await modalRes.text().catch(() => "no response body");
         console.error(
-          "Failed to trigger Modal pipeline:",
-          await modalRes.text()
+          `Modal pipeline returned ${modalRes.status}:`,
+          detail
         );
         await supabase
           .from("jobs")
-          .update({ status: "failed", error_message: "Failed to start pipeline" })
+          .update({
+            status: "failed",
+            error_message: `Modal error ${modalRes.status}: ${detail.slice(0, 200)}`,
+          })
           .eq("id", job.id);
       }
     } else {
