@@ -1,5 +1,5 @@
 """
-AlphoGenAI Mini — Modal Video Pipeline
+AlphoGenAI Mini — Modal Video Pipeline (v2)
 Architecture multi-plan :
   Free    : FLUX.1-schnell (T2I) + Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA (max 90s, A10G)
   Pro     : LTX-Video 13B (T2V natif, 60s streaming, A10G)
