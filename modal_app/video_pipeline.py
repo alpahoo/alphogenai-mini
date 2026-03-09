@@ -387,6 +387,41 @@ def webhook():
     async def health():
         return {"status": "ok", "plans": ["free", "pro", "premium"], "gpu": "A10G"}
 
+    @web.get("/debug")
+    async def debug():
+        """Diagnostic endpoint — tests Supabase connectivity from inside Modal."""
+        import traceback
+
+        results = {}
+
+        # 1. Check env vars
+        supabase_url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+        supabase_key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        results["env"] = {
+            "SUPABASE_URL": bool(supabase_url),
+            "SUPABASE_SERVICE_KEY": bool(supabase_key),
+            "url_prefix": supabase_url[:30] + "..." if supabase_url else "MISSING",
+            "key_prefix": supabase_key[:8] + "..." if supabase_key else "MISSING",
+        }
+
+        # 2. Test Supabase connection
+        try:
+            from supabase import create_client
+            sb = create_client(supabase_url, supabase_key)
+            count = sb.table("jobs").select("id", count="exact").limit(1).execute()
+            results["supabase"] = {"connected": True, "jobs_count": count.count}
+        except Exception as e:
+            results["supabase"] = {"connected": False, "error": str(e), "trace": traceback.format_exc()[-500:]}
+
+        # 3. Test spawn capability
+        try:
+            # Check if generate_video_complete is callable
+            results["spawn"] = {"function_exists": hasattr(generate_video_complete, "spawn")}
+        except Exception as e:
+            results["spawn"] = {"error": str(e)}
+
+        return results
+
     return web
 
 
