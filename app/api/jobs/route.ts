@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import type { JobPlan } from "@/lib/types";
 
@@ -6,7 +6,7 @@ const VALID_PLANS: JobPlan[] = ["free", "pro", "premium"];
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = createServiceClient();
     const body = await req.json();
     const { prompt, plan = "free" } = body as { prompt: string; plan?: JobPlan };
 
