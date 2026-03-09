@@ -10,7 +10,7 @@ from .config import get_settings
 
 class SupabaseClient:
     """Wrapper pour les opérations Supabase avec la table jobs"""
-    
+
     def __init__(self):
         settings = get_settings()
         service_key = settings.get_service_key()
@@ -20,8 +20,8 @@ class SupabaseClient:
             settings.SUPABASE_URL,
             service_key
         )
-    
-    async def create_job(
+
+    def create_job(
         self,
         user_id: str,
         prompt: str,
@@ -35,26 +35,29 @@ class SupabaseClient:
             "app_state": initial_state or {},
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
-        
+
         result = self.client.table("jobs").insert(job_data).execute()
         return result.data[0]["id"]
-    
-    async def update_job_state(
+
+    def update_job_state(
         self,
         job_id: str,
-        app_state: Dict[str, Any],
+        app_state: Optional[Dict[str, Any]] = None,
         status: Optional[str] = None,
         current_stage: Optional[str] = None,
         error_message: Optional[str] = None,
         video_url: Optional[str] = None,
+        audio_url: Optional[str] = None,
+        output_url_final: Optional[str] = None,
         final_url: Optional[str] = None
     ) -> None:
         """Met à jour l'état complet du job (app_state LangGraph)"""
         update_data: Dict[str, Any] = {
-            "app_state": app_state,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
-        
+
+        if app_state is not None:
+            update_data["app_state"] = app_state
         if status:
             update_data["status"] = status
         if current_stage:
@@ -63,30 +66,34 @@ class SupabaseClient:
             update_data["error_message"] = error_message
         if video_url:
             update_data["video_url"] = video_url
+        if audio_url:
+            update_data["audio_url"] = audio_url
+        if output_url_final:
+            update_data["output_url_final"] = output_url_final
         if final_url:
             update_data["final_url"] = final_url
-        
+
         self.client.table("jobs").update(update_data).eq("id", job_id).execute()
-    
-    async def increment_retry(self, job_id: str) -> int:
+
+    def increment_retry(self, job_id: str) -> int:
         """Incrémente le compteur de retry et retourne la nouvelle valeur"""
         result = self.client.table("jobs").select("retry_count").eq("id", job_id).single().execute()
         current_retry = result.data.get("retry_count", 0) if result.data else 0
         new_retry = current_retry + 1
-        
+
         self.client.table("jobs").update({
             "retry_count": new_retry,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }).eq("id", job_id).execute()
-        
+
         return new_retry
-    
-    async def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+
+    def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Récupère un job par son ID"""
         result = self.client.table("jobs").select("*").eq("id", job_id).execute()
         return result.data[0] if result.data else None
-    
-    async def get_pending_jobs(self, limit: int = 1) -> list[Dict[str, Any]]:
+
+    def get_pending_jobs(self, limit: int = 1) -> list[Dict[str, Any]]:
         """Récupère les jobs en attente"""
         result = self.client.table("jobs") \
             .select("*") \
@@ -95,8 +102,8 @@ class SupabaseClient:
             .limit(limit) \
             .execute()
         return result.data if result.data else []
-    
-    async def save_to_cache(
+
+    def save_to_cache(
         self,
         prompt: str,
         video_url: str,
@@ -104,13 +111,13 @@ class SupabaseClient:
     ) -> None:
         """Sauvegarde une vidéo dans le cache avec hash du prompt"""
         prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
-        
+
         cache_data = {
             "prompt": prompt,
             "prompt_hash": prompt_hash,
             "video_url": video_url,
             "metadata": metadata or {},
         }
-        
+
         # Upsert basé sur prompt_hash
         self.client.table("video_cache").upsert(cache_data, on_conflict="prompt_hash").execute()

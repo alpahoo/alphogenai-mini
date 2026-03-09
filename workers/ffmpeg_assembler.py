@@ -14,8 +14,7 @@ class FFmpegAssembler:
     """Service to assemble multiple video clips with music overlay"""
     
     def __init__(self):
-        self.temp_dir = Path("/tmp/video_assembly")
-        self.temp_dir.mkdir(exist_ok=True)
+        self.temp_dir = Path(tempfile.mkdtemp(prefix="video_assembly_"))
     
     async def assemble_clips(
         self,
@@ -42,15 +41,16 @@ class FFmpegAssembler:
             print(f"Music track: {music_url[:60]}...")
         print(f"{'='*70}\n")
         
+        assembly_dir = None
         try:
             assembly_id = os.urandom(8).hex()
             assembly_dir = self.temp_dir / assembly_id
             assembly_dir.mkdir(exist_ok=True)
-            
+
             clip_paths = await self._download_clips(clip_urls, assembly_dir)
-            
+
             concat_path = await self._concatenate_clips(clip_paths, assembly_dir)
-            
+
             if music_url:
                 print(f"\n[FFmpeg] Adding music overlay...")
                 final_path = await self._add_music(
@@ -64,19 +64,21 @@ class FFmpegAssembler:
                 final_output = assembly_dir / output_filename
                 os.rename(concat_path, final_output)
                 final_path = final_output
-            
+
             print(f"\n{'='*70}")
-            print(f"✅ Assembly completed successfully!")
+            print(f"Assembly completed successfully!")
             print(f"Final video: {final_path}")
             print(f"File size: {os.path.getsize(final_path) / 1024 / 1024:.2f} MB")
             print(f"{'='*70}\n")
-            
+
             return str(final_path)
-            
+
         except Exception as e:
             print(f"\n{'='*70}")
-            print(f"❌ Assembly failed: {str(e)}")
+            print(f"Assembly failed: {str(e)}")
             print(f"{'='*70}\n")
+            if assembly_dir:
+                self.cleanup(assembly_dir)
             raise
     
     async def _download_clips(

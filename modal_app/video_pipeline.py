@@ -40,7 +40,7 @@ secrets = modal.Secret.from_name("alphogenai-secrets")
 models_volume = modal.Volume.from_name("alphogenai-models", create_if_missing=True)
 
 # All plans run on A10G (24GB VRAM)
-GPU_A10G = modal.gpu.A10G()
+GPU_A10G = "A10G"
 
 
 # ===========================================================================
@@ -314,16 +314,19 @@ def generate_video_complete(
 ):
     from supabase import create_client
 
-    supabase = create_client(
-        os.environ["SUPABASE_URL"],
-        os.environ["SUPABASE_SERVICE_KEY"],
-    )
+    supabase_url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+    supabase_key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+
+    if not supabase_url or not supabase_key:
+        raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY (or their aliases) must be set in Modal secrets")
+
+    supabase = create_client(supabase_url, supabase_key)
 
     def update_job(**kwargs):
         supabase.table("jobs").update(kwargs).eq("id", job_id).execute()
 
     try:
-        update_job(status="processing", current_stage="generating_video")
+        update_job(status="in_progress", current_stage="generating_video")
         print(f"[{job_id}] Plan={plan} | {prompt[:60]}...")
 
         if plan == "free":
@@ -377,12 +380,76 @@ def webhook():
         expected = os.environ.get("MODAL_WEBHOOK_SECRET")
         if expected and x_webhook_secret != expected:
             raise HTTPException(status_code=401, detail="Unauthorized")
-        generate_video_complete.spawn(req.job_id, req.prompt, req.plan, req.user_id)
+
+        # Update job status immediately from webhook (don't rely on spawn)
+        try:
+            from supabase import create_client as _create_client
+            _url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+            _key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+            if _url and _key:
+                _sb = _create_client(_url, _key)
+                _sb.table("jobs").update({
+                    "status": "in_progress",
+                    "current_stage": "spawning_pipeline",
+                }).eq("id", req.job_id).execute()
+        except Exception as e:
+            print(f"[webhook] Failed to update job {req.job_id}: {e}")
+
+        try:
+            generate_video_complete.spawn(req.job_id, req.prompt, req.plan, req.user_id)
+        except Exception as e:
+            # If spawn fails, mark job as failed
+            print(f"[webhook] spawn() failed for {req.job_id}: {e}")
+            try:
+                _sb.table("jobs").update({
+                    "status": "failed",
+                    "current_stage": "failed",
+                    "error_message": f"Failed to spawn pipeline: {e}",
+                }).eq("id", req.job_id).execute()
+            except Exception:
+                pass
+            raise HTTPException(status_code=500, detail=f"Spawn failed: {e}")
+
         return {"success": True, "message": f"Pipeline started for job {req.job_id}", "plan": req.plan}
 
     @web.get("/health")
     async def health():
         return {"status": "ok", "plans": ["free", "pro", "premium"], "gpu": "A10G"}
+
+    @web.get("/debug")
+    async def debug():
+        """Diagnostic endpoint — tests Supabase connectivity from inside Modal."""
+        import traceback
+
+        results = {}
+
+        # 1. Check env vars
+        supabase_url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+        supabase_key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        results["env"] = {
+            "SUPABASE_URL": bool(supabase_url),
+            "SUPABASE_SERVICE_KEY": bool(supabase_key),
+            "url_prefix": supabase_url[:30] + "..." if supabase_url else "MISSING",
+            "key_prefix": supabase_key[:8] + "..." if supabase_key else "MISSING",
+        }
+
+        # 2. Test Supabase connection
+        try:
+            from supabase import create_client
+            sb = create_client(supabase_url, supabase_key)
+            count = sb.table("jobs").select("id", count="exact").limit(1).execute()
+            results["supabase"] = {"connected": True, "jobs_count": count.count}
+        except Exception as e:
+            results["supabase"] = {"connected": False, "error": str(e), "trace": traceback.format_exc()[-500:]}
+
+        # 3. Test spawn capability
+        try:
+            # Check if generate_video_complete is callable
+            results["spawn"] = {"function_exists": hasattr(generate_video_complete, "spawn")}
+        except Exception as e:
+            results["spawn"] = {"error": str(e)}
+
+        return results
 
     return web
 

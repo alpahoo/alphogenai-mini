@@ -1,3 +1,4 @@
+import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import type { JobPlan } from "@/lib/types";
@@ -6,7 +7,11 @@ const VALID_PLANS: JobPlan[] = ["free", "pro", "premium"];
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient();
+    // Get authenticated user (optional — allows anonymous job creation)
+    const authClient = await createClient();
+    const { data: { user } } = await authClient.auth.getUser();
+
+    const supabase = createServiceClient();
     const body = await req.json();
     const { prompt, plan = "free" } = body as { prompt: string; plan?: JobPlan };
 
@@ -31,6 +36,7 @@ export async function POST(req: Request) {
         plan,
         status: "pending",
         current_stage: "queued",
+        ...(user?.id ? { user_id: user.id } : {}),
       })
       .select()
       .single();
@@ -46,31 +52,64 @@ export async function POST(req: Request) {
     // Trigger Modal pipeline (async — returns immediately)
     const modalUrl = process.env.MODAL_WEBHOOK_URL;
     if (modalUrl) {
-      const modalRes = await fetch(`${modalUrl}/webhook`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-webhook-secret": process.env.MODAL_WEBHOOK_SECRET ?? "",
-        },
-        body: JSON.stringify({
-          job_id: job.id,
-          prompt: prompt.trim(),
-          plan,
-        }),
-      });
+      // Strip trailing slash and avoid double /webhook
+      const baseUrl = modalUrl.replace(/\/+$/, "");
+      const webhookEndpoint = baseUrl.endsWith("/webhook")
+        ? baseUrl
+        : `${baseUrl}/webhook`;
+
+      let modalRes: Response;
+      try {
+        modalRes = await fetch(webhookEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-webhook-secret": process.env.MODAL_WEBHOOK_SECRET ?? "",
+          },
+          body: JSON.stringify({
+            job_id: job.id,
+            prompt: prompt.trim(),
+            plan,
+            user_id: user?.id ?? null,
+          }),
+        });
+      } catch (fetchError) {
+        const errMsg =
+          fetchError instanceof Error ? fetchError.message : String(fetchError);
+        console.error(`Failed to reach Modal at ${webhookEndpoint}:`, errMsg);
+        await supabase
+          .from("jobs")
+          .update({
+            status: "failed",
+            error_message: `Cannot reach Modal pipeline: ${errMsg}`,
+          })
+          .eq("id", job.id);
+        return NextResponse.json({ success: true, jobId: job.id, job });
+      }
 
       if (!modalRes.ok) {
+        const detail = await modalRes.text().catch(() => "no response body");
         console.error(
-          "Failed to trigger Modal pipeline:",
-          await modalRes.text()
+          `Modal pipeline returned ${modalRes.status}:`,
+          detail
         );
         await supabase
           .from("jobs")
-          .update({ status: "failed", error_message: "Failed to start pipeline" })
+          .update({
+            status: "failed",
+            error_message: `Modal error ${modalRes.status}: ${detail.slice(0, 200)}`,
+          })
           .eq("id", job.id);
       }
     } else {
-      console.warn("MODAL_WEBHOOK_URL not set — pipeline not triggered");
+      console.error("MODAL_WEBHOOK_URL not set — pipeline not triggered");
+      await supabase
+        .from("jobs")
+        .update({
+          status: "failed",
+          error_message: "Pipeline not configured (MODAL_WEBHOOK_URL missing)",
+        })
+        .eq("id", job.id);
     }
 
     return NextResponse.json({ success: true, jobId: job.id, job });

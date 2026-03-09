@@ -15,7 +15,7 @@ import os
 import logging
 import asyncio
 from typing import Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class BudgetGuard:
         if len(self.active_jobs) >= self.config.max_concurrency:
             return False, f"Concurrency limit reached ({self.config.max_concurrency} jobs active)"
         
-        today = datetime.utcnow().date().isoformat()
+        today = datetime.now(timezone.utc).date().isoformat()
         daily_spent = self.daily_spending.get(today, 0.0)
         
         if daily_spent >= self.config.daily_budget_hardcap_eur:
@@ -96,7 +96,7 @@ class BudgetGuard:
         Args:
             job_id: Job ID to track
         """
-        self.active_jobs[job_id] = datetime.utcnow()
+        self.active_jobs[job_id] = datetime.now(timezone.utc)
         logger.info(f"Job {job_id} started (active: {len(self.active_jobs)}/{self.config.max_concurrency})")
     
     def finish_job(self, job_id: str, duration_seconds: Optional[float] = None) -> float:
@@ -116,13 +116,13 @@ class BudgetGuard:
         
         if duration_seconds is None:
             start_time = self.active_jobs[job_id]
-            duration_seconds = (datetime.utcnow() - start_time).total_seconds()
+            duration_seconds = (datetime.now(timezone.utc) - start_time).total_seconds()
         
         del self.active_jobs[job_id]
         
         cost = self._calculate_cost(duration_seconds)
         
-        today = datetime.utcnow().date().isoformat()
+        today = datetime.now(timezone.utc).date().isoformat()
         self.daily_spending[today] = self.daily_spending.get(today, 0.0) + cost
         
         logger.info(f"Job {job_id} finished: duration={duration_seconds:.1f}s, cost={cost:.4f}€, "
@@ -146,7 +146,7 @@ class BudgetGuard:
             return False
         
         start_time = self.active_jobs[job_id]
-        elapsed = (datetime.utcnow() - start_time).total_seconds()
+        elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
         
         if elapsed > self.config.max_runtime_per_job:
             logger.warning(f"Job {job_id} timed out: {elapsed:.1f}s > {self.config.max_runtime_per_job}s")
@@ -161,7 +161,7 @@ class BudgetGuard:
         Returns:
             Dictionary mapping job_id to elapsed seconds
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return {
             job_id: (now - start_time).total_seconds()
             for job_id, start_time in self.active_jobs.items()
@@ -174,7 +174,7 @@ class BudgetGuard:
         Returns:
             Dictionary with spending statistics
         """
-        today = datetime.utcnow().date().isoformat()
+        today = datetime.now(timezone.utc).date().isoformat()
         daily_spent = self.daily_spending.get(today, 0.0)
         
         return {
@@ -190,7 +190,7 @@ class BudgetGuard:
     
     def reset_daily_spending(self) -> None:
         """Reset daily spending (called at midnight UTC)."""
-        today = datetime.utcnow().date().isoformat()
+        today = datetime.now(timezone.utc).date().isoformat()
         if today in self.daily_spending:
             logger.info(f"Resetting daily spending: {self.daily_spending[today]:.2f}€")
             del self.daily_spending[today]
@@ -229,7 +229,7 @@ class BudgetGuard:
     
     def _check_alert_threshold(self) -> None:
         """Check if alert threshold has been reached and log warning."""
-        today = datetime.utcnow().date().isoformat()
+        today = datetime.now(timezone.utc).date().isoformat()
         daily_spent = self.daily_spending.get(today, 0.0)
         
         if daily_spent >= self.config.daily_budget_alert_eur and not self.alert_sent_today:
@@ -334,21 +334,25 @@ class BudgetGuardMiddleware:
         """Start background task for daily spending reset."""
         async def reset_loop():
             while True:
-                now = datetime.utcnow()
+                now = datetime.now(timezone.utc)
                 tomorrow = now.date() + timedelta(days=1)
-                midnight = datetime.combine(tomorrow, datetime.min.time())
+                midnight = datetime.combine(tomorrow, datetime.min.time(), tzinfo=timezone.utc)
                 seconds_until_midnight = (midnight - now).total_seconds()
-                
+
                 await asyncio.sleep(seconds_until_midnight)
-                
+
                 self.guard.reset_daily_spending()
-        
-        self._reset_task = asyncio.create_task(reset_loop())
+
+        try:
+            self._reset_task = asyncio.create_task(reset_loop())
+        except RuntimeError:
+            # No running event loop yet — will be started later
+            self._reset_task = None
 
 
 async def example_usage():
     """Example showing how to use budget guard in worker."""
-    from supabase_client import SupabaseClient
+    from .supabase_client import SupabaseClient
     
     guard = BudgetGuard()
     middleware = BudgetGuardMiddleware(guard)

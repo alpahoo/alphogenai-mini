@@ -4,72 +4,81 @@ Worker background qui traite les jobs AlphogenAI Mini
 import asyncio
 import signal
 import sys
-from datetime import datetime
+import logging
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from .supabase_client import SupabaseClient
 from .svi_client import SVIClient
 from .audio_orchestrator import AudioOrchestrator
+from .ffmpeg_assembler import FFmpegAssembler
+from .budget_guard import BudgetGuard, BudgetGuardMiddleware
 from .config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class AlphogenAIWorker:
     """Worker qui poll la table jobs et exécute l'orchestrateur"""
-    
+
     def __init__(self, poll_interval: int = 10):
         self.settings = get_settings()
         self.supabase = SupabaseClient()
         self.svi_client = SVIClient() if self.settings.SVI_ENDPOINT_URL else None
         self.audio_orchestrator = AudioOrchestrator() if self.settings.AUDIO_BACKEND_URL else None
+        self.ffmpeg_assembler = FFmpegAssembler()
+        self.budget_guard = BudgetGuard()
+        self.budget_middleware = BudgetGuardMiddleware(self.budget_guard)
         self.poll_interval = poll_interval
         self.running = False
         self.current_job_id: Optional[str] = None
-    
+
     async def start(self):
         """Démarre le worker"""
         self.running = True
-        
-        print("="*60)
-        print("🎬 AlphogenAI Mini Worker")
-        print("="*60)
-        print(f"Démarré: {datetime.now().isoformat()}")
-        print(f"Intervalle de poll: {self.poll_interval}s")
-        print(f"Retries max: {self.settings.MAX_RETRIES}")
-        print("="*60)
-        print("\nEn attente de jobs...\n")
-        
-        # Gestion des signaux
+
+        logger.info("=" * 60)
+        logger.info("AlphogenAI Mini Worker")
+        logger.info("=" * 60)
+        logger.info(f"Démarré: {datetime.now(timezone.utc).isoformat()}")
+        logger.info(f"Intervalle de poll: {self.poll_interval}s")
+        logger.info(f"Retries max: {self.settings.MAX_RETRIES}")
+        logger.info(f"Budget: cap={self.budget_guard.config.daily_budget_hardcap_eur}€, "
+                     f"concurrency={self.budget_guard.config.max_concurrency}")
+        logger.info("=" * 60)
+        logger.info("En attente de jobs...")
+
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
-        
+
         while self.running:
             try:
                 await self._process_pending_jobs()
                 await asyncio.sleep(self.poll_interval)
-                
+
             except KeyboardInterrupt:
-                print("\n\nInterruption reçue...")
+                logger.info("Interruption reçue...")
                 break
             except Exception as e:
-                print(f"[ERREUR] Worker : {str(e)}")
+                logger.error(f"Worker error: {e}")
                 await asyncio.sleep(self.poll_interval)
-        
-        print("\nWorker arrêté.")
-    
+
+        logger.info("Worker arrêté.")
+
     def _signal_handler(self, signum, frame):
         """Arrêt gracieux"""
-        print(f"\nSignal {signum} reçu")
+        logger.info(f"Signal {signum} reçu")
         self.running = False
-        
+
         if self.current_job_id:
-            print(f"Job {self.current_job_id} sera marqué comme échoué")
-    
+            logger.info(f"Job {self.current_job_id} sera marqué comme échoué")
+
     async def _process_pending_jobs(self):
         """Poll et traite les jobs en attente + récupération des jobs bloqués"""
-        
-        # Étape 1: Récupérer les jobs bloqués (in_progress depuis > 5min)
+
+        # Étape 1: Récupérer les jobs bloqués
         await self._recover_stuck_jobs()
-        
+
         # Étape 2: Chercher un job pending
         result = self.supabase.client.table("jobs") \
             .select("*") \
@@ -77,51 +86,72 @@ class AlphogenAIWorker:
             .order("created_at") \
             .limit(1) \
             .execute()
-        
+
         if not result.data or len(result.data) == 0:
             return
-        
+
         job = result.data[0]
         self.current_job_id = job["id"]
-        
-        print(f"\n{'='*60}")
-        print(f"🎬 Traitement du job: {job['id']}")
-        print(f"Utilisateur: {job['user_id']}")
-        print(f"Prompt: {job['prompt'][:80]}...")
-        print(f"{'='*60}\n")
-        
+
+        logger.info(f"Traitement du job: {job['id']}")
+        logger.info(f"Utilisateur: {job.get('user_id', 'anonymous')}")
+        logger.info(f"Prompt: {job['prompt'][:80]}...")
+        logger.info(f"Plan: {job.get('plan', 'free')}")
+
+        # Budget guard check
+        if not await self.budget_middleware.before_job(job["id"]):
+            self.supabase.update_job_state(
+                job["id"],
+                status="failed",
+                error_message="Budget limit reached - job blocked by budget guard"
+            )
+            self.current_job_id = None
+            return
+
+        success = False
         try:
             # Marquer comme in_progress
-            await self.supabase.update_job_state(
+            self.supabase.update_job_state(
                 job["id"],
-                "in_progress",
-                {}
+                status="in_progress",
+                current_stage="generating_video"
             )
-            
+
+            # Génération vidéo
             video_url = None
             if self.svi_client:
-                print("🎬 Génération vidéo avec SVI...")
-                video_result = self.svi_client.generate_video(
+                logger.info("Génération vidéo avec SVI...")
+                video_result = await self.svi_client.generate_video(
                     prompt=job["prompt"],
                     duration_sec=60,
                     resolution="1920x1080",
                     fps=24
                 )
                 video_url = video_result.get("video_url")
-                print(f"✅ Vidéo générée: {video_url}")
-                
-                await self.supabase.update_job_state(
+                logger.info(f"Vidéo générée: {video_url}")
+
+                self.supabase.update_job_state(
                     job["id"],
-                    app_state={"stage": "video_generated"},
-                    video_url=video_url,
-                    current_stage="video_generated"
+                    current_stage="generating_audio",
+                    video_url=video_url
                 )
-            
-            # Generate audio with Audio Orchestrator
+
+            # Génération audio + mixage
             audio_url = None
             output_url_final = video_url
             if self.audio_orchestrator and video_url and self.settings.AUDIO_MODE == "auto":
-                print("🎵 Génération audio...")
+                # Vérifier le timeout budget en cours de route
+                if await self.budget_middleware.check_timeout(job["id"]):
+                    raise TimeoutError(
+                        f"Job timeout exceeded ({self.budget_guard.config.max_runtime_per_job}s)"
+                    )
+
+                logger.info("Génération audio...")
+                self.supabase.update_job_state(
+                    job["id"],
+                    current_stage="generating_audio"
+                )
+
                 audio_result = await self.audio_orchestrator.process_audio(
                     job_id=job["id"],
                     video_url=video_url,
@@ -129,11 +159,35 @@ class AlphogenAIWorker:
                     duration=60.0
                 )
                 audio_url = audio_result.get("audio_url")
-                output_url_final = audio_result.get("output_url_final", video_url)
                 audio_score = audio_result.get("audio_score", 0.0)
-                print(f"✅ Audio généré: {audio_url} (score: {audio_score:.3f})")
-            
-            await self.supabase.update_job_state(
+
+                # Mixage audio + vidéo via FFmpeg
+                if audio_url and video_url:
+                    logger.info("Mixage audio + vidéo...")
+                    self.supabase.update_job_state(
+                        job["id"],
+                        current_stage="mixing"
+                    )
+
+                    mixed_path = await self.ffmpeg_assembler.assemble_clips(
+                        clip_urls=[video_url],
+                        music_url=audio_url,
+                        output_filename=f"job_{job['id']}_final.mp4"
+                    )
+                    # TODO: upload mixed_path to R2 and get public URL
+                    output_url_final = video_url  # Placeholder until R2 upload is implemented
+                    logger.info(f"Audio mixé (score: {audio_score:.3f}), fichier: {mixed_path}")
+                else:
+                    output_url_final = video_url
+
+            # Upload stage
+            self.supabase.update_job_state(
+                job["id"],
+                current_stage="uploading"
+            )
+
+            # Marquer comme terminé
+            self.supabase.update_job_state(
                 job["id"],
                 app_state={"stage": "completed"},
                 status="done",
@@ -143,70 +197,66 @@ class AlphogenAIWorker:
                 final_url=output_url_final,
                 current_stage="completed"
             )
-            
-            print(f"\n✅ Job {job['id']} terminé avec succès!")
-            print(f"Vidéo: {video_url}")
+
+            success = True
+            logger.info(f"Job {job['id']} terminé avec succès!")
+            if video_url:
+                logger.info(f"Vidéo: {video_url}")
             if audio_url:
-                print(f"Audio: {audio_url}")
-            print(f"Final: {output_url_final}\n")
-            
+                logger.info(f"Audio: {audio_url}")
+            logger.info(f"Final: {output_url_final}")
+
         except Exception as e:
-            print(f"\n❌ Job {job['id']} échoué avec exception: {str(e)}\n")
-            await self.supabase.update_job_state(
+            logger.error(f"Job {job['id']} échoué: {e}")
+            self.supabase.update_job_state(
                 job["id"],
-                "failed",
-                {},
+                status="failed",
                 error_message=str(e)
             )
-        
+
         finally:
+            await self.budget_middleware.after_job(job["id"], success=success)
             self.current_job_id = None
-    
+
     async def _recover_stuck_jobs(self):
         """Récupère les jobs bloqués en in_progress depuis > 5 minutes"""
-        from datetime import datetime, timedelta, timezone
-        
         try:
-            # Calculer le timestamp d'il y a 5 minutes
             five_minutes_ago = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
-            
-            # Chercher les jobs in_progress depuis > 5 minutes
+
             result = self.supabase.client.table("jobs") \
                 .select("id, updated_at, retry_count, current_stage") \
                 .eq("status", "in_progress") \
                 .lt("updated_at", five_minutes_ago) \
                 .execute()
-            
+
             if not result.data or len(result.data) == 0:
                 return
-            
+
             for job in result.data:
                 job_id = job["id"]
                 retry_count = job.get("retry_count", 0)
                 current_stage = job.get("current_stage", "unknown")
-                
-                print(f"\n⚠️  Job bloqué détecté: {job_id}")
-                print(f"    Stage: {current_stage}")
-                print(f"    Retry: {retry_count}/{self.settings.MAX_RETRIES}")
-                
+
+                logger.warning(f"Job bloqué détecté: {job_id} (stage: {current_stage}, retry: {retry_count}/{self.settings.MAX_RETRIES})")
+
                 if retry_count < self.settings.MAX_RETRIES:
-                    print(f"    → RETRY AUTOMATIQUE ({retry_count + 1}/{self.settings.MAX_RETRIES})")
+                    logger.info(f"Retry automatique ({retry_count + 1}/{self.settings.MAX_RETRIES})")
                     self.supabase.client.table("jobs").update({
                         "status": "pending",
                         "retry_count": retry_count + 1,
                         "updated_at": datetime.now(timezone.utc).isoformat(),
                     }).eq("id", job_id).execute()
                 else:
-                    print(f"    → MAX RETRIES ATTEINT - Job marqué comme échoué")
+                    logger.error(f"Max retries atteint pour {job_id} - marqué comme échoué")
                     self.supabase.client.table("jobs").update({
                         "status": "failed",
                         "error_message": f"Job bloqué à '{current_stage}' après {retry_count} tentatives",
                         "updated_at": datetime.now(timezone.utc).isoformat(),
                     }).eq("id", job_id).execute()
-        
+
         except Exception as e:
-            print(f"[ERREUR] Récupération jobs bloqués: {str(e)}")
-    
+            logger.error(f"Récupération jobs bloqués: {e}")
+
     def stop(self):
         """Arrête le worker"""
         self.running = False
@@ -214,23 +264,27 @@ class AlphogenAIWorker:
 
 async def main():
     """Point d'entrée du worker"""
-    
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+
     poll_interval = 10
-    
+
     if len(sys.argv) > 1:
         try:
             poll_interval = int(sys.argv[1])
         except ValueError:
-            print(f"Intervalle invalide: {sys.argv[1]}")
-            print("Usage: python -m workers.worker [intervalle_secondes]")
+            logger.error(f"Intervalle invalide: {sys.argv[1]}")
+            logger.info("Usage: python -m workers.worker [intervalle_secondes]")
             sys.exit(1)
-    
+
     worker = AlphogenAIWorker(poll_interval=poll_interval)
-    
+
     try:
         await worker.start()
     except KeyboardInterrupt:
-        print("\nArrêt en cours...")
+        logger.info("Arrêt en cours...")
         worker.stop()
 
 
