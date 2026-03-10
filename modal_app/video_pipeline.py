@@ -36,6 +36,11 @@ base_image = (
     .apt_install("ffmpeg", "git")
 )
 
+webhook_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("fastapi", "pydantic", "supabase", "httpx")
+)
+
 secrets = modal.Secret.from_name("alphogenai-secrets")
 models_volume = modal.Volume.from_name("alphogenai-models", create_if_missing=True)
 
@@ -361,7 +366,7 @@ def generate_video_complete(
 # FastAPI webhook
 # ===========================================================================
 
-@app.function(image=base_image, secrets=[secrets])
+@app.function(image=webhook_image, secrets=[secrets])
 @modal.asgi_app()
 def webhook():
     from fastapi import FastAPI, HTTPException, Header
