@@ -20,7 +20,7 @@ app = modal.App("alphogenai-setup")
 setup_image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
-        "torch==2.4.0",
+        "torch==2.5.1",
         "diffusers>=0.31.0",
         "transformers>=4.45.0",
         "accelerate>=0.33.0",
