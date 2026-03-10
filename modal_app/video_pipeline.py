@@ -1,9 +1,12 @@
 """
 AlphoGenAI Mini — Modal Video Pipeline (v2)
-Architecture multi-plan :
-  Free    : FLUX.1-schnell (T2I) + Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA (max 90s, A10G)
-  Pro     : LTX-Video 13B (T2V natif, 60s streaming, A10G)
+Architecture multi-plan — 100% self-hosted, modèles locaux sur volume Modal :
+  Free    : SDXL-Turbo (T2I) + Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA (max 90s, A10G)
+  Pro     : LTX-Video (T2V natif, 60s, A10G)
   Premium : Seedance 2.0 API (15s, qualité cinématique, A10G)
+
+Models are pre-downloaded to the Modal volume via setup_models.py.
+No external API calls (HuggingFace, etc.) during inference.
 """
 import modal
 import os
@@ -49,7 +52,17 @@ GPU_A10G = "A10G"
 
 
 # ===========================================================================
-# FREE PLAN — FLUX.1-schnell (T2I) + Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA
+# LOCAL MODEL PATHS (pre-downloaded via setup_models.py)
+# ===========================================================================
+
+SDXL_TURBO_PATH = "/models/sdxl-turbo"
+WAN_PATH        = "/models/wan2.2-ti2v-5b"
+SVI_LORA_PATH   = "/models/svi-lora/svi_2.0_pro_wan22_high.safetensors"
+LTX_PATH        = "/models/ltx-video"
+
+
+# ===========================================================================
+# FREE PLAN — SDXL-Turbo (T2I) + Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA
 # ===========================================================================
 
 @app.function(
@@ -62,14 +75,14 @@ GPU_A10G = "A10G"
 )
 def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     """
-    Free plan pipeline:
-    1. FLUX.1-schnell  → initial image (T2I, 4 steps)
+    Free plan pipeline (100% local, no external calls):
+    1. SDXL-Turbo       → initial image (T2I, 1-4 steps)
     2. Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA → iterative video segments
-    3. ffmpeg concat   → final MP4
-    GPU: A10G (24GB) — Wan2.2 5B fits comfortably
+    3. ffmpeg concat    → final MP4
+    GPU: A10G (24GB)
     """
     import torch
-    from diffusers import FluxPipeline, WanImageToVideoPipeline, AutoencoderKLWan
+    from diffusers import AutoPipelineForText2Image, WanImageToVideoPipeline, AutoencoderKLWan
     from diffusers.utils import export_to_video
     from PIL import Image
     import tempfile, subprocess, random
@@ -77,24 +90,17 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
 
     print(f"[{job_id}][FREE] Starting — max {max_duration}s | GPU: A10G")
 
-    MODEL_DIR = "/models"
-    FLUX_ID   = "black-forest-labs/FLUX.1-schnell"
-    WAN_ID    = "Wan-AI/Wan2.2-TI2V-5B"           # 5B — fits on A10G
-    SVI_LORA  = "Kijai/WanVideo_comfy"
-    SVI_LORA_PATH = "LoRAs/Stable-Video-Infinity/v2.0/svi_2.0_pro_wan22_high.safetensors"
-
     # ------------------------------------------------------------------
-    # Step 1: FLUX.1-schnell — text → initial image
+    # Step 1: SDXL-Turbo — text → initial image (local)
     # ------------------------------------------------------------------
-    print(f"[{job_id}] Step 1/3 — FLUX.1-schnell T2I...")
-    flux = FluxPipeline.from_pretrained(
-        FLUX_ID,
-        torch_dtype=torch.bfloat16,
-        cache_dir=MODEL_DIR,
+    print(f"[{job_id}] Step 1/3 — SDXL-Turbo T2I (local)...")
+    t2i = AutoPipelineForText2Image.from_pretrained(
+        SDXL_TURBO_PATH,
+        torch_dtype=torch.float16,
+        local_files_only=True,
     ).to("cuda")
-    flux.enable_model_cpu_offload()
 
-    image: Image.Image = flux(
+    image: Image.Image = t2i(
         prompt=prompt,
         num_inference_steps=4,
         guidance_scale=0.0,
@@ -102,29 +108,28 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
         width=832,
     ).images[0]
 
-    del flux
+    del t2i
     torch.cuda.empty_cache()
     print(f"[{job_id}] Initial image ✓")
 
     # ------------------------------------------------------------------
-    # Step 2: Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA — iterative segments
+    # Step 2: Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA — iterative segments (local)
     # ------------------------------------------------------------------
-    print(f"[{job_id}] Step 2/3 — Loading Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA...")
+    print(f"[{job_id}] Step 2/3 — Loading Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA (local)...")
 
     vae = AutoencoderKLWan.from_pretrained(
-        WAN_ID, subfolder="vae", torch_dtype=torch.float32, cache_dir=MODEL_DIR
+        WAN_PATH, subfolder="vae", torch_dtype=torch.float32,
+        local_files_only=True,
     )
     pipe = WanImageToVideoPipeline.from_pretrained(
-        WAN_ID,
+        WAN_PATH,
         vae=vae,
         torch_dtype=torch.bfloat16,
-        cache_dir=MODEL_DIR,
+        local_files_only=True,
     ).to("cuda")
 
     pipe.load_lora_weights(
-        SVI_LORA,
-        weight_name=SVI_LORA_PATH,
-        cache_dir=MODEL_DIR,
+        SVI_LORA_PATH,
     )
     pipe.set_adapters(["default"], adapter_weights=[0.9])
 
@@ -185,7 +190,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
 
 
 # ===========================================================================
-# PRO PLAN — LTX-Video 13B (T2V natif, 60s, A10G)
+# PRO PLAN — LTX-Video (T2V natif, 60s, A10G)
 # ===========================================================================
 
 @app.function(
@@ -197,19 +202,19 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     secrets=[secrets],
 )
 def generate_pro(prompt: str, job_id: str):
-    """Pro plan: LTX-Video 13B — native T2V, up to 60s. GPU: A10G"""
+    """Pro plan: LTX-Video — native T2V, up to 60s. GPU: A10G. Local only."""
     import torch
     from diffusers import LTXPipeline
     from diffusers.utils import export_to_video
     import tempfile
     from pathlib import Path
 
-    print(f"[{job_id}][PRO] LTX-Video 13B | GPU: A10G")
+    print(f"[{job_id}][PRO] LTX-Video | GPU: A10G (local)")
 
     pipe = LTXPipeline.from_pretrained(
-        "Lightricks/LTX-Video",
+        LTX_PATH,
         torch_dtype=torch.bfloat16,
-        cache_dir="/models",
+        local_files_only=True,
     ).to("cuda")
     pipe.enable_model_cpu_offload()
 
