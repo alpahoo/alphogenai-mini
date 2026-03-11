@@ -406,7 +406,7 @@ def webhook():
             print(f"[webhook] Failed to update job {req.job_id}: {e}")
 
         try:
-            generate_video_complete.spawn(req.job_id, req.prompt, req.plan, req.user_id)
+            await generate_video_complete.spawn.aio(req.job_id, req.prompt, req.plan, req.user_id)
         except Exception as e:
             # If spawn fails, mark job as failed
             print(f"[webhook] spawn() failed for {req.job_id}: {e}")
