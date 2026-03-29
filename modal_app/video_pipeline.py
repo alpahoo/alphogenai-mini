@@ -1,7 +1,7 @@
 """
 AlphoGenAI Mini — Modal Video Pipeline (v2)
 Architecture multi-plan — 100% self-hosted, modèles locaux sur volume Modal :
-  Free    : SDXL-Turbo (T2I) + Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA (max 90s, A10G)
+  Free    : SDXL-Turbo (T2I) + Wan2.2-TI2V-5B-Diffusers + SVI 2.0 Pro LoRA (max 90s, A10G)
   Pro     : LTX-Video (T2V natif, 60s, A10G)
   Premium : Seedance 2.0 API (15s, qualité cinématique, A10G)
 
@@ -21,7 +21,7 @@ base_image = (
     .pip_install(
         "torch==2.5.1",
         "torchvision",
-        "diffusers>=0.31.0",
+        "git+https://github.com/huggingface/diffusers.git",
         "transformers>=4.45.0",
         "accelerate>=0.33.0",
         "safetensors",
@@ -82,7 +82,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     GPU: A10G (24GB)
     """
     import torch
-    from diffusers import AutoPipelineForText2Image, WanImageToVideoPipeline, AutoencoderKLWan
+    from diffusers import AutoPipelineForText2Image, WanPipeline, AutoencoderKLWan
     from diffusers.utils import export_to_video
     from PIL import Image
     import tempfile, subprocess, random
@@ -121,7 +121,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
         WAN_PATH, subfolder="vae", torch_dtype=torch.float32,
         local_files_only=True,
     )
-    pipe = WanImageToVideoPipeline.from_pretrained(
+    pipe = WanPipeline.from_pretrained(
         WAN_PATH,
         vae=vae,
         torch_dtype=torch.bfloat16,
