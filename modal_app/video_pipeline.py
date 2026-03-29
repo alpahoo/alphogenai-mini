@@ -156,10 +156,14 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
                 raise RuntimeError(f"Failed to load Wan pipeline after 3 attempts: {cuda_err}")
             time.sleep(2)
 
-    pipe.load_lora_weights(
-        SVI_LORA_PATH,
-    )
-    pipe.set_adapters(["default"], adapter_weights=[0.9])
+    # SVI LoRA is trained for Wan2.2-I2V-14B (dim=5120), incompatible with 5B (dim=3072)
+    # Skip LoRA loading — Wan2.2-TI2V-5B works well without it
+    try:
+        pipe.load_lora_weights(SVI_LORA_PATH)
+        pipe.set_adapters(["default"], adapter_weights=[0.9])
+        print(f"[{job_id}] SVI LoRA loaded ✓")
+    except Exception as lora_err:
+        print(f"[{job_id}] ⚠️ SVI LoRA incompatible with 5B model, skipping: {lora_err}")
 
     SEGMENT_FRAMES   = 33       # ~2s at 16fps (reduced from 81 for A10G memory)
     FPS              = 16
