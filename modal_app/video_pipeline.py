@@ -1,7 +1,7 @@
 """
 AlphoGenAI Mini — Modal Video Pipeline (v2)
 Architecture multi-plan — 100% self-hosted, modèles locaux sur volume Modal :
-  Free    : SDXL-Turbo (T2I) + Wan2.2-TI2V-5B-Diffusers + SVI 2.0 Pro LoRA (max 90s, A10G)
+  Free    : SDXL-Turbo (T2I) + Wan2.2-I2V-A14B + SVI 2.0 Pro LoRA (max 90s, A100)
   Pro     : LTX-Video (T2V natif, 60s, A10G)
   Premium : Seedance 2.0 API (15s, qualité cinématique, A10G)
 
@@ -47,8 +47,9 @@ webhook_image = (
 secrets = modal.Secret.from_name("alphogenai-secrets-corrected-v2")
 models_volume = modal.Volume.from_name("alphogenai-models", create_if_missing=True)
 
-# All plans run on A10G (24GB VRAM)
-GPU_A10G = "A10G"
+# GPU configuration
+GPU_A10G = "A10G"   # 24GB VRAM — Pro/Premium plans
+GPU_A100 = "A100"   # 40GB VRAM — Free plan (Wan 14B + SVI LoRA)
 
 
 # ===========================================================================
@@ -56,18 +57,18 @@ GPU_A10G = "A10G"
 # ===========================================================================
 
 SDXL_TURBO_PATH = "/models/sdxl-turbo"
-WAN_PATH        = "/models/wan2.2-ti2v-5b"
-SVI_LORA_PATH   = "/models/svi-lora/svi_2.0_pro_wan22_high.safetensors"
+WAN_PATH        = "/models/wan2.2-i2v-a14b"
+SVI_LORA_PATH   = "/models/svi-lora/SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors"
 LTX_PATH        = "/models/ltx-video"
 
 
 # ===========================================================================
-# FREE PLAN — SDXL-Turbo (T2I) + Wan2.2-TI2V-5B-Diffusers + SVI 2.0 Pro LoRA
+# FREE PLAN — SDXL-Turbo (T2I) + Wan2.2-I2V-A14B + SVI 2.0 Pro LoRA
 # ===========================================================================
 
 @app.function(
     image=base_image,
-    gpu=GPU_A10G,
+    gpu=GPU_A100,
     timeout=900,
     retries=1,
     volumes={"/models": models_volume},
@@ -76,28 +77,29 @@ LTX_PATH        = "/models/ltx-video"
 def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     """
     Free plan pipeline (100% local, no external calls):
-    1. SDXL-Turbo       → initial image (T2I, 1-4 steps)
-    2. Wan2.2-TI2V-5B-Diffusers + SVI 2.0 Pro LoRA → iterative video segments
-    3. ffmpeg concat    → final MP4
-    GPU: A10G (24GB) — memory-optimized with CPU offload
+    1. SDXL-Turbo             → initial image (T2I, 1-4 steps)
+    2. Wan2.2-I2V-A14B + SVI  → iterative video segments (I2V)
+    3. ffmpeg concat          → final MP4
+    GPU: A100 (40GB) — Wan 14B MoE (27B total, 14B active per step)
     """
     import torch, gc, time
-    from diffusers import AutoPipelineForText2Image, WanPipeline, AutoencoderKLWan
+    import numpy as np
+    from diffusers import AutoPipelineForText2Image, WanImageToVideoPipeline
     from diffusers.utils import export_to_video
     from PIL import Image
     import tempfile, subprocess, random
     from pathlib import Path
 
-    print(f"[{job_id}][FREE] Starting — max {max_duration}s | GPU: A10G")
+    print(f"[{job_id}][FREE] Starting — max {max_duration}s | GPU: A100")
     print(f"[{job_id}] CUDA available: {torch.cuda.is_available()}, Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A'}")
-    print(f"[{job_id}] VRAM total: {torch.cuda.get_device_properties(0).total_mem / 1e9:.1f}GB" if torch.cuda.is_available() else "")
+    if torch.cuda.is_available():
+        print(f"[{job_id}] VRAM total: {torch.cuda.get_device_properties(0).total_mem / 1e9:.1f}GB")
 
     # ------------------------------------------------------------------
     # Step 1: SDXL-Turbo — text → initial image (local)
     # ------------------------------------------------------------------
     print(f"[{job_id}] Step 1/3 — SDXL-Turbo T2I (local)...")
 
-    # CUDA warmup + retry for cold starts
     for attempt in range(3):
         try:
             t2i = AutoPipelineForText2Image.from_pretrained(
@@ -119,53 +121,54 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
         num_inference_steps=4,
         guidance_scale=0.0,
         height=480,
-        width=480,
+        width=832,
     ).images[0]
 
-    # Aggressively free SDXL-Turbo before loading Wan
+    # Free SDXL-Turbo before loading Wan 14B
     del t2i
     gc.collect()
     torch.cuda.empty_cache()
-    print(f"[{job_id}] Initial image ✓ (VRAM: {torch.cuda.memory_allocated()/1e9:.1f}GB used / {torch.cuda.memory_reserved()/1e9:.1f}GB reserved)")
+    print(f"[{job_id}] Initial image ✓ ({image.size}) — VRAM: {torch.cuda.memory_allocated()/1e9:.1f}GB used")
+
+    # Resize image to match Wan 14B expected dimensions
+    max_area = 480 * 832
+    aspect_ratio = image.height / image.width
+    mod_value = 16  # vae_scale_factor * patch_size
+    height = round(np.sqrt(max_area * aspect_ratio)) // mod_value * mod_value
+    width = round(np.sqrt(max_area / aspect_ratio)) // mod_value * mod_value
+    image = image.resize((width, height))
+    print(f"[{job_id}] Image resized to {width}x{height}")
 
     # ------------------------------------------------------------------
-    # Step 2: Wan2.2-TI2V-5B-Diffusers + SVI 2.0 Pro LoRA — iterative segments
+    # Step 2: Wan2.2-I2V-A14B + SVI 2.0 Pro LoRA — iterative segments
     # ------------------------------------------------------------------
-    print(f"[{job_id}] Step 2/3 — Loading Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA (local)...")
+    print(f"[{job_id}] Step 2/3 — Loading Wan2.2-I2V-A14B + SVI LoRA (local)...")
 
     for attempt in range(3):
         try:
-            vae = AutoencoderKLWan.from_pretrained(
-                WAN_PATH, subfolder="vae", torch_dtype=torch.float32,
-                local_files_only=True,
-            )
-            pipe = WanPipeline.from_pretrained(
+            pipe = WanImageToVideoPipeline.from_pretrained(
                 WAN_PATH,
-                vae=vae,
                 torch_dtype=torch.bfloat16,
                 local_files_only=True,
-            )
-            # Use CPU offload instead of .to("cuda") to keep VRAM usage within A10G limits
-            pipe.enable_model_cpu_offload()
+            ).to("cuda")
             break
         except (RuntimeError, torch.cuda.OutOfMemoryError) as cuda_err:
-            print(f"[{job_id}] Wan load attempt {attempt+1}/3 failed: {cuda_err}")
+            print(f"[{job_id}] Wan 14B load attempt {attempt+1}/3 failed: {cuda_err}")
             gc.collect()
             torch.cuda.empty_cache()
             if attempt == 2:
-                raise RuntimeError(f"Failed to load Wan pipeline after 3 attempts: {cuda_err}")
+                raise RuntimeError(f"Failed to load Wan 14B after 3 attempts: {cuda_err}")
             time.sleep(2)
 
-    # SVI LoRA is trained for Wan2.2-I2V-14B (dim=5120), incompatible with 5B (dim=3072)
-    # Skip LoRA loading — Wan2.2-TI2V-5B works well without it
+    # Load SVI 2.0 Pro LoRA (trained for Wan2.2-I2V-A14B)
     try:
         pipe.load_lora_weights(SVI_LORA_PATH)
         pipe.set_adapters(["default"], adapter_weights=[0.9])
         print(f"[{job_id}] SVI LoRA loaded ✓")
     except Exception as lora_err:
-        print(f"[{job_id}] ⚠️ SVI LoRA incompatible with 5B model, skipping: {lora_err}")
+        print(f"[{job_id}] ⚠️ SVI LoRA loading failed, continuing without: {lora_err}")
 
-    SEGMENT_FRAMES   = 33       # ~2s at 16fps (reduced from 81 for A10G memory)
+    SEGMENT_FRAMES   = 81       # ~5s at 16fps
     FPS              = 16
     segment_duration = SEGMENT_FRAMES / FPS
     num_segments     = max(1, min(int(max_duration / segment_duration), 18))
@@ -178,15 +181,18 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     with tempfile.TemporaryDirectory() as tmpdir:
         for i in range(num_segments):
             seed = random.randint(0, 2**32 - 1)   # Different seed per segment!
-            generator = torch.Generator(device="cpu").manual_seed(seed)
+            generator = torch.Generator(device="cuda").manual_seed(seed)
             print(f"[{job_id}] Segment {i+1}/{num_segments} (seed={seed})...")
 
             frames = pipe(
                 image=current_image,
                 prompt=prompt,
+                negative_prompt="static, blurry, worst quality, distorted",
+                height=height,
+                width=width,
                 num_frames=SEGMENT_FRAMES,
-                guidance_scale=5.0,
-                num_inference_steps=20,
+                guidance_scale=3.5,
+                num_inference_steps=40,
                 generator=generator,
             ).frames[0]
 
@@ -199,7 +205,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
             current_image = last if isinstance(last, Image.Image) else Image.fromarray(last)
             print(f"[{job_id}] Segment {i+1} ✓")
 
-        del pipe, vae
+        del pipe
         gc.collect()
         torch.cuda.empty_cache()
 

@@ -8,10 +8,10 @@ Usage:
     modal run modal_app/setup_models.py
 
 Models downloaded:
-  - stabilityai/sdxl-turbo          (T2I, ~3.5GB)  — Free plan
-  - Wan-AI/Wan2.2-TI2V-5B-Diffusers (I2V, ~10GB)   — Free plan (SVI)
-  - Kijai/WanVideo_comfy LoRA        (SVI 2.0 Pro)  — Free plan
-  - Lightricks/LTX-Video            (T2V, ~9GB)    — Pro plan
+  - stabilityai/sdxl-turbo             (T2I, ~3.5GB)  — Free plan
+  - Wan-AI/Wan2.2-I2V-A14B-Diffusers   (I2V, ~28GB)   — Free plan (SVI, MoE 27B/14B active)
+  - Kijai/WanVideo_comfy LoRA           (SVI 2.0 Pro)  — Free plan
+  - Lightricks/LTX-Video               (T2V, ~9GB)    — Pro plan
 """
 import modal
 
@@ -39,7 +39,7 @@ MODEL_DIR = "/models"
 @app.function(
     image=setup_image,
     volumes={MODEL_DIR: models_volume},
-    timeout=3600,  # 1 hour max for large downloads
+    timeout=7200,  # 2 hours max — Wan 14B is ~28GB
 )
 def download_all_models():
     """Download all models to the Modal volume. Run once."""
@@ -69,50 +69,45 @@ def download_all_models():
         print("[1/4] SDXL-Turbo ✓")
 
     # ------------------------------------------------------------------
-    # 2. Wan2.2-TI2V-5B (Image-to-Video for SVI)
+    # 2. Wan2.2-I2V-A14B (Image-to-Video for SVI — MoE 27B total, 14B active)
     # ------------------------------------------------------------------
-    wan_path = Path(MODEL_DIR) / "wan2.2-ti2v-5b"
+    wan_path = Path(MODEL_DIR) / "wan2.2-i2v-a14b"
     if wan_path.exists() and any(wan_path.iterdir()):
-        print("[2/4] Wan2.2-TI2V-5B — already downloaded, skipping")
+        print("[2/4] Wan2.2-I2V-A14B — already downloaded, skipping")
     else:
-        print("[2/4] Downloading Wan2.2-TI2V-5B-Diffusers (~10GB)...")
-        from diffusers import WanPipeline, AutoencoderKLWan
-        vae = AutoencoderKLWan.from_pretrained(
-            "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
-            subfolder="vae",
-            torch_dtype=torch.float32,
-        )
-        pipe = WanPipeline.from_pretrained(
-            "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
-            vae=vae,
+        print("[2/4] Downloading Wan2.2-I2V-A14B-Diffusers (~28GB)...")
+        from diffusers import WanImageToVideoPipeline
+        pipe = WanImageToVideoPipeline.from_pretrained(
+            "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
             torch_dtype=torch.bfloat16,
         )
         pipe.save_pretrained(str(wan_path))
-        del pipe, vae
-        print("[2/4] Wan2.2-TI2V-5B ✓")
+        del pipe
+        print("[2/4] Wan2.2-I2V-A14B ✓")
 
     # ------------------------------------------------------------------
-    # 3. SVI 2.0 Pro LoRA weights
+    # 3. SVI 2.0 Pro LoRA weights (for Wan2.2-I2V-A14B)
     # ------------------------------------------------------------------
     lora_path = Path(MODEL_DIR) / "svi-lora"
-    lora_file = lora_path / "svi_2.0_pro_wan22_high.safetensors"
+    lora_filename = "SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors"
+    lora_file = lora_path / lora_filename
     if lora_file.exists():
-        print("[3/4] SVI 2.0 Pro LoRA — already downloaded, skipping")
+        print("[3/4] SVI 2.0 Pro LoRA (14B) — already downloaded, skipping")
     else:
-        print("[3/4] Downloading SVI 2.0 Pro LoRA...")
+        print("[3/4] Downloading SVI 2.0 Pro LoRA for Wan2.2-I2V-A14B...")
         from huggingface_hub import hf_hub_download
         lora_path.mkdir(parents=True, exist_ok=True)
         hf_hub_download(
             repo_id="Kijai/WanVideo_comfy",
-            filename="LoRAs/Stable-Video-Infinity/v2.0/svi_2.0_pro_wan22_high.safetensors",
+            filename=f"LoRAs/Stable-Video-Infinity/v2.0/{lora_filename}",
             local_dir=str(lora_path),
         )
         # Move file to expected location if nested
-        nested = lora_path / "LoRAs" / "Stable-Video-Infinity" / "v2.0" / "svi_2.0_pro_wan22_high.safetensors"
+        nested = lora_path / "LoRAs" / "Stable-Video-Infinity" / "v2.0" / lora_filename
         if nested.exists() and not lora_file.exists():
             import shutil
             shutil.move(str(nested), str(lora_file))
-        print("[3/4] SVI 2.0 Pro LoRA ✓")
+        print("[3/4] SVI 2.0 Pro LoRA (14B) ✓")
 
     # ------------------------------------------------------------------
     # 4. LTX-Video (Pro plan — text-to-video)
@@ -137,8 +132,8 @@ def download_all_models():
     print("=" * 60)
     print("All models downloaded to /models/")
     print("  /models/sdxl-turbo/")
-    print("  /models/wan2.2-ti2v-5b/")
-    print("  /models/svi-lora/svi_2.0_pro_wan22_high.safetensors")
+    print("  /models/wan2.2-i2v-a14b/")
+    print(f"  /models/svi-lora/{lora_filename}")
     print("  /models/ltx-video/")
     print("=" * 60)
 
