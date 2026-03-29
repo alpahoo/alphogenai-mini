@@ -150,7 +150,10 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
                 WAN_PATH,
                 torch_dtype=torch.bfloat16,
                 local_files_only=True,
-            ).to("cuda")
+            )
+            # MoE model has 27B total params (~54GB in bf16) — too large for A100 40GB
+            # CPU offload keeps weights on CPU, moves each module to GPU during forward pass
+            pipe.enable_model_cpu_offload()
             break
         except (RuntimeError, torch.cuda.OutOfMemoryError) as cuda_err:
             print(f"[{job_id}] Wan 14B load attempt {attempt+1}/3 failed: {cuda_err}")
@@ -181,7 +184,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     with tempfile.TemporaryDirectory() as tmpdir:
         for i in range(num_segments):
             seed = random.randint(0, 2**32 - 1)   # Different seed per segment!
-            generator = torch.Generator(device="cuda").manual_seed(seed)
+            generator = torch.Generator(device="cpu").manual_seed(seed)
             print(f"[{job_id}] Segment {i+1}/{num_segments} (seed={seed})...")
 
             frames = pipe(
