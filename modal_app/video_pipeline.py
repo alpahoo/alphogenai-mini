@@ -1,9 +1,12 @@
 """
-AlphoGenAI Mini — Modal Video Pipeline
-Architecture multi-plan :
-  Free    : FLUX.1-schnell (T2I) + Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA (max 90s, A10G)
-  Pro     : LTX-Video 13B (T2V natif, 60s streaming, A10G)
+AlphoGenAI Mini — Modal Video Pipeline (v2)
+Architecture multi-plan — 100% self-hosted, modèles locaux sur volume Modal :
+  Free    : SDXL-Turbo (T2I) + Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA (max 90s, A10G)
+  Pro     : LTX-Video (T2V natif, 60s, A10G)
   Premium : Seedance 2.0 API (15s, qualité cinématique, A10G)
+
+Models are pre-downloaded to the Modal volume via setup_models.py.
+No external API calls (HuggingFace, etc.) during inference.
 """
 import modal
 import os
@@ -18,7 +21,6 @@ base_image = (
     .pip_install(
         "torch==2.5.1",
         "torchvision",
-        "xformers==0.0.29.post1",
         "diffusers>=0.31.0",
         "transformers>=4.45.0",
         "accelerate>=0.33.0",
@@ -33,63 +35,34 @@ base_image = (
         "supabase",
         "boto3",
         "httpx",
-        "huggingface_hub",
     )
     .apt_install("ffmpeg", "git")
+)
+
+webhook_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("fastapi", "pydantic", "supabase", "httpx")
 )
 
 secrets = modal.Secret.from_name("alphogenai-secrets")
 models_volume = modal.Volume.from_name("alphogenai-models", create_if_missing=True)
 
-# Fix: use string instead of deprecated modal.gpu.A10G()
+# All plans run on A10G (24GB VRAM)
 GPU_A10G = "A10G"
 
 
 # ===========================================================================
-# MODEL DOWNLOAD — run once to pre-cache all models
+# LOCAL MODEL PATHS (pre-downloaded via setup_models.py)
 # ===========================================================================
 
-@app.function(
-    image=base_image,
-    gpu=GPU_A10G,
-    timeout=3600,
-    volumes={"/models": models_volume},
-    secrets=[secrets],
-)
-def download_models():
-    """Pre-download all models to persistent volume. Run once."""
-    from huggingface_hub import snapshot_download
-    import os
-
-    hf_token = os.environ.get("HF_TOKEN")
-
-    print("Downloading FLUX.1-schnell...")
-    snapshot_download(
-        "black-forest-labs/FLUX.1-schnell",
-        local_dir="/models/flux-schnell",
-        token=hf_token,
-    )
-
-    print("Downloading Wan2.2-TI2V-5B-Diffusers...")
-    snapshot_download(
-        "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
-        local_dir="/models/wan2.2-ti2v-5b",
-        token=hf_token,
-    )
-
-    print("Downloading LTX-Video...")
-    snapshot_download(
-        "Lightricks/LTX-Video",
-        local_dir="/models/ltx-video",
-        token=hf_token,
-    )
-
-    models_volume.commit()
-    print("All models downloaded and cached!")
+SDXL_TURBO_PATH = "/models/sdxl-turbo"
+WAN_PATH        = "/models/wan2.2-ti2v-5b"
+SVI_LORA_PATH   = "/models/svi-lora/svi_2.0_pro_wan22_high.safetensors"
+LTX_PATH        = "/models/ltx-video"
 
 
 # ===========================================================================
-# FREE PLAN — FLUX.1-schnell (T2I) + Wan2.2-TI2V-5B
+# FREE PLAN — SDXL-Turbo (T2I) + Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA
 # ===========================================================================
 
 @app.function(
@@ -102,14 +75,14 @@ def download_models():
 )
 def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     """
-    Free plan pipeline:
-    1. FLUX.1-schnell  → initial image (T2I, 4 steps)
-    2. Wan2.2-TI2V-5B → video segments
-    3. ffmpeg concat   → final MP4
+    Free plan pipeline (100% local, no external calls):
+    1. SDXL-Turbo       → initial image (T2I, 1-4 steps)
+    2. Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA → iterative video segments
+    3. ffmpeg concat    → final MP4
     GPU: A10G (24GB)
     """
     import torch
-    from diffusers import FluxPipeline, WanImageToVideoPipeline, AutoencoderKLWan
+    from diffusers import AutoPipelineForText2Image, WanImageToVideoPipeline, AutoencoderKLWan
     from diffusers.utils import export_to_video
     from PIL import Image
     import tempfile, subprocess, random
@@ -117,22 +90,17 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
 
     print(f"[{job_id}][FREE] Starting — max {max_duration}s | GPU: A10G")
 
-    MODEL_DIR = "/models"
-    FLUX_DIR  = f"{MODEL_DIR}/flux-schnell"
-    WAN_DIR   = f"{MODEL_DIR}/wan2.2-ti2v-5b"
-
     # ------------------------------------------------------------------
-    # Step 1: FLUX.1-schnell — text → initial image
+    # Step 1: SDXL-Turbo — text → initial image (local)
     # ------------------------------------------------------------------
-    print(f"[{job_id}] Step 1/3 — FLUX.1-schnell T2I...")
-    flux = FluxPipeline.from_pretrained(
-        FLUX_DIR,
-        torch_dtype=torch.bfloat16,
+    print(f"[{job_id}] Step 1/3 — SDXL-Turbo T2I (local)...")
+    t2i = AutoPipelineForText2Image.from_pretrained(
+        SDXL_TURBO_PATH,
+        torch_dtype=torch.float16,
         local_files_only=True,
     ).to("cuda")
-    flux.enable_model_cpu_offload()
 
-    image: Image.Image = flux(
+    image: Image.Image = t2i(
         prompt=prompt,
         num_inference_steps=4,
         guidance_scale=0.0,
@@ -140,40 +108,46 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
         width=832,
     ).images[0]
 
-    del flux
+    del t2i
     torch.cuda.empty_cache()
     print(f"[{job_id}] Initial image ✓")
 
     # ------------------------------------------------------------------
-    # Step 2: Wan2.2-TI2V-5B — image → video segments
+    # Step 2: Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA — iterative segments (local)
     # ------------------------------------------------------------------
-    print(f"[{job_id}] Step 2/3 — Loading Wan2.2-TI2V-5B...")
+    print(f"[{job_id}] Step 2/3 — Loading Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA (local)...")
 
     vae = AutoencoderKLWan.from_pretrained(
-        WAN_DIR, subfolder="vae", torch_dtype=torch.float32, local_files_only=True
+        WAN_PATH, subfolder="vae", torch_dtype=torch.float32,
+        local_files_only=True,
     )
     pipe = WanImageToVideoPipeline.from_pretrained(
-        WAN_DIR,
+        WAN_PATH,
         vae=vae,
         torch_dtype=torch.bfloat16,
         local_files_only=True,
     ).to("cuda")
+
+    pipe.load_lora_weights(
+        SVI_LORA_PATH,
+    )
+    pipe.set_adapters(["default"], adapter_weights=[0.9])
 
     SEGMENT_FRAMES   = 81       # ~5s at 16fps
     FPS              = 16
     segment_duration = SEGMENT_FRAMES / FPS
     num_segments     = max(1, min(int(max_duration / segment_duration), 18))
 
-    print(f"[{job_id}] {num_segments} segments × {segment_duration:.1f}s")
+    print(f"[{job_id}] {num_segments} segments × {segment_duration:.1f}s ≈ {num_segments*segment_duration:.0f}s")
 
     segment_paths = []
     current_image = image
 
     with tempfile.TemporaryDirectory() as tmpdir:
         for i in range(num_segments):
-            seed = random.randint(0, 2**32 - 1)
+            seed = random.randint(0, 2**32 - 1)   # Different seed per segment!
             generator = torch.Generator(device="cuda").manual_seed(seed)
-            print(f"[{job_id}] Segment {i+1}/{num_segments}...")
+            print(f"[{job_id}] Segment {i+1}/{num_segments} (seed={seed})...")
 
             frames = pipe(
                 image=current_image,
@@ -188,6 +162,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
             export_to_video(frames, str(seg_path), fps=FPS)
             segment_paths.append(str(seg_path))
 
+            # Last frame becomes first frame of next segment
             last = frames[-1]
             current_image = last if isinstance(last, Image.Image) else Image.fromarray(last)
             print(f"[{job_id}] Segment {i+1} ✓")
@@ -227,17 +202,17 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     secrets=[secrets],
 )
 def generate_pro(prompt: str, job_id: str):
-    """Pro plan: LTX-Video — native T2V, up to 60s. GPU: A10G"""
+    """Pro plan: LTX-Video — native T2V, up to 60s. GPU: A10G. Local only."""
     import torch
     from diffusers import LTXPipeline
     from diffusers.utils import export_to_video
     import tempfile
     from pathlib import Path
 
-    print(f"[{job_id}][PRO] LTX-Video | GPU: A10G")
+    print(f"[{job_id}][PRO] LTX-Video | GPU: A10G (local)")
 
     pipe = LTXPipeline.from_pretrained(
-        "/models/ltx-video",
+        LTX_PATH,
         torch_dtype=torch.bfloat16,
         local_files_only=True,
     ).to("cuda")
@@ -248,7 +223,7 @@ def generate_pro(prompt: str, job_id: str):
         negative_prompt="worst quality, inconsistent motion, blurry, jittery, distorted",
         width=768,
         height=512,
-        num_frames=241,
+        num_frames=241,         # ~60s at 4fps (LTX native)
         num_inference_steps=50,
         guidance_scale=3.0,
     ).frames[0]
@@ -261,7 +236,7 @@ def generate_pro(prompt: str, job_id: str):
 
 
 # ===========================================================================
-# PREMIUM PLAN — Seedance 2.0 API
+# PREMIUM PLAN — Seedance 2.0 API (15s, cinématique, A10G)
 # ===========================================================================
 
 @app.function(
@@ -272,7 +247,7 @@ def generate_pro(prompt: str, job_id: str):
     secrets=[secrets],
 )
 def generate_premium(prompt: str, job_id: str):
-    """Premium plan: Seedance 2.0 via API (15s)."""
+    """Premium plan: Seedance 2.0 via API (15s). GPU: A10G"""
     import httpx, time
 
     print(f"[{job_id}][PREMIUM] Seedance 2.0 API...")
@@ -291,6 +266,7 @@ def generate_premium(prompt: str, job_id: str):
         )
         resp.raise_for_status()
         task_id = resp.json()["task_id"]
+        print(f"[{job_id}] Seedance task: {task_id}")
 
         for _ in range(60):
             time.sleep(5)
@@ -339,12 +315,7 @@ def upload_to_r2(video_bytes: bytes, job_id: str) -> str:
 # Main orchestrator
 # ===========================================================================
 
-@app.function(
-    image=base_image,
-    secrets=[secrets],
-    timeout=1200,
-    retries=1,
-)
+@app.function(image=base_image, secrets=[secrets], timeout=1200, retries=1)
 def generate_video_complete(
     job_id: str,
     prompt: str,
@@ -353,14 +324,11 @@ def generate_video_complete(
 ):
     from supabase import create_client
 
-    # Debug: verify env vars are present
-    supabase_url = os.environ.get("SUPABASE_URL")
-    supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
-    print(f"[{job_id}] SUPABASE_URL present: {bool(supabase_url)}")
-    print(f"[{job_id}] SUPABASE_SERVICE_KEY present: {bool(supabase_key)}")
+    supabase_url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+    supabase_key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
     if not supabase_url or not supabase_key:
-        raise ValueError("Missing Supabase credentials in Modal secrets")
+        raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY (or their aliases) must be set in Modal secrets")
 
     supabase = create_client(supabase_url, supabase_key)
 
@@ -368,7 +336,7 @@ def generate_video_complete(
         supabase.table("jobs").update(kwargs).eq("id", job_id).execute()
 
     try:
-        update_job(status="processing", current_stage="generating_video")
+        update_job(status="in_progress", current_stage="generating_video")
         print(f"[{job_id}] Plan={plan} | {prompt[:60]}...")
 
         if plan == "free":
@@ -403,7 +371,7 @@ def generate_video_complete(
 # FastAPI webhook
 # ===========================================================================
 
-@app.function(image=base_image, secrets=[secrets])
+@app.function(image=webhook_image, secrets=[secrets])
 @modal.asgi_app()
 def webhook():
     from fastapi import FastAPI, HTTPException, Header
@@ -422,29 +390,85 @@ def webhook():
         expected = os.environ.get("MODAL_WEBHOOK_SECRET")
         if expected and x_webhook_secret != expected:
             raise HTTPException(status_code=401, detail="Unauthorized")
-        generate_video_complete.spawn(req.job_id, req.prompt, req.plan, req.user_id)
-        return {
-            "success": True,
-            "message": f"Pipeline started for job {req.job_id}",
-            "plan": req.plan,
-        }
+
+        # Update job status immediately from webhook (don't rely on spawn)
+        try:
+            from supabase import create_client as _create_client
+            _url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+            _key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+            if _url and _key:
+                _sb = _create_client(_url, _key)
+                _sb.table("jobs").update({
+                    "status": "in_progress",
+                    "current_stage": "spawning_pipeline",
+                }).eq("id", req.job_id).execute()
+        except Exception as e:
+            print(f"[webhook] Failed to update job {req.job_id}: {e}")
+
+        try:
+            await generate_video_complete.spawn.aio(req.job_id, req.prompt, req.plan, req.user_id)
+        except Exception as e:
+            # If spawn fails, mark job as failed
+            print(f"[webhook] spawn() failed for {req.job_id}: {e}")
+            try:
+                _sb.table("jobs").update({
+                    "status": "failed",
+                    "current_stage": "failed",
+                    "error_message": f"Failed to spawn pipeline: {e}",
+                }).eq("id", req.job_id).execute()
+            except Exception:
+                pass
+            raise HTTPException(status_code=500, detail=f"Spawn failed: {e}")
+
+        return {"success": True, "message": f"Pipeline started for job {req.job_id}", "plan": req.plan}
 
     @web.get("/health")
     async def health():
         return {"status": "ok", "plans": ["free", "pro", "premium"], "gpu": "A10G"}
 
+    @web.get("/debug")
+    async def debug():
+        """Diagnostic endpoint — tests Supabase connectivity from inside Modal."""
+        import traceback
+
+        results = {}
+
+        # 1. Check env vars
+        supabase_url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+        supabase_key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        results["env"] = {
+            "SUPABASE_URL": bool(supabase_url),
+            "SUPABASE_SERVICE_KEY": bool(supabase_key),
+            "url_prefix": supabase_url[:30] + "..." if supabase_url else "MISSING",
+            "key_prefix": supabase_key[:8] + "..." if supabase_key else "MISSING",
+        }
+
+        # 2. Test Supabase connection
+        try:
+            from supabase import create_client
+            sb = create_client(supabase_url, supabase_key)
+            count = sb.table("jobs").select("id", count="exact").limit(1).execute()
+            results["supabase"] = {"connected": True, "jobs_count": count.count}
+        except Exception as e:
+            results["supabase"] = {"connected": False, "error": str(e), "trace": traceback.format_exc()[-500:]}
+
+        # 3. Test spawn capability
+        try:
+            # Check if generate_video_complete is callable
+            results["spawn"] = {"function_exists": hasattr(generate_video_complete, "spawn")}
+        except Exception as e:
+            results["spawn"] = {"error": str(e)}
+
+        return results
+
     return web
 
-
-# ===========================================================================
-# Local test entrypoint
-# ===========================================================================
 
 @app.local_entrypoint()
 def test():
     result = generate_video_complete.remote(
-        job_id="test-local-001",
-        prompt="a cat walking in the rain",
+        job_id="test-001",
+        prompt="A rocket launching into space at sunset",
         plan="free",
     )
     print(result)
