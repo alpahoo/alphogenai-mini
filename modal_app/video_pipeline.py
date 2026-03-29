@@ -81,7 +81,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     3. ffmpeg concat    → final MP4
     GPU: A10G (24GB) — memory-optimized with CPU offload
     """
-    import torch, gc
+    import torch, gc, time
     from diffusers import AutoPipelineForText2Image, WanPipeline, AutoencoderKLWan
     from diffusers.utils import export_to_video
     from PIL import Image
@@ -89,16 +89,30 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     from pathlib import Path
 
     print(f"[{job_id}][FREE] Starting — max {max_duration}s | GPU: A10G")
+    print(f"[{job_id}] CUDA available: {torch.cuda.is_available()}, Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A'}")
+    print(f"[{job_id}] VRAM total: {torch.cuda.get_device_properties(0).total_mem / 1e9:.1f}GB" if torch.cuda.is_available() else "")
 
     # ------------------------------------------------------------------
     # Step 1: SDXL-Turbo — text → initial image (local)
     # ------------------------------------------------------------------
     print(f"[{job_id}] Step 1/3 — SDXL-Turbo T2I (local)...")
-    t2i = AutoPipelineForText2Image.from_pretrained(
-        SDXL_TURBO_PATH,
-        torch_dtype=torch.float16,
-        local_files_only=True,
-    ).to("cuda")
+
+    # CUDA warmup + retry for cold starts
+    for attempt in range(3):
+        try:
+            t2i = AutoPipelineForText2Image.from_pretrained(
+                SDXL_TURBO_PATH,
+                torch_dtype=torch.float16,
+                local_files_only=True,
+            ).to("cuda")
+            break
+        except (RuntimeError, torch.cuda.OutOfMemoryError) as cuda_err:
+            print(f"[{job_id}] SDXL-Turbo load attempt {attempt+1}/3 failed: {cuda_err}")
+            gc.collect()
+            torch.cuda.empty_cache()
+            if attempt == 2:
+                raise RuntimeError(f"Failed to load SDXL-Turbo after 3 attempts: {cuda_err}")
+            time.sleep(2)
 
     image: Image.Image = t2i(
         prompt=prompt,
@@ -112,25 +126,35 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     del t2i
     gc.collect()
     torch.cuda.empty_cache()
-    print(f"[{job_id}] Initial image ✓ (VRAM freed: {torch.cuda.memory_allocated()/1e9:.1f}GB used)")
+    print(f"[{job_id}] Initial image ✓ (VRAM: {torch.cuda.memory_allocated()/1e9:.1f}GB used / {torch.cuda.memory_reserved()/1e9:.1f}GB reserved)")
 
     # ------------------------------------------------------------------
     # Step 2: Wan2.2-TI2V-5B-Diffusers + SVI 2.0 Pro LoRA — iterative segments
     # ------------------------------------------------------------------
     print(f"[{job_id}] Step 2/3 — Loading Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA (local)...")
 
-    vae = AutoencoderKLWan.from_pretrained(
-        WAN_PATH, subfolder="vae", torch_dtype=torch.float32,
-        local_files_only=True,
-    )
-    pipe = WanPipeline.from_pretrained(
-        WAN_PATH,
-        vae=vae,
-        torch_dtype=torch.bfloat16,
-        local_files_only=True,
-    )
-    # Use CPU offload instead of .to("cuda") to keep VRAM usage within A10G limits
-    pipe.enable_model_cpu_offload()
+    for attempt in range(3):
+        try:
+            vae = AutoencoderKLWan.from_pretrained(
+                WAN_PATH, subfolder="vae", torch_dtype=torch.float32,
+                local_files_only=True,
+            )
+            pipe = WanPipeline.from_pretrained(
+                WAN_PATH,
+                vae=vae,
+                torch_dtype=torch.bfloat16,
+                local_files_only=True,
+            )
+            # Use CPU offload instead of .to("cuda") to keep VRAM usage within A10G limits
+            pipe.enable_model_cpu_offload()
+            break
+        except (RuntimeError, torch.cuda.OutOfMemoryError) as cuda_err:
+            print(f"[{job_id}] Wan load attempt {attempt+1}/3 failed: {cuda_err}")
+            gc.collect()
+            torch.cuda.empty_cache()
+            if attempt == 2:
+                raise RuntimeError(f"Failed to load Wan pipeline after 3 attempts: {cuda_err}")
+            time.sleep(2)
 
     pipe.load_lora_weights(
         SVI_LORA_PATH,
