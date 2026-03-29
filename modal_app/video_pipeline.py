@@ -44,7 +44,7 @@ webhook_image = (
     .pip_install("fastapi", "pydantic", "supabase", "httpx")
 )
 
-secrets = modal.Secret.from_name("alphogenai-secrets")
+secrets = modal.Secret.from_name("alphogenai-secrets-corrected-v2")
 models_volume = modal.Volume.from_name("alphogenai-models", create_if_missing=True)
 
 # All plans run on A10G (24GB VRAM)
