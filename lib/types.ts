@@ -4,11 +4,13 @@ export type JobPlan = "free" | "pro" | "premium";
 
 export type JobStage =
   | "queued"
+  | "spawning_pipeline"
   | "generating_video"
   | "generating_audio"
   | "mixing"
   | "uploading"
-  | "completed";
+  | "completed"
+  | "failed";
 
 export interface Job {
   id: string;
@@ -46,15 +48,18 @@ export interface ErrorResponse {
 
 export const STAGE_LABELS: Record<JobStage, string> = {
   queued: "In queue",
+  spawning_pipeline: "Starting pipeline",
   generating_video: "Generating video",
   generating_audio: "Generating audio",
   mixing: "Mixing audio & video",
   uploading: "Uploading",
   completed: "Complete",
+  failed: "Failed",
 };
 
 export const STAGE_ORDER: JobStage[] = [
   "queued",
+  "spawning_pipeline",
   "generating_video",
   "generating_audio",
   "mixing",
