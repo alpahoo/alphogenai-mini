@@ -14,6 +14,7 @@ from .audio_orchestrator import AudioOrchestrator
 from .ffmpeg_assembler import FFmpegAssembler
 from .budget_guard import BudgetGuard, BudgetGuardMiddleware
 from .config import get_settings
+from .r2_uploader import upload_file_to_r2
 
 logger = logging.getLogger(__name__)
 
@@ -174,9 +175,17 @@ class AlphogenAIWorker:
                         music_url=audio_url,
                         output_filename=f"job_{job['id']}_final.mp4"
                     )
-                    # TODO: upload mixed_path to R2 and get public URL
-                    output_url_final = video_url  # Placeholder until R2 upload is implemented
                     logger.info(f"Audio mixé (score: {audio_score:.3f}), fichier: {mixed_path}")
+
+                    # Upload mixed file to R2
+                    r2_key = f"videos/{job['id']}_final.mp4"
+                    r2_url = upload_file_to_r2(mixed_path, r2_key)
+                    if r2_url:
+                        output_url_final = r2_url
+                        logger.info(f"Mixed video uploaded to R2: {r2_url}")
+                    else:
+                        output_url_final = video_url
+                        logger.warning("R2 upload skipped — using original video URL")
                 else:
                     output_url_final = video_url
 

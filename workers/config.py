@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     
     CLIP_DURATION: int = 10  # Duration per clip in seconds (6-10)
     
+    # Cloudflare R2 (S3-compatible storage)
+    R2_ENDPOINT: Optional[str] = None
+    R2_ACCESS_KEY_ID: Optional[str] = None
+    R2_SECRET_ACCESS_KEY: Optional[str] = None
+    R2_BUCKET_NAME: str = "alphogenai-assets"
+    R2_PUBLIC_URL: Optional[str] = None
+
     NO_STORAGE_UPLOAD: bool = False
     MUSIC_SOURCE: str = "external"
     ASSEMBLER_SHARED_SECRET: Optional[str] = None
