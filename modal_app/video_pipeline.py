@@ -62,7 +62,7 @@ LTX_PATH        = "/models/ltx-video"
 
 
 # ===========================================================================
-# FREE PLAN — SDXL-Turbo (T2I) + Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA
+# FREE PLAN — SDXL-Turbo (T2I) + Wan2.2-TI2V-5B-Diffusers + SVI 2.0 Pro LoRA
 # ===========================================================================
 
 @app.function(
@@ -77,11 +77,11 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     """
     Free plan pipeline (100% local, no external calls):
     1. SDXL-Turbo       → initial image (T2I, 1-4 steps)
-    2. Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA → iterative video segments
+    2. Wan2.2-TI2V-5B-Diffusers + SVI 2.0 Pro LoRA → iterative video segments
     3. ffmpeg concat    → final MP4
-    GPU: A10G (24GB)
+    GPU: A10G (24GB) — memory-optimized with CPU offload
     """
-    import torch
+    import torch, gc
     from diffusers import AutoPipelineForText2Image, WanPipeline, AutoencoderKLWan
     from diffusers.utils import export_to_video
     from PIL import Image
@@ -105,15 +105,17 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
         num_inference_steps=4,
         guidance_scale=0.0,
         height=480,
-        width=832,
+        width=480,
     ).images[0]
 
+    # Aggressively free SDXL-Turbo before loading Wan
     del t2i
+    gc.collect()
     torch.cuda.empty_cache()
-    print(f"[{job_id}] Initial image ✓")
+    print(f"[{job_id}] Initial image ✓ (VRAM freed: {torch.cuda.memory_allocated()/1e9:.1f}GB used)")
 
     # ------------------------------------------------------------------
-    # Step 2: Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA — iterative segments (local)
+    # Step 2: Wan2.2-TI2V-5B-Diffusers + SVI 2.0 Pro LoRA — iterative segments
     # ------------------------------------------------------------------
     print(f"[{job_id}] Step 2/3 — Loading Wan2.2-TI2V-5B + SVI 2.0 Pro LoRA (local)...")
 
@@ -126,14 +128,16 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
         vae=vae,
         torch_dtype=torch.bfloat16,
         local_files_only=True,
-    ).to("cuda")
+    )
+    # Use CPU offload instead of .to("cuda") to keep VRAM usage within A10G limits
+    pipe.enable_model_cpu_offload()
 
     pipe.load_lora_weights(
         SVI_LORA_PATH,
     )
     pipe.set_adapters(["default"], adapter_weights=[0.9])
 
-    SEGMENT_FRAMES   = 81       # ~5s at 16fps
+    SEGMENT_FRAMES   = 33       # ~2s at 16fps (reduced from 81 for A10G memory)
     FPS              = 16
     segment_duration = SEGMENT_FRAMES / FPS
     num_segments     = max(1, min(int(max_duration / segment_duration), 18))
@@ -146,7 +150,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     with tempfile.TemporaryDirectory() as tmpdir:
         for i in range(num_segments):
             seed = random.randint(0, 2**32 - 1)   # Different seed per segment!
-            generator = torch.Generator(device="cuda").manual_seed(seed)
+            generator = torch.Generator(device="cpu").manual_seed(seed)
             print(f"[{job_id}] Segment {i+1}/{num_segments} (seed={seed})...")
 
             frames = pipe(
@@ -167,7 +171,8 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
             current_image = last if isinstance(last, Image.Image) else Image.fromarray(last)
             print(f"[{job_id}] Segment {i+1} ✓")
 
-        del pipe
+        del pipe, vae
+        gc.collect()
         torch.cuda.empty_cache()
 
         # ------------------------------------------------------------------
