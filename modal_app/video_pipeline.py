@@ -362,8 +362,12 @@ def generate_video_complete(
         return {"success": True, "job_id": job_id, "video_url": video_url}
 
     except Exception as e:
+        error_msg = str(e)[:500]  # Truncate to avoid Supabase 400 on long error messages
         print(f"[{job_id}] ❌ {e}")
-        update_job(status="failed", current_stage="failed", error_message=str(e))
+        try:
+            update_job(status="failed", current_stage="failed", error_message=error_msg)
+        except Exception as update_err:
+            print(f"[{job_id}] ⚠️ Failed to update job status: {update_err}")
         raise
 
 
@@ -414,7 +418,7 @@ def webhook():
                 _sb.table("jobs").update({
                     "status": "failed",
                     "current_stage": "failed",
-                    "error_message": f"Failed to spawn pipeline: {e}",
+                    "error_message": f"Failed to spawn pipeline: {str(e)[:400]}",
                 }).eq("id", req.job_id).execute()
             except Exception:
                 pass
