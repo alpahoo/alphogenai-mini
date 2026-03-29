@@ -9,7 +9,7 @@ Usage:
 
 Models downloaded:
   - stabilityai/sdxl-turbo          (T2I, ~3.5GB)  — Free plan
-  - Wan-AI/Wan2.2-TI2V-5B           (I2V, ~10GB)   — Free plan (SVI)
+  - Wan-AI/Wan2.2-TI2V-5B-Diffusers (I2V, ~10GB)   — Free plan (SVI)
   - Kijai/WanVideo_comfy LoRA        (SVI 2.0 Pro)  — Free plan
   - Lightricks/LTX-Video            (T2V, ~9GB)    — Pro plan
 """
@@ -21,7 +21,7 @@ setup_image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
         "torch==2.5.1",
-        "diffusers>=0.31.0",
+        "git+https://github.com/huggingface/diffusers.git",
         "transformers>=4.45.0",
         "accelerate>=0.33.0",
         "safetensors",
@@ -75,15 +75,15 @@ def download_all_models():
     if wan_path.exists() and any(wan_path.iterdir()):
         print("[2/4] Wan2.2-TI2V-5B — already downloaded, skipping")
     else:
-        print("[2/4] Downloading Wan2.2-TI2V-5B (~10GB)...")
-        from diffusers import WanImageToVideoPipeline, AutoencoderKLWan
+        print("[2/4] Downloading Wan2.2-TI2V-5B-Diffusers (~10GB)...")
+        from diffusers import WanPipeline, AutoencoderKLWan
         vae = AutoencoderKLWan.from_pretrained(
-            "Wan-AI/Wan2.2-TI2V-5B",
+            "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
             subfolder="vae",
             torch_dtype=torch.float32,
         )
-        pipe = WanImageToVideoPipeline.from_pretrained(
-            "Wan-AI/Wan2.2-TI2V-5B",
+        pipe = WanPipeline.from_pretrained(
+            "Wan-AI/Wan2.2-TI2V-5B-Diffusers",
             vae=vae,
             torch_dtype=torch.bfloat16,
         )
