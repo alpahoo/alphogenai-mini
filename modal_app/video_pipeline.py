@@ -332,18 +332,30 @@ def upload_to_r2(video_bytes: bytes, job_id: str) -> str:
     import boto3
     from botocore.config import Config
 
+    r2_endpoint = os.environ.get("R2_ENDPOINT")
+    r2_key_id = os.environ.get("R2_ACCESS_KEY_ID")
+    r2_secret = os.environ.get("R2_SECRET_ACCESS_KEY")
+    r2_bucket = os.environ.get("R2_BUCKET_NAME", "alphogenai-assets")
+
+    if not all([r2_endpoint, r2_key_id, r2_secret]):
+        raise RuntimeError(
+            "R2 credentials missing in Modal secrets. "
+            "Required: R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL. "
+            "Add them to the 'alphogenai-secrets-corrected-v2' secret in Modal dashboard."
+        )
+
     s3 = boto3.client(
         "s3",
-        endpoint_url=os.environ["R2_ENDPOINT"],
-        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+        endpoint_url=r2_endpoint,
+        aws_access_key_id=r2_key_id,
+        aws_secret_access_key=r2_secret,
         config=Config(signature_version="s3v4"),
         region_name="auto",
     )
 
     key = f"videos/{job_id}.mp4"
     s3.put_object(
-        Bucket=os.environ["R2_BUCKET_NAME"],
+        Bucket=r2_bucket,
         Key=key,
         Body=video_bytes,
         ContentType="video/mp4",
@@ -498,9 +510,43 @@ def webhook():
         except Exception as e:
             results["supabase"] = {"connected": False, "error": str(e), "trace": traceback.format_exc()[-500:]}
 
-        # 3. Test spawn capability
+        # 3. Check R2 credentials
+        r2_endpoint = os.environ.get("R2_ENDPOINT", "")
+        r2_key = os.environ.get("R2_ACCESS_KEY_ID", "")
+        r2_secret = os.environ.get("R2_SECRET_ACCESS_KEY", "")
+        r2_bucket = os.environ.get("R2_BUCKET_NAME", "")
+        r2_public = os.environ.get("R2_PUBLIC_URL", "")
+        results["r2"] = {
+            "R2_ENDPOINT": bool(r2_endpoint),
+            "R2_ACCESS_KEY_ID": bool(r2_key),
+            "R2_SECRET_ACCESS_KEY": bool(r2_secret),
+            "R2_BUCKET_NAME": r2_bucket or "MISSING",
+            "R2_PUBLIC_URL": r2_public[:40] + "..." if len(r2_public) > 40 else r2_public or "MISSING",
+            "all_configured": all([r2_endpoint, r2_key, r2_secret, r2_bucket]),
+        }
+
+        # 4. Test R2 connectivity
+        if results["r2"]["all_configured"]:
+            try:
+                import boto3
+                from botocore.config import Config as BotoConfig
+                s3 = boto3.client(
+                    "s3",
+                    endpoint_url=r2_endpoint,
+                    aws_access_key_id=r2_key,
+                    aws_secret_access_key=r2_secret,
+                    config=BotoConfig(signature_version="s3v4"),
+                    region_name="auto",
+                )
+                s3.head_bucket(Bucket=r2_bucket)
+                results["r2_connection"] = {"connected": True}
+            except Exception as e:
+                results["r2_connection"] = {"connected": False, "error": str(e)[:300]}
+        else:
+            results["r2_connection"] = {"skipped": "credentials missing"}
+
+        # 5. Test spawn capability
         try:
-            # Check if generate_video_complete is callable
             results["spawn"] = {"function_exists": hasattr(generate_video_complete, "spawn")}
         except Exception as e:
             results["spawn"] = {"error": str(e)}
