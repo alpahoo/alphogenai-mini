@@ -21,8 +21,8 @@ base_image = (
     .pip_install(
         "torch==2.5.1",
         "torchvision",
-        "git+https://github.com/huggingface/diffusers.git",
-        "transformers>=4.45.0",
+        "diffusers==0.37.1",
+        "transformers==4.51.3",
         "accelerate>=0.33.0",
         "safetensors",
         "sentencepiece",
@@ -36,7 +36,7 @@ base_image = (
         "boto3",
         "httpx",
     )
-    .apt_install("ffmpeg", "git")
+    .apt_install("ffmpeg")
 )
 
 webhook_image = (

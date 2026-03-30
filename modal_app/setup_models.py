@@ -21,8 +21,8 @@ setup_image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
         "torch==2.5.1",
-        "git+https://github.com/huggingface/diffusers.git",
-        "transformers>=4.45.0",
+        "diffusers==0.37.1",
+        "transformers==4.51.3",
         "accelerate>=0.33.0",
         "safetensors",
         "sentencepiece",
