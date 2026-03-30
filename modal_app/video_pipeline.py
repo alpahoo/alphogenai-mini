@@ -49,7 +49,7 @@ models_volume = modal.Volume.from_name("alphogenai-models", create_if_missing=Tr
 
 # GPU configuration
 GPU_A10G = "A10G"   # 24GB VRAM — Pro/Premium plans
-GPU_A100 = "A100"   # 40GB VRAM — Free plan (Wan 14B + SVI LoRA)
+GPU_A100 = "A100-80GB"  # 80GB VRAM — Free plan (Wan 14B MoE 27B params, full GPU without CPU offload)
 
 
 # ===========================================================================
@@ -80,7 +80,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     1. SDXL-Turbo             → initial image (T2I, 1-4 steps)
     2. Wan2.2-I2V-A14B + SVI  → iterative video segments (I2V)
     3. ffmpeg concat          → final MP4
-    GPU: A100 (40GB) — Wan 14B MoE (27B total, 14B active per step)
+    GPU: A100-80GB — Wan 14B MoE (27B total, ~54GB bf16) fully on GPU
     """
     import torch, gc, time
     import numpy as np
@@ -150,17 +150,30 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
                 WAN_PATH,
                 torch_dtype=torch.bfloat16,
                 local_files_only=True,
-            )
-            # MoE model has 27B total params (~54GB in bf16) — too large for A100 40GB
-            # CPU offload keeps weights on CPU, moves each module to GPU during forward pass
-            pipe.enable_model_cpu_offload()
+            ).to("cuda")
+            # A100-80GB has enough VRAM for the full MoE model (27B params, ~54GB in bf16)
+            print(f"[{job_id}] Wan 14B loaded on GPU ✓ — VRAM: {torch.cuda.memory_allocated()/1e9:.1f}GB")
             break
-        except (RuntimeError, torch.cuda.OutOfMemoryError) as cuda_err:
-            print(f"[{job_id}] Wan 14B load attempt {attempt+1}/3 failed: {cuda_err}")
+        except torch.cuda.OutOfMemoryError as oom_err:
+            print(f"[{job_id}] Wan 14B OOM attempt {attempt+1}/3, falling back to CPU offload: {oom_err}")
             gc.collect()
             torch.cuda.empty_cache()
             if attempt == 2:
-                raise RuntimeError(f"Failed to load Wan 14B after 3 attempts: {cuda_err}")
+                # Last resort: use CPU offload (slower but works)
+                pipe = WanImageToVideoPipeline.from_pretrained(
+                    WAN_PATH,
+                    torch_dtype=torch.bfloat16,
+                    local_files_only=True,
+                )
+                pipe.enable_model_cpu_offload()
+                print(f"[{job_id}] Wan 14B loaded with CPU offload (fallback)")
+            time.sleep(2)
+        except RuntimeError as rt_err:
+            print(f"[{job_id}] Wan 14B load attempt {attempt+1}/3 failed: {rt_err}")
+            gc.collect()
+            torch.cuda.empty_cache()
+            if attempt == 2:
+                raise
             time.sleep(2)
 
     # Load SVI 2.0 Pro LoRA (trained for Wan2.2-I2V-A14B)
@@ -184,7 +197,9 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     with tempfile.TemporaryDirectory() as tmpdir:
         for i in range(num_segments):
             seed = random.randint(0, 2**32 - 1)   # Different seed per segment!
-            generator = torch.Generator(device="cpu").manual_seed(seed)
+            # Use same device as the pipeline (cuda if full GPU, cpu if offloaded)
+            gen_device = "cuda" if next(pipe.transformer.parameters()).is_cuda else "cpu"
+            generator = torch.Generator(device=gen_device).manual_seed(seed)
             print(f"[{job_id}] Segment {i+1}/{num_segments} (seed={seed})...")
 
             frames = pipe(
