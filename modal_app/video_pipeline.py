@@ -91,7 +91,25 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     from pathlib import Path
 
     print(f"[{job_id}][FREE] Starting — max {max_duration}s | GPU: A100-80GB")
-    print(f"[{job_id}] CUDA: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A'}")
+
+    # ------------------------------------------------------------------
+    # Verify model paths exist before doing anything
+    # ------------------------------------------------------------------
+    for name, path in [("SDXL-Turbo", SDXL_TURBO_PATH), ("Wan 14B", WAN_PATH)]:
+        p = Path(path)
+        if not p.exists():
+            # List what IS on the volume for debugging
+            vol_root = Path("/models")
+            contents = list(vol_root.iterdir()) if vol_root.exists() else []
+            raise FileNotFoundError(
+                f"{name} not found at {path}. "
+                f"Volume /models contains: {[str(c.name) for c in contents]}. "
+                f"Run 'modal run modal_app/setup_models.py' to download models."
+            )
+        print(f"[{job_id}] ✓ {name} found at {path}")
+
+    lora_available = Path(SVI_LORA_PATH).exists()
+    print(f"[{job_id}] {'✓' if lora_available else '✗'} SVI LoRA at {SVI_LORA_PATH}")
 
     # ------------------------------------------------------------------
     # Step 1: SDXL-Turbo — text → initial image (local)
@@ -174,13 +192,16 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
                 raise
             time.sleep(2)
 
-    # Load SVI 2.0 Pro LoRA (trained for Wan2.2-I2V-A14B)
-    try:
-        pipe.load_lora_weights(SVI_LORA_PATH)
-        pipe.set_adapters(["default"], adapter_weights=[0.9])
-        print(f"[{job_id}] SVI LoRA loaded ✓")
-    except Exception as lora_err:
-        print(f"[{job_id}] ⚠️ SVI LoRA loading failed, continuing without: {lora_err}")
+    # Load SVI 2.0 Pro LoRA only if file exists on volume
+    if lora_available:
+        try:
+            pipe.load_lora_weights(SVI_LORA_PATH)
+            pipe.set_adapters(["default"], adapter_weights=[0.9])
+            print(f"[{job_id}] SVI LoRA loaded ✓")
+        except Exception as lora_err:
+            print(f"[{job_id}] ⚠️ SVI LoRA failed, continuing without: {lora_err}")
+    else:
+        print(f"[{job_id}] Skipping SVI LoRA (file not found on volume)")
 
     SEGMENT_FRAMES   = 81       # ~5s at 16fps
     FPS              = 16
@@ -567,6 +588,59 @@ def webhook():
         return results
 
     return web
+
+
+# ===========================================================================
+# Volume diagnostic — lists models on the volume (accessible via modal run)
+# ===========================================================================
+
+@app.function(
+    image=base_image,
+    volumes={"/models": models_volume},
+    timeout=60,
+)
+def check_volume():
+    """List all model files on the volume. Run: modal run modal_app/video_pipeline.py::check_volume"""
+    from pathlib import Path
+    import json
+
+    results = {}
+    vol_root = Path("/models")
+
+    if not vol_root.exists():
+        return {"error": "/models volume not mounted"}
+
+    for item in sorted(vol_root.iterdir()):
+        if item.is_dir():
+            files = []
+            total_size = 0
+            for f in item.rglob("*"):
+                if f.is_file():
+                    size = f.stat().st_size
+                    total_size += size
+                    files.append(f"{f.relative_to(vol_root)} ({size/1e6:.1f}MB)")
+            results[item.name] = {
+                "files_count": len(files),
+                "total_size_gb": round(total_size / 1e9, 2),
+                "files": files[:20],  # Limit output
+            }
+        elif item.is_file():
+            results[item.name] = {"size_mb": round(item.stat().st_size / 1e6, 1)}
+
+    # Check expected paths
+    expected = {
+        "sdxl-turbo": SDXL_TURBO_PATH,
+        "wan2.2-i2v-a14b": WAN_PATH,
+        "svi-lora": SVI_LORA_PATH,
+        "ltx-video": LTX_PATH,
+    }
+    checks = {}
+    for name, path in expected.items():
+        checks[name] = {"path": path, "exists": Path(path).exists()}
+    results["_expected_paths"] = checks
+
+    print(json.dumps(results, indent=2))
+    return results
 
 
 @app.local_entrypoint()
