@@ -90,10 +90,8 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     import tempfile, subprocess, random
     from pathlib import Path
 
-    print(f"[{job_id}][FREE] Starting — max {max_duration}s | GPU: A100")
-    print(f"[{job_id}] CUDA available: {torch.cuda.is_available()}, Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A'}")
-    if torch.cuda.is_available():
-        print(f"[{job_id}] VRAM total: {torch.cuda.get_device_properties(0).total_mem / 1e9:.1f}GB")
+    print(f"[{job_id}][FREE] Starting — max {max_duration}s | GPU: A100-80GB")
+    print(f"[{job_id}] CUDA: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A'}")
 
     # ------------------------------------------------------------------
     # Step 1: SDXL-Turbo — text → initial image (local)
@@ -128,7 +126,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     del t2i
     gc.collect()
     torch.cuda.empty_cache()
-    print(f"[{job_id}] Initial image ✓ ({image.size}) — VRAM: {torch.cuda.memory_allocated()/1e9:.1f}GB used")
+    print(f"[{job_id}] Initial image ✓ ({image.size})")
 
     # Resize image to match Wan 14B expected dimensions
     max_area = 480 * 832
@@ -152,7 +150,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
                 local_files_only=True,
             ).to("cuda")
             # A100-80GB has enough VRAM for the full MoE model (27B params, ~54GB in bf16)
-            print(f"[{job_id}] Wan 14B loaded on GPU ✓ — VRAM: {torch.cuda.memory_allocated()/1e9:.1f}GB")
+            print(f"[{job_id}] Wan 14B loaded on GPU ✓")
             break
         except torch.cuda.OutOfMemoryError as oom_err:
             print(f"[{job_id}] Wan 14B OOM attempt {attempt+1}/3, falling back to CPU offload: {oom_err}")
