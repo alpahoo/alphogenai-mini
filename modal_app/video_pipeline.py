@@ -590,6 +590,59 @@ def webhook():
     return web
 
 
+# ===========================================================================
+# Volume diagnostic — lists models on the volume (accessible via modal run)
+# ===========================================================================
+
+@app.function(
+    image=base_image,
+    volumes={"/models": models_volume},
+    timeout=60,
+)
+def check_volume():
+    """List all model files on the volume. Run: modal run modal_app/video_pipeline.py::check_volume"""
+    from pathlib import Path
+    import json
+
+    results = {}
+    vol_root = Path("/models")
+
+    if not vol_root.exists():
+        return {"error": "/models volume not mounted"}
+
+    for item in sorted(vol_root.iterdir()):
+        if item.is_dir():
+            files = []
+            total_size = 0
+            for f in item.rglob("*"):
+                if f.is_file():
+                    size = f.stat().st_size
+                    total_size += size
+                    files.append(f"{f.relative_to(vol_root)} ({size/1e6:.1f}MB)")
+            results[item.name] = {
+                "files_count": len(files),
+                "total_size_gb": round(total_size / 1e9, 2),
+                "files": files[:20],  # Limit output
+            }
+        elif item.is_file():
+            results[item.name] = {"size_mb": round(item.stat().st_size / 1e6, 1)}
+
+    # Check expected paths
+    expected = {
+        "sdxl-turbo": SDXL_TURBO_PATH,
+        "wan2.2-i2v-a14b": WAN_PATH,
+        "svi-lora": SVI_LORA_PATH,
+        "ltx-video": LTX_PATH,
+    }
+    checks = {}
+    for name, path in expected.items():
+        checks[name] = {"path": path, "exists": Path(path).exists()}
+    results["_expected_paths"] = checks
+
+    print(json.dumps(results, indent=2))
+    return results
+
+
 @app.local_entrypoint()
 def test():
     result = generate_video_complete.remote(
