@@ -14,7 +14,10 @@ export async function POST(req: Request) {
 
     const supabase = createServiceClient();
     const body = await req.json();
-    const { prompt } = body as { prompt: string };
+    const { prompt, target_duration_seconds } = body as {
+      prompt: string;
+      target_duration_seconds?: number;
+    };
 
     // --- validation ---------------------------------------------------
     if (!prompt || prompt.trim().length < 3) {
@@ -68,6 +71,13 @@ export async function POST(req: Request) {
     }
 
     // --- create job ---------------------------------------------------
+    // Clamp target_duration to plan limit (free = 5s)
+    const maxDuration = 5; // free plan
+    const targetDuration = Math.min(
+      Math.max(target_duration_seconds ?? 5, 3),
+      maxDuration
+    );
+
     const { data: job, error: insertError } = await supabase
       .from("jobs")
       .insert({
@@ -75,6 +85,7 @@ export async function POST(req: Request) {
         plan: "free",
         status: "pending",
         current_stage: "queued",
+        target_duration_seconds: targetDuration,
         ...(user?.id ? { user_id: user.id } : {}),
       })
       .select()

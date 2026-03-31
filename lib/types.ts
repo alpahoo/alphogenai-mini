@@ -26,6 +26,45 @@ export interface Job {
   audio_url: string | null;
   output_url_final: string | null;
   error_message: string | null;
+  storyboard: StoryboardScene[] | null;
+  target_duration_seconds: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Scene types — Phase 1 multi-scene foundations
+// ---------------------------------------------------------------------------
+
+export type SceneStatus =
+  | "pending"
+  | "generating"
+  | "encoding"
+  | "uploading"
+  | "done"
+  | "failed"
+  | "skipped";
+
+export type EngineKey = "wan_i2v" | "seedance";
+
+export interface StoryboardScene {
+  scene_index: number;
+  prompt: string;
+  engine: EngineKey;
+  duration_sec: number;
+}
+
+export interface JobScene {
+  id: string;
+  job_id: string;
+  scene_index: number;
+  prompt: string;
+  engine: EngineKey;
+  duration_sec: number;
+  status: SceneStatus;
+  clip_url: string | null;
+  error_message: string | null;
+  metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -33,6 +72,7 @@ export interface Job {
 export interface CreateJobRequest {
   prompt: string;
   plan?: JobPlan;
+  target_duration_seconds?: number;
 }
 
 export interface CreateJobResponse {
