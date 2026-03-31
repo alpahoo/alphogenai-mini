@@ -54,10 +54,24 @@ def download_all_models():
     # 1. SDXL-Turbo (replaces FLUX.1-schnell — not gated, open source)
     # ------------------------------------------------------------------
     sdxl_path = Path(MODEL_DIR) / "sdxl-turbo"
-    if sdxl_path.exists() and any(sdxl_path.iterdir()):
-        print("[1/4] SDXL-Turbo — already downloaded, skipping")
+    # Verify tokenizer files exist (previous saves may be incomplete)
+    tokenizer_vocab = sdxl_path / "tokenizer" / "vocab.json"
+    tokenizer_merges = sdxl_path / "tokenizer" / "merges.txt"
+    sdxl_complete = (
+        sdxl_path.exists()
+        and any(sdxl_path.iterdir())
+        and tokenizer_vocab.exists()
+        and tokenizer_merges.exists()
+    )
+    if sdxl_complete:
+        print("[1/4] SDXL-Turbo — already downloaded (tokenizer OK), skipping")
     else:
-        print("[1/4] Downloading SDXL-Turbo (~3.5GB)...")
+        if sdxl_path.exists():
+            import shutil
+            print("[1/4] SDXL-Turbo — incomplete (missing tokenizer files), re-downloading...")
+            shutil.rmtree(str(sdxl_path))
+        else:
+            print("[1/4] Downloading SDXL-Turbo (~3.5GB)...")
         from diffusers import AutoPipelineForText2Image
         pipe = AutoPipelineForText2Image.from_pretrained(
             "stabilityai/sdxl-turbo",
@@ -65,8 +79,11 @@ def download_all_models():
             variant="fp16",
         )
         pipe.save_pretrained(str(sdxl_path))
+        # Verify tokenizer was saved correctly
+        assert tokenizer_vocab.exists(), f"Tokenizer vocab.json missing after save at {tokenizer_vocab}"
+        assert tokenizer_merges.exists(), f"Tokenizer merges.txt missing after save at {tokenizer_merges}"
         del pipe
-        print("[1/4] SDXL-Turbo ✓")
+        print("[1/4] SDXL-Turbo ✓ (tokenizer verified)")
 
     # ------------------------------------------------------------------
     # 2. Wan2.2-I2V-A14B (Image-to-Video for SVI — MoE 27B total, 14B active)
