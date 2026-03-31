@@ -70,12 +70,12 @@ LTX_PATH        = "/models/ltx-video"
 @app.function(
     image=base_image,
     gpu=GPU_A100,
-    timeout=900,
+    timeout=2400,
     retries=1,
     volumes={"/models": models_volume},
     secrets=[secrets],
 )
-def generate_free(prompt: str, job_id: str, max_duration: int = 90):
+def generate_free(prompt: str, job_id: str, max_duration: int = 25):
     """
     Free plan pipeline (100% local, no external calls):
     1. SDXL-Turbo             → initial image (T2I, 1-4 steps)
@@ -213,6 +213,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
 
     SEGMENT_FRAMES   = 81       # ~5s at 16fps
     FPS              = 16
+    NUM_STEPS        = 25       # 25 steps is good quality on A100 (was 40, saved ~35% time)
     segment_duration = SEGMENT_FRAMES / FPS
     num_segments     = max(1, min(int(max_duration / segment_duration), 18))
 
@@ -237,7 +238,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
                 width=width,
                 num_frames=SEGMENT_FRAMES,
                 guidance_scale=3.5,
-                num_inference_steps=40,
+                num_inference_steps=NUM_STEPS,
                 generator=generator,
             ).frames[0]
 
@@ -411,7 +412,7 @@ def upload_to_r2(video_bytes: bytes, job_id: str) -> str:
 # Main orchestrator
 # ===========================================================================
 
-@app.function(image=base_image, secrets=[secrets], timeout=1200, retries=1)
+@app.function(image=base_image, secrets=[secrets], timeout=2700, retries=1)
 def generate_video_complete(
     job_id: str,
     prompt: str,
