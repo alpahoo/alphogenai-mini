@@ -32,6 +32,7 @@ base_image = (
         "pillow",
         "numpy",
         "scipy",
+        "ftfy",
         "supabase",
         "boto3",
         "httpx",
