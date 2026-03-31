@@ -54,36 +54,37 @@ def download_all_models():
     # 1. SDXL-Turbo (replaces FLUX.1-schnell — not gated, open source)
     # ------------------------------------------------------------------
     sdxl_path = Path(MODEL_DIR) / "sdxl-turbo"
-    # Verify tokenizer files exist (previous saves may be incomplete)
-    tokenizer_vocab = sdxl_path / "tokenizer" / "vocab.json"
-    tokenizer_merges = sdxl_path / "tokenizer" / "merges.txt"
-    sdxl_complete = (
-        sdxl_path.exists()
-        and any(sdxl_path.iterdir())
-        and tokenizer_vocab.exists()
-        and tokenizer_merges.exists()
-    )
+    # Verify critical files exist (tokenizer vocab + sentencepiece for tokenizer_2)
+    required_files = [
+        sdxl_path / "tokenizer" / "vocab.json",
+        sdxl_path / "tokenizer" / "merges.txt",
+        sdxl_path / "tokenizer_2" / "vocab.json",
+        sdxl_path / "tokenizer_2" / "merges.txt",
+        sdxl_path / "model_index.json",
+    ]
+    sdxl_complete = sdxl_path.exists() and all(f.exists() for f in required_files)
     if sdxl_complete:
-        print("[1/4] SDXL-Turbo — already downloaded (tokenizer OK), skipping")
+        print("[1/4] SDXL-Turbo — already downloaded (all tokenizers OK), skipping")
     else:
         if sdxl_path.exists():
             import shutil
-            print("[1/4] SDXL-Turbo — incomplete (missing tokenizer files), re-downloading...")
+            missing = [str(f.relative_to(sdxl_path)) for f in required_files if not f.exists()]
+            print(f"[1/4] SDXL-Turbo — incomplete (missing: {missing}), re-downloading...")
             shutil.rmtree(str(sdxl_path))
         else:
             print("[1/4] Downloading SDXL-Turbo (~3.5GB)...")
-        from diffusers import AutoPipelineForText2Image
-        pipe = AutoPipelineForText2Image.from_pretrained(
-            "stabilityai/sdxl-turbo",
-            torch_dtype=torch.float16,
-            variant="fp16",
+        # Use snapshot_download to get ALL files (save_pretrained misses tokenizer files)
+        from huggingface_hub import snapshot_download
+        snapshot_download(
+            repo_id="stabilityai/sdxl-turbo",
+            local_dir=str(sdxl_path),
+            local_dir_use_symlinks=False,
         )
-        pipe.save_pretrained(str(sdxl_path))
-        # Verify tokenizer was saved correctly
-        assert tokenizer_vocab.exists(), f"Tokenizer vocab.json missing after save at {tokenizer_vocab}"
-        assert tokenizer_merges.exists(), f"Tokenizer merges.txt missing after save at {tokenizer_merges}"
-        del pipe
-        print("[1/4] SDXL-Turbo ✓ (tokenizer verified)")
+        # Verify all required files are present
+        missing = [str(f.relative_to(sdxl_path)) for f in required_files if not f.exists()]
+        if missing:
+            raise RuntimeError(f"SDXL-Turbo download incomplete, still missing: {missing}")
+        print("[1/4] SDXL-Turbo ✓ (all tokenizer files verified)")
 
     # ------------------------------------------------------------------
     # 2. Wan2.2-I2V-A14B (Image-to-Video for SVI — MoE 27B total, 14B active)
