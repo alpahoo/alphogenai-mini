@@ -98,7 +98,6 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     for name, path in [("SDXL-Turbo", SDXL_TURBO_PATH), ("Wan 14B", WAN_PATH)]:
         p = Path(path)
         if not p.exists():
-            # List what IS on the volume for debugging
             vol_root = Path("/models")
             contents = list(vol_root.iterdir()) if vol_root.exists() else []
             raise FileNotFoundError(
@@ -106,7 +105,12 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
                 f"Volume /models contains: {[str(c.name) for c in contents]}. "
                 f"Run 'modal run modal_app/setup_models.py' to download models."
             )
-        print(f"[{job_id}] ✓ {name} found at {path}")
+        # List files in model directory for debugging
+        if p.is_dir():
+            top_files = [f.name for f in sorted(p.iterdir())[:10]]
+            print(f"[{job_id}] ✓ {name} at {path} — files: {top_files}")
+        else:
+            print(f"[{job_id}] ✓ {name} found at {path}")
 
     lora_available = Path(SVI_LORA_PATH).exists()
     print(f"[{job_id}] {'✓' if lora_available else '✗'} SVI LoRA at {SVI_LORA_PATH}")
@@ -116,6 +120,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
     # ------------------------------------------------------------------
     print(f"[{job_id}] Step 1/3 — SDXL-Turbo T2I (local)...")
 
+    print(f"[{job_id}] Loading SDXL-Turbo from {SDXL_TURBO_PATH}...")
     for attempt in range(3):
         try:
             t2i = AutoPipelineForText2Image.from_pretrained(
@@ -123,6 +128,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
                 torch_dtype=torch.float16,
                 local_files_only=True,
             ).to("cuda")
+            print(f"[{job_id}] SDXL-Turbo loaded on GPU ✓")
             break
         except (RuntimeError, torch.cuda.OutOfMemoryError) as cuda_err:
             print(f"[{job_id}] SDXL-Turbo load attempt {attempt+1}/3 failed: {cuda_err}")
@@ -132,6 +138,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 90):
                 raise RuntimeError(f"Failed to load SDXL-Turbo after 3 attempts: {cuda_err}")
             time.sleep(2)
 
+    print(f"[{job_id}] Generating initial image with SDXL-Turbo...")
     image: Image.Image = t2i(
         prompt=prompt,
         num_inference_steps=4,
@@ -450,8 +457,11 @@ def generate_video_complete(
         return {"success": True, "job_id": job_id, "video_url": video_url}
 
     except Exception as e:
-        error_msg = str(e)[:500]  # Truncate to avoid Supabase 400 on long error messages
-        print(f"[{job_id}] ❌ {e}")
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[{job_id}] ❌ FULL TRACEBACK:\n{tb}")
+        # Include last part of traceback in error message for debugging
+        error_msg = f"{str(e)[:300]} | TB: {tb[-200:]}"[:500]
         try:
             update_job(status="failed", current_stage="failed", error_message=error_msg)
         except Exception as update_err:
