@@ -1,13 +1,17 @@
-export type JobStatus = "pending" | "in_progress" | "done" | "failed";
+// ---------------------------------------------------------------------------
+// Job statuses — simplified v3
+// ---------------------------------------------------------------------------
+
+export type JobStatus = "pending" | "generating" | "uploading" | "done" | "failed";
 
 export type JobPlan = "free" | "pro" | "premium";
 
 export type JobStage =
   | "queued"
   | "spawning_pipeline"
+  | "generating_image"
   | "generating_video"
-  | "generating_audio"
-  | "mixing"
+  | "encoding"
   | "uploading"
   | "completed"
   | "failed";
@@ -49,9 +53,9 @@ export interface ErrorResponse {
 export const STAGE_LABELS: Record<JobStage, string> = {
   queued: "In queue",
   spawning_pipeline: "Starting pipeline",
+  generating_image: "Generating image",
   generating_video: "Generating video",
-  generating_audio: "Generating audio",
-  mixing: "Mixing audio & video",
+  encoding: "Encoding video",
   uploading: "Uploading",
   completed: "Complete",
   failed: "Failed",
@@ -60,9 +64,9 @@ export const STAGE_LABELS: Record<JobStage, string> = {
 export const STAGE_ORDER: JobStage[] = [
   "queued",
   "spawning_pipeline",
+  "generating_image",
   "generating_video",
-  "generating_audio",
-  "mixing",
+  "encoding",
   "uploading",
   "completed",
 ];
@@ -74,7 +78,7 @@ export const PLAN_LABELS: Record<JobPlan, string> = {
 };
 
 export const PLAN_MAX_DURATION: Record<JobPlan, number> = {
-  free: 15,
+  free: 5,
   pro: 60,
   premium: 120,
 };

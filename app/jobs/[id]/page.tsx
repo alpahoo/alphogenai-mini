@@ -108,7 +108,7 @@ export default function JobPage() {
 
   if (!job) return null;
 
-  const isActive = job.status === "pending" || job.status === "in_progress";
+  const isActive = job.status === "pending" || job.status === "generating" || job.status === "uploading";
   const isDone = job.status === "done";
   const isFailed = job.status === "failed";
   const videoUrl = job.output_url_final || job.video_url;
