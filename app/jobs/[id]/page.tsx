@@ -25,6 +25,7 @@ export default function JobPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
 
   const fetchJob = useCallback(async () => {
     try {
@@ -70,6 +71,33 @@ export default function JobPage() {
     };
   }, [fetchJob]);
 
+  // Timer: counts seconds since job creation
+  useEffect(() => {
+    if (!job) return;
+    const isTerminal = job.status === "done" || job.status === "failed";
+
+    const createdAt = new Date(job.created_at).getTime();
+
+    if (isTerminal) {
+      // Show final duration
+      const updatedAt = new Date(job.updated_at).getTime();
+      setElapsed(Math.round((updatedAt - createdAt) / 1000));
+      return;
+    }
+
+    // Live counter
+    const tick = () => setElapsed(Math.round((Date.now() - createdAt) / 1000));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [job]);
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m > 0 ? `${m}m ${sec.toString().padStart(2, "0")}s` : `${sec}s`;
+  };
+
   const copyLink = (url: string) => {
     navigator.clipboard.writeText(url);
     setCopied(true);
@@ -108,7 +136,7 @@ export default function JobPage() {
 
   if (!job) return null;
 
-  const isActive = job.status === "pending" || job.status === "in_progress";
+  const isActive = job.status === "pending" || job.status === "generating" || job.status === "uploading";
   const isDone = job.status === "done";
   const isFailed = job.status === "failed";
   const videoUrl = job.output_url_final || job.video_url;
@@ -169,7 +197,7 @@ export default function JobPage() {
                   Step {Math.max(currentStageIndex + 1, 1)} of{" "}
                   {STAGE_ORDER.length}
                 </span>
-                <span>Polling every 5s</span>
+                <span className="tabular-nums">{formatTime(elapsed)}</span>
               </div>
             </div>
           )}
@@ -203,9 +231,16 @@ export default function JobPage() {
           {/* Done — Video player */}
           {isDone && videoUrl && (
             <div className="mb-6 rounded-2xl border border-border/50 bg-card/80 p-6 backdrop-blur-sm">
-              <div className="mb-4 flex items-center gap-2">
-                <Check className="h-5 w-5 text-green-500" />
-                <span className="font-semibold text-green-500">Complete</span>
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Check className="h-5 w-5 text-green-500" />
+                  <span className="font-semibold text-green-500">Complete</span>
+                </div>
+                {elapsed > 0 && (
+                  <span className="text-sm text-muted-foreground tabular-nums">
+                    Generated in {formatTime(elapsed)}
+                  </span>
+                )}
               </div>
 
               <video

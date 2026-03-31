@@ -54,36 +54,69 @@ def download_all_models():
     # 1. SDXL-Turbo (replaces FLUX.1-schnell — not gated, open source)
     # ------------------------------------------------------------------
     sdxl_path = Path(MODEL_DIR) / "sdxl-turbo"
-    if sdxl_path.exists() and any(sdxl_path.iterdir()):
-        print("[1/4] SDXL-Turbo — already downloaded, skipping")
+    # Verify critical files exist (tokenizer vocab + sentencepiece for tokenizer_2)
+    required_files = [
+        sdxl_path / "tokenizer" / "vocab.json",
+        sdxl_path / "tokenizer" / "merges.txt",
+        sdxl_path / "tokenizer_2" / "vocab.json",
+        sdxl_path / "tokenizer_2" / "merges.txt",
+        sdxl_path / "model_index.json",
+    ]
+    sdxl_complete = sdxl_path.exists() and all(f.exists() for f in required_files)
+    if sdxl_complete:
+        print("[1/4] SDXL-Turbo — already downloaded (all tokenizers OK), skipping")
     else:
-        print("[1/4] Downloading SDXL-Turbo (~3.5GB)...")
-        from diffusers import AutoPipelineForText2Image
-        pipe = AutoPipelineForText2Image.from_pretrained(
-            "stabilityai/sdxl-turbo",
-            torch_dtype=torch.float16,
-            variant="fp16",
+        if sdxl_path.exists():
+            import shutil
+            missing = [str(f.relative_to(sdxl_path)) for f in required_files if not f.exists()]
+            print(f"[1/4] SDXL-Turbo — incomplete (missing: {missing}), re-downloading...")
+            shutil.rmtree(str(sdxl_path))
+        else:
+            print("[1/4] Downloading SDXL-Turbo (~3.5GB)...")
+        # Use snapshot_download to get ALL files (save_pretrained misses tokenizer files)
+        from huggingface_hub import snapshot_download
+        snapshot_download(
+            repo_id="stabilityai/sdxl-turbo",
+            local_dir=str(sdxl_path),
+            local_dir_use_symlinks=False,
         )
-        pipe.save_pretrained(str(sdxl_path))
-        del pipe
-        print("[1/4] SDXL-Turbo ✓")
+        # Verify all required files are present
+        missing = [str(f.relative_to(sdxl_path)) for f in required_files if not f.exists()]
+        if missing:
+            raise RuntimeError(f"SDXL-Turbo download incomplete, still missing: {missing}")
+        print("[1/4] SDXL-Turbo ✓ (all tokenizer files verified)")
 
     # ------------------------------------------------------------------
     # 2. Wan2.2-I2V-A14B (Image-to-Video for SVI — MoE 27B total, 14B active)
     # ------------------------------------------------------------------
     wan_path = Path(MODEL_DIR) / "wan2.2-i2v-a14b"
-    if wan_path.exists() and any(wan_path.iterdir()):
-        print("[2/4] Wan2.2-I2V-A14B — already downloaded, skipping")
+    # Wan 14B uses T5 tokenizer (SentencePiece) — verify spiece.model exists
+    wan_required = [
+        wan_path / "model_index.json",
+        wan_path / "tokenizer" / "spiece.model",
+    ]
+    wan_complete = wan_path.exists() and all(f.exists() for f in wan_required)
+    if wan_complete:
+        print("[2/4] Wan2.2-I2V-A14B — already downloaded (tokenizer OK), skipping")
     else:
-        print("[2/4] Downloading Wan2.2-I2V-A14B-Diffusers (~28GB)...")
-        from diffusers import WanImageToVideoPipeline
-        pipe = WanImageToVideoPipeline.from_pretrained(
-            "Wan-AI/Wan2.2-I2V-A14B-Diffusers",
-            torch_dtype=torch.bfloat16,
+        if wan_path.exists():
+            import shutil
+            missing = [str(f.relative_to(wan_path)) for f in wan_required if not f.exists()]
+            print(f"[2/4] Wan2.2-I2V-A14B — incomplete (missing: {missing}), re-downloading...")
+            shutil.rmtree(str(wan_path))
+        else:
+            print("[2/4] Downloading Wan2.2-I2V-A14B-Diffusers (~28GB)...")
+        # Use snapshot_download to get ALL files (save_pretrained misses tokenizer files)
+        from huggingface_hub import snapshot_download
+        snapshot_download(
+            repo_id="Wan-AI/Wan2.2-I2V-A14B-Diffusers",
+            local_dir=str(wan_path),
+            local_dir_use_symlinks=False,
         )
-        pipe.save_pretrained(str(wan_path))
-        del pipe
-        print("[2/4] Wan2.2-I2V-A14B ✓")
+        missing = [str(f.relative_to(wan_path)) for f in wan_required if not f.exists()]
+        if missing:
+            raise RuntimeError(f"Wan 14B download incomplete, still missing: {missing}")
+        print("[2/4] Wan2.2-I2V-A14B ✓ (tokenizer verified)")
 
     # ------------------------------------------------------------------
     # 3. SVI 2.0 Pro LoRA weights (for Wan2.2-I2V-A14B)
@@ -113,17 +146,23 @@ def download_all_models():
     # 4. LTX-Video (Pro plan — text-to-video)
     # ------------------------------------------------------------------
     ltx_path = Path(MODEL_DIR) / "ltx-video"
-    if ltx_path.exists() and any(ltx_path.iterdir()):
+    ltx_required = [ltx_path / "model_index.json"]
+    ltx_complete = ltx_path.exists() and all(f.exists() for f in ltx_required)
+    if ltx_complete:
         print("[4/4] LTX-Video — already downloaded, skipping")
     else:
-        print("[4/4] Downloading LTX-Video (~9GB)...")
-        from diffusers import LTXPipeline
-        pipe = LTXPipeline.from_pretrained(
-            "Lightricks/LTX-Video",
-            torch_dtype=torch.bfloat16,
+        if ltx_path.exists():
+            import shutil
+            print("[4/4] LTX-Video — incomplete, re-downloading...")
+            shutil.rmtree(str(ltx_path))
+        else:
+            print("[4/4] Downloading LTX-Video (~9GB)...")
+        from huggingface_hub import snapshot_download
+        snapshot_download(
+            repo_id="Lightricks/LTX-Video",
+            local_dir=str(ltx_path),
+            local_dir_use_symlinks=False,
         )
-        pipe.save_pretrained(str(ltx_path))
-        del pipe
         print("[4/4] LTX-Video ✓")
 
     # Commit volume changes
