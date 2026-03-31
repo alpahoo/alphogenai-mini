@@ -230,7 +230,7 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 25):
             generator = torch.Generator(device=gen_device).manual_seed(seed)
             print(f"[{job_id}] Segment {i+1}/{num_segments} (seed={seed})...")
 
-            frames = pipe(
+            output = pipe(
                 image=current_image,
                 prompt=prompt,
                 negative_prompt="static, blurry, worst quality, distorted",
@@ -240,24 +240,35 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 25):
                 guidance_scale=3.5,
                 num_inference_steps=NUM_STEPS,
                 generator=generator,
-            ).frames[0]
+                output_type="np",  # numpy for reliable frame handling
+            )
+            frames = output.frames[0]  # list of numpy arrays (H, W, 3) float32 [0,1]
 
             seg_path = Path(tmpdir) / f"seg_{i:03d}.mp4"
             export_to_video(frames, str(seg_path), fps=FPS)
             segment_paths.append(str(seg_path))
 
-            # Last frame becomes first frame of next segment
+            # Last frame → PIL Image for next segment input
             last = frames[-1]
             if isinstance(last, Image.Image):
                 current_image = last
+            elif isinstance(last, np.ndarray):
+                # numpy float [0,1] or [0,255] → uint8
+                arr = last
+                if arr.dtype != np.uint8:
+                    if arr.max() <= 1.0:
+                        arr = (arr * 255).astype(np.uint8)
+                    else:
+                        arr = np.clip(arr, 0, 255).astype(np.uint8)
+                current_image = Image.fromarray(arr)
             else:
-                # Convert float32/float64 array to uint8 for PIL
-                if hasattr(last, 'numpy'):
-                    last = last.numpy()
-                if last.dtype != np.uint8:
-                    last = (np.clip(last, 0, 255) if last.max() > 1.0 else np.clip(last * 255, 0, 255)).astype(np.uint8)
-                current_image = Image.fromarray(last)
-            print(f"[{job_id}] Segment {i+1} ✓")
+                # torch tensor fallback
+                arr = last.cpu().numpy() if hasattr(last, 'cpu') else np.array(last)
+                if arr.dtype != np.uint8:
+                    arr = (np.clip(arr, 0, 1) * 255).astype(np.uint8)
+                current_image = Image.fromarray(arr)
+
+            print(f"[{job_id}] Segment {i+1} ✓ (last frame: {type(last).__name__}, shape: {getattr(last, 'shape', 'N/A')})")
 
         del pipe
         gc.collect()
@@ -308,8 +319,8 @@ def generate_pro(prompt: str, job_id: str):
         LTX_PATH,
         torch_dtype=torch.bfloat16,
         local_files_only=True,
-    ).to("cuda")
-    pipe.enable_model_cpu_offload()
+    )
+    pipe.enable_model_cpu_offload()  # CPU offload handles device placement
 
     frames = pipe(
         prompt=prompt,
@@ -445,7 +456,7 @@ def generate_video_complete(
         print(f"[{job_id}] Plan={plan} | {prompt[:60]}...")
 
         if plan == "free":
-            video_bytes = generate_free.remote(prompt, job_id, max_duration=90)
+            video_bytes = generate_free.remote(prompt, job_id, max_duration=25)
         elif plan == "pro":
             video_bytes = generate_pro.remote(prompt, job_id)
         elif plan == "premium":
