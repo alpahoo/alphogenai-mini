@@ -248,7 +248,15 @@ def generate_free(prompt: str, job_id: str, max_duration: int = 25):
 
             # Last frame becomes first frame of next segment
             last = frames[-1]
-            current_image = last if isinstance(last, Image.Image) else Image.fromarray(last)
+            if isinstance(last, Image.Image):
+                current_image = last
+            else:
+                # Convert float32/float64 array to uint8 for PIL
+                if hasattr(last, 'numpy'):
+                    last = last.numpy()
+                if last.dtype != np.uint8:
+                    last = (np.clip(last, 0, 255) if last.max() > 1.0 else np.clip(last * 255, 0, 255)).astype(np.uint8)
+                current_image = Image.fromarray(last)
             print(f"[{job_id}] Segment {i+1} ✓")
 
         del pipe
