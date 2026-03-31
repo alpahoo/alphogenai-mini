@@ -35,6 +35,13 @@ export async function GET(
       );
     }
 
+    // Fetch scenes if any exist (Phase 1 multi-scene)
+    const { data: scenes } = await supabase
+      .from("job_scenes")
+      .select("*")
+      .eq("job_id", id)
+      .order("scene_index", { ascending: true });
+
     return NextResponse.json({
       success: true,
       job: {
@@ -47,9 +54,12 @@ export async function GET(
         audio_url: job.audio_url,
         output_url_final: job.output_url_final,
         error_message: job.error_message,
+        storyboard: job.storyboard ?? null,
+        target_duration_seconds: job.target_duration_seconds ?? 5,
         created_at: job.created_at,
         updated_at: job.updated_at,
       },
+      scenes: scenes ?? [],
     });
   } catch (error: unknown) {
     console.error("Error in GET /api/jobs/[id]:", error);
