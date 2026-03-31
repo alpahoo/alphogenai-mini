@@ -1,21 +1,20 @@
 """
-AlphoGenAI Mini — Modal Video Pipeline (v2)
-Architecture multi-plan — 100% self-hosted, modèles locaux sur volume Modal :
-  Free    : SDXL-Turbo (T2I) + Wan2.2-I2V-A14B + SVI 2.0 Pro LoRA (max 90s, A100)
-  Pro     : LTX-Video (T2V natif, 60s, A10G)
-  Premium : Seedance 2.0 API (15s, qualité cinématique, A10G)
+AlphoGenAI Mini — Modal Video Pipeline (v3 — simplified)
 
-Models are pre-downloaded to the Modal volume via setup_models.py.
-No external API calls (HuggingFace, etc.) during inference.
+Single-clip pipeline: prompt → SDXL-Turbo (T2I) → Wan I2V (1 clip, 5s) → R2
+
+Models pre-downloaded to Modal volume via setup_models.py.
+No external API calls during inference.
 """
 import modal
 import os
-from typing import Optional, Literal
+from typing import Optional
 
 app = modal.App("alphogenai-v2")
 
-Plan = Literal["free", "pro", "premium"]
-
+# ---------------------------------------------------------------------------
+# Images
+# ---------------------------------------------------------------------------
 base_image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
@@ -28,7 +27,6 @@ base_image = (
         "sentencepiece",
         "peft",
         "imageio[ffmpeg]",
-        "ffmpeg-python",
         "pillow",
         "numpy",
         "scipy",
@@ -45,366 +43,127 @@ webhook_image = (
     .pip_install("fastapi", "pydantic", "supabase", "httpx", "boto3")
 )
 
+# ---------------------------------------------------------------------------
+# Infra
+# ---------------------------------------------------------------------------
 secrets = modal.Secret.from_name("alphogenai-secrets-corrected-v2")
 models_volume = modal.Volume.from_name("alphogenai-models", create_if_missing=True)
 
-# GPU configuration
-GPU_A10G = "A10G"   # 24GB VRAM — Pro/Premium plans
-GPU_A100 = "A100-80GB"  # 80GB VRAM — Free plan (Wan 14B MoE 27B params, full GPU without CPU offload)
-
-
-# ===========================================================================
-# LOCAL MODEL PATHS (pre-downloaded via setup_models.py)
-# ===========================================================================
+GPU = "A100-80GB"
 
 SDXL_TURBO_PATH = "/models/sdxl-turbo"
 WAN_PATH        = "/models/wan2.2-i2v-a14b"
+ENABLE_SVI_LORA = False  # disabled — stabilise pipeline first
 SVI_LORA_PATH   = "/models/svi-lora/SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors"
-LTX_PATH        = "/models/ltx-video"
+
+# ---------------------------------------------------------------------------
+# Pipeline params
+# ---------------------------------------------------------------------------
+NUM_FRAMES      = 81    # ~5s at 16 fps
+FPS             = 16
+NUM_STEPS       = 15    # fast + decent quality on A100
+GUIDANCE_SCALE  = 3.5
+IMG_HEIGHT      = 480
+IMG_WIDTH       = 832
 
 
-# ===========================================================================
-# FREE PLAN — SDXL-Turbo (T2I) + Wan2.2-I2V-A14B + SVI 2.0 Pro LoRA
-# ===========================================================================
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def log(job_id: str, msg: str):
+    print(f"[job:{job_id}] {msg}")
 
-@app.function(
-    image=base_image,
-    gpu=GPU_A100,
-    timeout=2400,
-    retries=1,
-    volumes={"/models": models_volume},
-    secrets=[secrets],
-)
-def generate_free(prompt: str, job_id: str, max_duration: int = 25):
-    """
-    Free plan pipeline (100% local, no external calls):
-    1. SDXL-Turbo             → initial image (T2I, 1-4 steps)
-    2. Wan2.2-I2V-A14B + SVI  → iterative video segments (I2V)
-    3. ffmpeg concat          → final MP4
-    GPU: A100-80GB — Wan 14B MoE (27B total, ~54GB bf16) fully on GPU
-    """
-    import torch, gc, time
+
+def normalize_error(e: Exception) -> str:
+    """Return a short, classifiable error tag + message."""
+    msg = str(e)[:400]
+    name = type(e).__name__
+    if "timeout" in msg.lower() or isinstance(e, TimeoutError):
+        return f"timeout: {msg}"
+    if "OutOfMemoryError" in name or "CUDA" in msg:
+        return f"gpu_oom: {msg}"
+    if "FileNotFoundError" in name or "not found" in msg.lower():
+        return f"model_load_failed: {msg}"
+    if "R2" in msg or "S3" in msg or "boto" in msg.lower():
+        return f"upload_failed: {msg}"
+    if "ffmpeg" in msg.lower() or "encoding" in msg.lower():
+        return f"encoding_failed: {msg}"
+    return f"generation_failed: {msg}"
+
+
+def get_supabase_client():
+    from supabase import create_client
+    url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+    key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    if not url or not key:
+        raise ValueError("SUPABASE_URL / SUPABASE_SERVICE_KEY missing in Modal secrets")
+    return create_client(url, key)
+
+
+def update_job(job_id: str, **fields):
+    """Partial update of a job row. Logs every update."""
+    try:
+        sb = get_supabase_client()
+        sb.table("jobs").update(fields).eq("id", job_id).execute()
+        log(job_id, f"update_job → {fields}")
+    except Exception as e:
+        log(job_id, f"update_job FAILED: {e}")
+
+
+def frames_to_mp4(frames, output_path: str, fps: int = FPS):
+    """Convert numpy frames [0,1] float32 → H.264 MP4 via ffmpeg."""
     import numpy as np
-    from diffusers import AutoPipelineForText2Image, WanImageToVideoPipeline
-    from diffusers.utils import export_to_video
-    from PIL import Image
-    import tempfile, subprocess, random
-    from pathlib import Path
-
-    print(f"[{job_id}][FREE] Starting — max {max_duration}s | GPU: A100-80GB")
-
-    # ------------------------------------------------------------------
-    # Verify model paths exist before doing anything
-    # ------------------------------------------------------------------
-    for name, path in [("SDXL-Turbo", SDXL_TURBO_PATH), ("Wan 14B", WAN_PATH)]:
-        p = Path(path)
-        if not p.exists():
-            vol_root = Path("/models")
-            contents = list(vol_root.iterdir()) if vol_root.exists() else []
-            raise FileNotFoundError(
-                f"{name} not found at {path}. "
-                f"Volume /models contains: {[str(c.name) for c in contents]}. "
-                f"Run 'modal run modal_app/setup_models.py' to download models."
-            )
-        # List files in model directory for debugging
-        if p.is_dir():
-            top_files = [f.name for f in sorted(p.iterdir())[:10]]
-            print(f"[{job_id}] ✓ {name} at {path} — files: {top_files}")
-        else:
-            print(f"[{job_id}] ✓ {name} found at {path}")
-
-    lora_available = Path(SVI_LORA_PATH).exists()
-    print(f"[{job_id}] {'✓' if lora_available else '✗'} SVI LoRA at {SVI_LORA_PATH}")
-
-    # ------------------------------------------------------------------
-    # Step 1: SDXL-Turbo — text → initial image (local)
-    # ------------------------------------------------------------------
-    print(f"[{job_id}] Step 1/3 — SDXL-Turbo T2I (local)...")
-
-    print(f"[{job_id}] Loading SDXL-Turbo from {SDXL_TURBO_PATH}...")
-    for attempt in range(3):
-        try:
-            t2i = AutoPipelineForText2Image.from_pretrained(
-                SDXL_TURBO_PATH,
-                torch_dtype=torch.float16,
-                local_files_only=True,
-            ).to("cuda")
-            print(f"[{job_id}] SDXL-Turbo loaded on GPU ✓")
-            break
-        except (RuntimeError, torch.cuda.OutOfMemoryError) as cuda_err:
-            print(f"[{job_id}] SDXL-Turbo load attempt {attempt+1}/3 failed: {cuda_err}")
-            gc.collect()
-            torch.cuda.empty_cache()
-            if attempt == 2:
-                raise RuntimeError(f"Failed to load SDXL-Turbo after 3 attempts: {cuda_err}")
-            time.sleep(2)
-
-    print(f"[{job_id}] Generating initial image with SDXL-Turbo...")
-    image: Image.Image = t2i(
-        prompt=prompt,
-        num_inference_steps=4,
-        guidance_scale=0.0,
-        height=480,
-        width=832,
-    ).images[0]
-
-    # Free SDXL-Turbo before loading Wan 14B
-    del t2i
-    gc.collect()
-    torch.cuda.empty_cache()
-    print(f"[{job_id}] Initial image ✓ ({image.size})")
-
-    # Resize image to match Wan 14B expected dimensions
-    max_area = 480 * 832
-    aspect_ratio = image.height / image.width
-    mod_value = 16  # vae_scale_factor * patch_size
-    height = round(np.sqrt(max_area * aspect_ratio)) // mod_value * mod_value
-    width = round(np.sqrt(max_area / aspect_ratio)) // mod_value * mod_value
-    image = image.resize((width, height))
-    print(f"[{job_id}] Image resized to {width}x{height}")
-
-    # ------------------------------------------------------------------
-    # Step 2: Wan2.2-I2V-A14B + SVI 2.0 Pro LoRA — iterative segments
-    # ------------------------------------------------------------------
-    print(f"[{job_id}] Step 2/3 — Loading Wan2.2-I2V-A14B + SVI LoRA (local)...")
-
-    for attempt in range(3):
-        try:
-            pipe = WanImageToVideoPipeline.from_pretrained(
-                WAN_PATH,
-                torch_dtype=torch.bfloat16,
-                local_files_only=True,
-            ).to("cuda")
-            # A100-80GB has enough VRAM for the full MoE model (27B params, ~54GB in bf16)
-            print(f"[{job_id}] Wan 14B loaded on GPU ✓")
-            break
-        except torch.cuda.OutOfMemoryError as oom_err:
-            print(f"[{job_id}] Wan 14B OOM attempt {attempt+1}/3, falling back to CPU offload: {oom_err}")
-            gc.collect()
-            torch.cuda.empty_cache()
-            if attempt == 2:
-                # Last resort: use CPU offload (slower but works)
-                pipe = WanImageToVideoPipeline.from_pretrained(
-                    WAN_PATH,
-                    torch_dtype=torch.bfloat16,
-                    local_files_only=True,
-                )
-                pipe.enable_model_cpu_offload()
-                print(f"[{job_id}] Wan 14B loaded with CPU offload (fallback)")
-            time.sleep(2)
-        except RuntimeError as rt_err:
-            print(f"[{job_id}] Wan 14B load attempt {attempt+1}/3 failed: {rt_err}")
-            gc.collect()
-            torch.cuda.empty_cache()
-            if attempt == 2:
-                raise
-            time.sleep(2)
-
-    # Load SVI 2.0 Pro LoRA only if file exists on volume
-    if lora_available:
-        try:
-            pipe.load_lora_weights(SVI_LORA_PATH)
-            pipe.set_adapters(["default"], adapter_weights=[0.9])
-            print(f"[{job_id}] SVI LoRA loaded ✓")
-        except Exception as lora_err:
-            print(f"[{job_id}] ⚠️ SVI LoRA failed, continuing without: {lora_err}")
-    else:
-        print(f"[{job_id}] Skipping SVI LoRA (file not found on volume)")
-
-    SEGMENT_FRAMES   = 81       # ~5s at 16fps
-    FPS              = 16
-    NUM_STEPS        = 25       # 25 steps is good quality on A100 (was 40, saved ~35% time)
-    segment_duration = SEGMENT_FRAMES / FPS
-    num_segments     = max(1, min(int(max_duration / segment_duration), 18))
-
-    print(f"[{job_id}] {num_segments} segments × {segment_duration:.1f}s ≈ {num_segments*segment_duration:.0f}s")
-
-    segment_paths = []
-    current_image = image
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        for i in range(num_segments):
-            seed = random.randint(0, 2**32 - 1)   # Different seed per segment!
-            # Use same device as the pipeline (cuda if full GPU, cpu if offloaded)
-            gen_device = "cuda" if next(pipe.transformer.parameters()).is_cuda else "cpu"
-            generator = torch.Generator(device=gen_device).manual_seed(seed)
-            print(f"[{job_id}] Segment {i+1}/{num_segments} (seed={seed})...")
-
-            output = pipe(
-                image=current_image,
-                prompt=prompt,
-                negative_prompt="static, blurry, worst quality, distorted",
-                height=height,
-                width=width,
-                num_frames=SEGMENT_FRAMES,
-                guidance_scale=3.5,
-                num_inference_steps=NUM_STEPS,
-                generator=generator,
-                output_type="np",  # numpy for reliable frame handling
-            )
-            frames = output.frames[0]  # list of numpy arrays (H, W, 3) float32 [0,1]
-
-            seg_path = Path(tmpdir) / f"seg_{i:03d}.mp4"
-            export_to_video(frames, str(seg_path), fps=FPS)
-            segment_paths.append(str(seg_path))
-
-            # Last frame → PIL Image for next segment input
-            last = frames[-1]
-            if isinstance(last, Image.Image):
-                current_image = last
-            elif isinstance(last, np.ndarray):
-                # numpy float [0,1] or [0,255] → uint8
-                arr = last
-                if arr.dtype != np.uint8:
-                    if arr.max() <= 1.0:
-                        arr = (arr * 255).astype(np.uint8)
-                    else:
-                        arr = np.clip(arr, 0, 255).astype(np.uint8)
-                current_image = Image.fromarray(arr)
-            else:
-                # torch tensor fallback
-                arr = last.cpu().numpy() if hasattr(last, 'cpu') else np.array(last)
-                if arr.dtype != np.uint8:
-                    arr = (np.clip(arr, 0, 1) * 255).astype(np.uint8)
-                current_image = Image.fromarray(arr)
-
-            print(f"[{job_id}] Segment {i+1} ✓ (last frame: {type(last).__name__}, shape: {getattr(last, 'shape', 'N/A')})")
-
-        del pipe
-        gc.collect()
-        torch.cuda.empty_cache()
-
-        # ------------------------------------------------------------------
-        # Step 3: ffmpeg concat
-        # ------------------------------------------------------------------
-        print(f"[{job_id}] Step 3/3 — Concatenating {len(segment_paths)} segments...")
-        concat_list = Path(tmpdir) / "concat.txt"
-        concat_list.write_text("\n".join(f"file '{p}'" for p in segment_paths))
-
-        output_path = Path(tmpdir) / f"{job_id}.mp4"
-        subprocess.run([
-            "ffmpeg", "-f", "concat", "-safe", "0",
-            "-i", str(concat_list),
-            "-c:v", "libx264", "-crf", "18", "-preset", "fast",
-            str(output_path), "-y",
-        ], check=True, capture_output=True)
-
-        with open(output_path, "rb") as f:
-            return f.read()
-
-
-# ===========================================================================
-# PRO PLAN — LTX-Video (T2V natif, 60s, A10G)
-# ===========================================================================
-
-@app.function(
-    image=base_image,
-    gpu=GPU_A10G,
-    timeout=600,
-    retries=1,
-    volumes={"/models": models_volume},
-    secrets=[secrets],
-)
-def generate_pro(prompt: str, job_id: str):
-    """Pro plan: LTX-Video — native T2V, up to 60s. GPU: A10G. Local only."""
-    import torch
-    from diffusers import LTXPipeline
-    from diffusers.utils import export_to_video
+    import subprocess
     import tempfile
     from pathlib import Path
+    from PIL import Image
 
-    print(f"[{job_id}][PRO] LTX-Video | GPU: A10G (local)")
+    tmpdir = Path(output_path).parent
+    frame_dir = tmpdir / "frames"
+    frame_dir.mkdir(exist_ok=True)
 
-    pipe = LTXPipeline.from_pretrained(
-        LTX_PATH,
-        torch_dtype=torch.bfloat16,
-        local_files_only=True,
+    for i, frame in enumerate(frames):
+        if isinstance(frame, Image.Image):
+            frame.save(frame_dir / f"{i:04d}.png")
+        else:
+            arr = frame
+            if hasattr(arr, 'cpu'):
+                arr = arr.cpu().numpy()
+            if not isinstance(arr, np.ndarray):
+                arr = np.array(arr)
+            if arr.dtype != np.uint8:
+                if arr.max() <= 1.0:
+                    arr = (arr * 255).astype(np.uint8)
+                else:
+                    arr = np.clip(arr, 0, 255).astype(np.uint8)
+            Image.fromarray(arr).save(frame_dir / f"{i:04d}.png")
+
+    result = subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-framerate", str(fps),
+            "-i", str(frame_dir / "%04d.png"),
+            "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+            "-pix_fmt", "yuv420p",
+            str(output_path),
+        ],
+        capture_output=True, text=True,
     )
-    pipe.enable_model_cpu_offload()  # CPU offload handles device placement
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed: {result.stderr[-500:]}")
 
-    frames = pipe(
-        prompt=prompt,
-        negative_prompt="worst quality, inconsistent motion, blurry, jittery, distorted",
-        width=768,
-        height=512,
-        num_frames=241,         # ~60s at 4fps (LTX native)
-        num_inference_steps=50,
-        guidance_scale=3.0,
-    ).frames[0]
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        output_path = Path(tmpdir) / f"{job_id}.mp4"
-        export_to_video(frames, str(output_path), fps=24)
-        with open(output_path, "rb") as f:
-            return f.read()
-
-
-# ===========================================================================
-# PREMIUM PLAN — Seedance 2.0 API (15s, cinématique, A10G)
-# ===========================================================================
-
-@app.function(
-    image=base_image,
-    gpu=GPU_A10G,
-    timeout=300,
-    retries=2,
-    secrets=[secrets],
-)
-def generate_premium(prompt: str, job_id: str):
-    """Premium plan: Seedance 2.0 via API (15s). GPU: A10G"""
-    import httpx, time
-
-    print(f"[{job_id}][PREMIUM] Seedance 2.0 API...")
-
-    api_key = os.environ.get("SEEDANCE_API_KEY", "")
-    api_url = os.environ.get("SEEDANCE_API_URL", "")
-
-    if not api_key or not api_url:
-        raise ValueError("SEEDANCE_API_KEY / SEEDANCE_API_URL not configured")
-
-    with httpx.Client(timeout=240) as client:
-        resp = client.post(
-            f"{api_url}/v1/video/generate",
-            headers={"Authorization": f"Bearer {api_key}"},
-            json={"prompt": prompt, "duration": 15, "quality": "cinematic"},
-        )
-        resp.raise_for_status()
-        task_id = resp.json()["task_id"]
-        print(f"[{job_id}] Seedance task: {task_id}")
-
-        for _ in range(60):
-            time.sleep(5)
-            data = client.get(
-                f"{api_url}/v1/video/{task_id}",
-                headers={"Authorization": f"Bearer {api_key}"},
-            ).json()
-            if data["status"] == "completed":
-                return client.get(data["video_url"]).content
-            elif data["status"] == "failed":
-                raise RuntimeError(f"Seedance failed: {data.get('error')}")
-
-    raise TimeoutError("Seedance API timed out")
-
-
-# ===========================================================================
-# R2 Upload
-# ===========================================================================
 
 def upload_to_r2(video_bytes: bytes, job_id: str) -> str:
     import boto3
     from botocore.config import Config
 
     r2_endpoint = os.environ.get("R2_ENDPOINT")
-    r2_key_id = os.environ.get("R2_ACCESS_KEY_ID")
-    r2_secret = os.environ.get("R2_SECRET_ACCESS_KEY")
-    r2_bucket = os.environ.get("R2_BUCKET_NAME", "alphogenai-assets")
+    r2_key_id   = os.environ.get("R2_ACCESS_KEY_ID")
+    r2_secret   = os.environ.get("R2_SECRET_ACCESS_KEY")
+    r2_bucket   = os.environ.get("R2_BUCKET_NAME", "alphogenai-assets")
 
     if not all([r2_endpoint, r2_key_id, r2_secret]):
-        raise RuntimeError(
-            "R2 credentials missing in Modal secrets. "
-            "Required: R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL. "
-            "Add them to the 'alphogenai-secrets-corrected-v2' secret in Modal dashboard."
-        )
+        raise RuntimeError("R2 credentials missing in Modal secrets")
 
     s3 = boto3.client(
         "s3",
@@ -416,82 +175,166 @@ def upload_to_r2(video_bytes: bytes, job_id: str) -> str:
     )
 
     key = f"videos/{job_id}.mp4"
-    s3.put_object(
-        Bucket=r2_bucket,
-        Key=key,
-        Body=video_bytes,
-        ContentType="video/mp4",
-    )
+    s3.put_object(Bucket=r2_bucket, Key=key, Body=video_bytes, ContentType="video/mp4")
 
     public_url = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")
     return f"{public_url}/{key}"
 
 
 # ===========================================================================
-# Main orchestrator
+# GPU function — single clip generation
 # ===========================================================================
 
-@app.function(image=base_image, secrets=[secrets], timeout=2700, retries=1)
-def generate_video_complete(
-    job_id: str,
-    prompt: str,
-    plan: Plan = "free",
-    user_id: Optional[str] = None,
-):
-    from supabase import create_client
+@app.function(
+    image=base_image,
+    gpu=GPU,
+    timeout=1200,  # 20 min max
+    retries=0,
+    volumes={"/models": models_volume},
+    secrets=[secrets],
+)
+def generate_clip(prompt: str, job_id: str) -> bytes:
+    """
+    Single-clip pipeline:
+      1. SDXL-Turbo → 1 image
+      2. Wan2.2-I2V-A14B → 81 frames (~5s)
+      3. ffmpeg → MP4 bytes
+    """
+    import torch
+    import gc
+    import numpy as np
+    from diffusers import AutoPipelineForText2Image, WanImageToVideoPipeline
+    from PIL import Image
+    import tempfile
+    from pathlib import Path
 
-    supabase_url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
-    supabase_key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    log(job_id, f"generate_clip start | GPU={GPU} steps={NUM_STEPS}")
 
-    if not supabase_url or not supabase_key:
-        raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY (or their aliases) must be set in Modal secrets")
+    # --- verify models ------------------------------------------------
+    for name, path in [("SDXL-Turbo", SDXL_TURBO_PATH), ("Wan 14B", WAN_PATH)]:
+        if not Path(path).exists():
+            vol = Path("/models")
+            contents = [c.name for c in vol.iterdir()] if vol.exists() else []
+            raise FileNotFoundError(f"{name} missing at {path}. Volume has: {contents}")
+        log(job_id, f"{name} OK")
 
-    supabase = create_client(supabase_url, supabase_key)
+    # --- step 1: SDXL-Turbo (T2I) ------------------------------------
+    update_job(job_id, current_stage="generating_image")
+    log(job_id, "loading SDXL-Turbo")
+    t2i = AutoPipelineForText2Image.from_pretrained(
+        SDXL_TURBO_PATH, torch_dtype=torch.float16, local_files_only=True,
+    ).to("cuda")
 
-    def update_job(**kwargs):
-        supabase.table("jobs").update(kwargs).eq("id", job_id).execute()
+    image = t2i(
+        prompt=prompt, num_inference_steps=4, guidance_scale=0.0,
+        height=IMG_HEIGHT, width=IMG_WIDTH,
+    ).images[0]
+    log(job_id, f"image generated {image.size}")
+
+    del t2i; gc.collect(); torch.cuda.empty_cache()
+
+    # resize for Wan (must be divisible by 16)
+    max_area = IMG_HEIGHT * IMG_WIDTH
+    ar = image.height / image.width
+    h = round(np.sqrt(max_area * ar)) // 16 * 16
+    w = round(np.sqrt(max_area / ar)) // 16 * 16
+    image = image.resize((w, h))
+
+    # --- step 2: Wan I2V (single clip) --------------------------------
+    update_job(job_id, current_stage="generating_video")
+    log(job_id, "loading Wan 14B")
 
     try:
-        update_job(status="in_progress", current_stage="generating_video")
-        print(f"[{job_id}] Plan={plan} | {prompt[:60]}...")
+        pipe = WanImageToVideoPipeline.from_pretrained(
+            WAN_PATH, torch_dtype=torch.bfloat16, local_files_only=True,
+        ).to("cuda")
+        log(job_id, "Wan 14B on GPU")
+    except torch.cuda.OutOfMemoryError:
+        gc.collect(); torch.cuda.empty_cache()
+        pipe = WanImageToVideoPipeline.from_pretrained(
+            WAN_PATH, torch_dtype=torch.bfloat16, local_files_only=True,
+        )
+        pipe.enable_model_cpu_offload()
+        log(job_id, "Wan 14B with CPU offload (fallback)")
 
-        if plan == "free":
-            video_bytes = generate_free.remote(prompt, job_id, max_duration=25)
-        elif plan == "pro":
-            video_bytes = generate_pro.remote(prompt, job_id)
-        elif plan == "premium":
-            video_bytes = generate_premium.remote(prompt, job_id)
-        else:
-            raise ValueError(f"Unknown plan: {plan}")
+    if ENABLE_SVI_LORA and Path(SVI_LORA_PATH).exists():
+        try:
+            pipe.load_lora_weights(SVI_LORA_PATH)
+            pipe.set_adapters(["default"], adapter_weights=[0.9])
+            log(job_id, "SVI LoRA loaded")
+        except Exception as e:
+            log(job_id, f"SVI LoRA skipped: {e}")
 
-        update_job(current_stage="uploading")
+    gen_device = "cuda" if next(pipe.transformer.parameters()).is_cuda else "cpu"
+    generator = torch.Generator(device=gen_device).manual_seed(42)
+
+    log(job_id, f"inference {NUM_FRAMES} frames, {NUM_STEPS} steps, {w}x{h}")
+    output = pipe(
+        image=image,
+        prompt=prompt,
+        negative_prompt="static, blurry, worst quality, distorted",
+        height=h, width=w,
+        num_frames=NUM_FRAMES,
+        guidance_scale=GUIDANCE_SCALE,
+        num_inference_steps=NUM_STEPS,
+        generator=generator,
+        output_type="np",
+    )
+    frames = output.frames[0]
+    log(job_id, f"got {len(frames)} frames")
+
+    del pipe; gc.collect(); torch.cuda.empty_cache()
+
+    # --- step 3: encode MP4 -------------------------------------------
+    update_job(job_id, current_stage="encoding")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mp4_path = str(Path(tmpdir) / f"{job_id}.mp4")
+        frames_to_mp4(frames, mp4_path, fps=FPS)
+        with open(mp4_path, "rb") as f:
+            video_bytes = f.read()
+        log(job_id, f"encoded {len(video_bytes)/1e6:.1f} MB")
+        return video_bytes
+
+
+# ===========================================================================
+# Orchestrator (no GPU — just coordinates)
+# ===========================================================================
+
+@app.function(image=base_image, secrets=[secrets], timeout=1500, retries=0)
+def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = None):
+    import traceback
+
+    log(job_id, f"orchestrator start | prompt={prompt[:60]}")
+
+    try:
+        update_job(job_id, status="generating", current_stage="generating_image")
+
+        video_bytes = generate_clip.remote(prompt, job_id)
+
+        update_job(job_id, current_stage="uploading")
         video_url = upload_to_r2(video_bytes, job_id)
-        print(f"[{job_id}] Uploaded: {video_url}")
+        log(job_id, f"uploaded → {video_url}")
 
         update_job(
+            job_id,
             status="done",
             current_stage="completed",
             video_url=video_url,
             output_url_final=video_url,
         )
-        print(f"[{job_id}] ✅ Done!")
-        return {"success": True, "job_id": job_id, "video_url": video_url}
+        log(job_id, "DONE")
+        return {"success": True, "video_url": video_url}
 
     except Exception as e:
-        import traceback
         tb = traceback.format_exc()
-        print(f"[{job_id}] ❌ FULL TRACEBACK:\n{tb}")
-        # Include last part of traceback in error message for debugging
-        error_msg = f"{str(e)[:300]} | TB: {tb[-200:]}"[:500]
-        try:
-            update_job(status="failed", current_stage="failed", error_message=error_msg)
-        except Exception as update_err:
-            print(f"[{job_id}] ⚠️ Failed to update job status: {update_err}")
+        log(job_id, f"FAILED:\n{tb}")
+        error_msg = normalize_error(e)
+        update_job(job_id, status="failed", current_stage="failed", error_message=error_msg[:500])
         raise
 
 
 # ===========================================================================
-# FastAPI webhook
+# Webhook (FastAPI)
 # ===========================================================================
 
 @app.function(image=webhook_image, secrets=[secrets])
@@ -505,7 +348,7 @@ def webhook():
     class JobRequest(BaseModel):
         job_id: str
         prompt: str
-        plan: Plan = "free"
+        plan: str = "free"  # kept for compat, ignored in v3
         user_id: Optional[str] = None
 
     @web.post("/webhook")
@@ -514,107 +357,73 @@ def webhook():
         if expected and x_webhook_secret != expected:
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        # Update job status immediately from webhook (don't rely on spawn)
+        # Immediate status update
         try:
-            from supabase import create_client as _create_client
-            _url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
-            _key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
-            if _url and _key:
-                _sb = _create_client(_url, _key)
-                _sb.table("jobs").update({
-                    "status": "in_progress",
-                    "current_stage": "spawning_pipeline",
-                }).eq("id", req.job_id).execute()
+            sb = get_supabase_client()
+            sb.table("jobs").update({
+                "status": "generating",
+                "current_stage": "spawning_pipeline",
+            }).eq("id", req.job_id).execute()
         except Exception as e:
-            print(f"[webhook] Failed to update job {req.job_id}: {e}")
+            print(f"[webhook] status update failed: {e}")
 
         try:
-            await generate_video_complete.spawn.aio(req.job_id, req.prompt, req.plan, req.user_id)
+            await generate_video_complete.spawn.aio(req.job_id, req.prompt, req.user_id)
         except Exception as e:
-            # If spawn fails, mark job as failed
-            print(f"[webhook] spawn() failed for {req.job_id}: {e}")
+            print(f"[webhook] spawn failed: {e}")
             try:
-                _sb.table("jobs").update({
+                sb.table("jobs").update({
                     "status": "failed",
                     "current_stage": "failed",
-                    "error_message": f"Failed to spawn pipeline: {str(e)[:400]}",
+                    "error_message": normalize_error(e)[:500],
                 }).eq("id", req.job_id).execute()
             except Exception:
                 pass
-            raise HTTPException(status_code=500, detail=f"Spawn failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e)[:200])
 
-        return {"success": True, "message": f"Pipeline started for job {req.job_id}", "plan": req.plan}
+        return {"success": True, "job_id": req.job_id}
 
     @web.get("/health")
     async def health():
-        return {"status": "ok", "plans": ["free", "pro", "premium"], "gpu": "A10G"}
+        return {"status": "ok", "gpu": GPU, "steps": NUM_STEPS, "frames": NUM_FRAMES}
 
     @web.get("/debug")
     async def debug():
-        """Diagnostic endpoint — tests Supabase connectivity from inside Modal."""
         import traceback
-
         results = {}
 
-        # 1. Check env vars
-        supabase_url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
-        supabase_key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
-        results["env"] = {
-            "SUPABASE_URL": bool(supabase_url),
-            "SUPABASE_SERVICE_KEY": bool(supabase_key),
-            "url_prefix": supabase_url[:30] + "..." if supabase_url else "MISSING",
-            "key_prefix": supabase_key[:8] + "..." if supabase_key else "MISSING",
-        }
+        url = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+        key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        results["env"] = {"SUPABASE_URL": bool(url), "SUPABASE_SERVICE_KEY": bool(key)}
 
-        # 2. Test Supabase connection
         try:
-            from supabase import create_client
-            sb = create_client(supabase_url, supabase_key)
+            sb = get_supabase_client()
             count = sb.table("jobs").select("id", count="exact").limit(1).execute()
             results["supabase"] = {"connected": True, "jobs_count": count.count}
         except Exception as e:
-            results["supabase"] = {"connected": False, "error": str(e), "trace": traceback.format_exc()[-500:]}
+            results["supabase"] = {"connected": False, "error": str(e)[:300]}
 
-        # 3. Check R2 credentials
-        r2_endpoint = os.environ.get("R2_ENDPOINT", "")
-        r2_key = os.environ.get("R2_ACCESS_KEY_ID", "")
-        r2_secret = os.environ.get("R2_SECRET_ACCESS_KEY", "")
-        r2_bucket = os.environ.get("R2_BUCKET_NAME", "")
-        r2_public = os.environ.get("R2_PUBLIC_URL", "")
-        results["r2"] = {
-            "R2_ENDPOINT": bool(r2_endpoint),
-            "R2_ACCESS_KEY_ID": bool(r2_key),
-            "R2_SECRET_ACCESS_KEY": bool(r2_secret),
-            "R2_BUCKET_NAME": r2_bucket or "MISSING",
-            "R2_PUBLIC_URL": r2_public[:40] + "..." if len(r2_public) > 40 else r2_public or "MISSING",
-            "all_configured": all([r2_endpoint, r2_key, r2_secret, r2_bucket]),
-        }
+        r2_ok = all([
+            os.environ.get("R2_ENDPOINT"),
+            os.environ.get("R2_ACCESS_KEY_ID"),
+            os.environ.get("R2_SECRET_ACCESS_KEY"),
+        ])
+        results["r2"] = {"all_configured": r2_ok}
 
-        # 4. Test R2 connectivity
-        if results["r2"]["all_configured"]:
+        if r2_ok:
             try:
                 import boto3
-                from botocore.config import Config as BotoConfig
-                s3 = boto3.client(
-                    "s3",
-                    endpoint_url=r2_endpoint,
-                    aws_access_key_id=r2_key,
-                    aws_secret_access_key=r2_secret,
-                    config=BotoConfig(signature_version="s3v4"),
-                    region_name="auto",
+                from botocore.config import Config as BC
+                s3 = boto3.client("s3",
+                    endpoint_url=os.environ["R2_ENDPOINT"],
+                    aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+                    aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+                    config=BC(signature_version="s3v4"), region_name="auto",
                 )
-                s3.head_bucket(Bucket=r2_bucket)
+                s3.head_bucket(Bucket=os.environ.get("R2_BUCKET_NAME", "alphogenai-assets"))
                 results["r2_connection"] = {"connected": True}
             except Exception as e:
-                results["r2_connection"] = {"connected": False, "error": str(e)[:300]}
-        else:
-            results["r2_connection"] = {"skipped": "credentials missing"}
-
-        # 5. Test spawn capability
-        try:
-            results["spawn"] = {"function_exists": hasattr(generate_video_complete, "spawn")}
-        except Exception as e:
-            results["spawn"] = {"error": str(e)}
+                results["r2_connection"] = {"connected": False, "error": str(e)[:200]}
 
         return results
 
@@ -622,63 +431,36 @@ def webhook():
 
 
 # ===========================================================================
-# Volume diagnostic — lists models on the volume (accessible via modal run)
+# Volume diagnostic
 # ===========================================================================
 
-@app.function(
-    image=base_image,
-    volumes={"/models": models_volume},
-    timeout=60,
-)
+@app.function(image=base_image, volumes={"/models": models_volume}, timeout=60)
 def check_volume():
-    """List all model files on the volume. Run: modal run modal_app/video_pipeline.py::check_volume"""
     from pathlib import Path
     import json
 
     results = {}
-    vol_root = Path("/models")
+    vol = Path("/models")
+    if not vol.exists():
+        return {"error": "/models not mounted"}
 
-    if not vol_root.exists():
-        return {"error": "/models volume not mounted"}
-
-    for item in sorted(vol_root.iterdir()):
+    for item in sorted(vol.iterdir()):
         if item.is_dir():
-            files = []
-            total_size = 0
-            for f in item.rglob("*"):
-                if f.is_file():
-                    size = f.stat().st_size
-                    total_size += size
-                    files.append(f"{f.relative_to(vol_root)} ({size/1e6:.1f}MB)")
-            results[item.name] = {
-                "files_count": len(files),
-                "total_size_gb": round(total_size / 1e9, 2),
-                "files": files[:20],  # Limit output
-            }
+            total = sum(f.stat().st_size for f in item.rglob("*") if f.is_file())
+            results[item.name] = {"size_gb": round(total / 1e9, 2)}
         elif item.is_file():
             results[item.name] = {"size_mb": round(item.stat().st_size / 1e6, 1)}
 
-    # Check expected paths
     expected = {
         "sdxl-turbo": SDXL_TURBO_PATH,
         "wan2.2-i2v-a14b": WAN_PATH,
-        "svi-lora": SVI_LORA_PATH,
-        "ltx-video": LTX_PATH,
     }
-    checks = {}
-    for name, path in expected.items():
-        checks[name] = {"path": path, "exists": Path(path).exists()}
-    results["_expected_paths"] = checks
-
+    results["_checks"] = {n: Path(p).exists() for n, p in expected.items()}
     print(json.dumps(results, indent=2))
     return results
 
 
 @app.local_entrypoint()
 def test():
-    result = generate_video_complete.remote(
-        job_id="test-001",
-        prompt="A rocket launching into space at sunset",
-        plan="free",
-    )
+    result = generate_video_complete.remote("test-001", "A rocket launching into space at sunset")
     print(result)
