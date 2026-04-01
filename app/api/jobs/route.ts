@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { generateStoryboard, isValidPlan } from "@/lib/storyboard";
 import type { JobPlan } from "@/lib/types";
 
-const FREE_QUOTA_24H = 3; // max free jobs per 24h per user
+const FREE_QUOTA_24H = 1; // max free jobs per 24h per user (pre-Stripe)
 const MAX_ACTIVE_JOBS = 1; // max concurrent jobs per user
 
 export async function POST(req: Request) {
@@ -91,6 +91,8 @@ export async function POST(req: Request) {
 
     const targetDuration = storyboard.reduce((s, sc) => s + sc.duration_sec, 0);
 
+    // Insert as "pending" — webhook will atomically set "generating"
+    // before spawning the pipeline, so frontend never lingers on "pending".
     const { data: job, error: insertError } = await supabase
       .from("jobs")
       .insert({
@@ -170,6 +172,14 @@ export async function POST(req: Request) {
             error_message: `Modal error ${modalRes.status}: ${detail.slice(0, 200)}`,
           })
           .eq("id", job.id);
+      } else {
+        // Webhook accepted — mark generating immediately so frontend
+        // never polls "pending" after this point.
+        await supabase
+          .from("jobs")
+          .update({ status: "generating", current_stage: "spawning_pipeline" })
+          .eq("id", job.id)
+          .eq("status", "pending"); // only if still pending (avoid overwriting failure)
       }
     } catch (fetchError) {
       const errMsg =

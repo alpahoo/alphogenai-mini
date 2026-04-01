@@ -236,7 +236,6 @@ def generate_clip(prompt: str, job_id: str) -> bytes:
         log(job_id, f"{name} OK")
 
     # --- step 1: SDXL-Turbo (T2I) ------------------------------------
-    update_job(job_id, current_stage="generating_image")
     log(job_id, "loading SDXL-Turbo")
     t2i = AutoPipelineForText2Image.from_pretrained(
         SDXL_TURBO_PATH, torch_dtype=torch.float16, local_files_only=True,
@@ -258,7 +257,6 @@ def generate_clip(prompt: str, job_id: str) -> bytes:
     image = image.resize((w, h))
 
     # --- step 2: Wan I2V (single clip) --------------------------------
-    update_job(job_id, current_stage="generating_video")
     log(job_id, "loading Wan 14B")
 
     try:
@@ -303,7 +301,6 @@ def generate_clip(prompt: str, job_id: str) -> bytes:
     del pipe; gc.collect(); torch.cuda.empty_cache()
 
     # --- step 3: encode MP4 -------------------------------------------
-    update_job(job_id, current_stage="encoding")
     with tempfile.TemporaryDirectory() as tmpdir:
         mp4_path = str(Path(tmpdir) / f"{job_id}.mp4")
         frames_to_mp4(frames, mp4_path, fps=FPS)
@@ -360,6 +357,8 @@ def generate_multi_scene(job_id: str, scenes: list) -> list:
 
         log(job_id, f"scene [{idx+1}/{total}] generating | prompt={scene_prompt[:60]}")
         update_scene(job_id, idx, status="generating")
+        # Update parent job stage so frontend shows per-scene progress
+        update_job(job_id, current_stage=f"generating_scene_{idx+1}")
 
         try:
             video_bytes = generate_clip.remote(scene_prompt, f"{job_id}_scene_{idx:02d}")
@@ -477,7 +476,8 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
         # ------------------------------------------------------------------
         if len(storyboard) <= 1:
             log(job_id, "single-scene path (v3 compat)")
-            update_job(job_id, status="generating", current_stage="generating_image")
+            # status already "generating" from webhook — only update stage
+            update_job(job_id, status="generating", current_stage="generating_scene_1")
 
             video_bytes = generate_clip.remote(prompt, job_id)
 
@@ -503,7 +503,8 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
         # Route: multi-scene → generate each scene, then assemble
         # ------------------------------------------------------------------
         log(job_id, f"multi-scene path: {len(storyboard)} scenes")
-        update_job(job_id, status="generating", current_stage="generating_image")
+        # status already "generating" from webhook — only update stage
+        update_job(job_id, status="generating", current_stage="generating_scene_1")
 
         # Step 1: generate all scene clips
         clip_urls = generate_multi_scene.remote(job_id, storyboard)
