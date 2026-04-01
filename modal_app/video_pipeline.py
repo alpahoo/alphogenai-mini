@@ -481,6 +481,9 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
 
             video_bytes = generate_clip.remote(prompt, job_id)
 
+            update_job(job_id, current_stage="encoding")
+            # encoding already happened inside generate_clip (ffmpeg);
+            # this stage exists so the frontend flow is consistent.
             update_job(job_id, current_stage="uploading")
             video_url = upload_to_r2(video_bytes, job_id)
             log(job_id, f"uploaded → {video_url}")
