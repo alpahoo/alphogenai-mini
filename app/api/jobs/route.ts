@@ -1,6 +1,8 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { generateStoryboard } from "@/lib/storyboard";
+import type { JobPlan } from "@/lib/types";
 
 const FREE_QUOTA_24H = 3; // max free jobs per 24h per user
 const MAX_ACTIVE_JOBS = 1; // max concurrent jobs per user
@@ -14,9 +16,10 @@ export async function POST(req: Request) {
 
     const supabase = createServiceClient();
     const body = await req.json();
-    const { prompt, target_duration_seconds } = body as {
+    const { prompt, target_duration_seconds, plan: requestedPlan } = body as {
       prompt: string;
       target_duration_seconds?: number;
+      plan?: JobPlan;
     };
 
     // --- validation ---------------------------------------------------
@@ -71,21 +74,26 @@ export async function POST(req: Request) {
     }
 
     // --- create job ---------------------------------------------------
-    // Clamp target_duration to plan limit (free = 5s)
-    const maxDuration = 5; // free plan
-    const targetDuration = Math.min(
-      Math.max(target_duration_seconds ?? 5, 3),
-      maxDuration
+    const plan: JobPlan = requestedPlan ?? "free";
+
+    // Generate storyboard (mirrors workers/storyboard_generator.py)
+    const storyboard = generateStoryboard(
+      prompt.trim(),
+      target_duration_seconds ?? 5,
+      plan
     );
+
+    const targetDuration = storyboard.reduce((s, sc) => s + sc.duration_sec, 0);
 
     const { data: job, error: insertError } = await supabase
       .from("jobs")
       .insert({
         prompt: prompt.trim(),
-        plan: "free",
+        plan,
         status: "pending",
         current_stage: "queued",
-        target_duration_seconds: targetDuration,
+        target_duration_seconds: Math.round(targetDuration),
+        storyboard,
         ...(user?.id ? { user_id: user.id } : {}),
       })
       .select()
@@ -94,6 +102,25 @@ export async function POST(req: Request) {
     if (insertError) {
       console.error("Failed to create job:", insertError);
       return NextResponse.json({ error: insertError.message }, { status: 500 });
+    }
+
+    // --- insert scenes into job_scenes --------------------------------
+    const sceneRows = storyboard.map((sc) => ({
+      job_id: job.id,
+      scene_index: sc.scene_index,
+      prompt: sc.prompt,
+      engine: sc.engine,
+      duration_sec: sc.duration_sec,
+      status: "pending" as const,
+    }));
+
+    const { error: scenesError } = await supabase
+      .from("job_scenes")
+      .insert(sceneRows);
+
+    if (scenesError) {
+      console.error("Failed to insert scenes:", scenesError);
+      // Non-fatal: job still exists, pipeline can re-derive scenes from storyboard
     }
 
     // --- trigger Modal ------------------------------------------------
@@ -121,8 +148,9 @@ export async function POST(req: Request) {
         body: JSON.stringify({
           job_id: job.id,
           prompt: prompt.trim(),
-          plan: "free",
+          plan,
           user_id: user?.id ?? null,
+          scene_count: storyboard.length,
         }),
       });
 

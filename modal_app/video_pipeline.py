@@ -153,7 +153,8 @@ def frames_to_mp4(frames, output_path: str, fps: int = FPS):
         raise RuntimeError(f"ffmpeg failed: {result.stderr[-500:]}")
 
 
-def upload_to_r2(video_bytes: bytes, job_id: str) -> str:
+def upload_to_r2(video_bytes: bytes, job_id: str, suffix: str = "") -> str:
+    """Upload video bytes to R2. Optional suffix for scene clips (e.g. '_scene_00')."""
     import boto3
     from botocore.config import Config
 
@@ -174,11 +175,21 @@ def upload_to_r2(video_bytes: bytes, job_id: str) -> str:
         region_name="auto",
     )
 
-    key = f"videos/{job_id}.mp4"
+    key = f"videos/{job_id}{suffix}.mp4"
     s3.put_object(Bucket=r2_bucket, Key=key, Body=video_bytes, ContentType="video/mp4")
 
     public_url = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")
     return f"{public_url}/{key}"
+
+
+def update_scene(job_id: str, scene_index: int, **fields):
+    """Update a single scene row in job_scenes."""
+    try:
+        sb = get_supabase_client()
+        sb.table("job_scenes").update(fields).eq("job_id", job_id).eq("scene_index", scene_index).execute()
+        log(job_id, f"update_scene[{scene_index}] → {fields}")
+    except Exception as e:
+        log(job_id, f"update_scene[{scene_index}] FAILED: {e}")
 
 
 # ===========================================================================
@@ -297,23 +308,165 @@ def generate_clip(prompt: str, job_id: str) -> bytes:
 
 
 # ===========================================================================
+# Multi-scene generation (no GPU — just coordinates scene-by-scene)
+# ===========================================================================
+
+@app.function(image=base_image, secrets=[secrets], timeout=3600, retries=0)
+def generate_multi_scene(job_id: str, scenes: list) -> list:
+    """
+    Generate clips for each scene in the storyboard sequentially.
+
+    Each scene calls generate_clip.remote() (which runs on GPU),
+    uploads to R2, and updates job_scenes status in Supabase.
+
+    Returns list of clip URLs in scene order.
+    """
+    log(job_id, f"generate_multi_scene: {len(scenes)} scene(s)")
+    clip_urls: list = []
+
+    for scene in scenes:
+        idx = scene["scene_index"]
+        scene_prompt = scene["prompt"]
+
+        log(job_id, f"scene {idx}/{len(scenes)-1}: generating clip")
+        update_scene(job_id, idx, status="generating")
+
+        try:
+            video_bytes = generate_clip.remote(scene_prompt, f"{job_id}_scene_{idx:02d}")
+
+            # Upload scene clip to R2
+            suffix = f"_scene_{idx:02d}"
+            clip_url = upload_to_r2(video_bytes, job_id, suffix=suffix)
+            log(job_id, f"scene {idx}: uploaded → {clip_url}")
+
+            update_scene(job_id, idx, status="done", clip_url=clip_url)
+            clip_urls.append(clip_url)
+
+        except Exception as e:
+            error_msg = normalize_error(e)[:500]
+            log(job_id, f"scene {idx}: FAILED — {error_msg}")
+            update_scene(job_id, idx, status="failed", error_message=error_msg)
+            raise RuntimeError(f"Scene {idx} failed: {error_msg}") from e
+
+    log(job_id, f"generate_multi_scene: all {len(clip_urls)} clips done")
+    return clip_urls
+
+
+@app.function(image=base_image, secrets=[secrets], timeout=600, retries=0)
+def assemble_scenes(job_id: str, clip_urls: list) -> bytes:
+    """
+    Download scene clips and concatenate them into a single MP4 via ffmpeg.
+
+    Runs on Modal (has ffmpeg via base_image). Returns final video bytes.
+    """
+    import tempfile
+    import subprocess
+    from pathlib import Path
+    import httpx
+
+    log(job_id, f"assemble_scenes: concatenating {len(clip_urls)} clips")
+
+    with tempfile.TemporaryDirectory(prefix=f"assemble_{job_id}_") as tmpdir:
+        tmppath = Path(tmpdir)
+        clip_paths = []
+
+        # Download each clip
+        client = httpx.Client(timeout=120.0)
+        for i, url in enumerate(clip_urls):
+            log(job_id, f"downloading clip {i}")
+            resp = client.get(url)
+            resp.raise_for_status()
+            clip_file = tmppath / f"clip_{i:02d}.mp4"
+            clip_file.write_bytes(resp.content)
+            clip_paths.append(clip_file)
+        client.close()
+
+        # Write concat list
+        concat_file = tmppath / "concat.txt"
+        with open(concat_file, "w") as f:
+            for p in clip_paths:
+                f.write(f"file '{p}'\n")
+
+        # Concatenate
+        output_path = tmppath / "final.mp4"
+        result = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-f", "concat", "-safe", "0",
+                "-i", str(concat_file),
+                "-c", "copy",
+                str(output_path),
+            ],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"ffmpeg concat failed: {result.stderr[-500:]}")
+
+        video_bytes = output_path.read_bytes()
+        log(job_id, f"assemble_scenes: final {len(video_bytes)/1e6:.1f} MB")
+        return video_bytes
+
+
+# ===========================================================================
 # Orchestrator (no GPU — just coordinates)
 # ===========================================================================
 
-@app.function(image=base_image, secrets=[secrets], timeout=1500, retries=0)
+@app.function(image=base_image, secrets=[secrets], timeout=3600, retries=0)
 def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = None):
     import traceback
 
     log(job_id, f"orchestrator start | prompt={prompt[:60]}")
 
     try:
+        # Fetch job to read storyboard (scenes created by API)
+        sb = get_supabase_client()
+        job_row = sb.table("jobs").select("storyboard, target_duration_seconds").eq("id", job_id).single().execute()
+        storyboard = (job_row.data or {}).get("storyboard") or []
+
+        # ------------------------------------------------------------------
+        # Route: single-scene → original pipeline (unchanged)
+        # ------------------------------------------------------------------
+        if len(storyboard) <= 1:
+            log(job_id, "single-scene path (v3 compat)")
+            update_job(job_id, status="generating", current_stage="generating_image")
+
+            video_bytes = generate_clip.remote(prompt, job_id)
+
+            update_job(job_id, current_stage="uploading")
+            video_url = upload_to_r2(video_bytes, job_id)
+            log(job_id, f"uploaded → {video_url}")
+
+            # Also mark the single scene as done (if it exists)
+            if storyboard:
+                update_scene(job_id, 0, status="done", clip_url=video_url)
+
+            update_job(
+                job_id,
+                status="done",
+                current_stage="completed",
+                video_url=video_url,
+                output_url_final=video_url,
+            )
+            log(job_id, "DONE (single-scene)")
+            return {"success": True, "video_url": video_url}
+
+        # ------------------------------------------------------------------
+        # Route: multi-scene → generate each scene, then assemble
+        # ------------------------------------------------------------------
+        log(job_id, f"multi-scene path: {len(storyboard)} scenes")
         update_job(job_id, status="generating", current_stage="generating_image")
 
-        video_bytes = generate_clip.remote(prompt, job_id)
+        # Step 1: generate all scene clips
+        clip_urls = generate_multi_scene.remote(job_id, storyboard)
 
+        # Step 2: assemble into final video
+        update_job(job_id, current_stage="encoding")
+        final_bytes = assemble_scenes.remote(job_id, clip_urls)
+
+        # Step 3: upload final assembled video
         update_job(job_id, current_stage="uploading")
-        video_url = upload_to_r2(video_bytes, job_id)
-        log(job_id, f"uploaded → {video_url}")
+        video_url = upload_to_r2(final_bytes, job_id, suffix="_final")
+        log(job_id, f"final uploaded → {video_url}")
 
         update_job(
             job_id,
@@ -322,7 +475,7 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
             video_url=video_url,
             output_url_final=video_url,
         )
-        log(job_id, "DONE")
+        log(job_id, f"DONE (multi-scene, {len(clip_urls)} clips)")
         return {"success": True, "video_url": video_url}
 
     except Exception as e:
@@ -348,8 +501,9 @@ def webhook():
     class JobRequest(BaseModel):
         job_id: str
         prompt: str
-        plan: str = "free"  # kept for compat, ignored in v3
+        plan: str = "free"
         user_id: Optional[str] = None
+        scene_count: int = 1  # Phase 2: number of scenes from storyboard
 
     @web.post("/webhook")
     async def trigger(req: JobRequest, x_webhook_secret: str = Header(None)):
