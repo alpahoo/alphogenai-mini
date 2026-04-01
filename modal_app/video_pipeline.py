@@ -66,6 +66,12 @@ GUIDANCE_SCALE  = 3.5
 IMG_HEIGHT      = 480
 IMG_WIDTH       = 832
 
+# ---------------------------------------------------------------------------
+# MVP scene limits (server-side hard cap — mirrors lib/storyboard.ts)
+# ---------------------------------------------------------------------------
+MAX_SCENES = {"free": 1, "pro": 3, "premium": 5}
+ABSOLUTE_MAX_SCENES = 5  # never exceed, regardless of plan
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -311,7 +317,14 @@ def generate_clip(prompt: str, job_id: str) -> bytes:
 # Multi-scene generation (no GPU — just coordinates scene-by-scene)
 # ===========================================================================
 
-@app.function(image=base_image, secrets=[secrets], timeout=3600, retries=0)
+@app.function(
+    image=base_image,
+    secrets=[secrets],
+    # Timeout rationale: each scene ≈ 8 min (3 min cold start + 5 min gen).
+    # 5 scenes × 8 min = 40 min max.  Set to 50 min (3000s) for safety margin.
+    timeout=3000,
+    retries=0,
+)
 def generate_multi_scene(job_id: str, scenes: list) -> list:
     """
     Generate clips for each scene in the storyboard sequentially.
@@ -319,36 +332,57 @@ def generate_multi_scene(job_id: str, scenes: list) -> list:
     Each scene calls generate_clip.remote() (which runs on GPU),
     uploads to R2, and updates job_scenes status in Supabase.
 
+    Partial failure policy (MVP):
+        If scene N fails, already-uploaded clips for scenes 0..N-1 are
+        intentionally KEPT on R2.  They are cheap to store (<50 MB each),
+        useful for debugging, and can be reused by a future retry mechanism.
+        The parent job is marked failed so the user sees a clear error.
+
     Returns list of clip URLs in scene order.
     """
-    log(job_id, f"generate_multi_scene: {len(scenes)} scene(s)")
+    import time
+
+    total = len(scenes)
+
+    # Server-side hard cap — never trust storyboard length from DB blindly
+    if total > ABSOLUTE_MAX_SCENES:
+        log(job_id, f"scene count {total} exceeds cap {ABSOLUTE_MAX_SCENES}, truncating")
+        scenes = scenes[:ABSOLUTE_MAX_SCENES]
+        total = ABSOLUTE_MAX_SCENES
+
+    log(job_id, f"generate_multi_scene START: {total} scene(s)")
     clip_urls: list = []
 
     for scene in scenes:
         idx = scene["scene_index"]
         scene_prompt = scene["prompt"]
+        t0 = time.monotonic()
 
-        log(job_id, f"scene {idx}/{len(scenes)-1}: generating clip")
+        log(job_id, f"scene [{idx+1}/{total}] generating | prompt={scene_prompt[:60]}")
         update_scene(job_id, idx, status="generating")
 
         try:
             video_bytes = generate_clip.remote(scene_prompt, f"{job_id}_scene_{idx:02d}")
 
-            # Upload scene clip to R2
             suffix = f"_scene_{idx:02d}"
             clip_url = upload_to_r2(video_bytes, job_id, suffix=suffix)
-            log(job_id, f"scene {idx}: uploaded → {clip_url}")
+            elapsed = time.monotonic() - t0
 
+            log(job_id, f"scene [{idx+1}/{total}] DONE in {elapsed:.0f}s | {len(video_bytes)/1e6:.1f} MB → {clip_url}")
             update_scene(job_id, idx, status="done", clip_url=clip_url)
             clip_urls.append(clip_url)
 
         except Exception as e:
+            elapsed = time.monotonic() - t0
             error_msg = normalize_error(e)[:500]
-            log(job_id, f"scene {idx}: FAILED — {error_msg}")
+            log(job_id, f"scene [{idx+1}/{total}] FAILED after {elapsed:.0f}s — {error_msg}")
             update_scene(job_id, idx, status="failed", error_message=error_msg)
+            # Mark remaining scenes as skipped
+            for remaining_scene in scenes[idx + 1:]:
+                update_scene(job_id, remaining_scene["scene_index"], status="skipped")
             raise RuntimeError(f"Scene {idx} failed: {error_msg}") from e
 
-    log(job_id, f"generate_multi_scene: all {len(clip_urls)} clips done")
+    log(job_id, f"generate_multi_scene COMPLETE: {len(clip_urls)}/{total} clips")
     return clip_urls
 
 
@@ -411,17 +445,32 @@ def assemble_scenes(job_id: str, clip_urls: list) -> bytes:
 # Orchestrator (no GPU — just coordinates)
 # ===========================================================================
 
-@app.function(image=base_image, secrets=[secrets], timeout=3600, retries=0)
+@app.function(
+    image=base_image,
+    secrets=[secrets],
+    # Timeout rationale: must outlive generate_multi_scene (3000s) + assemble (600s)
+    # + upload overhead.  Set to 3900s (~65 min).
+    timeout=3900,
+    retries=0,
+)
 def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = None):
     import traceback
 
     log(job_id, f"orchestrator start | prompt={prompt[:60]}")
 
     try:
-        # Fetch job to read storyboard (scenes created by API)
+        # Fetch job to read storyboard — scene_count is ALWAYS derived
+        # server-side from DB, never from client webhook payload.
         sb = get_supabase_client()
-        job_row = sb.table("jobs").select("storyboard, target_duration_seconds").eq("id", job_id).single().execute()
+        job_row = sb.table("jobs").select("storyboard, target_duration_seconds, plan").eq("id", job_id).single().execute()
         storyboard = (job_row.data or {}).get("storyboard") or []
+        plan = (job_row.data or {}).get("plan", "free")
+
+        # Server-side hard cap (defense in depth)
+        plan_cap = MAX_SCENES.get(plan, 1)
+        if len(storyboard) > plan_cap:
+            log(job_id, f"storyboard has {len(storyboard)} scenes but plan '{plan}' allows {plan_cap}, truncating")
+            storyboard = storyboard[:plan_cap]
 
         # ------------------------------------------------------------------
         # Route: single-scene → original pipeline (unchanged)

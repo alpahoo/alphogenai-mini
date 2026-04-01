@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { generateStoryboard } from "@/lib/storyboard";
+import { generateStoryboard, isValidPlan } from "@/lib/storyboard";
 import type { JobPlan } from "@/lib/types";
 
 const FREE_QUOTA_24H = 3; // max free jobs per 24h per user
@@ -18,8 +18,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { prompt, target_duration_seconds, plan: requestedPlan } = body as {
       prompt: string;
-      target_duration_seconds?: number;
-      plan?: JobPlan;
+      target_duration_seconds?: unknown;
+      plan?: unknown;
     };
 
     // --- validation ---------------------------------------------------
@@ -73,13 +73,19 @@ export async function POST(req: Request) {
       }
     }
 
-    // --- create job ---------------------------------------------------
-    const plan: JobPlan = requestedPlan ?? "free";
+    // --- strict server-side validation of plan & duration ---------------
+    const plan: JobPlan = isValidPlan(requestedPlan) ? requestedPlan : "free";
 
-    // Generate storyboard (mirrors workers/storyboard_generator.py)
+    const rawDuration = Number(target_duration_seconds);
+    const safeDuration =
+      Number.isFinite(rawDuration) && rawDuration > 0
+        ? Math.round(rawDuration)
+        : 5;
+
+    // Generate storyboard server-side (scene_count is NEVER taken from client)
     const storyboard = generateStoryboard(
       prompt.trim(),
-      target_duration_seconds ?? 5,
+      safeDuration,
       plan
     );
 

@@ -37,6 +37,13 @@ PLAN_MAX_DURATION: dict[str, int] = {
     "premium": 120,
 }
 
+# MVP hard caps on scene count (mirrors lib/storyboard.ts MAX_SCENES)
+MAX_SCENES: dict[str, int] = {
+    "free": 1,
+    "pro": 3,
+    "premium": 5,
+}
+
 DEFAULT_ENGINE = "wan_i2v"
 
 
@@ -63,9 +70,10 @@ def generate_storyboard(
     target_duration = min(target_duration, max_dur)
     target_duration = max(target_duration, int(MIN_CLIP_DURATION))
 
-    # Calculate number of scenes
+    # Calculate number of scenes, then hard-cap to plan limit
     clip_dur = max(MIN_CLIP_DURATION, min(clip_duration, MAX_CLIP_DURATION))
-    num_scenes = max(1, math.ceil(target_duration / clip_dur))
+    max_scenes = MAX_SCENES.get(plan, 1)
+    num_scenes = min(max(1, math.ceil(target_duration / clip_dur)), max_scenes)
 
     # For free plan, always 1 scene
     if plan == "free":
