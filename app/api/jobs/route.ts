@@ -44,7 +44,7 @@ export async function POST(req: Request) {
         .from("jobs")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
-        .in("status", ["pending", "generating", "in_progress", "uploading"]);
+        .in("status", ["pending", "in_progress", "uploading"]);
 
       if (activeCount && activeCount >= MAX_ACTIVE_JOBS) {
         return NextResponse.json(
@@ -91,8 +91,7 @@ export async function POST(req: Request) {
 
     const targetDuration = storyboard.reduce((s, sc) => s + sc.duration_sec, 0);
 
-    // Insert as "pending" — webhook will atomically set "generating"
-    // before spawning the pipeline, so frontend never lingers on "pending".
+    // Insert as "pending" — webhook will set "in_progress" before spawning.
     const { data: job, error: insertError } = await supabase
       .from("jobs")
       .insert({
@@ -177,7 +176,7 @@ export async function POST(req: Request) {
         // never polls "pending" after this point.
         await supabase
           .from("jobs")
-          .update({ status: "generating", current_stage: "spawning_pipeline" })
+          .update({ status: "in_progress", current_stage: "spawning_pipeline" })
           .eq("id", job.id)
           .eq("status", "pending"); // only if still pending (avoid overwriting failure)
       }

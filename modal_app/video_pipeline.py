@@ -356,7 +356,7 @@ def generate_multi_scene(job_id: str, scenes: list) -> list:
         t0 = time.monotonic()
 
         log(job_id, f"scene [{idx+1}/{total}] generating | prompt={scene_prompt[:60]}")
-        update_scene(job_id, idx, status="generating")
+        update_scene(job_id, idx, status="in_progress")
         # Update parent job stage so frontend shows per-scene progress
         update_job(job_id, current_stage=f"generating_scene_{idx+1}")
 
@@ -477,7 +477,7 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
         if len(storyboard) <= 1:
             log(job_id, "single-scene path (v3 compat)")
             # status already "generating" from webhook — only update stage
-            update_job(job_id, status="generating", current_stage="generating_scene_1")
+            update_job(job_id, status="in_progress", current_stage="generating_scene_1")
 
             video_bytes = generate_clip.remote(prompt, job_id)
 
@@ -507,7 +507,7 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
         # ------------------------------------------------------------------
         log(job_id, f"multi-scene path: {len(storyboard)} scenes")
         # status already "generating" from webhook — only update stage
-        update_job(job_id, status="generating", current_stage="generating_scene_1")
+        update_job(job_id, status="in_progress", current_stage="generating_scene_1")
 
         # Step 1: generate all scene clips
         clip_urls = generate_multi_scene.remote(job_id, storyboard)
@@ -568,7 +568,7 @@ def webhook():
         try:
             sb = get_supabase_client()
             sb.table("jobs").update({
-                "status": "generating",
+                "status": "in_progress",
                 "current_stage": "spawning_pipeline",
             }).eq("id", req.job_id).execute()
         except Exception as e:

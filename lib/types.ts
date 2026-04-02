@@ -2,7 +2,7 @@
 // Job statuses — simplified v3
 // ---------------------------------------------------------------------------
 
-export type JobStatus = "pending" | "generating" | "uploading" | "done" | "failed";
+export type JobStatus = "pending" | "in_progress" | "uploading" | "done" | "failed";
 
 export type JobPlan = "free" | "pro" | "premium";
 
