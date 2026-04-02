@@ -476,7 +476,7 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
         # ------------------------------------------------------------------
         if len(storyboard) <= 1:
             log(job_id, "single-scene path (v3 compat)")
-            # status already "generating" from webhook — only update stage
+            # status already "in_progress" from webhook — only update stage
             update_job(job_id, status="in_progress", current_stage="generating_scene_1")
 
             video_bytes = generate_clip.remote(prompt, job_id)
@@ -506,7 +506,7 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
         # Route: multi-scene → generate each scene, then assemble
         # ------------------------------------------------------------------
         log(job_id, f"multi-scene path: {len(storyboard)} scenes")
-        # status already "generating" from webhook — only update stage
+        # status already "in_progress" from webhook — only update stage
         update_job(job_id, status="in_progress", current_stage="generating_scene_1")
 
         # Step 1: generate all scene clips

@@ -44,7 +44,7 @@ export async function POST(req: Request) {
         .from("jobs")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
-        .in("status", ["pending", "in_progress", "uploading"]);
+        .in("status", ["pending", "in_progress"]);
 
       if (activeCount && activeCount >= MAX_ACTIVE_JOBS) {
         return NextResponse.json(
