@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { generateStoryboard, isValidPlan } from "@/lib/storyboard";
+import { generateStoryboard } from "@/lib/storyboard";
 import type { JobPlan } from "@/lib/types";
 
 const FREE_QUOTA_24H = 1; // max free jobs per 24h per user (pre-Stripe)
@@ -16,10 +16,9 @@ export async function POST(req: Request) {
 
     const supabase = createServiceClient();
     const body = await req.json();
-    const { prompt, target_duration_seconds, plan: requestedPlan } = body as {
+    const { prompt, target_duration_seconds } = body as {
       prompt: string;
       target_duration_seconds?: unknown;
-      plan?: unknown;
     };
 
     // --- validation ---------------------------------------------------
@@ -37,9 +36,22 @@ export async function POST(req: Request) {
       );
     }
 
+    // --- resolve plan from profiles (never trust client input) ----------
+    let plan: JobPlan = "free";
+    if (user?.id) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("plan")
+        .eq("id", user.id)
+        .single();
+      if (profile?.plan === "pro" || profile?.plan === "premium") {
+        plan = profile.plan as JobPlan;
+      }
+    }
+
     // --- quota check (authenticated users only) -----------------------
     if (user?.id) {
-      // 1. Check active jobs (pending / generating / uploading)
+      // 1. Check active jobs
       const { count: activeCount } = await supabase
         .from("jobs")
         .select("id", { count: "exact", head: true })
@@ -53,34 +65,35 @@ export async function POST(req: Request) {
         );
       }
 
-      // 2. Check 24h free quota
-      const twentyFourHoursAgo = new Date(
-        Date.now() - 24 * 60 * 60 * 1000
-      ).toISOString();
+      // 2. Check 24h free quota (pro users: unlimited)
+      if (plan === "free") {
+        const twentyFourHoursAgo = new Date(
+          Date.now() - 24 * 60 * 60 * 1000
+        ).toISOString();
 
-      const { count: recentCount } = await supabase
-        .from("jobs")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .eq("plan", "free")
-        .gte("created_at", twentyFourHoursAgo);
+        const { count: recentCount } = await supabase
+          .from("jobs")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .gte("created_at", twentyFourHoursAgo);
 
-      if (recentCount && recentCount >= FREE_QUOTA_24H) {
-        return NextResponse.json(
-          { error: `Free plan limit: ${FREE_QUOTA_24H} videos per 24 hours. Try again later.` },
-          { status: 429 }
-        );
+        if (recentCount && recentCount >= FREE_QUOTA_24H) {
+          return NextResponse.json(
+            {
+              error: "You've reached your free limit. Upgrade to Pro to generate longer videos and unlimited scenes.",
+              upgrade: true,
+            },
+            { status: 429 }
+          );
+        }
       }
     }
-
-    // --- strict server-side validation of plan & duration ---------------
-    const plan: JobPlan = isValidPlan(requestedPlan) ? requestedPlan : "free";
 
     const rawDuration = Number(target_duration_seconds);
     const safeDuration =
       Number.isFinite(rawDuration) && rawDuration > 0
         ? Math.round(rawDuration)
-        : 5;
+        : plan === "pro" ? 15 : 5;
 
     // Generate storyboard server-side (scene_count is NEVER taken from client)
     const storyboard = generateStoryboard(
