@@ -9,6 +9,7 @@ import {
   Crown,
   LogOut,
   Plus,
+  Library,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -16,8 +17,9 @@ import { useRouter } from "next/navigation";
 
 const NAV_ITEMS = [
   { href: "/home", label: "Home", icon: Home },
-  { href: "/projects", label: "Projects", icon: FolderOpen },
   { href: "/create", label: "Create", icon: Plus },
+  { href: "/projects", label: "Projects", icon: FolderOpen },
+  { href: "/library", label: "Library", icon: Library },
 ] as const;
 
 interface SidebarProps {
