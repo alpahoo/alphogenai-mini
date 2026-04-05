@@ -322,7 +322,7 @@ def generate_clip(prompt: str, job_id: str) -> bytes:
     timeout=3000,
     retries=0,
 )
-def generate_multi_scene(job_id: str, scenes: list) -> list:
+def generate_multi_scene(job_id: str, scenes: list, plan: str = "free") -> list:
     """
     Generate clips for each scene in the storyboard sequentially.
 
@@ -361,7 +361,11 @@ def generate_multi_scene(job_id: str, scenes: list) -> list:
         update_job(job_id, current_stage=f"generating_scene_{idx+1}")
 
         try:
-            video_bytes = generate_clip.remote(scene_prompt, f"{job_id}_scene_{idx:02d}")
+            from modal_app.engines import select_engine, get_engine_adapter
+            scene_dur = int(scene.get("duration_sec", 5))
+            engine_key = select_engine(plan=plan, duration_seconds=scene_dur)
+            engine = get_engine_adapter(engine_key)
+            video_bytes = engine.generate(prompt=scene_prompt, job_id=f"{job_id}_scene_{idx:02d}", duration_seconds=scene_dur)
 
             suffix = f"_scene_{idx:02d}"
             clip_url = upload_to_r2(video_bytes, job_id, suffix=suffix)
@@ -479,7 +483,12 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
             # status already "in_progress" from webhook — only update stage
             update_job(job_id, status="in_progress", current_stage="generating_scene_1")
 
-            video_bytes = generate_clip.remote(prompt, job_id)
+            from modal_app.engines import select_engine, get_engine_adapter
+            clip_dur = int(storyboard[0]["duration_sec"]) if storyboard else 5
+            engine_key = select_engine(plan=plan, duration_seconds=clip_dur)
+            engine = get_engine_adapter(engine_key)
+            log(job_id, f"engine selected: {engine_key}")
+            video_bytes = engine.generate(prompt=prompt, job_id=job_id, duration_seconds=clip_dur)
 
             update_job(job_id, current_stage="encoding")
             # encoding already happened inside generate_clip (ffmpeg);
@@ -510,7 +519,7 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
         update_job(job_id, status="in_progress", current_stage="generating_scene_1")
 
         # Step 1: generate all scene clips
-        clip_urls = generate_multi_scene.remote(job_id, storyboard)
+        clip_urls = generate_multi_scene.remote(job_id, storyboard, plan)
 
         # Step 2: assemble into final video
         update_job(job_id, current_stage="encoding")
