@@ -36,6 +36,7 @@ base_image = (
         "httpx",
     )
     .apt_install("ffmpeg")
+    .add_local_python_source("modal_app.engines")
 )
 
 webhook_image = (
@@ -458,6 +459,8 @@ def assemble_scenes(job_id: str, clip_urls: list) -> bytes:
 )
 def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = None):
     import traceback
+    from modal_app.engines import init_engines
+    init_engines(generate_clip_fn=generate_clip.remote)
 
     log(job_id, f"orchestrator start | prompt={prompt[:60]}")
 
