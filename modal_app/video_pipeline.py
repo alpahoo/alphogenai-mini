@@ -37,6 +37,7 @@ base_image = (
     )
     .apt_install("ffmpeg")
     .add_local_python_source("modal_app.engines")
+    .add_local_python_source("modal_app.utils")
 )
 
 webhook_image = (
@@ -491,6 +492,16 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
             engine_key = select_engine(plan=plan, duration_seconds=clip_dur)
             engine = get_engine_adapter(engine_key)
             log(job_id, f"engine selected: {engine_key}")
+
+            # Cost tracking (before generation — recorded even on failure)
+            try:
+                from modal_app.utils.costs import estimate_cost
+                estimated_cost = estimate_cost(engine_key, clip_dur)
+                log(job_id, f"cost estimated: {engine_key} → ${estimated_cost:.4f}")
+                update_job(job_id, engine_used=engine_key, estimated_cost_usd=estimated_cost)
+            except Exception:
+                pass  # never block generation for cost tracking
+
             video_bytes = engine.generate(prompt=prompt, job_id=job_id, duration_seconds=clip_dur)
 
             update_job(job_id, current_stage="encoding")
@@ -520,6 +531,18 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
         log(job_id, f"multi-scene path: {len(storyboard)} scenes")
         # status already "in_progress" from webhook — only update stage
         update_job(job_id, status="in_progress", current_stage="generating_scene_1")
+
+        # Cost tracking (before generation — recorded even on failure)
+        try:
+            from modal_app.engines import select_engine as _sel
+            from modal_app.utils.costs import estimate_cost
+            total_dur = sum(int(s.get("duration_sec", 5)) for s in storyboard)
+            ms_engine_key = _sel(plan=plan, duration_seconds=int(storyboard[0].get("duration_sec", 5)))
+            estimated_cost = estimate_cost(ms_engine_key, total_dur)
+            log(job_id, f"cost estimated: {ms_engine_key} × {len(storyboard)} scenes → ${estimated_cost:.4f}")
+            update_job(job_id, engine_used=ms_engine_key, estimated_cost_usd=estimated_cost)
+        except Exception:
+            pass  # never block generation for cost tracking
 
         # Step 1: generate all scene clips
         clip_urls = generate_multi_scene.remote(job_id, storyboard, plan)
