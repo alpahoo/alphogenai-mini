@@ -496,11 +496,11 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
             # Cost tracking (before generation — recorded even on failure)
             try:
                 from modal_app.utils.costs import estimate_cost
-                estimated_cost = estimate_cost(engine_key, clip_dur)
+                estimated_cost = round(estimate_cost(engine_key, clip_dur), 4)
                 log(job_id, f"cost estimated: {engine_key} → ${estimated_cost:.4f}")
                 update_job(job_id, engine_used=engine_key, estimated_cost_usd=estimated_cost)
-            except Exception:
-                pass  # never block generation for cost tracking
+            except Exception as e:
+                log(job_id, f"cost tracking skipped: {e}")
 
             video_bytes = engine.generate(prompt=prompt, job_id=job_id, duration_seconds=clip_dur)
 
@@ -538,11 +538,11 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
             from modal_app.utils.costs import estimate_cost
             total_dur = sum(int(s.get("duration_sec", 5)) for s in storyboard)
             ms_engine_key = _sel(plan=plan, duration_seconds=int(storyboard[0].get("duration_sec", 5)))
-            estimated_cost = estimate_cost(ms_engine_key, total_dur)
+            estimated_cost = round(estimate_cost(ms_engine_key, total_dur), 4)
             log(job_id, f"cost estimated: {ms_engine_key} × {len(storyboard)} scenes → ${estimated_cost:.4f}")
             update_job(job_id, engine_used=ms_engine_key, estimated_cost_usd=estimated_cost)
-        except Exception:
-            pass  # never block generation for cost tracking
+        except Exception as e:
+            log(job_id, f"cost tracking skipped: {e}")
 
         # Step 1: generate all scene clips
         clip_urls = generate_multi_scene.remote(job_id, storyboard, plan)
