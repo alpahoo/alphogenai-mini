@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getStripe } from "@/lib/stripe";
+import { mergeAppMetadata } from "@/lib/stripe-app-context";
 import { NextResponse } from "next/server";
 
 export async function POST() {
@@ -38,7 +39,7 @@ export async function POST() {
     if (!customerId) {
       const customer = await getStripe().customers.create({
         email: user.email,
-        metadata: { userId: user.id },
+        metadata: mergeAppMetadata({ userId: user.id }),
       });
       customerId = customer.id;
 
@@ -65,7 +66,10 @@ export async function POST() {
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${siteUrl}/generate?upgraded=true`,
       cancel_url: `${siteUrl}/pricing`,
-      metadata: { userId: user.id },
+      metadata: mergeAppMetadata({ userId: user.id }),
+      subscription_data: {
+        metadata: mergeAppMetadata({ userId: user.id }),
+      },
     });
 
     return NextResponse.json({ url: session.url });
