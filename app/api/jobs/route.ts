@@ -1,8 +1,10 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { generateStoryboard } from "@/lib/storyboard";
+import type { JobPlan } from "@/lib/types";
 
-const FREE_QUOTA_24H = 3; // max free jobs per 24h per user
+const FREE_QUOTA_24H = 1; // max free jobs per 24h per user (pre-Stripe)
 const MAX_ACTIVE_JOBS = 1; // max concurrent jobs per user
 
 export async function POST(req: Request) {
@@ -16,7 +18,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { prompt, target_duration_seconds } = body as {
       prompt: string;
-      target_duration_seconds?: number;
+      target_duration_seconds?: unknown;
     };
 
     // --- validation ---------------------------------------------------
@@ -34,14 +36,27 @@ export async function POST(req: Request) {
       );
     }
 
+    // --- resolve plan from profiles (never trust client input) ----------
+    let plan: JobPlan = "free";
+    if (user?.id) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("plan")
+        .eq("id", user.id)
+        .single();
+      if (profile?.plan === "pro" || profile?.plan === "premium") {
+        plan = profile.plan as JobPlan;
+      }
+    }
+
     // --- quota check (authenticated users only) -----------------------
     if (user?.id) {
-      // 1. Check active jobs (pending / generating / uploading)
+      // 1. Check active jobs
       const { count: activeCount } = await supabase
         .from("jobs")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user.id)
-        .in("status", ["pending", "generating", "in_progress", "uploading"]);
+        .in("status", ["pending", "in_progress"]);
 
       if (activeCount && activeCount >= MAX_ACTIVE_JOBS) {
         return NextResponse.json(
@@ -50,42 +65,55 @@ export async function POST(req: Request) {
         );
       }
 
-      // 2. Check 24h free quota
-      const twentyFourHoursAgo = new Date(
-        Date.now() - 24 * 60 * 60 * 1000
-      ).toISOString();
+      // 2. Check 24h free quota (pro users: unlimited)
+      if (plan === "free") {
+        const twentyFourHoursAgo = new Date(
+          Date.now() - 24 * 60 * 60 * 1000
+        ).toISOString();
 
-      const { count: recentCount } = await supabase
-        .from("jobs")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .eq("plan", "free")
-        .gte("created_at", twentyFourHoursAgo);
+        const { count: recentCount } = await supabase
+          .from("jobs")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .gte("created_at", twentyFourHoursAgo);
 
-      if (recentCount && recentCount >= FREE_QUOTA_24H) {
-        return NextResponse.json(
-          { error: `Free plan limit: ${FREE_QUOTA_24H} videos per 24 hours. Try again later.` },
-          { status: 429 }
-        );
+        if (recentCount && recentCount >= FREE_QUOTA_24H) {
+          return NextResponse.json(
+            {
+              error: "You've reached your free limit. Upgrade to Pro to generate longer videos and unlimited scenes.",
+              upgrade: true,
+            },
+            { status: 429 }
+          );
+        }
       }
     }
 
-    // --- create job ---------------------------------------------------
-    // Clamp target_duration to plan limit (free = 5s)
-    const maxDuration = 5; // free plan
-    const targetDuration = Math.min(
-      Math.max(target_duration_seconds ?? 5, 3),
-      maxDuration
+    const rawDuration = Number(target_duration_seconds);
+    const safeDuration =
+      Number.isFinite(rawDuration) && rawDuration > 0
+        ? Math.round(rawDuration)
+        : plan === "pro" ? 15 : 5;
+
+    // Generate storyboard server-side (scene_count is NEVER taken from client)
+    const storyboard = generateStoryboard(
+      prompt.trim(),
+      safeDuration,
+      plan
     );
 
+    const targetDuration = storyboard.reduce((s, sc) => s + sc.duration_sec, 0);
+
+    // Insert as "pending" — webhook will set "in_progress" before spawning.
     const { data: job, error: insertError } = await supabase
       .from("jobs")
       .insert({
         prompt: prompt.trim(),
-        plan: "free",
+        plan,
         status: "pending",
         current_stage: "queued",
-        target_duration_seconds: targetDuration,
+        target_duration_seconds: Math.round(targetDuration),
+        storyboard,
         ...(user?.id ? { user_id: user.id } : {}),
       })
       .select()
@@ -94,6 +122,25 @@ export async function POST(req: Request) {
     if (insertError) {
       console.error("Failed to create job:", insertError);
       return NextResponse.json({ error: insertError.message }, { status: 500 });
+    }
+
+    // --- insert scenes into job_scenes --------------------------------
+    const sceneRows = storyboard.map((sc) => ({
+      job_id: job.id,
+      scene_index: sc.scene_index,
+      prompt: sc.prompt,
+      engine: sc.engine,
+      duration_sec: sc.duration_sec,
+      status: "pending" as const,
+    }));
+
+    const { error: scenesError } = await supabase
+      .from("job_scenes")
+      .insert(sceneRows);
+
+    if (scenesError) {
+      console.error("Failed to insert scenes:", scenesError);
+      // Non-fatal: job still exists, pipeline can re-derive scenes from storyboard
     }
 
     // --- trigger Modal ------------------------------------------------
@@ -121,8 +168,9 @@ export async function POST(req: Request) {
         body: JSON.stringify({
           job_id: job.id,
           prompt: prompt.trim(),
-          plan: "free",
+          plan,
           user_id: user?.id ?? null,
+          scene_count: storyboard.length,
         }),
       });
 
@@ -136,6 +184,14 @@ export async function POST(req: Request) {
             error_message: `Modal error ${modalRes.status}: ${detail.slice(0, 200)}`,
           })
           .eq("id", job.id);
+      } else {
+        // Webhook accepted — mark generating immediately so frontend
+        // never polls "pending" after this point.
+        await supabase
+          .from("jobs")
+          .update({ status: "in_progress", current_stage: "spawning_pipeline" })
+          .eq("id", job.id)
+          .eq("status", "pending"); // only if still pending (avoid overwriting failure)
       }
     } catch (fetchError) {
       const errMsg =

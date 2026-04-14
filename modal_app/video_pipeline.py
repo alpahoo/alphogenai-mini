@@ -36,6 +36,8 @@ base_image = (
         "httpx",
     )
     .apt_install("ffmpeg")
+    .add_local_python_source("modal_app.engines")
+    .add_local_python_source("modal_app.utils")
 )
 
 webhook_image = (
@@ -65,6 +67,12 @@ NUM_STEPS       = 15    # fast + decent quality on A100
 GUIDANCE_SCALE  = 3.5
 IMG_HEIGHT      = 480
 IMG_WIDTH       = 832
+
+# ---------------------------------------------------------------------------
+# MVP scene limits (server-side hard cap — mirrors lib/storyboard.ts)
+# ---------------------------------------------------------------------------
+MAX_SCENES = {"free": 1, "pro": 3, "premium": 5}
+ABSOLUTE_MAX_SCENES = 5  # never exceed, regardless of plan
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +161,8 @@ def frames_to_mp4(frames, output_path: str, fps: int = FPS):
         raise RuntimeError(f"ffmpeg failed: {result.stderr[-500:]}")
 
 
-def upload_to_r2(video_bytes: bytes, job_id: str) -> str:
+def upload_to_r2(video_bytes: bytes, job_id: str, suffix: str = "") -> str:
+    """Upload video bytes to R2. Optional suffix for scene clips (e.g. '_scene_00')."""
     import boto3
     from botocore.config import Config
 
@@ -174,11 +183,21 @@ def upload_to_r2(video_bytes: bytes, job_id: str) -> str:
         region_name="auto",
     )
 
-    key = f"videos/{job_id}.mp4"
+    key = f"videos/{job_id}{suffix}.mp4"
     s3.put_object(Bucket=r2_bucket, Key=key, Body=video_bytes, ContentType="video/mp4")
 
     public_url = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")
     return f"{public_url}/{key}"
+
+
+def update_scene(job_id: str, scene_index: int, **fields):
+    """Update a single scene row in job_scenes."""
+    try:
+        sb = get_supabase_client()
+        sb.table("job_scenes").update(fields).eq("job_id", job_id).eq("scene_index", scene_index).execute()
+        log(job_id, f"update_scene[{scene_index}] → {fields}")
+    except Exception as e:
+        log(job_id, f"update_scene[{scene_index}] FAILED: {e}")
 
 
 # ===========================================================================
@@ -219,7 +238,6 @@ def generate_clip(prompt: str, job_id: str) -> bytes:
         log(job_id, f"{name} OK")
 
     # --- step 1: SDXL-Turbo (T2I) ------------------------------------
-    update_job(job_id, current_stage="generating_image")
     log(job_id, "loading SDXL-Turbo")
     t2i = AutoPipelineForText2Image.from_pretrained(
         SDXL_TURBO_PATH, torch_dtype=torch.float16, local_files_only=True,
@@ -241,7 +259,6 @@ def generate_clip(prompt: str, job_id: str) -> bytes:
     image = image.resize((w, h))
 
     # --- step 2: Wan I2V (single clip) --------------------------------
-    update_job(job_id, current_stage="generating_video")
     log(job_id, "loading Wan 14B")
 
     try:
@@ -286,7 +303,6 @@ def generate_clip(prompt: str, job_id: str) -> bytes:
     del pipe; gc.collect(); torch.cuda.empty_cache()
 
     # --- step 3: encode MP4 -------------------------------------------
-    update_job(job_id, current_stage="encoding")
     with tempfile.TemporaryDirectory() as tmpdir:
         mp4_path = str(Path(tmpdir) / f"{job_id}.mp4")
         frames_to_mp4(frames, mp4_path, fps=FPS)
@@ -297,23 +313,248 @@ def generate_clip(prompt: str, job_id: str) -> bytes:
 
 
 # ===========================================================================
+# Multi-scene generation (no GPU — just coordinates scene-by-scene)
+# ===========================================================================
+
+@app.function(
+    image=base_image,
+    secrets=[secrets],
+    # Timeout rationale: each scene ≈ 8 min (3 min cold start + 5 min gen).
+    # 5 scenes × 8 min = 40 min max.  Set to 50 min (3000s) for safety margin.
+    timeout=3000,
+    retries=0,
+)
+def generate_multi_scene(job_id: str, scenes: list, plan: str = "free") -> list:
+    """
+    Generate clips for each scene in the storyboard sequentially.
+
+    Each scene calls generate_clip.remote() (which runs on GPU),
+    uploads to R2, and updates job_scenes status in Supabase.
+
+    Partial failure policy (MVP):
+        If scene N fails, already-uploaded clips for scenes 0..N-1 are
+        intentionally KEPT on R2.  They are cheap to store (<50 MB each),
+        useful for debugging, and can be reused by a future retry mechanism.
+        The parent job is marked failed so the user sees a clear error.
+
+    Returns list of clip URLs in scene order.
+    """
+    import time
+
+    total = len(scenes)
+
+    # Server-side hard cap — never trust storyboard length from DB blindly
+    if total > ABSOLUTE_MAX_SCENES:
+        log(job_id, f"scene count {total} exceeds cap {ABSOLUTE_MAX_SCENES}, truncating")
+        scenes = scenes[:ABSOLUTE_MAX_SCENES]
+        total = ABSOLUTE_MAX_SCENES
+
+    log(job_id, f"generate_multi_scene START: {total} scene(s)")
+    clip_urls: list = []
+
+    for scene in scenes:
+        idx = scene["scene_index"]
+        scene_prompt = scene["prompt"]
+        t0 = time.monotonic()
+
+        log(job_id, f"scene [{idx+1}/{total}] generating | prompt={scene_prompt[:60]}")
+        update_scene(job_id, idx, status="in_progress")
+        # Update parent job stage so frontend shows per-scene progress
+        update_job(job_id, current_stage=f"generating_scene_{idx+1}")
+
+        try:
+            from modal_app.engines import select_engine, get_engine_adapter
+            scene_dur = int(scene.get("duration_sec", 5))
+            engine_key = select_engine(plan=plan, duration_seconds=scene_dur)
+            engine = get_engine_adapter(engine_key)
+            video_bytes = engine.generate(prompt=scene_prompt, job_id=f"{job_id}_scene_{idx:02d}", duration_seconds=scene_dur)
+
+            suffix = f"_scene_{idx:02d}"
+            clip_url = upload_to_r2(video_bytes, job_id, suffix=suffix)
+            elapsed = time.monotonic() - t0
+
+            log(job_id, f"scene [{idx+1}/{total}] DONE in {elapsed:.0f}s | {len(video_bytes)/1e6:.1f} MB → {clip_url}")
+            update_scene(job_id, idx, status="done", clip_url=clip_url)
+            clip_urls.append(clip_url)
+
+        except Exception as e:
+            elapsed = time.monotonic() - t0
+            error_msg = normalize_error(e)[:500]
+            log(job_id, f"scene [{idx+1}/{total}] FAILED after {elapsed:.0f}s — {error_msg}")
+            update_scene(job_id, idx, status="failed", error_message=error_msg)
+            # Mark remaining scenes as skipped
+            for remaining_scene in scenes[idx + 1:]:
+                update_scene(job_id, remaining_scene["scene_index"], status="skipped")
+            raise RuntimeError(f"Scene {idx} failed: {error_msg}") from e
+
+    log(job_id, f"generate_multi_scene COMPLETE: {len(clip_urls)}/{total} clips")
+    return clip_urls
+
+
+@app.function(image=base_image, secrets=[secrets], timeout=600, retries=0)
+def assemble_scenes(job_id: str, clip_urls: list) -> bytes:
+    """
+    Download scene clips and concatenate them into a single MP4 via ffmpeg.
+
+    Runs on Modal (has ffmpeg via base_image). Returns final video bytes.
+    """
+    import tempfile
+    import subprocess
+    from pathlib import Path
+    import httpx
+
+    log(job_id, f"assemble_scenes: concatenating {len(clip_urls)} clips")
+
+    with tempfile.TemporaryDirectory(prefix=f"assemble_{job_id}_") as tmpdir:
+        tmppath = Path(tmpdir)
+        clip_paths = []
+
+        # Download each clip
+        client = httpx.Client(timeout=120.0)
+        for i, url in enumerate(clip_urls):
+            log(job_id, f"downloading clip {i}")
+            resp = client.get(url)
+            resp.raise_for_status()
+            clip_file = tmppath / f"clip_{i:02d}.mp4"
+            clip_file.write_bytes(resp.content)
+            clip_paths.append(clip_file)
+        client.close()
+
+        # Write concat list
+        concat_file = tmppath / "concat.txt"
+        with open(concat_file, "w") as f:
+            for p in clip_paths:
+                f.write(f"file '{p}'\n")
+
+        # Concatenate
+        output_path = tmppath / "final.mp4"
+        result = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-f", "concat", "-safe", "0",
+                "-i", str(concat_file),
+                "-c", "copy",
+                str(output_path),
+            ],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"ffmpeg concat failed: {result.stderr[-500:]}")
+
+        video_bytes = output_path.read_bytes()
+        log(job_id, f"assemble_scenes: final {len(video_bytes)/1e6:.1f} MB")
+        return video_bytes
+
+
+# ===========================================================================
 # Orchestrator (no GPU — just coordinates)
 # ===========================================================================
 
-@app.function(image=base_image, secrets=[secrets], timeout=1500, retries=0)
+@app.function(
+    image=base_image,
+    secrets=[secrets],
+    # Timeout rationale: must outlive generate_multi_scene (3000s) + assemble (600s)
+    # + upload overhead.  Set to 3900s (~65 min).
+    timeout=3900,
+    retries=0,
+)
 def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = None):
     import traceback
+    from modal_app.engines import init_engines
+    init_engines(generate_clip_fn=generate_clip.remote)
 
     log(job_id, f"orchestrator start | prompt={prompt[:60]}")
 
     try:
-        update_job(job_id, status="generating", current_stage="generating_image")
+        # Fetch job to read storyboard — scene_count is ALWAYS derived
+        # server-side from DB, never from client webhook payload.
+        sb = get_supabase_client()
+        job_row = sb.table("jobs").select("storyboard, target_duration_seconds, plan").eq("id", job_id).single().execute()
+        storyboard = (job_row.data or {}).get("storyboard") or []
+        plan = (job_row.data or {}).get("plan", "free")
 
-        video_bytes = generate_clip.remote(prompt, job_id)
+        # Server-side hard cap (defense in depth)
+        plan_cap = MAX_SCENES.get(plan, 1)
+        if len(storyboard) > plan_cap:
+            log(job_id, f"storyboard has {len(storyboard)} scenes but plan '{plan}' allows {plan_cap}, truncating")
+            storyboard = storyboard[:plan_cap]
 
+        # ------------------------------------------------------------------
+        # Route: single-scene → original pipeline (unchanged)
+        # ------------------------------------------------------------------
+        if len(storyboard) <= 1:
+            log(job_id, "single-scene path (v3 compat)")
+            # status already "in_progress" from webhook — only update stage
+            update_job(job_id, status="in_progress", current_stage="generating_scene_1")
+
+            from modal_app.engines import select_engine, get_engine_adapter
+            clip_dur = int(storyboard[0]["duration_sec"]) if storyboard else 5
+            engine_key = select_engine(plan=plan, duration_seconds=clip_dur)
+            engine = get_engine_adapter(engine_key)
+            log(job_id, f"engine selected: {engine_key}")
+
+            # Cost tracking (before generation — recorded even on failure)
+            try:
+                from modal_app.utils.costs import estimate_cost
+                estimated_cost = round(estimate_cost(engine_key, clip_dur), 4)
+                log(job_id, f"cost estimated: {engine_key} → ${estimated_cost:.4f}")
+                update_job(job_id, engine_used=engine_key, estimated_cost_usd=estimated_cost)
+            except Exception as e:
+                log(job_id, f"cost tracking skipped: {e}")
+
+            video_bytes = engine.generate(prompt=prompt, job_id=job_id, duration_seconds=clip_dur)
+
+            update_job(job_id, current_stage="encoding")
+            # encoding already happened inside generate_clip (ffmpeg);
+            # this stage exists so the frontend flow is consistent.
+            update_job(job_id, current_stage="uploading")
+            video_url = upload_to_r2(video_bytes, job_id)
+            log(job_id, f"uploaded → {video_url}")
+
+            # Also mark the single scene as done (if it exists)
+            if storyboard:
+                update_scene(job_id, 0, status="done", clip_url=video_url)
+
+            update_job(
+                job_id,
+                status="done",
+                current_stage="completed",
+                video_url=video_url,
+                output_url_final=video_url,
+            )
+            log(job_id, "DONE (single-scene)")
+            return {"success": True, "video_url": video_url}
+
+        # ------------------------------------------------------------------
+        # Route: multi-scene → generate each scene, then assemble
+        # ------------------------------------------------------------------
+        log(job_id, f"multi-scene path: {len(storyboard)} scenes")
+        # status already "in_progress" from webhook — only update stage
+        update_job(job_id, status="in_progress", current_stage="generating_scene_1")
+
+        # Cost tracking (before generation — recorded even on failure)
+        try:
+            from modal_app.engines import select_engine as _sel
+            from modal_app.utils.costs import estimate_cost
+            total_dur = sum(int(s.get("duration_sec", 5)) for s in storyboard)
+            ms_engine_key = _sel(plan=plan, duration_seconds=int(storyboard[0].get("duration_sec", 5)))
+            estimated_cost = round(estimate_cost(ms_engine_key, total_dur), 4)
+            log(job_id, f"cost estimated: {ms_engine_key} × {len(storyboard)} scenes → ${estimated_cost:.4f}")
+            update_job(job_id, engine_used=ms_engine_key, estimated_cost_usd=estimated_cost)
+        except Exception as e:
+            log(job_id, f"cost tracking skipped: {e}")
+
+        # Step 1: generate all scene clips
+        clip_urls = generate_multi_scene.remote(job_id, storyboard, plan)
+
+        # Step 2: assemble into final video
+        update_job(job_id, current_stage="encoding")
+        final_bytes = assemble_scenes.remote(job_id, clip_urls)
+
+        # Step 3: upload final assembled video
         update_job(job_id, current_stage="uploading")
-        video_url = upload_to_r2(video_bytes, job_id)
-        log(job_id, f"uploaded → {video_url}")
+        video_url = upload_to_r2(final_bytes, job_id, suffix="_final")
+        log(job_id, f"final uploaded → {video_url}")
 
         update_job(
             job_id,
@@ -322,7 +563,7 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
             video_url=video_url,
             output_url_final=video_url,
         )
-        log(job_id, "DONE")
+        log(job_id, f"DONE (multi-scene, {len(clip_urls)} clips)")
         return {"success": True, "video_url": video_url}
 
     except Exception as e:
@@ -348,8 +589,9 @@ def webhook():
     class JobRequest(BaseModel):
         job_id: str
         prompt: str
-        plan: str = "free"  # kept for compat, ignored in v3
+        plan: str = "free"
         user_id: Optional[str] = None
+        scene_count: int = 1  # Phase 2: number of scenes from storyboard
 
     @web.post("/webhook")
     async def trigger(req: JobRequest, x_webhook_secret: str = Header(None)):
@@ -361,7 +603,7 @@ def webhook():
         try:
             sb = get_supabase_client()
             sb.table("jobs").update({
-                "status": "generating",
+                "status": "in_progress",
                 "current_stage": "spawning_pipeline",
             }).eq("id", req.job_id).execute()
         except Exception as e:

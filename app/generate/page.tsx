@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Wand2, ArrowLeft, Loader2 } from "lucide-react";
+import { Wand2, ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 const EXAMPLE_PROMPTS = [
@@ -18,6 +18,16 @@ export default function GeneratePage() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [upgraded, setUpgraded] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("upgraded") === "true") {
+      setUpgraded(true);
+      window.history.replaceState({}, "", "/generate");
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +50,9 @@ export default function GeneratePage() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 429 && data.upgrade) {
+          setShowUpgrade(true);
+        }
         throw new Error(data.error || "Failed to create job");
       }
 
@@ -118,10 +131,27 @@ export default function GeneratePage() {
               </div>
             </div>
 
+            {/* Upgrade success */}
+            {upgraded && (
+              <div className="mt-4 rounded-xl border border-green-500/50 bg-green-500/10 p-4 text-sm text-green-400 flex items-center gap-2">
+                <Sparkles className="h-4 w-4" />
+                Welcome to Pro! You can now generate multi-scene videos.
+              </div>
+            )}
+
             {/* Error */}
             {error && (
               <div className="mt-4 rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
                 {error}
+                {showUpgrade && (
+                  <Link
+                    href="/pricing"
+                    className="mt-3 flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Upgrade to Pro
+                  </Link>
+                )}
               </div>
             )}
 

@@ -2,15 +2,18 @@
 // Job statuses — simplified v3
 // ---------------------------------------------------------------------------
 
-export type JobStatus = "pending" | "generating" | "uploading" | "done" | "failed";
+export type JobStatus = "pending" | "in_progress" | "done" | "failed";
 
 export type JobPlan = "free" | "pro" | "premium";
 
 export type JobStage =
   | "queued"
   | "spawning_pipeline"
-  | "generating_image"
-  | "generating_video"
+  | "generating_scene_1"
+  | "generating_scene_2"
+  | "generating_scene_3"
+  | "generating_scene_4"
+  | "generating_scene_5"
   | "encoding"
   | "uploading"
   | "completed"
@@ -93,8 +96,11 @@ export interface ErrorResponse {
 export const STAGE_LABELS: Record<JobStage, string> = {
   queued: "In queue",
   spawning_pipeline: "Starting pipeline",
-  generating_image: "Generating image",
-  generating_video: "Generating video",
+  generating_scene_1: "Generating scene 1",
+  generating_scene_2: "Generating scene 2",
+  generating_scene_3: "Generating scene 3",
+  generating_scene_4: "Generating scene 4",
+  generating_scene_5: "Generating scene 5",
   encoding: "Encoding video",
   uploading: "Uploading",
   completed: "Complete",
@@ -104,8 +110,11 @@ export const STAGE_LABELS: Record<JobStage, string> = {
 export const STAGE_ORDER: JobStage[] = [
   "queued",
   "spawning_pipeline",
-  "generating_image",
-  "generating_video",
+  "generating_scene_1",
+  "generating_scene_2",
+  "generating_scene_3",
+  "generating_scene_4",
+  "generating_scene_5",
   "encoding",
   "uploading",
   "completed",

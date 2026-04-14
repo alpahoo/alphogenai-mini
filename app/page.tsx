@@ -38,19 +38,19 @@ export default function HomePage() {
 
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
           <Link
-            href="/generate"
+            href="/create"
             className="inline-flex items-center gap-2 rounded-xl bg-primary px-8 py-3.5 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110"
           >
             <Wand2 className="h-4 w-4" />
-            Generate a Video
+            Create a Video
           </Link>
 
           <Link
-            href="/generate"
+            href="/pricing"
             className="inline-flex items-center gap-2 rounded-xl border border-border bg-card/50 px-8 py-3.5 text-sm font-semibold text-foreground backdrop-blur-sm transition-all hover:bg-card"
           >
             <Play className="h-4 w-4" />
-            See How It Works
+            See Plans
           </Link>
         </div>
       </motion.div>
