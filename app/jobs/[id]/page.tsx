@@ -23,6 +23,8 @@ import {
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Sidebar } from "@/components/workspace/sidebar";
+import { JobCostBadge } from "@/components/job/JobCostBadge";
+import { SHOW_COST_TRACKING_UI, isAdminEmail } from "@/lib/flags";
 import type { Job, JobStage, JobScene } from "@/lib/types";
 import { STAGE_ORDER } from "@/lib/types";
 
@@ -204,6 +206,7 @@ export default function JobPage() {
 
   const isActive = job ? (job.status === "pending" || job.status === "in_progress") : false;
   const isDone = job?.status === "done";
+  const isAdmin = isAdminEmail(email);
   const isFailed = job?.status === "failed";
   const videoUrl = job ? (job.output_url_final || job.video_url) : null;
   const sceneCount = scenes.length || (job?.storyboard ? job.storyboard.length : 1);
@@ -357,7 +360,7 @@ export default function JobPage() {
               {/* ── Mobile info cards (hidden on desktop) ───── */}
               {job && (
                 <div className="lg:hidden space-y-5">
-                  <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} />
+                  <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} />
                 </div>
               )}
             </motion.div>
@@ -367,7 +370,7 @@ export default function JobPage() {
         {/* ═══ RIGHT: Info sidebar (desktop only) ══════════════ */}
         {job && (
           <div className="hidden lg:flex w-72 flex-col border-l border-border/40 bg-muted/20 p-6 gap-5 overflow-y-auto">
-            <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} />
+            <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} />
           </div>
         )}
       </main>
@@ -386,6 +389,7 @@ function InfoCards({
   stageLabel,
   elapsed,
   sceneCount,
+  isAdmin = false,
 }: {
   job: Job;
   isActive: boolean;
@@ -394,6 +398,7 @@ function InfoCards({
   stageLabel: string;
   elapsed: number;
   sceneCount: number;
+  isAdmin?: boolean;
 }) {
   return (
     <>
@@ -433,6 +438,10 @@ function InfoCards({
           <div className="flex justify-between"><span className="text-muted-foreground">Plan</span><span className="font-medium capitalize">{job.plan}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Created</span><span className="font-medium text-[10px]">{formatDate(job.created_at)}</span></div>
         </div>
+        {/* Admin-only cost tracking */}
+        {isAdmin && SHOW_COST_TRACKING_UI && (
+          <JobCostBadge engine={job.engine_used} cost={job.estimated_cost_usd} />
+        )}
       </div>
 
       {/* Upgrade */}

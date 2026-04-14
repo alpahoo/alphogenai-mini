@@ -56,6 +56,8 @@ export async function GET(
         error_message: job.error_message,
         storyboard: job.storyboard ?? null,
         target_duration_seconds: job.target_duration_seconds ?? 5,
+        engine_used: job.engine_used ?? null,
+        estimated_cost_usd: job.estimated_cost_usd ?? null,
         created_at: job.created_at,
         updated_at: job.updated_at,
       },
