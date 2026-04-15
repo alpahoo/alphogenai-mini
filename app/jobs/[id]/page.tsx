@@ -26,7 +26,7 @@ import { Sidebar } from "@/components/workspace/sidebar";
 import { JobCostBadge } from "@/components/job/JobCostBadge";
 import { SHOW_COST_TRACKING_UI, isAdminEmail } from "@/lib/flags";
 import type { Job, JobStage, JobScene } from "@/lib/types";
-import { STAGE_ORDER } from "@/lib/types";
+import { STAGE_ORDER, getEngineDisplayName } from "@/lib/types";
 
 const POLL_INTERVAL = 5000;
 
@@ -310,7 +310,7 @@ export default function JobPage() {
                     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{job.target_duration_seconds}s</span>
                       <span className="flex items-center gap-1"><Layers className="h-3 w-3" />{sceneCount} scene{sceneCount > 1 ? "s" : ""}</span>
-                      <span className="flex items-center gap-1"><Cpu className="h-3 w-3" />Wan 2.2 I2V</span>
+                      <span className="flex items-center gap-1"><Cpu className="h-3 w-3" />{getEngineDisplayName(job.engine_used)}</span>
                       <span className="uppercase text-[10px] font-medium">{job.plan}</span>
                     </div>
                   </div>
@@ -432,7 +432,7 @@ function InfoCards({
       <div className="rounded-xl border border-border/40 bg-card/60 p-4">
         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">Details</h3>
         <div className="space-y-2.5 text-xs">
-          <div className="flex justify-between"><span className="text-muted-foreground">Model</span><span className="font-medium">Wan 2.2 I2V</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Model</span><span className="font-medium">{getEngineDisplayName(job.engine_used)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Duration</span><span className="font-medium">{job.target_duration_seconds}s</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Scenes</span><span className="font-medium">{sceneCount}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Plan</span><span className="font-medium capitalize">{job.plan}</span></div>

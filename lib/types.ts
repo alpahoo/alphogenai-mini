@@ -122,6 +122,16 @@ export const STAGE_ORDER: JobStage[] = [
   "completed",
 ];
 
+export const ENGINE_DISPLAY_NAMES: Record<string, string> = {
+  wan_i2v: "Wan 2.2 I2V",
+  seedance: "Seedance 2.0",
+};
+
+export function getEngineDisplayName(engine: string | null | undefined): string {
+  if (!engine) return "Wan 2.2 I2V";
+  return ENGINE_DISPLAY_NAMES[engine] ?? engine;
+}
+
 export const PLAN_LABELS: Record<JobPlan, string> = {
   free: "Free",
   pro: "Pro",
