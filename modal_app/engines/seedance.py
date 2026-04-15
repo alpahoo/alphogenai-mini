@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 KIE_API_BASE = "https://api.kie.ai/api/v1"
 KIE_MODEL_SEEDANCE = "bytedance/seedance-2"
-KIE_POLL_INTERVAL = 5        # seconds between status checks
-KIE_POLL_TIMEOUT = 120       # max seconds to wait for completion
+KIE_POLL_INTERVAL = 8        # seconds between status checks
+KIE_POLL_TIMEOUT = 300       # max seconds to wait (observed: ~70s typical)
 KIE_HTTP_TIMEOUT = 30        # timeout per HTTP request
 
 
