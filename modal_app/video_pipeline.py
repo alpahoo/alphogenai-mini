@@ -337,9 +337,14 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free") -> list:
         useful for debugging, and can be reused by a future retry mechanism.
         The parent job is marked failed so the user sees a clear error.
 
-    Returns list of clip URLs in scene order.
+    Returns dict with clip_urls list and any_fallback flag.
     """
     import time
+
+    # Initialize engines in this container (separate from orchestrator).
+    # Required for generate_with_fallback() to access WanEngine for fallback.
+    from modal_app.engines import init_engines
+    init_engines(generate_clip_fn=generate_clip.remote)
 
     total = len(scenes)
 
