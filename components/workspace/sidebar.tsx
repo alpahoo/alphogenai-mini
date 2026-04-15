@@ -10,9 +10,11 @@ import {
   LogOut,
   Plus,
   Library,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { isAdminEmail } from "@/lib/flags";
 import { useRouter } from "next/navigation";
 
 const NAV_ITEMS = [
@@ -74,6 +76,15 @@ export function Sidebar({ plan, email }: SidebarProps) {
 
       {/* Bottom */}
       <div className="border-t border-border/50 p-3 space-y-2">
+        {isAdminEmail(email) && (
+          <Link
+            href="/admin"
+            className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10"
+          >
+            <Shield className="h-3.5 w-3.5" />
+            Admin Panel
+          </Link>
+        )}
         {plan !== "pro" && (
           <Link
             href="/pricing"
