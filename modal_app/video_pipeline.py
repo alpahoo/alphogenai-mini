@@ -351,6 +351,8 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free") -> list:
 
     log(job_id, f"generate_multi_scene START: {total} scene(s)")
     clip_urls: list = []
+    # Track if ANY scene used fallback — if so, job-level engine_used = "wan_i2v"
+    any_fallback = False
 
     for scene in scenes:
         idx = scene["scene_index"]
@@ -363,11 +365,17 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free") -> list:
         update_job(job_id, current_stage=f"generating_scene_{idx+1}")
 
         try:
-            from modal_app.engines import select_engine, get_engine_adapter
+            from modal_app.engines import select_engine, generate_with_fallback
             scene_dur = int(scene.get("duration_sec", 5))
             engine_key = select_engine(plan=plan, duration_seconds=scene_dur)
-            engine = get_engine_adapter(engine_key)
-            video_bytes = engine.generate(prompt=scene_prompt, job_id=f"{job_id}_scene_{idx:02d}", duration_seconds=scene_dur)
+            video_bytes, actual_engine = generate_with_fallback(
+                engine_key, prompt=scene_prompt,
+                job_id=f"{job_id}_scene_{idx:02d}",
+                duration_seconds=scene_dur,
+            )
+            if actual_engine != engine_key:
+                log(job_id, f"scene [{idx+1}/{total}] fallback: {engine_key} → {actual_engine}")
+                any_fallback = True
 
             suffix = f"_scene_{idx:02d}"
             clip_url = upload_to_r2(video_bytes, job_id, suffix=suffix)
@@ -387,8 +395,10 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free") -> list:
                 update_scene(job_id, remaining_scene["scene_index"], status="skipped")
             raise RuntimeError(f"Scene {idx} failed: {error_msg}") from e
 
-    log(job_id, f"generate_multi_scene COMPLETE: {len(clip_urls)}/{total} clips")
-    return clip_urls
+    log(job_id, f"generate_multi_scene COMPLETE: {len(clip_urls)}/{total} clips"
+         f"{' (fallback used)' if any_fallback else ''}")
+    # Return clip URLs + fallback flag for job-level engine_used aggregation
+    return {"clip_urls": clip_urls, "any_fallback": any_fallback}
 
 
 @app.function(image=base_image, secrets=[secrets], timeout=600, retries=0)
@@ -487,10 +497,9 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
             # status already "in_progress" from webhook — only update stage
             update_job(job_id, status="in_progress", current_stage="generating_scene_1")
 
-            from modal_app.engines import select_engine, get_engine_adapter
+            from modal_app.engines import select_engine, generate_with_fallback
             clip_dur = int(storyboard[0]["duration_sec"]) if storyboard else 5
             engine_key = select_engine(plan=plan, duration_seconds=clip_dur)
-            engine = get_engine_adapter(engine_key)
             log(job_id, f"engine selected: {engine_key}")
 
             # Cost tracking (before generation — recorded even on failure)
@@ -502,7 +511,18 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
             except Exception as e:
                 log(job_id, f"cost tracking skipped: {e}")
 
-            video_bytes = engine.generate(prompt=prompt, job_id=job_id, duration_seconds=clip_dur)
+            video_bytes, actual_engine = generate_with_fallback(
+                engine_key, prompt=prompt, job_id=job_id, duration_seconds=clip_dur
+            )
+            if actual_engine != engine_key:
+                log(job_id, f"fallback triggered: {engine_key} → {actual_engine}")
+                update_job(job_id, engine_used=actual_engine)
+                try:
+                    from modal_app.utils.costs import estimate_cost
+                    fallback_cost = round(estimate_cost(actual_engine, clip_dur), 4)
+                    update_job(job_id, estimated_cost_usd=fallback_cost)
+                except Exception:
+                    pass
 
             update_job(job_id, current_stage="encoding")
             # encoding already happened inside generate_clip (ffmpeg);
@@ -532,11 +552,13 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
         # status already "in_progress" from webhook — only update stage
         update_job(job_id, status="in_progress", current_stage="generating_scene_1")
 
+        # Total duration needed for cost recalculation on fallback
+        total_dur = sum(int(s.get("duration_sec", 5)) for s in storyboard)
+
         # Cost tracking (before generation — recorded even on failure)
         try:
             from modal_app.engines import select_engine as _sel
             from modal_app.utils.costs import estimate_cost
-            total_dur = sum(int(s.get("duration_sec", 5)) for s in storyboard)
             ms_engine_key = _sel(plan=plan, duration_seconds=int(storyboard[0].get("duration_sec", 5)))
             estimated_cost = round(estimate_cost(ms_engine_key, total_dur), 4)
             log(job_id, f"cost estimated: {ms_engine_key} × {len(storyboard)} scenes → ${estimated_cost:.4f}")
@@ -545,7 +567,21 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
             log(job_id, f"cost tracking skipped: {e}")
 
         # Step 1: generate all scene clips
-        clip_urls = generate_multi_scene.remote(job_id, storyboard, plan)
+        ms_result = generate_multi_scene.remote(job_id, storyboard, plan)
+        clip_urls = ms_result["clip_urls"]
+        ms_any_fallback = ms_result["any_fallback"]
+
+        # Multi-scene engine_used rule:
+        # If ANY scene used fallback → job-level engine_used = "wan_i2v"
+        # This ensures the cost displayed reflects the actual engine used.
+        if ms_any_fallback:
+            log(job_id, "multi-scene fallback detected → engine_used = wan_i2v")
+            try:
+                from modal_app.utils.costs import estimate_cost
+                fallback_cost = round(estimate_cost("wan_i2v", total_dur), 4)
+                update_job(job_id, engine_used="wan_i2v", estimated_cost_usd=fallback_cost)
+            except Exception:
+                update_job(job_id, engine_used="wan_i2v")
 
         # Step 2: assemble into final video
         update_job(job_id, current_stage="encoding")
