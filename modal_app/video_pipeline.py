@@ -161,8 +161,14 @@ def frames_to_mp4(frames, output_path: str, fps: int = FPS):
         raise RuntimeError(f"ffmpeg failed: {result.stderr[-500:]}")
 
 
-def upload_to_r2(video_bytes: bytes, job_id: str, suffix: str = "") -> str:
-    """Upload video bytes to R2. Optional suffix for scene clips (e.g. '_scene_00')."""
+def upload_to_r2(
+    file_bytes: bytes,
+    job_id: str,
+    suffix: str = "",
+    content_type: str = "video/mp4",
+    extension: str = "mp4",
+) -> str:
+    """Upload file bytes to R2. Supports video (mp4) and audio (mp3)."""
     import boto3
     from botocore.config import Config
 
@@ -183,8 +189,8 @@ def upload_to_r2(video_bytes: bytes, job_id: str, suffix: str = "") -> str:
         region_name="auto",
     )
 
-    key = f"videos/{job_id}{suffix}.mp4"
-    s3.put_object(Bucket=r2_bucket, Key=key, Body=video_bytes, ContentType="video/mp4")
+    key = f"videos/{job_id}{suffix}.{extension}"
+    s3.put_object(Bucket=r2_bucket, Key=key, Body=file_bytes, ContentType=content_type)
 
     public_url = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")
     return f"{public_url}/{key}"
@@ -461,6 +467,41 @@ def assemble_scenes(job_id: str, clip_urls: list) -> bytes:
         return video_bytes
 
 
+@app.function(image=base_image, secrets=[secrets], timeout=120, retries=0)
+def mux_audio(video_bytes: bytes, audio_bytes: bytes) -> bytes:
+    """Combine video + audio into a single MP4 using ffmpeg."""
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        video_path = Path(tmpdir) / "video.mp4"
+        audio_path = Path(tmpdir) / "audio.mp3"
+        output_path = Path(tmpdir) / "output.mp4"
+
+        video_path.write_bytes(video_bytes)
+        audio_path.write_bytes(audio_bytes)
+
+        result = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-i", str(video_path),
+                "-i", str(audio_path),
+                "-c:v", "copy",
+                "-c:a", "aac", "-b:a", "192k",
+                "-shortest",
+                str(output_path),
+            ],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"ffmpeg mux failed: {result.stderr[-300:]}")
+
+        muxed = output_path.read_bytes()
+        print(f"[mux_audio] {len(video_bytes)/1e6:.1f}MB video + {len(audio_bytes)/1e3:.0f}KB audio → {len(muxed)/1e6:.1f}MB")
+        return muxed
+
+
 # ===========================================================================
 # Orchestrator (no GPU — just coordinates)
 # ===========================================================================
@@ -536,8 +577,6 @@ def generate_video_complete(
                     pass
 
             update_job(job_id, current_stage="encoding")
-            # encoding already happened inside generate_clip (ffmpeg);
-            # this stage exists so the frontend flow is consistent.
             update_job(job_id, current_stage="uploading")
             video_url = upload_to_r2(video_bytes, job_id)
             log(job_id, f"uploaded → {video_url}")
@@ -546,15 +585,38 @@ def generate_video_complete(
             if storyboard:
                 update_scene(job_id, 0, status="done", clip_url=video_url)
 
+            # Audio generation for Wan (Seedance already has audio in MP4)
+            final_url = video_url
+            if actual_engine == "wan_i2v":
+                try:
+                    update_job(job_id, current_stage="generating_audio")
+                    log(job_id, "generating audio via AudioLDM2...")
+                    from modal_app.audio_generator import generate_audio
+                    audio_bytes = generate_audio.remote(prompt, clip_dur)
+                    audio_url = upload_to_r2(
+                        audio_bytes, job_id,
+                        suffix="_audio", content_type="audio/mpeg", extension="mp3",
+                    )
+                    log(job_id, f"audio uploaded → {audio_url}")
+
+                    update_job(job_id, current_stage="muxing_audio")
+                    muxed_bytes = mux_audio.remote(video_bytes, audio_bytes)
+                    final_url = upload_to_r2(muxed_bytes, job_id, suffix="_final")
+                    log(job_id, f"muxed video+audio → {final_url}")
+                    update_job(job_id, audio_url=audio_url)
+                except Exception as e:
+                    log(job_id, f"audio generation skipped (non-blocking): {e}")
+                    # Video is already uploaded — proceed without audio
+
             update_job(
                 job_id,
                 status="done",
                 current_stage="completed",
                 video_url=video_url,
-                output_url_final=video_url,
+                output_url_final=final_url,
             )
             log(job_id, "DONE (single-scene)")
-            return {"success": True, "video_url": video_url}
+            return {"success": True, "video_url": final_url}
 
         # ------------------------------------------------------------------
         # Route: multi-scene → generate each scene, then assemble
@@ -603,12 +665,35 @@ def generate_video_complete(
         video_url = upload_to_r2(final_bytes, job_id, suffix="_final")
         log(job_id, f"final uploaded → {video_url}")
 
+        # Step 4: Audio for Wan multi-scene (Seedance has audio embedded)
+        final_url = video_url
+        actual_ms_engine = "wan_i2v" if ms_any_fallback else ms_engine_key
+        if actual_ms_engine == "wan_i2v":
+            try:
+                update_job(job_id, current_stage="generating_audio")
+                log(job_id, "generating audio via AudioLDM2...")
+                from modal_app.audio_generator import generate_audio
+                audio_bytes = generate_audio.remote(prompt, total_dur)
+                audio_url = upload_to_r2(
+                    audio_bytes, job_id,
+                    suffix="_audio", content_type="audio/mpeg", extension="mp3",
+                )
+                log(job_id, f"audio uploaded → {audio_url}")
+
+                update_job(job_id, current_stage="muxing_audio")
+                muxed_bytes = mux_audio.remote(final_bytes, audio_bytes)
+                final_url = upload_to_r2(muxed_bytes, job_id, suffix="_with_audio")
+                log(job_id, f"muxed video+audio → {final_url}")
+                update_job(job_id, audio_url=audio_url)
+            except Exception as e:
+                log(job_id, f"audio generation skipped (non-blocking): {e}")
+
         update_job(
             job_id,
             status="done",
             current_stage="completed",
             video_url=video_url,
-            output_url_final=video_url,
+            output_url_final=final_url,
         )
         log(job_id, f"DONE (multi-scene, {len(clip_urls)} clips)")
         return {"success": True, "video_url": video_url}

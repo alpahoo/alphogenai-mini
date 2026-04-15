@@ -77,7 +77,7 @@ class SeedanceEngine(BaseEngine):
                 "duration": duration,
                 "resolution": "720p",
                 "aspect_ratio": "16:9",
-                "generate_audio": False,
+                "generate_audio": True,
                 "web_search": False,
                 "nsfw_checker": False,
             },

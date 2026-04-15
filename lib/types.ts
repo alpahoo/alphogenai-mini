@@ -16,6 +16,8 @@ export type JobStage =
   | "generating_scene_5"
   | "encoding"
   | "uploading"
+  | "generating_audio"
+  | "muxing_audio"
   | "completed"
   | "failed";
 
@@ -106,6 +108,8 @@ export const STAGE_LABELS: Record<JobStage, string> = {
   generating_scene_5: "Generating scene 5",
   encoding: "Encoding video",
   uploading: "Uploading",
+  generating_audio: "Generating audio",
+  muxing_audio: "Mixing audio",
   completed: "Complete",
   failed: "Failed",
 };
@@ -120,6 +124,8 @@ export const STAGE_ORDER: JobStage[] = [
   "generating_scene_5",
   "encoding",
   "uploading",
+  "generating_audio",
+  "muxing_audio",
   "completed",
 ];
 
