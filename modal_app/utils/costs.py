@@ -14,9 +14,9 @@ ENGINE_COSTS: dict[str, dict] = {
         "billing_model": "per_second",
         "per_second_usd": 0.015,
     },
-    "seedance_kie": {
-        "billing_model": "per_video",
-        "per_video_usd": 0.125,
+    "seedance": {
+        "billing_model": "per_second",
+        "per_second_usd": 0.025,
     },
 }
 

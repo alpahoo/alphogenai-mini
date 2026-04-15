@@ -38,7 +38,16 @@ def select_engine(
         logger.info(f"engine_router: using preferred engine '{preferred}'")
         return preferred
 
-    # 2. Find the first active engine that supports this plan
+    # 2. Explicit priority: pro/premium get seedance when active
+    #    This is intentionally explicit — do NOT rely on dict ordering.
+    if plan in ("pro", "premium") and is_engine_available("seedance", plan):
+        if duration_seconds <= ENGINES.get("seedance", {}).get("max_duration", 999):
+            logger.info(
+                f"engine_router: selected 'seedance' for plan={plan} dur={duration_seconds}s"
+            )
+            return "seedance"
+
+    # 3. Find first active engine that supports this plan (covers free + fallthrough)
     for key, spec in ENGINES.items():
         if spec["status"] == "active" and plan in spec.get("plans", []):
             if duration_seconds <= spec.get("max_duration", 999):
@@ -47,7 +56,7 @@ def select_engine(
                 )
                 return key
 
-    # 3. Fallback — always safe
+    # 4. Fallback — always safe
     logger.warning(
         f"engine_router: no matching engine for plan={plan} dur={duration_seconds}s, "
         f"falling back to '{FALLBACK_ENGINE}'"

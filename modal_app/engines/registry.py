@@ -11,15 +11,30 @@ Adding a new engine:
 """
 from __future__ import annotations
 
+import os
+
 # ---------------------------------------------------------------------------
 # Feature flags
 # ---------------------------------------------------------------------------
 ENABLE_MULTI_GENERATION = False  # OFF — do not enable in production yet
+ENABLE_SEEDANCE = os.environ.get("ENABLE_SEEDANCE", "").lower() == "true"
 
 # ---------------------------------------------------------------------------
 # Engine catalog
+#
+# ORDER MATTERS: router iterates in insertion order and returns the first
+# active match. Seedance must come before wan_i2v so pro/premium users
+# get Seedance when it is active. Free users skip it (not in plans list).
 # ---------------------------------------------------------------------------
 ENGINES: dict[str, dict] = {
+    "seedance": {
+        "name": "Seedance 2.0",
+        "type": "api",
+        "status": "active" if ENABLE_SEEDANCE else "coming_soon",
+        "plans": ["pro", "premium"],
+        "max_duration": 15,          # Kie.ai supports 4-15s
+        "gpu": None,
+    },
     "wan_i2v": {
         "name": "Wan 2.2 I2V",
         "type": "modal_local",       # runs on Modal GPU
@@ -28,14 +43,6 @@ ENGINES: dict[str, dict] = {
         "max_duration": 60,
         "gpu": "A100-80GB",
         "clip_duration": 5.0,        # seconds per clip
-    },
-    "seedance": {
-        "name": "Seedance 2.0",
-        "type": "api",               # future: external API call
-        "status": "coming_soon",
-        "plans": ["pro", "premium"],
-        "max_duration": 120,
-        "gpu": None,
     },
     "kling": {
         "name": "Kling 2.0",
