@@ -467,6 +467,69 @@ def assemble_scenes(job_id: str, clip_urls: list) -> bytes:
         return video_bytes
 
 
+# ---------------------------------------------------------------------------
+# Audio generation (AudioLDM2 on A10G — for Wan only, Seedance has native audio)
+# ---------------------------------------------------------------------------
+audio_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("ffmpeg")
+    .pip_install(
+        "torch==2.2.0",
+        "torchaudio==2.2.0",
+        "diffusers>=0.27.0",
+        "transformers>=4.38.0",
+        "scipy",
+        "accelerate",
+    )
+)
+
+
+@app.function(image=audio_image, gpu="A10G", secrets=[secrets], timeout=300, retries=0)
+def generate_audio(prompt: str, duration_seconds: int = 5) -> bytes:
+    """Generate audio from text prompt using AudioLDM2. Returns MP3 bytes."""
+    import torch
+    import torchaudio
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    from diffusers import AudioLDM2Pipeline
+
+    duration = max(2, min(30, duration_seconds))
+    print(f"[audio] generating {duration}s audio for: {prompt[:60]}")
+
+    pipe = AudioLDM2Pipeline.from_pretrained(
+        "cvssp/audioldm2",
+        torch_dtype=torch.float16,
+    ).to("cuda")
+
+    audio = pipe(
+        prompt=prompt,
+        audio_length_in_s=duration,
+        num_inference_steps=50,
+        guidance_scale=3.5,
+    ).audios[0]
+
+    sample_rate = 16000
+    print(f"[audio] generated {len(audio)} samples at {sample_rate}Hz")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        wav_path = Path(tmpdir) / "audio.wav"
+        mp3_path = Path(tmpdir) / "audio.mp3"
+
+        audio_tensor = torch.tensor(audio).unsqueeze(0)
+        torchaudio.save(str(wav_path), audio_tensor, sample_rate)
+
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(wav_path),
+             "-codec:a", "libmp3lame", "-b:a", "192k", str(mp3_path)],
+            capture_output=True, check=True,
+        )
+        mp3_bytes = mp3_path.read_bytes()
+
+    print(f"[audio] encoded MP3: {len(mp3_bytes) / 1024:.1f} KB")
+    return mp3_bytes
+
+
 @app.function(image=base_image, secrets=[secrets], timeout=120, retries=0)
 def mux_audio(video_bytes: bytes, audio_bytes: bytes) -> bytes:
     """Combine video + audio into a single MP4 using ffmpeg."""
@@ -591,7 +654,7 @@ def generate_video_complete(
                 try:
                     update_job(job_id, current_stage="generating_audio")
                     log(job_id, "generating audio via AudioLDM2...")
-                    from modal_app.audio_generator import generate_audio
+                    # generate_audio is defined in this file (above)
                     audio_bytes = generate_audio.remote(prompt, clip_dur)
                     audio_url = upload_to_r2(
                         audio_bytes, job_id,
