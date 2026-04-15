@@ -324,7 +324,7 @@ def generate_clip(prompt: str, job_id: str) -> bytes:
     timeout=3000,
     retries=0,
 )
-def generate_multi_scene(job_id: str, scenes: list, plan: str = "free") -> list:
+def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferred_engine: Optional[str] = None) -> list:
     """
     Generate clips for each scene in the storyboard sequentially.
 
@@ -372,7 +372,7 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free") -> list:
         try:
             from modal_app.engines import select_engine, generate_with_fallback
             scene_dur = int(scene.get("duration_sec", 5))
-            engine_key = select_engine(plan=plan, duration_seconds=scene_dur)
+            engine_key = select_engine(plan=plan, duration_seconds=scene_dur, preferred=preferred_engine)
             video_bytes, actual_engine = generate_with_fallback(
                 engine_key, prompt=scene_prompt,
                 job_id=f"{job_id}_scene_{idx:02d}",
@@ -473,12 +473,18 @@ def assemble_scenes(job_id: str, clip_urls: list) -> bytes:
     timeout=3900,
     retries=0,
 )
-def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = None):
+def generate_video_complete(
+    job_id: str,
+    prompt: str,
+    user_id: Optional[str] = None,
+    preferred_engine: Optional[str] = None,
+):
     import traceback
     from modal_app.engines import init_engines
     init_engines(generate_clip_fn=generate_clip.remote)
 
-    log(job_id, f"orchestrator start | prompt={prompt[:60]}")
+    log(job_id, f"orchestrator start | prompt={prompt[:60]}"
+        f"{f' | preferred={preferred_engine}' if preferred_engine else ''}")
 
     try:
         # Fetch job to read storyboard — scene_count is ALWAYS derived
@@ -504,7 +510,7 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
 
             from modal_app.engines import select_engine, generate_with_fallback
             clip_dur = int(storyboard[0]["duration_sec"]) if storyboard else 5
-            engine_key = select_engine(plan=plan, duration_seconds=clip_dur)
+            engine_key = select_engine(plan=plan, duration_seconds=clip_dur, preferred=preferred_engine)
             log(job_id, f"engine selected: {engine_key}")
 
             # Cost tracking (before generation — recorded even on failure)
@@ -564,7 +570,7 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
         try:
             from modal_app.engines import select_engine as _sel
             from modal_app.utils.costs import estimate_cost
-            ms_engine_key = _sel(plan=plan, duration_seconds=int(storyboard[0].get("duration_sec", 5)))
+            ms_engine_key = _sel(plan=plan, duration_seconds=int(storyboard[0].get("duration_sec", 5)), preferred=preferred_engine)
             estimated_cost = round(estimate_cost(ms_engine_key, total_dur), 4)
             log(job_id, f"cost estimated: {ms_engine_key} × {len(storyboard)} scenes → ${estimated_cost:.4f}")
             update_job(job_id, engine_used=ms_engine_key, estimated_cost_usd=estimated_cost)
@@ -572,7 +578,7 @@ def generate_video_complete(job_id: str, prompt: str, user_id: Optional[str] = N
             log(job_id, f"cost tracking skipped: {e}")
 
         # Step 1: generate all scene clips
-        ms_result = generate_multi_scene.remote(job_id, storyboard, plan)
+        ms_result = generate_multi_scene.remote(job_id, storyboard, plan, preferred_engine)
         clip_urls = ms_result["clip_urls"]
         ms_any_fallback = ms_result["any_fallback"]
 
@@ -633,6 +639,7 @@ def webhook():
         plan: str = "free"
         user_id: Optional[str] = None
         scene_count: int = 1  # Phase 2: number of scenes from storyboard
+        preferred_engine: Optional[str] = None  # User's engine preference
 
     @web.post("/webhook")
     async def trigger(req: JobRequest, x_webhook_secret: str = Header(None)):
@@ -651,7 +658,9 @@ def webhook():
             print(f"[webhook] status update failed: {e}")
 
         try:
-            await generate_video_complete.spawn.aio(req.job_id, req.prompt, req.user_id)
+            await generate_video_complete.spawn.aio(
+                req.job_id, req.prompt, req.user_id, req.preferred_engine
+            )
         except Exception as e:
             print(f"[webhook] spawn failed: {e}")
             try:

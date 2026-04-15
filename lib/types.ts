@@ -78,6 +78,7 @@ export interface CreateJobRequest {
   prompt: string;
   plan?: JobPlan;
   target_duration_seconds?: number;
+  preferred_engine?: EngineKey;
 }
 
 export interface CreateJobResponse {

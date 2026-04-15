@@ -24,7 +24,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { SegmentedControl } from "@/components/create/segmented-control";
 import { ComingSoonSection } from "@/components/create/coming-soon-section";
-import type { JobPlan } from "@/lib/types";
+import type { JobPlan, EngineKey } from "@/lib/types";
+import { ENGINE_DISPLAY_NAMES } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Mode config
@@ -85,6 +86,7 @@ export default function CreateModePage({
   // Form
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState("5");
+  const [selectedEngine, setSelectedEngine] = useState<EngineKey | "auto">("auto");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
@@ -139,6 +141,7 @@ export default function CreateModePage({
         body: JSON.stringify({
           prompt: trimmed,
           target_duration_seconds: parseInt(duration, 10),
+          ...(selectedEngine !== "auto" && { preferred_engine: selectedEngine }),
         }),
       });
       const data = await res.json();
@@ -302,18 +305,46 @@ export default function CreateModePage({
                     </div>
                   </ComingSoonSection>
 
-                  <ComingSoonSection label="Model">
-                    <div className="flex gap-2">
-                      <div className="rounded-md border border-primary/30 bg-primary/5 px-2.5 py-1 text-[11px] font-medium">
-                        <Cpu className="inline h-3 w-3 mr-0.5" />
-                        Wan 2.2 I2V
-                      </div>
-                      <div className="rounded-md border border-border/40 bg-muted/20 px-2.5 py-1 text-[11px]">
-                        <Cpu className="inline h-3 w-3 mr-0.5" />
-                        Seedance 2.0
-                      </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Model</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {(
+                        [
+                          { key: "auto" as const, label: "Auto", desc: "Best for your plan" },
+                          { key: "wan_i2v" as const, label: "Wan 2.2 I2V", desc: "GPU • up to 60s" },
+                          { key: "seedance" as const, label: "Seedance 2.0", desc: "API • up to 15s", proOnly: true },
+                        ] as const
+                      ).map((opt) => {
+                        const locked = opt.proOnly && plan === "free";
+                        const active = selectedEngine === opt.key;
+                        return (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            disabled={locked}
+                            onClick={() => setSelectedEngine(opt.key)}
+                            className={`relative rounded-md border px-3 py-1.5 text-[11px] font-medium transition-all ${
+                              active
+                                ? "border-primary/50 bg-primary/10 text-primary"
+                                : locked
+                                ? "border-border/20 bg-muted/10 text-muted-foreground/40 cursor-not-allowed"
+                                : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground cursor-pointer"
+                            }`}
+                            title={locked ? "Pro/Premium only" : opt.desc}
+                          >
+                            <Cpu className="inline h-3 w-3 mr-1" />
+                            {opt.label}
+                            {locked && <Lock className="inline h-2.5 w-2.5 ml-1 opacity-50" />}
+                          </button>
+                        );
+                      })}
                     </div>
-                  </ComingSoonSection>
+                    {plan === "free" && (
+                      <p className="text-[10px] text-muted-foreground/50 mt-1.5">
+                        Seedance requires <Link href="/pricing" className="text-primary hover:underline">Pro plan</Link>
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -395,7 +426,7 @@ export default function CreateModePage({
               </div>
               <div className="flex justify-between">
                 <span>Model</span>
-                <span className="font-medium text-foreground">Wan 2.2 I2V</span>
+                <span className="font-medium text-foreground">{selectedEngine === "auto" ? "Auto" : ENGINE_DISPLAY_NAMES[selectedEngine] ?? selectedEngine}</span>
               </div>
               <div className="flex justify-between">
                 <span>Plan</span>

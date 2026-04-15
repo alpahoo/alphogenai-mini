@@ -16,10 +16,18 @@ export async function POST(req: Request) {
 
     const supabase = createServiceClient();
     const body = await req.json();
-    const { prompt, target_duration_seconds } = body as {
+    const { prompt, target_duration_seconds, preferred_engine } = body as {
       prompt: string;
       target_duration_seconds?: unknown;
+      preferred_engine?: string;
     };
+
+    // Validate preferred_engine if provided
+    const validEngines = ["wan_i2v", "seedance"];
+    const safePreferredEngine =
+      preferred_engine && validEngines.includes(preferred_engine)
+        ? preferred_engine
+        : undefined;
 
     // --- validation ---------------------------------------------------
     if (!prompt || prompt.trim().length < 3) {
@@ -171,6 +179,7 @@ export async function POST(req: Request) {
           plan,
           user_id: user?.id ?? null,
           scene_count: storyboard.length,
+          ...(safePreferredEngine && { preferred_engine: safePreferredEngine }),
         }),
       });
 
