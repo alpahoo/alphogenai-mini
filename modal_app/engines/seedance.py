@@ -45,6 +45,7 @@ class SeedanceEngine(BaseEngine):
         api_key = os.environ.get("KIE_API_KEY")
         if not api_key:
             raise RuntimeError("SeedanceEngine: KIE_API_KEY not set")
+        api_key = api_key.strip()  # guard against trailing whitespace in secrets
 
         # Clamp duration to Kie.ai limits (4-15 seconds)
         duration = max(4, min(15, duration_seconds))
