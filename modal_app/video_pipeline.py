@@ -63,16 +63,16 @@ SVI_LORA_PATH   = "/models/svi-lora/SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_12
 # ---------------------------------------------------------------------------
 NUM_FRAMES      = 81    # ~5s at 16 fps
 FPS             = 16
-NUM_STEPS       = 15    # fast + decent quality on A100
+NUM_STEPS       = 25    # higher quality (was 15 — fast but lower detail)
 GUIDANCE_SCALE  = 3.5
-IMG_HEIGHT      = 480
-IMG_WIDTH       = 832
+IMG_HEIGHT      = 720
+IMG_WIDTH       = 1280  # 720p (was 832×480)
 
 # ---------------------------------------------------------------------------
 # MVP scene limits (server-side hard cap — mirrors lib/storyboard.ts)
 # ---------------------------------------------------------------------------
-MAX_SCENES = {"free": 1, "pro": 3, "premium": 5}
-ABSOLUTE_MAX_SCENES = 5  # never exceed, regardless of plan
+MAX_SCENES = {"free": 1, "pro": 3, "premium": 10}
+ABSOLUTE_MAX_SCENES = 10  # never exceed, regardless of plan
 
 
 # ---------------------------------------------------------------------------
