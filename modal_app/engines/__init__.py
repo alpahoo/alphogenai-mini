@@ -1,22 +1,28 @@
 """
 engines — pluggable engine layer for video generation.
 
+DB-driven adapter instantiation (Session 3/4):
+- wan_i2v → WanEngine (hardcoded, GPU-local)
+- any "api" type → GenericApiEngine from DB config + decrypted secrets
+- unknown/failed → falls back to wan_i2v
+
 Usage (inside video_pipeline.py):
     from engines import init_engines, select_engine, generate_with_fallback
 
     # Once at setup:
     init_engines(generate_clip_fn=generate_clip.remote)
 
-    # Per generation:
-    engine_key = select_engine(plan="pro", duration_seconds=5)
+    # Per generation (pass supabase_client for DB-driven routing):
+    engine_key = select_engine(plan="pro", duration_seconds=5, supabase_client=sb)
     video_bytes, actual_key = generate_with_fallback(
-        engine_key, prompt="...", job_id="...", duration_seconds=5
+        engine_key, prompt="...", job_id="...", duration_seconds=5,
+        supabase_client=sb,
     )
 """
 from __future__ import annotations
 
 import logging
-from typing import Callable, TYPE_CHECKING
+from typing import Callable
 
 from .base import BaseEngine
 from .generic_api import GenericApiEngine
@@ -27,44 +33,65 @@ from .wan import WanEngine
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Adapter registry — maps engine key -> adapter instance.
+# Static adapters (hardcoded)
 # ---------------------------------------------------------------------------
 _wan = WanEngine()
-_seedance = SeedanceEngine()
+_seedance_legacy = SeedanceEngine()  # fallback if DB has no config
 
-_ADAPTERS: dict[str, BaseEngine] = {
-    "seedance": _seedance,
+_STATIC_ADAPTERS: dict[str, BaseEngine] = {
     "wan_i2v": _wan,
+    "seedance": _seedance_legacy,  # legacy fallback — overridden by DB config if available
 }
 
 _initialized = False
 
 
 def init_engines(generate_clip_fn: Callable) -> None:
-    """Inject the generate_clip.remote callable into the Wan adapter.
-    Must be called once before any generation.
-    SeedanceEngine is self-contained (API-based) and needs no injection."""
+    """Inject the generate_clip.remote callable into the Wan adapter."""
     global _initialized
     _wan.set_generate_fn(generate_clip_fn)
     _initialized = True
 
 
-def get_engine_adapter(key: str) -> BaseEngine:
-    """Get an engine adapter by key. Falls back to Wan."""
+def get_engine_adapter(key: str, supabase_client=None) -> BaseEngine:
+    """
+    Dynamically resolve engine adapter:
+    - wan_i2v → always returns _wan (GPU-local, hardcoded)
+    - api-type engine → creates GenericApiEngine from DB config
+    - falls back to _wan if engine not found or misconfigured
+
+    Args:
+        key: engine key (e.g. "wan_i2v", "seedance", "kling")
+        supabase_client: optional DB client for dynamic lookup
+    """
     if not _initialized:
         raise RuntimeError("engines not initialized. Call init_engines() first.")
-    adapter = _ADAPTERS.get(key)
-    if adapter is None:
-        return _ADAPTERS["wan_i2v"]
-    return adapter
+
+    # Wan is always hardcoded (GPU-local, no config needed)
+    if key == "wan_i2v":
+        return _wan
+
+    # Try DB-driven GenericApiEngine first
+    if supabase_client is not None:
+        try:
+            dynamic_engine = _load_dynamic_api_engine(key, supabase_client)
+            if dynamic_engine:
+                return dynamic_engine
+        except Exception as e:
+            logger.warning(f"[get_engine_adapter] DB lookup failed for {key}: {e}")
+
+    # Fall back to static adapter (seedance has a hardcoded implementation)
+    adapter = _STATIC_ADAPTERS.get(key)
+    if adapter is not None:
+        return adapter
+
+    # Ultimate fallback: wan
+    logger.warning(f"[get_engine_adapter] Unknown engine '{key}', falling back to wan_i2v")
+    return _wan
 
 
-def load_generic_engine(engine_id: str, supabase_client) -> GenericApiEngine | None:
-    """Dynamically instantiate a GenericApiEngine from DB config.
-
-    Returns None if engine not found, not API type, or has no api_config.
-    Decrypts secrets and passes them to the adapter.
-    """
+def _load_dynamic_api_engine(engine_id: str, supabase_client) -> GenericApiEngine | None:
+    """Try to load an engine from DB as GenericApiEngine. None if unavailable."""
     from modal_app.utils.encryption import load_engine_secrets
 
     try:
@@ -76,18 +103,31 @@ def load_generic_engine(engine_id: str, supabase_client) -> GenericApiEngine | N
             .execute()
         )
     except Exception as e:
-        logger.warning(f"[load_generic_engine] DB error for {engine_id}: {e}")
+        logger.debug(f"[_load_dynamic_api_engine] Not found in DB: {engine_id} ({e})")
         return None
 
     row = res.data
-    if not row or row.get("type") != "api" or not row.get("api_config"):
+    if not row:
+        return None
+    if row.get("type") != "api":
         return None
     if row.get("status") != "active":
-        logger.info(f"[load_generic_engine] {engine_id} is not active, skipping")
+        logger.info(f"[_load_dynamic_api_engine] {engine_id} is {row.get('status')}, skipping")
+        return None
+    if not row.get("api_config"):
+        logger.info(f"[_load_dynamic_api_engine] {engine_id} has no api_config, skipping")
         return None
 
     secrets = load_engine_secrets(supabase_client, engine_id)
+    logger.info(f"[_load_dynamic_api_engine] Instantiating {engine_id} from DB "
+                f"(secrets: {list(secrets.keys())})")
     return GenericApiEngine(engine_id, row["api_config"], secrets)
+
+
+# Legacy name kept for backward compat
+def load_generic_engine(engine_id: str, supabase_client) -> GenericApiEngine | None:
+    """Deprecated: use get_engine_adapter() instead."""
+    return _load_dynamic_api_engine(engine_id, supabase_client)
 
 
 def generate_with_fallback(
@@ -95,18 +135,16 @@ def generate_with_fallback(
     prompt: str,
     job_id: str,
     duration_seconds: int = 5,
+    supabase_client=None,
     **kwargs,
 ) -> tuple[bytes, str]:
     """
     Try primary engine; on failure, fall back to wan_i2v.
-
     Returns (video_bytes, actual_engine_key_used).
-    If engine_key is already wan_i2v, no fallback wrapper — errors propagate.
     """
-    engine = get_engine_adapter(engine_key)
+    engine = get_engine_adapter(engine_key, supabase_client)
 
     if engine_key == "wan_i2v":
-        # Wan IS the fallback — no wrapping needed
         return engine.generate(
             prompt=prompt, job_id=job_id,
             duration_seconds=duration_seconds, **kwargs,
@@ -123,7 +161,7 @@ def generate_with_fallback(
             f"Engine '{engine_key}' failed for job={job_id} ({e}), "
             f"falling back to wan_i2v"
         )
-        fallback = get_engine_adapter("wan_i2v")
+        fallback = get_engine_adapter("wan_i2v", supabase_client)
         video_bytes = fallback.generate(
             prompt=prompt, job_id=job_id,
             duration_seconds=duration_seconds, **kwargs,

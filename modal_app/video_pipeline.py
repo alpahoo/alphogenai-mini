@@ -398,7 +398,11 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferre
         try:
             from modal_app.engines import select_engine, generate_with_fallback
             scene_dur = int(scene.get("duration_sec", 5))
-            engine_key = select_engine(plan=plan, duration_seconds=scene_dur, preferred=preferred_engine)
+            ms_sb = get_supabase_client()
+            engine_key = select_engine(
+                plan=plan, duration_seconds=scene_dur, preferred=preferred_engine,
+                supabase_client=ms_sb,
+            )
             # Only first scene (idx=0) gets the user-uploaded image
             scene_image_url = image_url if idx == 0 else None
             video_bytes, actual_engine = generate_with_fallback(
@@ -406,6 +410,7 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferre
                 job_id=f"{job_id}_scene_{idx:02d}",
                 duration_seconds=scene_dur,
                 image_url=scene_image_url,
+                supabase_client=ms_sb,
             )
             if actual_engine != engine_key:
                 log(job_id, f"scene [{idx+1}/{total}] fallback: {engine_key} → {actual_engine}")
@@ -682,14 +687,18 @@ def generate_video_complete(
             update_job(job_id, status="in_progress", current_stage="generating_scene_1")
 
             from modal_app.engines import select_engine, generate_with_fallback
+            supabase_client_for_engines = get_supabase_client()
             clip_dur = int(storyboard[0]["duration_sec"]) if storyboard else 5
-            engine_key = select_engine(plan=plan, duration_seconds=clip_dur, preferred=preferred_engine)
+            engine_key = select_engine(
+                plan=plan, duration_seconds=clip_dur, preferred=preferred_engine,
+                supabase_client=supabase_client_for_engines,
+            )
             log(job_id, f"engine selected: {engine_key}")
 
             # Cost tracking (before generation — recorded even on failure)
             try:
                 from modal_app.utils.costs import estimate_cost
-                estimated_cost = round(estimate_cost(engine_key, clip_dur), 4)
+                estimated_cost = round(estimate_cost(engine_key, clip_dur, supabase_client_for_engines), 4)
                 log(job_id, f"cost estimated: {engine_key} → ${estimated_cost:.4f}")
                 update_job(job_id, engine_used=engine_key, estimated_cost_usd=estimated_cost)
             except Exception as e:
@@ -697,14 +706,14 @@ def generate_video_complete(
 
             video_bytes, actual_engine = generate_with_fallback(
                 engine_key, prompt=prompt, job_id=job_id, duration_seconds=clip_dur,
-                image_url=image_url,
+                image_url=image_url, supabase_client=supabase_client_for_engines,
             )
             if actual_engine != engine_key:
                 log(job_id, f"fallback triggered: {engine_key} → {actual_engine}")
                 update_job(job_id, engine_used=actual_engine)
                 try:
                     from modal_app.utils.costs import estimate_cost
-                    fallback_cost = round(estimate_cost(actual_engine, clip_dur), 4)
+                    fallback_cost = round(estimate_cost(actual_engine, clip_dur, supabase_client_for_engines), 4)
                     update_job(job_id, estimated_cost_usd=fallback_cost)
                 except Exception:
                     pass
@@ -774,8 +783,12 @@ def generate_video_complete(
         try:
             from modal_app.engines import select_engine as _sel
             from modal_app.utils.costs import estimate_cost
-            ms_engine_key = _sel(plan=plan, duration_seconds=int(storyboard[0].get("duration_sec", 5)), preferred=preferred_engine)
-            estimated_cost = round(estimate_cost(ms_engine_key, total_dur), 4)
+            orchestrator_sb = get_supabase_client()
+            ms_engine_key = _sel(
+                plan=plan, duration_seconds=int(storyboard[0].get("duration_sec", 5)),
+                preferred=preferred_engine, supabase_client=orchestrator_sb,
+            )
+            estimated_cost = round(estimate_cost(ms_engine_key, total_dur, orchestrator_sb), 4)
             log(job_id, f"cost estimated: {ms_engine_key} × {len(storyboard)} scenes → ${estimated_cost:.4f}")
             update_job(job_id, engine_used=ms_engine_key, estimated_cost_usd=estimated_cost)
         except Exception as e:
@@ -793,7 +806,7 @@ def generate_video_complete(
             log(job_id, "multi-scene fallback detected → engine_used = wan_i2v")
             try:
                 from modal_app.utils.costs import estimate_cost
-                fallback_cost = round(estimate_cost("wan_i2v", total_dur), 4)
+                fallback_cost = round(estimate_cost("wan_i2v", total_dur, get_supabase_client()), 4)
                 update_job(job_id, engine_used="wan_i2v", estimated_cost_usd=fallback_cost)
             except Exception:
                 update_job(job_id, engine_used="wan_i2v")
