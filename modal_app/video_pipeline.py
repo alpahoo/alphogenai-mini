@@ -593,6 +593,86 @@ def mux_audio(video_bytes: bytes, audio_bytes: bytes) -> bytes:
         return muxed
 
 
+@app.function(image=base_image, secrets=[secrets], timeout=300, retries=0)
+def export_social_formats(video_url: str, job_id: str) -> dict:
+    """Re-encode video into TikTok (9:16), Instagram (1:1), and YouTube (16:9) formats.
+
+    Downloads the original, runs ffmpeg crop/pad, uploads each to R2.
+    Returns dict of { tiktok: url, instagram: url, youtube: url }.
+    """
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    import httpx
+
+    print(f"[social] job={job_id} downloading source video...")
+    with httpx.Client(timeout=60) as client:
+        resp = client.get(video_url)
+        resp.raise_for_status()
+    video_bytes = resp.content
+    print(f"[social] downloaded {len(video_bytes) / 1e6:.1f} MB")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_path = Path(tmpdir) / "input.mp4"
+        input_path.write_bytes(video_bytes)
+
+        # Probe original dimensions
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height",
+             "-of", "csv=s=x:p=0", str(input_path)],
+            capture_output=True, text=True,
+        )
+        w, h = map(int, probe.stdout.strip().split("x")) if "x" in probe.stdout else (1280, 720)
+        print(f"[social] source: {w}x{h}")
+
+        results = {}
+
+        # 9:16 TikTok (vertical) — crop center horizontally, pad if needed
+        tiktok_path = Path(tmpdir) / "tiktok.mp4"
+        target_w_9_16 = int(h * 9 / 16)  # width based on original height
+        if target_w_9_16 > w:
+            # Need to pad (add black bars top/bottom to make it 9:16)
+            target_h = int(w * 16 / 9)
+            vf = f"scale={w}:{target_h}:force_original_aspect_ratio=decrease,pad={w}:{target_h}:(ow-iw)/2:(oh-ih)/2:black"
+        else:
+            # Crop from center
+            vf = f"crop={target_w_9_16}:{h}:(iw-{target_w_9_16})/2:0"
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(input_path), "-vf", vf,
+             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+             "-c:a", "aac", "-b:a", "192k", str(tiktok_path)],
+            capture_output=True, check=True,
+        )
+        tiktok_url = upload_to_r2(tiktok_path.read_bytes(), job_id, suffix="_tiktok")
+        results["tiktok"] = tiktok_url
+        print(f"[social] tiktok: {tiktok_path.stat().st_size / 1e6:.1f} MB → {tiktok_url}")
+
+        # 1:1 Instagram (square) — crop to square from center
+        insta_path = Path(tmpdir) / "insta.mp4"
+        side = min(w, h)
+        vf_insta = f"crop={side}:{side}:(iw-{side})/2:(ih-{side})/2"
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(input_path), "-vf", vf_insta,
+             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+             "-c:a", "aac", "-b:a", "192k", str(insta_path)],
+            capture_output=True, check=True,
+        )
+        insta_url = upload_to_r2(insta_path.read_bytes(), job_id, suffix="_insta")
+        results["instagram"] = insta_url
+        print(f"[social] instagram: {insta_path.stat().st_size / 1e6:.1f} MB → {insta_url}")
+
+        # 16:9 YouTube — original is already 16:9 (or close), just copy
+        results["youtube"] = video_url
+        print(f"[social] youtube: using original → {video_url}")
+
+        # Update job
+        update_job(job_id, social_exports=results)
+        print(f"[social] job={job_id} DONE — 3 formats exported")
+
+    return results
+
+
 @app.function(image=base_image, secrets=[secrets], timeout=120, retries=0)
 def add_watermark(video_bytes: bytes) -> bytes:
     """Overlay 'AlphoGenAI' watermark on video (free plan only). Uses ffmpeg drawtext."""

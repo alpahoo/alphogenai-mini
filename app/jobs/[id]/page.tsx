@@ -24,6 +24,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Sidebar } from "@/components/workspace/sidebar";
 import { JobCostBadge } from "@/components/job/JobCostBadge";
+import { SocialExportPanel } from "@/components/job/social-export-panel";
 import { SHOW_COST_TRACKING_UI, isAdminEmail } from "@/lib/flags";
 import type { Job, JobStage, JobScene } from "@/lib/types";
 import { STAGE_ORDER, getEngineDisplayName } from "@/lib/types";
@@ -450,6 +451,16 @@ function InfoCards({
           <Crown className="h-4 w-4" />
           <div><p>Unlock longer videos</p><p className="font-normal opacity-80">Up to 60s, 3 scenes</p></div>
         </Link>
+      )}
+
+      {/* Social Export */}
+      {isDone && (
+        <SocialExportPanel
+          jobId={job.id}
+          plan={job.plan}
+          videoUrl={job.output_url_final || job.video_url || ""}
+          existingExports={(job as Record<string, unknown>).social_exports as Record<string, string> | undefined}
+        />
       )}
 
       {/* Quick actions */}

@@ -1,0 +1,262 @@
+"use client";
+
+import { useState } from "react";
+import {
+  Loader2,
+  Download,
+  Copy,
+  Check,
+  Smartphone,
+  Square,
+  Monitor,
+  Sparkles,
+  Crown,
+} from "lucide-react";
+import Link from "next/link";
+import type { SocialMetadata } from "@/lib/social-metadata";
+
+interface SocialExportPanelProps {
+  jobId: string;
+  plan: string;
+  videoUrl: string;
+  existingExports?: Record<string, string>;
+}
+
+const FORMATS = [
+  { key: "tiktok", label: "TikTok / Reels", ratio: "9:16", icon: Smartphone, color: "text-pink-400" },
+  { key: "instagram", label: "Instagram", ratio: "1:1", icon: Square, color: "text-purple-400" },
+  { key: "youtube", label: "YouTube", ratio: "16:9", icon: Monitor, color: "text-red-400" },
+] as const;
+
+export function SocialExportPanel({ jobId, plan, videoUrl, existingExports }: SocialExportPanelProps) {
+  const [exports, setExports] = useState<Record<string, string>>(existingExports || {});
+  const [exporting, setExporting] = useState(false);
+  const [metadata, setMetadata] = useState<SocialMetadata | null>(null);
+  const [loadingMeta, setLoadingMeta] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+  const isFree = plan === "free";
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/export-social`, { method: "POST" });
+      const data = await res.json();
+      if (data.formats) {
+        setExports(data.formats);
+      }
+    } catch (e) {
+      console.error("Export failed:", e);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleGenerateMetadata = async () => {
+    setLoadingMeta(true);
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/generate-metadata`, { method: "POST" });
+      const data = await res.json();
+      if (data.metadata) setMetadata(data.metadata);
+    } catch (e) {
+      console.error("Metadata generation failed:", e);
+    } finally {
+      setLoadingMeta(false);
+    }
+  };
+
+  const copyToClipboard = async (text: string, key: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  if (isFree) {
+    return (
+      <div className="rounded-xl border border-border/40 bg-card/60 p-5">
+        <div className="flex items-center gap-2 mb-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold">Export for Social Media</h3>
+        </div>
+        <p className="text-xs text-muted-foreground mb-3">
+          Export your video in TikTok, Instagram, and YouTube formats with
+          AI-generated titles, hashtags, and descriptions.
+        </p>
+        <Link
+          href="/pricing"
+          className="flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-500 px-4 py-2.5 text-xs font-semibold text-white hover:brightness-110"
+        >
+          <Crown className="h-3.5 w-3.5" />
+          Upgrade to Pro
+        </Link>
+      </div>
+    );
+  }
+
+  const hasExports = Object.keys(exports).length > 0;
+
+  return (
+    <div className="rounded-xl border border-border/40 bg-card/60 p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold">Export for Social</h3>
+        </div>
+        {!hasExports && (
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-50"
+          >
+            {exporting ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Download className="h-3 w-3" />
+            )}
+            {exporting ? "Exporting..." : "Export Formats"}
+          </button>
+        )}
+      </div>
+
+      {/* Format downloads */}
+      <div className="grid gap-2">
+        {FORMATS.map((fmt) => {
+          const url = exports[fmt.key] || (fmt.key === "youtube" ? videoUrl : null);
+          return (
+            <div
+              key={fmt.key}
+              className="flex items-center justify-between rounded-lg border border-border/30 bg-background/40 px-3 py-2"
+            >
+              <div className="flex items-center gap-2">
+                <fmt.icon className={`h-4 w-4 ${fmt.color}`} />
+                <div>
+                  <span className="text-xs font-medium">{fmt.label}</span>
+                  <span className="ml-2 text-[10px] text-muted-foreground">{fmt.ratio}</span>
+                </div>
+              </div>
+              {url ? (
+                <a
+                  href={url}
+                  download
+                  className="rounded-md border border-border bg-background/50 px-2 py-1 text-[10px] font-medium hover:bg-muted/40"
+                >
+                  Download
+                </a>
+              ) : (
+                <span className="text-[10px] text-muted-foreground">
+                  {exporting ? "Processing..." : "Click Export"}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Metadata */}
+      <div className="border-t border-border/30 pt-4">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            AI-Generated Copy
+          </h4>
+          {!metadata && (
+            <button
+              onClick={handleGenerateMetadata}
+              disabled={loadingMeta}
+              className="flex items-center gap-1 rounded-md border border-border bg-background/50 px-2 py-1 text-[10px] font-medium hover:bg-muted/40 disabled:opacity-50"
+            >
+              {loadingMeta ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Sparkles className="h-3 w-3" />
+              )}
+              Generate
+            </button>
+          )}
+        </div>
+
+        {metadata ? (
+          <div className="space-y-3">
+            {/* Title */}
+            <CopyField label="Title" value={metadata.title} copied={copied} onCopy={copyToClipboard} />
+
+            {/* Hashtags */}
+            <CopyField
+              label="Hashtags"
+              value={metadata.hashtags.join(" ")}
+              copied={copied}
+              onCopy={copyToClipboard}
+            />
+
+            {/* Platform descriptions */}
+            <CopyField
+              label="TikTok / Reels"
+              value={metadata.description_tiktok}
+              copied={copied}
+              onCopy={copyToClipboard}
+              multiline
+            />
+            <CopyField
+              label="YouTube"
+              value={metadata.description_youtube}
+              copied={copied}
+              onCopy={copyToClipboard}
+              multiline
+            />
+            <CopyField
+              label="Instagram"
+              value={metadata.description_instagram}
+              copied={copied}
+              onCopy={copyToClipboard}
+              multiline
+            />
+          </div>
+        ) : (
+          <p className="text-[11px] text-muted-foreground/60">
+            Click &quot;Generate&quot; to get AI-crafted titles, hashtags, and
+            descriptions optimized for each platform.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CopyField({
+  label,
+  value,
+  copied,
+  onCopy,
+  multiline = false,
+}: {
+  label: string;
+  value: string;
+  copied: string | null;
+  onCopy: (text: string, key: string) => void;
+  multiline?: boolean;
+}) {
+  const key = label.toLowerCase().replace(/\s/g, "_");
+  return (
+    <div className="rounded-md border border-border/20 bg-background/30 p-2">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[10px] font-medium text-muted-foreground">{label}</span>
+        <button
+          onClick={() => onCopy(value, key)}
+          className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+        >
+          {copied === key ? (
+            <Check className="h-3 w-3 text-green-400" />
+          ) : (
+            <Copy className="h-3 w-3" />
+          )}
+          {copied === key ? "Copied" : "Copy"}
+        </button>
+      </div>
+      {multiline ? (
+        <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed">
+          {value}
+        </pre>
+      ) : (
+        <p className="text-[11px] text-foreground">{value}</p>
+      )}
+    </div>
+  );
+}
