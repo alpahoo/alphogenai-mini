@@ -11,6 +11,9 @@ import {
   Plus,
   Trash2,
   AlertCircle,
+  CheckCircle,
+  XCircle,
+  PlayCircle,
 } from "lucide-react";
 
 interface Engine {
@@ -39,7 +42,11 @@ export default function EngineDetailPage() {
   const [engine, setEngine] = useState<Engine | null>(null);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [apiConfigJson, setApiConfigJson] = useState<string>("");
+  const [apiConfigError, setApiConfigError] = useState<string | null>(null);
 
   // Form state for new engine
   const [form, setForm] = useState({
@@ -79,6 +86,11 @@ export default function EngineDetailPage() {
             cost_per_second: d.engine.cost?.per_second_usd ?? 0.025,
             cost_per_video: d.engine.cost?.per_video_usd ?? 0.1,
           });
+          setApiConfigJson(
+            d.engine.api_config && Object.keys(d.engine.api_config).length > 0
+              ? JSON.stringify(d.engine.api_config, null, 2)
+              : ""
+          );
         }
       })
       .finally(() => setLoading(false));
@@ -118,6 +130,18 @@ export default function EngineDetailPage() {
         if (!res.ok) throw new Error(data.error);
         router.push(`/admin/engines/${form.id}`);
       } else {
+        // Parse api_config JSON
+        let apiConfig: object = {};
+        if (apiConfigJson.trim()) {
+          try {
+            apiConfig = JSON.parse(apiConfigJson);
+            setApiConfigError(null);
+          } catch (e) {
+            setApiConfigError(e instanceof Error ? e.message : "Invalid JSON");
+            throw new Error("api_config is invalid JSON");
+          }
+        }
+
         // Update engine
         await fetch(`/api/admin/engines/${id}`, {
           method: "PATCH",
@@ -130,6 +154,7 @@ export default function EngineDetailPage() {
             gpu: form.gpu || null,
             clip_duration: form.clip_duration ? Number(form.clip_duration) : null,
             priority: form.priority,
+            api_config: apiConfig,
           }),
         });
         // Update plans
@@ -185,6 +210,20 @@ export default function EngineDetailPage() {
       method: "DELETE",
     });
     fetchEngine();
+  };
+
+  const testConnection = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch(`/api/admin/engines/${id}/test`, { method: "POST" });
+      const data = await res.json();
+      setTestResult(data);
+    } catch (e) {
+      setTestResult({ success: false, error: e instanceof Error ? e.message : "Test failed" });
+    } finally {
+      setTesting(false);
+    }
   };
 
   const deleteEngine = async () => {
@@ -393,6 +432,60 @@ export default function EngineDetailPage() {
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* API Config (JSONB) — only for api-type engines */}
+      {!isNew && engine && form.type === "api" && (
+        <div className="rounded-xl border border-border/40 bg-card/60 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">API Config (Generic Adapter)</h2>
+            <button
+              onClick={testConnection}
+              disabled={testing}
+              className="flex items-center gap-1 rounded-md border border-border bg-background/50 px-2 py-1 text-xs hover:bg-muted/40 disabled:opacity-50"
+            >
+              {testing ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <PlayCircle className="h-3 w-3" />
+              )}
+              Test Connection
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            JSON config for generic REST adapter. Supports {"{{prompt}}"}, {"{{duration}}"},
+            {" {{image_url}}"}, {"{{task_id}}"}, {"{{secrets.name}}"} placeholders.
+          </p>
+          <textarea
+            value={apiConfigJson}
+            onChange={(e) => {
+              setApiConfigJson(e.target.value);
+              setApiConfigError(null);
+            }}
+            placeholder='{"create_task": {"url": "...", "body": {...}}, "poll_task": {...}}'
+            className="h-64 w-full rounded-lg border border-border bg-background/50 px-3 py-2 text-xs font-mono"
+            spellCheck={false}
+          />
+          {apiConfigError && (
+            <p className="text-xs text-destructive">JSON error: {apiConfigError}</p>
+          )}
+          {testResult && (
+            <div
+              className={`flex items-start gap-2 rounded-lg border p-3 text-xs ${
+                testResult.success
+                  ? "border-green-500/30 bg-green-500/5 text-green-400"
+                  : "border-destructive/40 bg-destructive/5 text-destructive"
+              }`}
+            >
+              {testResult.success ? (
+                <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              ) : (
+                <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              )}
+              <span>{testResult.message ?? testResult.error}</span>
             </div>
           )}
         </div>

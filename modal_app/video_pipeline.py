@@ -35,6 +35,7 @@ base_image = (
         "boto3",
         "httpx",
         "sentry-sdk",
+        "cryptography",
     )
     .apt_install("ffmpeg")
     .add_local_python_source("modal_app.engines")
@@ -43,7 +44,7 @@ base_image = (
 
 webhook_image = (
     modal.Image.debian_slim(python_version="3.11")
-    .pip_install("fastapi", "pydantic", "supabase", "httpx", "boto3", "sentry-sdk")
+    .pip_install("fastapi", "pydantic", "supabase", "httpx", "boto3", "sentry-sdk", "cryptography")
 )
 
 # ---------------------------------------------------------------------------

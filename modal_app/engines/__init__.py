@@ -16,9 +16,10 @@ Usage (inside video_pipeline.py):
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from typing import Callable, TYPE_CHECKING
 
 from .base import BaseEngine
+from .generic_api import GenericApiEngine
 from .router import select_engine
 from .seedance import SeedanceEngine
 from .wan import WanEngine
@@ -56,6 +57,37 @@ def get_engine_adapter(key: str) -> BaseEngine:
     if adapter is None:
         return _ADAPTERS["wan_i2v"]
     return adapter
+
+
+def load_generic_engine(engine_id: str, supabase_client) -> GenericApiEngine | None:
+    """Dynamically instantiate a GenericApiEngine from DB config.
+
+    Returns None if engine not found, not API type, or has no api_config.
+    Decrypts secrets and passes them to the adapter.
+    """
+    from modal_app.utils.encryption import load_engine_secrets
+
+    try:
+        res = (
+            supabase_client.table("engines")
+            .select("id, type, api_config, status")
+            .eq("id", engine_id)
+            .single()
+            .execute()
+        )
+    except Exception as e:
+        logger.warning(f"[load_generic_engine] DB error for {engine_id}: {e}")
+        return None
+
+    row = res.data
+    if not row or row.get("type") != "api" or not row.get("api_config"):
+        return None
+    if row.get("status") != "active":
+        logger.info(f"[load_generic_engine] {engine_id} is not active, skipping")
+        return None
+
+    secrets = load_engine_secrets(supabase_client, engine_id)
+    return GenericApiEngine(engine_id, row["api_config"], secrets)
 
 
 def generate_with_fallback(
