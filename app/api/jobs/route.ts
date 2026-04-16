@@ -16,11 +16,18 @@ export async function POST(req: Request) {
 
     const supabase = createServiceClient();
     const body = await req.json();
-    const { prompt, target_duration_seconds, preferred_engine } = body as {
+    const { prompt, target_duration_seconds, preferred_engine, image_url } = body as {
       prompt: string;
       target_duration_seconds?: unknown;
       preferred_engine?: string;
+      image_url?: string;
     };
+
+    // Validate image_url if provided
+    const safeImageUrl =
+      image_url && typeof image_url === "string" && image_url.startsWith("http")
+        ? image_url
+        : undefined;
 
     // Validate preferred_engine if provided
     const validEngines = ["wan_i2v", "seedance"];
@@ -122,6 +129,7 @@ export async function POST(req: Request) {
         current_stage: "queued",
         target_duration_seconds: Math.round(targetDuration),
         storyboard,
+        ...(safeImageUrl ? { image_url: safeImageUrl } : {}),
         ...(user?.id ? { user_id: user.id } : {}),
       })
       .select()
@@ -179,6 +187,7 @@ export async function POST(req: Request) {
           plan,
           user_id: user?.id ?? null,
           scene_count: storyboard.length,
+          ...(safeImageUrl && { image_url: safeImageUrl }),
           ...(safePreferredEngine && { preferred_engine: safePreferredEngine }),
         }),
       });

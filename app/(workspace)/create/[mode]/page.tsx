@@ -87,10 +87,48 @@ export default function CreateModePage({
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState("5");
   const [selectedEngine, setSelectedEngine] = useState<EngineKey | "auto">("auto");
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      setError("Image too large (max 10MB)");
+      return;
+    }
+
+    // Preview
+    setImagePreview(URL.createObjectURL(file));
+    setUploading(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setUploadedImageUrl(data.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+      setImagePreview(null);
+      setUploadedImageUrl(null);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const clearImage = () => {
+    setUploadedImageUrl(null);
+    setImagePreview(null);
+  };
 
   useEffect(() => {
     async function fetchPlan() {
@@ -141,6 +179,7 @@ export default function CreateModePage({
         body: JSON.stringify({
           prompt: trimmed,
           target_duration_seconds: parseInt(duration, 10),
+          ...(uploadedImageUrl && { image_url: uploadedImageUrl }),
           ...(selectedEngine !== "auto" && { preferred_engine: selectedEngine }),
         }),
       });
@@ -215,6 +254,49 @@ export default function CreateModePage({
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* ── Reference Image (I2V) ──────────────────────────── */}
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                Reference image <span className="text-muted-foreground/50">(optional)</span>
+              </p>
+              {imagePreview ? (
+                <div className="relative inline-block">
+                  <img
+                    src={imagePreview}
+                    alt="Reference"
+                    className="h-24 w-auto rounded-lg border border-border/40 object-cover"
+                  />
+                  {uploading && (
+                    <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/50">
+                      <Loader2 className="h-5 w-5 animate-spin text-white" />
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={clearImage}
+                    className="absolute -top-2 -right-2 rounded-full bg-destructive p-0.5 text-destructive-foreground hover:brightness-110"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <label className="flex h-20 w-full cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-border/40 bg-muted/10 text-xs text-muted-foreground transition-colors hover:border-border hover:bg-muted/20">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                  <span className="flex items-center gap-2">
+                    <Film className="h-4 w-4" />
+                    Drop an image or click to upload
+                  </span>
+                </label>
+              )}
             </div>
 
             {/* ── Duration ───────────────────────────────────────── */}

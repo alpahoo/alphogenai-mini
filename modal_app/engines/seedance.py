@@ -50,10 +50,14 @@ class SeedanceEngine(BaseEngine):
         # Clamp duration to Kie.ai limits (4-15 seconds)
         duration = max(4, min(15, duration_seconds))
 
-        logger.info(f"[seedance] job={job_id} submitting to Kie.ai (dur={duration}s)")
+        image_url = kwargs.get("image_url")
+        logger.info(
+            f"[seedance] job={job_id} submitting to Kie.ai (dur={duration}s)"
+            f"{f' | I2V: {image_url[:60]}' if image_url else ''}"
+        )
 
         # ----- 1. Create generation task -----
-        task_id = self._create_task(api_key, prompt, duration)
+        task_id = self._create_task(api_key, prompt, duration, image_url=image_url)
         logger.info(f"[seedance] job={job_id} taskId={task_id}")
 
         # ----- 2. Poll until complete -----
@@ -68,19 +72,27 @@ class SeedanceEngine(BaseEngine):
 
     # -- internal helpers --------------------------------------------------
 
-    def _create_task(self, api_key: str, prompt: str, duration: int) -> str:
+    def _create_task(
+        self, api_key: str, prompt: str, duration: int, image_url: str | None = None
+    ) -> str:
         """Submit a generation task to Kie.ai. Returns taskId."""
+        input_params: dict = {
+            "prompt": prompt,
+            "duration": duration,
+            "resolution": "720p",
+            "aspect_ratio": "16:9",
+            "generate_audio": True,
+            "web_search": False,
+            "nsfw_checker": False,
+        }
+
+        # I2V mode: pass user image as first frame
+        if image_url:
+            input_params["first_frame_url"] = image_url
+
         payload = {
             "model": KIE_MODEL_SEEDANCE,
-            "input": {
-                "prompt": prompt,
-                "duration": duration,
-                "resolution": "720p",
-                "aspect_ratio": "16:9",
-                "generate_audio": True,
-                "web_search": False,
-                "nsfw_checker": False,
-            },
+            "input": input_params,
         }
 
         with httpx.Client(timeout=KIE_HTTP_TIMEOUT) as client:

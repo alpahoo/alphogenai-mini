@@ -218,12 +218,14 @@ def update_scene(job_id: str, scene_index: int, **fields):
     volumes={"/models": models_volume},
     secrets=[secrets],
 )
-def generate_clip(prompt: str, job_id: str) -> bytes:
+def generate_clip(prompt: str, job_id: str, image_url: Optional[str] = None) -> bytes:
     """
     Single-clip pipeline:
-      1. SDXL-Turbo → 1 image
+      1. User image OR SDXL-Turbo → 1 image
       2. Wan2.2-I2V-A14B → 81 frames (~5s)
       3. ffmpeg → MP4 bytes
+
+    If image_url is provided, skips T2I and downloads the user's image.
     """
     import torch
     import gc
@@ -233,29 +235,45 @@ def generate_clip(prompt: str, job_id: str) -> bytes:
     import tempfile
     from pathlib import Path
 
-    log(job_id, f"generate_clip start | GPU={GPU} steps={NUM_STEPS}")
+    log(job_id, f"generate_clip start | GPU={GPU} steps={NUM_STEPS}"
+        f"{' | I2V mode (user image)' if image_url else ''}")
 
     # --- verify models ------------------------------------------------
+    wan_needed = True
+    t2i_needed = not image_url
     for name, path in [("SDXL-Turbo", SDXL_TURBO_PATH), ("Wan 14B", WAN_PATH)]:
+        if name == "SDXL-Turbo" and not t2i_needed:
+            continue
         if not Path(path).exists():
             vol = Path("/models")
             contents = [c.name for c in vol.iterdir()] if vol.exists() else []
             raise FileNotFoundError(f"{name} missing at {path}. Volume has: {contents}")
         log(job_id, f"{name} OK")
 
-    # --- step 1: SDXL-Turbo (T2I) ------------------------------------
-    log(job_id, "loading SDXL-Turbo")
-    t2i = AutoPipelineForText2Image.from_pretrained(
-        SDXL_TURBO_PATH, torch_dtype=torch.float16, local_files_only=True,
-    ).to("cuda")
+    # --- step 1: Get first frame image --------------------------------
+    if image_url:
+        # I2V mode: download user-uploaded image
+        import httpx
+        from io import BytesIO
+        log(job_id, f"downloading user image: {image_url[:80]}")
+        resp = httpx.get(image_url, timeout=30)
+        resp.raise_for_status()
+        image = Image.open(BytesIO(resp.content)).convert("RGB")
+        log(job_id, f"user image loaded {image.size}")
+    else:
+        # T2I mode: generate image via SDXL-Turbo
+        log(job_id, "loading SDXL-Turbo")
+        t2i = AutoPipelineForText2Image.from_pretrained(
+            SDXL_TURBO_PATH, torch_dtype=torch.float16, local_files_only=True,
+        ).to("cuda")
 
-    image = t2i(
-        prompt=prompt, num_inference_steps=4, guidance_scale=0.0,
-        height=IMG_HEIGHT, width=IMG_WIDTH,
-    ).images[0]
-    log(job_id, f"image generated {image.size}")
+        image = t2i(
+            prompt=prompt, num_inference_steps=4, guidance_scale=0.0,
+            height=IMG_HEIGHT, width=IMG_WIDTH,
+        ).images[0]
+        log(job_id, f"image generated {image.size}")
 
-    del t2i; gc.collect(); torch.cuda.empty_cache()
+        del t2i; gc.collect(); torch.cuda.empty_cache()
 
     # resize for Wan (must be divisible by 16)
     max_area = IMG_HEIGHT * IMG_WIDTH
@@ -330,7 +348,7 @@ def generate_clip(prompt: str, job_id: str) -> bytes:
     timeout=3000,
     retries=0,
 )
-def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferred_engine: Optional[str] = None) -> list:
+def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferred_engine: Optional[str] = None, image_url: Optional[str] = None) -> list:
     """
     Generate clips for each scene in the storyboard sequentially.
 
@@ -379,10 +397,13 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferre
             from modal_app.engines import select_engine, generate_with_fallback
             scene_dur = int(scene.get("duration_sec", 5))
             engine_key = select_engine(plan=plan, duration_seconds=scene_dur, preferred=preferred_engine)
+            # Only first scene (idx=0) gets the user-uploaded image
+            scene_image_url = image_url if idx == 0 else None
             video_bytes, actual_engine = generate_with_fallback(
                 engine_key, prompt=scene_prompt,
                 job_id=f"{job_id}_scene_{idx:02d}",
                 duration_seconds=scene_dur,
+                image_url=scene_image_url,
             )
             if actual_engine != engine_key:
                 log(job_id, f"scene [{idx+1}/{total}] fallback: {engine_key} → {actual_engine}")
@@ -582,6 +603,7 @@ def generate_video_complete(
     prompt: str,
     user_id: Optional[str] = None,
     preferred_engine: Optional[str] = None,
+    image_url: Optional[str] = None,
 ):
     import traceback
     from modal_app.engines import init_engines
@@ -627,7 +649,8 @@ def generate_video_complete(
                 log(job_id, f"cost tracking skipped: {e}")
 
             video_bytes, actual_engine = generate_with_fallback(
-                engine_key, prompt=prompt, job_id=job_id, duration_seconds=clip_dur
+                engine_key, prompt=prompt, job_id=job_id, duration_seconds=clip_dur,
+                image_url=image_url,
             )
             if actual_engine != engine_key:
                 log(job_id, f"fallback triggered: {engine_key} → {actual_engine}")
@@ -703,7 +726,7 @@ def generate_video_complete(
             log(job_id, f"cost tracking skipped: {e}")
 
         # Step 1: generate all scene clips
-        ms_result = generate_multi_scene.remote(job_id, storyboard, plan, preferred_engine)
+        ms_result = generate_multi_scene.remote(job_id, storyboard, plan, preferred_engine, image_url)
         clip_urls = ms_result["clip_urls"]
         ms_any_fallback = ms_result["any_fallback"]
 
@@ -786,8 +809,9 @@ def webhook():
         prompt: str
         plan: str = "free"
         user_id: Optional[str] = None
-        scene_count: int = 1  # Phase 2: number of scenes from storyboard
-        preferred_engine: Optional[str] = None  # User's engine preference
+        scene_count: int = 1
+        preferred_engine: Optional[str] = None
+        image_url: Optional[str] = None  # I2V: user-uploaded first frame
 
     @web.post("/webhook")
     async def trigger(req: JobRequest, x_webhook_secret: str = Header(None)):
@@ -807,7 +831,7 @@ def webhook():
 
         try:
             await generate_video_complete.spawn.aio(
-                req.job_id, req.prompt, req.user_id, req.preferred_engine
+                req.job_id, req.prompt, req.user_id, req.preferred_engine, req.image_url
             )
         except Exception as e:
             print(f"[webhook] spawn failed: {e}")

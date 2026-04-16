@@ -33,6 +33,7 @@ export interface Job {
   error_message: string | null;
   storyboard: StoryboardScene[] | null;
   target_duration_seconds: number;
+  image_url: string | null;
   engine_used: string | null;
   estimated_cost_usd: number | string | null;
   created_at: string;
