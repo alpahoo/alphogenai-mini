@@ -21,6 +21,7 @@ interface SocialExportPanelProps {
   plan: string;
   videoUrl: string;
   existingExports?: Record<string, string>;
+  youtubeConnected?: boolean;
 }
 
 const FORMATS = [
@@ -29,7 +30,7 @@ const FORMATS = [
   { key: "youtube", label: "YouTube", ratio: "16:9", icon: Monitor, color: "text-red-400" },
 ] as const;
 
-export function SocialExportPanel({ jobId, plan, videoUrl, existingExports }: SocialExportPanelProps) {
+export function SocialExportPanel({ jobId, plan, videoUrl, existingExports, youtubeConnected }: SocialExportPanelProps) {
   const [exports, setExports] = useState<Record<string, string>>(existingExports || {});
   const [exporting, setExporting] = useState(false);
   const [metadata, setMetadata] = useState<SocialMetadata | null>(null);
@@ -38,8 +39,42 @@ export function SocialExportPanel({ jobId, plan, videoUrl, existingExports }: So
     existingExports?.thumbnail ?? null
   );
   const [genThumb, setGenThumb] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishResult, setPublishResult] = useState<{ url?: string; error?: string } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const isFree = plan === "free";
+
+  const publishToYouTube = async () => {
+    if (!metadata) {
+      alert("Generate metadata first (click Generate under AI Copy)");
+      return;
+    }
+    if (!confirm(`Publish to YouTube as "${metadata.title}"?`)) return;
+    setPublishing(true);
+    setPublishResult(null);
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/publish/youtube`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: metadata.title,
+          description: metadata.description_youtube,
+          tags: metadata.hashtags.map((h: string) => h.replace("#", "")),
+          privacy: "unlisted",
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPublishResult({ url: data.youtube_url });
+      } else {
+        setPublishResult({ error: data.error });
+      }
+    } catch (e) {
+      setPublishResult({ error: e instanceof Error ? e.message : "Failed" });
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   const handleExport = async () => {
     setExporting(true);
@@ -224,6 +259,49 @@ export function SocialExportPanel({ jobId, plan, videoUrl, existingExports }: So
             </button>
           )}
         </div>
+
+        {/* Publish to YouTube */}
+        {youtubeConnected && metadata && (
+          <div className="mb-3">
+            <button
+              onClick={publishToYouTube}
+              disabled={publishing}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-50"
+            >
+              {publishing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Monitor className="h-3.5 w-3.5" />
+              )}
+              {publishing ? "Publishing..." : "Publish to YouTube"}
+            </button>
+            {publishResult?.url && (
+              <a
+                href={publishResult.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 block rounded-md bg-green-500/10 border border-green-500/30 px-3 py-2 text-xs text-green-400 text-center hover:brightness-110"
+              >
+                Published! View on YouTube →
+              </a>
+            )}
+            {publishResult?.error && (
+              <p className="mt-2 rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-xs text-destructive">
+                {publishResult.error}
+              </p>
+            )}
+          </div>
+        )}
+
+        {!youtubeConnected && (
+          <a
+            href="/api/auth/youtube/connect"
+            className="mb-3 flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10"
+          >
+            <Monitor className="h-3.5 w-3.5" />
+            Connect YouTube
+          </a>
+        )}
 
         {metadata ? (
           <div className="space-y-3">

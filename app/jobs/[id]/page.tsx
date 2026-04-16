@@ -205,6 +205,21 @@ export default function JobPage() {
     );
   }
 
+  const [youtubeConnected, setYoutubeConnected] = useState(false);
+
+  // Check YouTube connection once user is known
+  useEffect(() => {
+    if (!email) return;
+    const sb = createClient();
+    sb.from("social_connections")
+      .select("id")
+      .eq("platform", "youtube")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setYoutubeConnected(true);
+      });
+  }, [email]);
+
   const isActive = job ? (job.status === "pending" || job.status === "in_progress") : false;
   const isDone = job?.status === "done";
   const isAdmin = isAdminEmail(email);
@@ -460,6 +475,7 @@ function InfoCards({
           plan={job.plan}
           videoUrl={job.output_url_final || job.video_url || ""}
           existingExports={(job as Record<string, unknown>).social_exports as Record<string, string> | undefined}
+          youtubeConnected={youtubeConnected}
         />
       )}
 
