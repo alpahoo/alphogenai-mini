@@ -24,6 +24,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { SegmentedControl } from "@/components/create/segmented-control";
 import { ComingSoonSection } from "@/components/create/coming-soon-section";
+import { TemplatePicker } from "@/components/create/template-picker";
+import type { PromptTemplate } from "@/lib/prompt-templates";
 import type { JobPlan, EngineKey } from "@/lib/types";
 import { ENGINE_DISPLAY_NAMES } from "@/lib/types";
 
@@ -94,6 +96,14 @@ export default function CreateModePage({
   const [error, setError] = useState<string | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+
+  const handleTemplateSelect = (template: PromptTemplate) => {
+    setPrompt(template.prompt);
+    if (template.duration && plan !== "free") {
+      setDuration(String(template.duration));
+    }
+  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -228,9 +238,17 @@ export default function CreateModePage({
             <div>
               <label
                 htmlFor="prompt"
-                className="mb-1.5 block text-xs font-medium text-muted-foreground"
+                className="mb-1.5 flex items-center justify-between text-xs font-medium text-muted-foreground"
               >
-                Describe your video
+                <span>Describe your video</span>
+                <button
+                  type="button"
+                  onClick={() => setShowTemplates(true)}
+                  className="flex items-center gap-1 rounded-md border border-border/40 bg-muted/20 px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  Templates
+                </button>
               </label>
               <textarea
                 id="prompt"
@@ -530,6 +548,13 @@ export default function CreateModePage({
           </div>
         </motion.div>
       </div>
+
+      {/* Prompt templates modal */}
+      <TemplatePicker
+        open={showTemplates}
+        onClose={() => setShowTemplates(false)}
+        onSelect={handleTemplateSelect}
+      />
     </div>
   );
 }
