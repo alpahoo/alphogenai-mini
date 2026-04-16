@@ -674,6 +674,74 @@ def export_social_formats(video_url: str, job_id: str) -> dict:
 
 
 @app.function(image=base_image, secrets=[secrets], timeout=120, retries=0)
+def generate_thumbnail(video_url: str, job_id: str, title: str = "") -> str:
+    """Extract best frame from video + optional title overlay.
+
+    Returns R2 URL of the thumbnail JPG.
+    """
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    import httpx
+
+    print(f"[thumbnail] job={job_id} downloading video...")
+    with httpx.Client(timeout=60) as client:
+        resp = client.get(video_url)
+        resp.raise_for_status()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_path = Path(tmpdir) / "input.mp4"
+        thumb_path = Path(tmpdir) / "thumb.jpg"
+        input_path.write_bytes(resp.content)
+
+        # Probe duration
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "csv=s=x:p=0", str(input_path)],
+            capture_output=True, text=True,
+        )
+        duration = float(probe.stdout.strip()) if probe.stdout.strip() else 3.0
+
+        # Extract frame at ~30% of video (usually the most interesting moment)
+        timestamp = min(duration * 0.3, duration - 0.1)
+
+        if title:
+            # Frame + title overlay
+            safe_title = title.replace("'", "").replace('"', '')[:60]
+            vf = (
+                f"drawtext="
+                f"text='{safe_title}':"
+                f"fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
+                f"fontsize=36:"
+                f"fontcolor=white:"
+                f"box=1:boxcolor=black@0.6:boxborderw=12:"
+                f"x=(w-tw)/2:y=h-th-40"
+            )
+            subprocess.run(
+                ["ffmpeg", "-y", "-ss", str(timestamp), "-i", str(input_path),
+                 "-vf", vf, "-frames:v", "1", "-q:v", "2", str(thumb_path)],
+                capture_output=True, check=True,
+            )
+        else:
+            # Just extract frame
+            subprocess.run(
+                ["ffmpeg", "-y", "-ss", str(timestamp), "-i", str(input_path),
+                 "-frames:v", "1", "-q:v", "2", str(thumb_path)],
+                capture_output=True, check=True,
+            )
+
+        thumb_bytes = thumb_path.read_bytes()
+        print(f"[thumbnail] extracted {len(thumb_bytes) / 1024:.0f} KB")
+
+        thumb_url = upload_to_r2(
+            thumb_bytes, job_id,
+            suffix="_thumb", content_type="image/jpeg", extension="jpg",
+        )
+        print(f"[thumbnail] uploaded → {thumb_url}")
+        return thumb_url
+
+
+@app.function(image=base_image, secrets=[secrets], timeout=120, retries=0)
 def add_watermark(video_bytes: bytes) -> bytes:
     """Overlay 'AlphoGenAI' watermark on video (free plan only). Uses ffmpeg drawtext."""
     import subprocess

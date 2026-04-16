@@ -11,6 +11,7 @@ import {
   Monitor,
   Sparkles,
   Crown,
+  Image as ImageIcon,
 } from "lucide-react";
 import Link from "next/link";
 import type { SocialMetadata } from "@/lib/social-metadata";
@@ -33,6 +34,10 @@ export function SocialExportPanel({ jobId, plan, videoUrl, existingExports }: So
   const [exporting, setExporting] = useState(false);
   const [metadata, setMetadata] = useState<SocialMetadata | null>(null);
   const [loadingMeta, setLoadingMeta] = useState(false);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(
+    existingExports?.thumbnail ?? null
+  );
+  const [genThumb, setGenThumb] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const isFree = plan === "free";
 
@@ -149,6 +154,53 @@ export function SocialExportPanel({ jobId, plan, videoUrl, existingExports }: So
             </div>
           );
         })}
+      </div>
+
+      {/* Thumbnail */}
+      <div className="border-t border-border/30 pt-4">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Thumbnail
+          </h4>
+          {!thumbnailUrl && (
+            <button
+              onClick={async () => {
+                setGenThumb(true);
+                try {
+                  const res = await fetch(`/api/jobs/${jobId}/thumbnail`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ title: metadata?.title || "" }),
+                  });
+                  const data = await res.json();
+                  if (data.thumbnail_url) setThumbnailUrl(data.thumbnail_url);
+                } catch { /* ignore */ }
+                setGenThumb(false);
+              }}
+              disabled={genThumb}
+              className="flex items-center gap-1 rounded-md border border-border bg-background/50 px-2 py-1 text-[10px] font-medium hover:bg-muted/40 disabled:opacity-50"
+            >
+              {genThumb ? <Loader2 className="h-3 w-3 animate-spin" /> : <ImageIcon className="h-3 w-3" />}
+              Generate
+            </button>
+          )}
+        </div>
+        {thumbnailUrl ? (
+          <div className="relative">
+            <img src={thumbnailUrl} alt="Thumbnail" className="w-full rounded-lg border border-border/30" />
+            <a
+              href={thumbnailUrl}
+              download
+              className="absolute bottom-2 right-2 rounded-md bg-black/60 px-2 py-1 text-[10px] text-white hover:bg-black/80"
+            >
+              Download
+            </a>
+          </div>
+        ) : (
+          <p className="text-[11px] text-muted-foreground/60">
+            {genThumb ? "Generating thumbnail..." : "Generate a thumbnail for your social media posts."}
+          </p>
+        )}
       </div>
 
       {/* Metadata */}
