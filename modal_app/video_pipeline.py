@@ -586,6 +586,51 @@ def mux_audio(video_bytes: bytes, audio_bytes: bytes) -> bytes:
         return muxed
 
 
+@app.function(image=base_image, secrets=[secrets], timeout=120, retries=0)
+def add_watermark(video_bytes: bytes) -> bytes:
+    """Overlay 'AlphoGenAI' watermark on video (free plan only). Uses ffmpeg drawtext."""
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        input_path = Path(tmpdir) / "input.mp4"
+        output_path = Path(tmpdir) / "output.mp4"
+        input_path.write_bytes(video_bytes)
+
+        # Bottom-right watermark with semi-transparent background
+        # Font: DejaVu Sans is bundled with ffmpeg in debian
+        drawtext = (
+            "drawtext="
+            "text='AlphoGenAI':"
+            "fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
+            "fontsize=24:"
+            "fontcolor=white@0.85:"
+            "box=1:boxcolor=black@0.4:boxborderw=8:"
+            "x=w-tw-20:y=h-th-20"
+        )
+
+        result = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-i", str(input_path),
+                "-vf", drawtext,
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-c:a", "copy",
+                str(output_path),
+            ],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            print(f"[watermark] ffmpeg failed: {result.stderr[-300:]}")
+            # Non-fatal: return original video if watermark fails
+            return video_bytes
+
+        watermarked = output_path.read_bytes()
+        print(f"[watermark] applied → {len(watermarked)/1e6:.1f}MB")
+        return watermarked
+
+
 # ===========================================================================
 # Orchestrator (no GPU — just coordinates)
 # ===========================================================================
@@ -663,6 +708,15 @@ def generate_video_complete(
                     pass
 
             update_job(job_id, current_stage="encoding")
+
+            # Apply watermark for free plan users only
+            if plan == "free":
+                log(job_id, "applying watermark (free plan)...")
+                try:
+                    video_bytes = add_watermark.remote(video_bytes)
+                except Exception as e:
+                    log(job_id, f"watermark skipped: {e}")
+
             update_job(job_id, current_stage="uploading")
             video_url = upload_to_r2(video_bytes, job_id)
             log(job_id, f"uploaded → {video_url}")
@@ -745,6 +799,14 @@ def generate_video_complete(
         # Step 2: assemble into final video
         update_job(job_id, current_stage="encoding")
         final_bytes = assemble_scenes.remote(job_id, clip_urls)
+
+        # Apply watermark for free plan users only
+        if plan == "free":
+            log(job_id, "applying watermark (free plan)...")
+            try:
+                final_bytes = add_watermark.remote(final_bytes)
+            except Exception as e:
+                log(job_id, f"watermark skipped: {e}")
 
         # Step 3: upload final assembled video
         update_job(job_id, current_stage="uploading")
