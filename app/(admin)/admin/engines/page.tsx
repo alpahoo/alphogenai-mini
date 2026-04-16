@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Loader2, Plus, Cpu, DollarSign, Settings } from "lucide-react";
+import { Loader2, Plus, Cpu, DollarSign, Settings, RefreshCw, Download } from "lucide-react";
 
 interface Engine {
   id: string;
@@ -26,6 +26,41 @@ const STATUS_COLORS: Record<string, string> = {
 export default function AdminEnginesPage() {
   const [engines, setEngines] = useState<Engine[]>([]);
   const [loading, setLoading] = useState(true);
+  const [flushing, setFlushing] = useState(false);
+  const [flushMsg, setFlushMsg] = useState<string | null>(null);
+
+  const migrateFromEnv = async () => {
+    if (!confirm("Migrate API keys from Vercel env vars to encrypted DB secrets?\n\nThis copies KIE_API_KEY → seedance/api_key in the DB. After migration, the DB version takes precedence (GenericApiEngine).")) return;
+    try {
+      const res = await fetch("/api/admin/engines/migrate-env", { method: "POST" });
+      const data = await res.json();
+      const summary = [
+        `✅ Migrated: ${data.migrated.length}`,
+        data.migrated.length ? `  ${data.migrated.join(", ")}` : "",
+        data.skipped.length ? `⏭ Skipped: ${data.skipped.join(", ")}` : "",
+        data.errors.length ? `❌ Errors: ${data.errors.join(", ")}` : "",
+      ].filter(Boolean).join("\n");
+      alert(summary);
+      fetchEngines();
+    } catch (e) {
+      alert(`Migration failed: ${e instanceof Error ? e.message : e}`);
+    }
+  };
+
+  const flushCache = async () => {
+    setFlushing(true);
+    setFlushMsg(null);
+    try {
+      const res = await fetch("/api/admin/engines/flush-cache", { method: "POST" });
+      const data = await res.json();
+      setFlushMsg(data.message || (data.success ? "Cache flushed" : "Flush may have failed"));
+    } catch (e) {
+      setFlushMsg(e instanceof Error ? e.message : "Flush error");
+    } finally {
+      setFlushing(false);
+      setTimeout(() => setFlushMsg(null), 5000);
+    }
+  };
 
   const fetchEngines = useCallback(() => {
     setLoading(true);
@@ -60,14 +95,39 @@ export default function AdminEnginesPage() {
             Manage video generation engines, plans, costs, and API secrets
           </p>
         </div>
-        <Link
-          href="/admin/engines/new"
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:brightness-110"
-        >
-          <Plus className="h-4 w-4" />
-          Add Engine
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={migrateFromEnv}
+            title="Copy legacy API keys from Vercel env vars (e.g. KIE_API_KEY) into encrypted DB secrets"
+            className="flex items-center gap-2 rounded-lg border border-border bg-background/50 px-3 py-2 text-sm hover:bg-muted/40"
+          >
+            <Download className="h-4 w-4" />
+            Migrate env → DB
+          </button>
+          <button
+            onClick={flushCache}
+            disabled={flushing}
+            title="Force Modal pipeline to reload engine configs immediately (bypass 5-min cache)"
+            className="flex items-center gap-2 rounded-lg border border-border bg-background/50 px-3 py-2 text-sm hover:bg-muted/40 disabled:opacity-50"
+          >
+            {flushing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Flush Cache
+          </button>
+          <Link
+            href="/admin/engines/new"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:brightness-110"
+          >
+            <Plus className="h-4 w-4" />
+            Add Engine
+          </Link>
+        </div>
       </div>
+
+      {flushMsg && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs text-primary">
+          {flushMsg}
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-20">

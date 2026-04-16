@@ -14,7 +14,9 @@ import {
   CheckCircle,
   XCircle,
   PlayCircle,
+  FileText,
 } from "lucide-react";
+import { ENGINE_TEMPLATES, getTemplate } from "@/lib/engine-templates";
 
 interface Engine {
   id: string;
@@ -210,6 +212,22 @@ export default function EngineDetailPage() {
       method: "DELETE",
     });
     fetchEngine();
+  };
+
+  const loadTemplate = (templateId: string) => {
+    const tpl = getTemplate(templateId);
+    if (!tpl) return;
+    if (apiConfigJson && !confirm(`Overwrite current config with "${tpl.label}"?`)) return;
+    setApiConfigJson(JSON.stringify(tpl.config, null, 2));
+    setApiConfigError(null);
+    // Auto-fill suggestions
+    setForm((f) => ({
+      ...f,
+      type: "api",
+      max_duration: tpl.defaultMaxDuration,
+      cost_billing_model: "per_second",
+      cost_per_second: tpl.defaultCostPerSecond,
+    }));
   };
 
   const testConnection = async () => {
@@ -440,20 +458,34 @@ export default function EngineDetailPage() {
       {/* API Config (JSONB) — only for api-type engines */}
       {!isNew && engine && form.type === "api" && (
         <div className="rounded-xl border border-border/40 bg-card/60 p-6 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">API Config (Generic Adapter)</h2>
-            <button
-              onClick={testConnection}
-              disabled={testing}
-              className="flex items-center gap-1 rounded-md border border-border bg-background/50 px-2 py-1 text-xs hover:bg-muted/40 disabled:opacity-50"
-            >
-              {testing ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <PlayCircle className="h-3 w-3" />
-              )}
-              Test Connection
-            </button>
+            <div className="flex items-center gap-2">
+              <select
+                onChange={(e) => e.target.value && loadTemplate(e.target.value)}
+                defaultValue=""
+                className="rounded-md border border-border bg-background/50 px-2 py-1 text-xs"
+              >
+                <option value="">📋 Load template...</option>
+                {ENGINE_TEMPLATES.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={testConnection}
+                disabled={testing}
+                className="flex items-center gap-1 rounded-md border border-border bg-background/50 px-2 py-1 text-xs hover:bg-muted/40 disabled:opacity-50"
+              >
+                {testing ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <PlayCircle className="h-3 w-3" />
+                )}
+                Test Connection
+              </button>
+            </div>
           </div>
           <p className="text-[11px] text-muted-foreground">
             JSON config for generic REST adapter. Supports {"{{prompt}}"}, {"{{duration}}"},

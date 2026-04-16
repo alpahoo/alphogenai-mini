@@ -943,6 +943,28 @@ def webhook():
 
         return {"success": True, "job_id": req.job_id}
 
+    @web.post("/flush-cache")
+    async def flush_cache(x_webhook_secret: str = Header(None)):
+        """Invalidate in-memory engine registry + costs caches.
+
+        Called by admin UI after editing engine configs.
+        Auth via MODAL_WEBHOOK_SECRET.
+        """
+        expected = os.environ.get("MODAL_WEBHOOK_SECRET")
+        if expected and x_webhook_secret != expected:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        try:
+            from modal_app.engines.registry import invalidate_cache as inv_reg
+            from modal_app.utils.costs import invalidate_cache as inv_costs
+            inv_reg()
+            inv_costs()
+            print("[flush-cache] registry + costs caches invalidated")
+            return {"success": True, "caches": ["registry", "costs"]}
+        except Exception as e:
+            print(f"[flush-cache] failed: {e}")
+            return {"success": False, "error": str(e)[:200]}
+
     @web.get("/health")
     async def health():
         return {"status": "ok", "gpu": GPU, "steps": NUM_STEPS, "frames": NUM_FRAMES}
