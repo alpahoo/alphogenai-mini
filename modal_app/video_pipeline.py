@@ -34,6 +34,7 @@ base_image = (
         "supabase",
         "boto3",
         "httpx",
+        "sentry-sdk",
     )
     .apt_install("ffmpeg")
     .add_local_python_source("modal_app.engines")
@@ -42,7 +43,7 @@ base_image = (
 
 webhook_image = (
     modal.Image.debian_slim(python_version="3.11")
-    .pip_install("fastapi", "pydantic", "supabase", "httpx", "boto3")
+    .pip_install("fastapi", "pydantic", "supabase", "httpx", "boto3", "sentry-sdk")
 )
 
 # ---------------------------------------------------------------------------
@@ -851,7 +852,26 @@ def generate_video_complete(
         log(job_id, f"FAILED:\n{tb}")
         error_msg = normalize_error(e)
         update_job(job_id, status="failed", current_stage="failed", error_message=error_msg[:500])
+        # Report to Sentry if configured
+        _report_sentry(e, job_id=job_id, prompt=prompt)
         raise
+
+
+def _report_sentry(exc: Exception, **context) -> None:
+    """Report exception to Sentry if SENTRY_DSN is configured. Non-blocking."""
+    dsn = os.environ.get("SENTRY_DSN")
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+        if not sentry_sdk.Hub.current.client:
+            sentry_sdk.init(dsn=dsn, environment=os.environ.get("ENV", "production"))
+        with sentry_sdk.push_scope() as scope:
+            for k, v in context.items():
+                scope.set_tag(k, str(v)[:200] if v else "null")
+            sentry_sdk.capture_exception(exc)
+    except Exception as sentry_err:
+        print(f"[sentry] report failed: {sentry_err}")
 
 
 # ===========================================================================
