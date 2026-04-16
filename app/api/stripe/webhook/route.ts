@@ -156,9 +156,15 @@ export async function POST(req: Request) {
         );
       }
 
+      // Resolve plan from metadata (supports pro + premium)
+      const checkoutPlan =
+        (session.metadata?.plan === "premium" ? "premium" : null) ??
+        (session.metadata?.plan === "pro" ? "pro" : null) ??
+        "pro"; // default to pro for backward compat
+
       const { error: updateError } = await supabase
         .from("profiles")
-        .update({ plan: "pro", updated_at: new Date().toISOString() })
+        .update({ plan: checkoutPlan, updated_at: new Date().toISOString() })
         .eq("id", userId);
 
       if (updateError) {
