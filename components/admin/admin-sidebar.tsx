@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Users, Film, ArrowLeft, Shield } from "lucide-react";
+import { BarChart3, Users, Film, ArrowLeft, Shield, Cpu } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard", icon: BarChart3 },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/jobs", label: "Jobs", icon: Film },
+  { href: "/admin/engines", label: "Engines", icon: Cpu },
 ];
 
 export function AdminSidebar({ email }: { email: string }) {
