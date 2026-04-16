@@ -15,16 +15,17 @@ const nextConfig = {
   },
 };
 
-// Only wrap with Sentry if DSN is configured (optional feature)
+// Only wrap with Sentry if DSN is configured
 const useSentry = !!(process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN);
 
 export default useSentry
   ? withSentryConfig(nextConfig, {
-      silent: true,
       org: process.env.SENTRY_ORG,
       project: process.env.SENTRY_PROJECT,
-      // Source maps upload disabled unless SENTRY_AUTH_TOKEN is set
+      authToken: process.env.SENTRY_AUTH_TOKEN,
       widenClientFileUpload: true,
+      tunnelRoute: "/monitoring",
+      silent: !process.env.CI,
       hideSourceMaps: true,
       disableLogger: true,
     })
