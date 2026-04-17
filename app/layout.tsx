@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   keywords: "AI video, text to video, video generation, generative AI",
   other: {
     // TikTok domain verification
-    "tiktok-domain-verification": "zqvWqGoGXB0OzKIXcJXb9RF7OTNpEVFO",
+    "tiktok-domain-verification": "hq3rJetYb0yoqEc9U9eYuRTV3ZDGQCaY",
   },
 };
 
