@@ -5,10 +5,13 @@ import { NextResponse } from "next/server";
 
 /**
  * POST /api/jobs/[id]/publish/instagram
- * Publishes video to Instagram as a Reel via Graph API.
+ * Publishes video to Instagram as a Reel via the new Instagram Graph API.
  * Body: { caption }
  *
- * Flow: Create media container → wait for processing → publish
+ * Flow:
+ *   1. Create media container (Reel) → container_id
+ *   2. Poll container status until FINISHED
+ *   3. Publish container → media_id
  */
 export async function POST(
   req: Request,
@@ -26,6 +29,7 @@ export async function POST(
 
     const supabase = createServiceClient();
 
+    // ── Get Instagram connection ────────────────────────────────────────────
     const { data: conn } = await supabase
       .from("social_connections")
       .select("*")
@@ -33,8 +37,14 @@ export async function POST(
       .eq("platform", "instagram")
       .single();
 
-    if (!conn || !conn.channel_id) {
-      return NextResponse.json({ error: "Instagram not connected or no business account" }, { status: 400 });
+    if (!conn) {
+      return NextResponse.json({ error: "Instagram not connected" }, { status: 400 });
+    }
+    if (!conn.channel_id) {
+      return NextResponse.json(
+        { error: "No Instagram User ID found. Please reconnect your account." },
+        { status: 400 }
+      );
     }
 
     const accessToken = decryptSecret({
@@ -43,9 +53,9 @@ export async function POST(
       authTag: conn.token_auth_tag,
     });
 
-    const igAccountId = conn.channel_id;
+    const igUserId = conn.channel_id;
 
-    // Get video URL (prefer Instagram format)
+    // ── Get video URL ───────────────────────────────────────────────────────
     const { data: job } = await supabase
       .from("jobs")
       .select("output_url_final, video_url, social_exports")
@@ -57,64 +67,74 @@ export async function POST(
     const socialExports = (job.social_exports as Record<string, string>) || {};
     const videoUrl = socialExports.instagram || job.output_url_final || job.video_url;
 
-    // Step 1: Create media container (Reel)
-    const containerParams = new URLSearchParams({
-      media_type: "REELS",
-      video_url: videoUrl!,
-      caption: (caption || "").slice(0, 2200),
-      access_token: accessToken,
-    });
+    if (!videoUrl) {
+      return NextResponse.json({ error: "No video URL found" }, { status: 400 });
+    }
 
+    console.log(`[instagram-publish] Starting: user=${user.id} ig=${igUserId}`);
+
+    // ── Step 1: Create Reel media container ────────────────────────────────
+    // Uses new Instagram Graph API (graph.instagram.com, not graph.facebook.com)
     const containerRes = await fetch(
-      `https://graph.facebook.com/v19.0/${igAccountId}/media`,
+      `https://graph.instagram.com/v21.0/${igUserId}/media`,
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: containerParams,
+        body: new URLSearchParams({
+          media_type: "REELS",
+          video_url: videoUrl,
+          caption: (caption || "").slice(0, 2200),
+          access_token: accessToken,
+        }),
       }
     );
     const container = await containerRes.json();
 
     if (!container.id) {
       console.error("[instagram-publish] Container creation failed:", container);
-      return NextResponse.json({
-        error: container.error?.message || "Failed to create Instagram media container",
-      }, { status: 500 });
+      const errMsg = container.error?.message || "Failed to create Instagram media container";
+      return NextResponse.json({ error: errMsg, details: container }, { status: 500 });
     }
 
     const containerId = container.id;
     console.log(`[instagram-publish] Container created: ${containerId}`);
 
-    // Step 2: Wait for processing (poll status)
+    // ── Step 2: Poll container status until FINISHED ────────────────────────
     let status = "IN_PROGRESS";
     let attempts = 0;
-    while (status === "IN_PROGRESS" && attempts < 30) {
-      await new Promise((r) => setTimeout(r, 5000)); // 5s intervals
+    const MAX_ATTEMPTS = 36; // 3 min max (36 × 5s)
+
+    while (status === "IN_PROGRESS" && attempts < MAX_ATTEMPTS) {
+      await new Promise((r) => setTimeout(r, 5000)); // 5s wait
       attempts++;
 
       const statusRes = await fetch(
-        `https://graph.facebook.com/v19.0/${containerId}?fields=status_code&access_token=${accessToken}`
+        `https://graph.instagram.com/v21.0/${containerId}?fields=status_code&access_token=${accessToken}`
       );
       const statusData = await statusRes.json();
       status = statusData.status_code || "UNKNOWN";
 
+      console.log(`[instagram-publish] Poll #${attempts}: status=${status}`);
+
       if (status === "FINISHED") break;
       if (status === "ERROR") {
-        return NextResponse.json({
-          error: "Instagram video processing failed",
-        }, { status: 500 });
+        return NextResponse.json(
+          { error: "Instagram video processing failed. Check that the video URL is publicly accessible." },
+          { status: 500 }
+        );
       }
     }
 
     if (status !== "FINISHED") {
-      return NextResponse.json({
-        error: "Instagram processing timed out. Try again.",
-      }, { status: 500 });
+      return NextResponse.json(
+        { error: `Instagram processing timed out (status: ${status}). Try again.` },
+        { status: 500 }
+      );
     }
 
-    // Step 3: Publish the container
+    // ── Step 3: Publish the container ──────────────────────────────────────
     const publishRes = await fetch(
-      `https://graph.facebook.com/v19.0/${igAccountId}/media_publish`,
+      `https://graph.instagram.com/v21.0/${igUserId}/media_publish`,
       {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -128,20 +148,21 @@ export async function POST(
 
     if (!publishData.id) {
       console.error("[instagram-publish] Publish failed:", publishData);
-      return NextResponse.json({
-        error: publishData.error?.message || "Failed to publish to Instagram",
-      }, { status: 500 });
+      const errMsg = publishData.error?.message || "Failed to publish to Instagram";
+      return NextResponse.json({ error: errMsg }, { status: 500 });
     }
 
-    console.log(`[instagram-publish] Published: media_id=${publishData.id} (user=${user.id})`);
+    console.log(
+      `[instagram-publish] Published: media_id=${publishData.id} (user=${user.id} ig=${igUserId})`
+    );
 
     return NextResponse.json({
       success: true,
       instagram_media_id: publishData.id,
-      message: "Published to Instagram! Check your Reels.",
+      message: "Published to Instagram! Check your Reels in a few minutes.",
     });
   } catch (error) {
     console.error("[instagram-publish] Error:", error);
-    return NextResponse.json({ error: "Publish failed" }, { status: 500 });
+    return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }

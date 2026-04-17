@@ -4,18 +4,28 @@ import { NextResponse } from "next/server";
 
 /**
  * GET /api/auth/instagram/callback
- * Handles Instagram/Facebook OAuth callback.
- * Exchanges short-lived token for long-lived token.
+ * Handles Instagram OAuth callback (new Business API — instagram.com/oauth).
+ *
+ * Flow:
+ *   1. Exchange code → short-lived token (api.instagram.com)
+ *   2. Exchange → long-lived token (graph.instagram.com)
+ *   3. Get user ID + username (graph.instagram.com/me)
+ *   4. Store encrypted token in social_connections
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const error = url.searchParams.get("error");
+  const errorParam = url.searchParams.get("error");
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
-  if (error) return NextResponse.redirect(`${siteUrl}/home?instagram_error=${error}`);
-  if (!code || !state) return NextResponse.redirect(`${siteUrl}/home?instagram_error=missing_params`);
+  if (errorParam) {
+    console.error("[instagram-cb] OAuth error:", errorParam);
+    return NextResponse.redirect(`${siteUrl}/home?instagram_error=${errorParam}`);
+  }
+  if (!code || !state) {
+    return NextResponse.redirect(`${siteUrl}/home?instagram_error=missing_params`);
+  }
 
   let userId: string;
   try {
@@ -25,53 +35,69 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${siteUrl}/home?instagram_error=invalid_state`);
   }
 
-  const appId = process.env.INSTAGRAM_APP_ID || process.env.FACEBOOK_APP_ID!;
-  const appSecret = process.env.INSTAGRAM_APP_SECRET || process.env.FACEBOOK_APP_SECRET!;
+  const appId = process.env.INSTAGRAM_APP_ID!;
+  const appSecret = process.env.INSTAGRAM_APP_SECRET!;
   const redirectUri = `${siteUrl}/api/auth/instagram/callback`;
 
+  if (!appId || !appSecret) {
+    console.error("[instagram-cb] INSTAGRAM_APP_ID or INSTAGRAM_APP_SECRET not set");
+    return NextResponse.redirect(`${siteUrl}/home?instagram_error=not_configured`);
+  }
+
   try {
-    // Step 1: Exchange code for short-lived token
-    const tokenRes = await fetch(
-      `https://graph.facebook.com/v19.0/oauth/access_token?` +
-      new URLSearchParams({
-        client_id: appId,
-        client_secret: appSecret,
-        redirect_uri: redirectUri,
-        code,
-      })
-    );
-    const shortToken = await tokenRes.json();
-    if (!shortToken.access_token) {
-      console.error("[instagram-oauth] Short token failed:", shortToken);
+    // ── Step 1: Exchange code → short-lived access token ──────────────────
+    const shortTokenForm = new URLSearchParams({
+      client_id: appId,
+      client_secret: appSecret,
+      grant_type: "authorization_code",
+      redirect_uri: redirectUri,
+      code,
+    });
+
+    const shortRes = await fetch("https://api.instagram.com/oauth/access_token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: shortTokenForm,
+    });
+    const shortData = await shortRes.json();
+
+    if (!shortData.access_token) {
+      console.error("[instagram-cb] Short-lived token failed:", shortData);
       return NextResponse.redirect(`${siteUrl}/home?instagram_error=token_failed`);
     }
 
-    // Step 2: Exchange for long-lived token (60 days)
+    const shortToken = shortData.access_token as string;
+    // user_id is the Instagram User ID returned directly in the short token response
+    const igUserId = String(shortData.user_id ?? "");
+
+    // ── Step 2: Exchange → long-lived token (60 days) ─────────────────────
     const longRes = await fetch(
-      `https://graph.facebook.com/v19.0/oauth/access_token?` +
+      `https://graph.instagram.com/access_token?` +
       new URLSearchParams({
-        grant_type: "fb_exchange_token",
+        grant_type: "ig_exchange_token",
         client_id: appId,
         client_secret: appSecret,
-        fb_exchange_token: shortToken.access_token,
+        access_token: shortToken,
       })
     );
-    const longToken = await longRes.json();
-    const accessToken = longToken.access_token || shortToken.access_token;
-    const expiresIn = longToken.expires_in || 5184000; // 60 days default
+    const longData = await longRes.json();
 
-    // Step 3: Get Instagram Business Account ID
-    const pagesRes = await fetch(
-      `https://graph.facebook.com/v19.0/me/accounts?fields=instagram_business_account,name&access_token=${accessToken}`
-    );
-    const pagesData = await pagesRes.json();
-    const igAccount = pagesData.data?.find(
-      (p: { instagram_business_account?: { id: string } }) => p.instagram_business_account
-    );
-    const igAccountId = igAccount?.instagram_business_account?.id ?? null;
-    const pageName = igAccount?.name ?? null;
+    const accessToken = longData.access_token || shortToken;
+    const expiresIn: number = longData.expires_in ?? 5184000; // 60 days default
 
-    // Encrypt + store
+    // ── Step 3: Get username from Instagram Graph API ──────────────────────
+    let username: string | null = null;
+    let resolvedIgUserId = igUserId;
+    try {
+      const meRes = await fetch(
+        `https://graph.instagram.com/me?fields=id,username&access_token=${accessToken}`
+      );
+      const meData = await meRes.json();
+      username = meData.username ?? null;
+      if (meData.id) resolvedIgUserId = meData.id;
+    } catch { /* ignore — will work without username */ }
+
+    // ── Step 4: Encrypt + store ────────────────────────────────────────────
     const enc = encryptSecret(accessToken);
     const supabase = createServiceClient();
 
@@ -85,18 +111,21 @@ export async function GET(req: Request) {
         refresh_token_encrypted: null,
         refresh_iv: null,
         refresh_auth_tag: null,
-        channel_name: pageName,
-        channel_id: igAccountId,
+        // channel_id = Instagram User ID (used for media publishing)
+        channel_id: resolvedIgUserId || null,
+        channel_name: username,
         expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id,platform" }
     );
 
-    console.log(`[instagram-oauth] Connected: user=${userId} ig=${igAccountId} page=${pageName}`);
+    console.log(
+      `[instagram-cb] Connected: user=${userId} ig_user=${resolvedIgUserId} username=${username}`
+    );
     return NextResponse.redirect(`${siteUrl}/home?instagram_connected=true`);
   } catch (e) {
-    console.error("[instagram-oauth] Exception:", e);
+    console.error("[instagram-cb] Exception:", e);
     return NextResponse.redirect(`${siteUrl}/home?instagram_error=exception`);
   }
 }
