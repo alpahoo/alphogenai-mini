@@ -12,6 +12,7 @@ import {
   Sparkles,
   Crown,
   Image as ImageIcon,
+  LogOut,
 } from "lucide-react";
 import Link from "next/link";
 import type { SocialMetadata } from "@/lib/social-metadata";
@@ -44,7 +45,36 @@ export function SocialExportPanel({ jobId, plan, videoUrl, existingExports, yout
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<{ url?: string; error?: string } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
+
+  // Local connection state — starts from props, updated on disconnect
+  const [ytConnected, setYtConnected] = useState(youtubeConnected ?? false);
+  const [ttConnected, setTtConnected] = useState(tiktokConnected ?? false);
+  const [igConnected, setIgConnected] = useState(instagramConnected ?? false);
+
   const isFree = plan === "free";
+
+  const handleDisconnect = async (platform: "youtube" | "tiktok" | "instagram") => {
+    if (!confirm(`Disconnect ${platform}?`)) return;
+    setDisconnecting(platform);
+    try {
+      const res = await fetch("/api/auth/social/disconnect", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform }),
+      });
+      if (res.ok) {
+        if (platform === "youtube") setYtConnected(false);
+        if (platform === "tiktok") setTtConnected(false);
+        if (platform === "instagram") setIgConnected(false);
+        setPublishResult(null);
+      }
+    } catch (e) {
+      console.error("Disconnect failed:", e);
+    } finally {
+      setDisconnecting(null);
+    }
+  };
 
   const publishToYouTube = async () => {
     if (!metadata) {
@@ -262,110 +292,159 @@ export function SocialExportPanel({ jobId, plan, videoUrl, existingExports, yout
           )}
         </div>
 
-        {/* Publish to YouTube */}
-        {youtubeConnected && metadata && (
-          <div className="mb-3">
-            <button
-              onClick={publishToYouTube}
-              disabled={publishing}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-50"
-            >
-              {publishing ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Monitor className="h-3.5 w-3.5" />
+        {/* Platform rows: connected = publish + disconnect / disconnected = connect */}
+        <div className="flex flex-col gap-2 mb-3">
+
+          {/* YouTube */}
+          {ytConnected ? (
+            <div className="flex gap-1.5">
+              {metadata && (
+                <button
+                  onClick={publishToYouTube}
+                  disabled={publishing}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-50"
+                >
+                  {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Monitor className="h-3.5 w-3.5" />}
+                  {publishing ? "Publishing..." : "Publish to YouTube"}
+                </button>
               )}
-              {publishing ? "Publishing..." : "Publish to YouTube"}
-            </button>
-            {publishResult?.url && (
-              <a
-                href={publishResult.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 block rounded-md bg-green-500/10 border border-green-500/30 px-3 py-2 text-xs text-green-400 text-center hover:brightness-110"
+              {!metadata && (
+                <div className="flex flex-1 items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+                  <Monitor className="h-3.5 w-3.5" /> YouTube connected
+                </div>
+              )}
+              <button
+                onClick={() => handleDisconnect("youtube")}
+                disabled={disconnecting === "youtube"}
+                title="Disconnect YouTube"
+                className="rounded-lg border border-border/40 bg-background/40 px-2 py-2 text-muted-foreground hover:text-destructive hover:border-destructive/40 disabled:opacity-50"
               >
-                Published! View on YouTube →
-              </a>
-            )}
-            {publishResult?.error && (
-              <p className="mt-2 rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-xs text-destructive">
-                {publishResult.error}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* TikTok */}
-        {tiktokConnected && metadata && (
-          <button
-            onClick={async () => {
-              if (!confirm(`Post to TikTok: "${metadata.title}"?`)) return;
-              setPublishing(true);
-              try {
-                const res = await fetch(`/api/jobs/${jobId}/publish/tiktok`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ title: metadata.description_tiktok }),
-                });
-                const data = await res.json();
-                setPublishResult(data.success ? { url: "tiktok://posted" } : { error: data.error });
-              } catch { setPublishResult({ error: "TikTok publish failed" }); }
-              setPublishing(false);
-            }}
-            disabled={publishing}
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-black border border-white/20 px-4 py-2.5 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-50"
-          >
-            {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Smartphone className="h-3.5 w-3.5" />}
-            Publish to TikTok
-          </button>
-        )}
-
-        {/* Instagram */}
-        {instagramConnected && metadata && (
-          <button
-            onClick={async () => {
-              if (!confirm(`Post to Instagram: "${metadata.title}"?`)) return;
-              setPublishing(true);
-              try {
-                const res = await fetch(`/api/jobs/${jobId}/publish/instagram`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ caption: metadata.description_instagram }),
-                });
-                const data = await res.json();
-                setPublishResult(data.success ? { url: "instagram://posted" } : { error: data.error });
-              } catch { setPublishResult({ error: "Instagram publish failed" }); }
-              setPublishing(false);
-            }}
-            disabled={publishing}
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-500 px-4 py-2.5 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-50"
-          >
-            {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
-            Publish to Instagram
-          </button>
-        )}
-
-        {/* Connect buttons for unconnected platforms */}
-        <div className="flex flex-col gap-1.5 mb-3">
-          {!youtubeConnected && (
+                {disconnecting === "youtube" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          ) : (
             <a href="/api/auth/youtube/connect"
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10">
               <Monitor className="h-3.5 w-3.5" /> Connect YouTube
             </a>
           )}
-          {!tiktokConnected && (
+
+          {/* TikTok */}
+          {ttConnected ? (
+            <div className="flex gap-1.5">
+              {metadata && (
+                <button
+                  onClick={async () => {
+                    if (!confirm(`Post to TikTok: "${metadata.title}"?`)) return;
+                    setPublishing(true);
+                    try {
+                      const res = await fetch(`/api/jobs/${jobId}/publish/tiktok`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ title: metadata.description_tiktok }),
+                      });
+                      const data = await res.json();
+                      setPublishResult(data.success ? { url: "tiktok://posted" } : { error: data.error });
+                    } catch { setPublishResult({ error: "TikTok publish failed" }); }
+                    setPublishing(false);
+                  }}
+                  disabled={publishing}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-black border border-white/20 px-3 py-2 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-50"
+                >
+                  {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Smartphone className="h-3.5 w-3.5" />}
+                  Publish to TikTok
+                </button>
+              )}
+              {!metadata && (
+                <div className="flex flex-1 items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs text-white/70">
+                  <Smartphone className="h-3.5 w-3.5" /> TikTok connected
+                </div>
+              )}
+              <button
+                onClick={() => handleDisconnect("tiktok")}
+                disabled={disconnecting === "tiktok"}
+                title="Disconnect TikTok"
+                className="rounded-lg border border-border/40 bg-background/40 px-2 py-2 text-muted-foreground hover:text-destructive hover:border-destructive/40 disabled:opacity-50"
+              >
+                {disconnecting === "tiktok" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          ) : (
             <a href="/api/auth/tiktok/connect"
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-xs font-medium text-white/70 hover:bg-white/10">
               <Smartphone className="h-3.5 w-3.5" /> Connect TikTok
             </a>
           )}
-          {!instagramConnected && (
+
+          {/* Instagram */}
+          {igConnected ? (
+            <div className="flex gap-1.5">
+              {metadata && (
+                <button
+                  onClick={async () => {
+                    if (!confirm(`Post to Instagram: "${metadata.title}"?`)) return;
+                    setPublishing(true);
+                    try {
+                      const res = await fetch(`/api/jobs/${jobId}/publish/instagram`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ caption: metadata.description_instagram }),
+                      });
+                      const data = await res.json();
+                      setPublishResult(data.success ? { url: "instagram://posted" } : { error: data.error });
+                    } catch { setPublishResult({ error: "Instagram publish failed" }); }
+                    setPublishing(false);
+                  }}
+                  disabled={publishing}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-500 px-3 py-2 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-50"
+                >
+                  {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
+                  Publish to Instagram
+                </button>
+              )}
+              {!metadata && (
+                <div className="flex flex-1 items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/5 px-3 py-2 text-xs text-purple-400">
+                  <Square className="h-3.5 w-3.5" /> Instagram connected
+                </div>
+              )}
+              <button
+                onClick={() => handleDisconnect("instagram")}
+                disabled={disconnecting === "instagram"}
+                title="Disconnect Instagram"
+                className="rounded-lg border border-border/40 bg-background/40 px-2 py-2 text-muted-foreground hover:text-destructive hover:border-destructive/40 disabled:opacity-50"
+              >
+                {disconnecting === "instagram" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          ) : (
             <a href="/api/auth/instagram/connect"
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/5 px-4 py-2 text-xs font-medium text-purple-400 hover:bg-purple-500/10">
               <Square className="h-3.5 w-3.5" /> Connect Instagram
             </a>
           )}
         </div>
+
+        {/* Publish result feedback */}
+        {publishResult?.url && publishResult.url.startsWith("http") && (
+          <a
+            href={publishResult.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mb-3 block rounded-md bg-green-500/10 border border-green-500/30 px-3 py-2 text-xs text-green-400 text-center hover:brightness-110"
+          >
+            Published! View on YouTube →
+          </a>
+        )}
+        {publishResult?.url && !publishResult.url.startsWith("http") && (
+          <p className="mb-3 rounded-md bg-green-500/10 border border-green-500/30 px-3 py-2 text-xs text-green-400 text-center">
+            ✓ Posted successfully
+          </p>
+        )}
+        {publishResult?.error && (
+          <p className="mb-3 rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-xs text-destructive">
+            {publishResult.error}
+          </p>
+        )}
 
         {metadata ? (
           <div className="space-y-3">
