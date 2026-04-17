@@ -111,12 +111,43 @@ export async function POST(
 
     console.log(`[tiktok-publish] FILE_UPLOAD: size=${videoSize} chunks=${totalChunks} user=${user.id}`);
 
-    // ── Init upload via INBOX (draft → TikTok Studio) ──────────
-    // Using inbox instead of direct post: no content-sharing-guidelines
-    // restrictions, no creator_info pre-check required.
-    // Video appears as a draft in the creator's TikTok Studio inbox.
-    const initRes = await fetch(
-      "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
+    // ── Query creator info for Direct Post ─────────────────────
+    let creatorInfo: Record<string, unknown> = {};
+    try {
+      const creatorRes = await fetch(
+        "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json; charset=UTF-8",
+          },
+          body: JSON.stringify({}),
+        }
+      );
+      const creatorData = await creatorRes.json();
+      if (creatorData.data) creatorInfo = creatorData.data;
+    } catch { /* ignore — will fall back to inbox */ }
+
+    const allowedPrivacy: string[] = (creatorInfo.privacy_level_options as string[]) ?? ["SELF_ONLY"];
+    const privacyLevel = allowedPrivacy.includes(privacy ?? "")
+      ? privacy
+      : allowedPrivacy.includes("SELF_ONLY") ? "SELF_ONLY" : allowedPrivacy[0];
+
+    const sourceInfo = {
+      source: "FILE_UPLOAD",
+      video_size: videoSize,
+      chunk_size: chunkSize,
+      total_chunk_count: totalChunks,
+    };
+
+    // ── Try Direct Post first (supports title/hashtags) ─────────
+    // Falls back to Inbox if app not yet approved or sandbox restriction
+    let initData: Record<string, unknown> = {};
+    let usedInbox = false;
+
+    const directRes = await fetch(
+      "https://open.tiktokapis.com/v2/post/publish/video/init/",
       {
         method: "POST",
         headers: {
@@ -124,29 +155,52 @@ export async function POST(
           "Content-Type": "application/json; charset=UTF-8",
         },
         body: JSON.stringify({
-          source_info: {
-            source: "FILE_UPLOAD",
-            video_size: videoSize,
-            chunk_size: chunkSize,
-            total_chunk_count: totalChunks,
+          post_info: {
+            title: (title || "AI Generated Video").slice(0, 150),
+            privacy_level: privacyLevel,
+            disable_duet: (creatorInfo.duet_disabled as boolean) ?? true,
+            disable_comment: (creatorInfo.comment_disabled as boolean) ?? false,
+            disable_stitch: (creatorInfo.stitch_disabled as boolean) ?? true,
           },
+          source_info: sourceInfo,
         }),
       }
     );
+    const directData = await directRes.json();
+    const directOk = directRes.ok && (!directData.error?.code || directData.error.code === "ok");
 
-    const initData = await initRes.json();
-    console.log("[tiktok-publish] Init response:", JSON.stringify(initData));
+    if (directOk) {
+      initData = directData;
+      console.log("[tiktok-publish] Direct Post init OK");
+    } else {
+      // Fall back to inbox (no post_info, no restrictions)
+      console.log("[tiktok-publish] Direct Post failed, falling back to inbox:", JSON.stringify(directData));
+      const inboxRes = await fetch(
+        "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json; charset=UTF-8",
+          },
+          body: JSON.stringify({ source_info: sourceInfo }),
+        }
+      );
+      initData = await inboxRes.json();
+      usedInbox = true;
+      console.log("[tiktok-publish] Inbox init response:", JSON.stringify(initData));
 
-    // TikTok returns error.code = "ok" on success — "ok" is truthy, so check explicitly
-    if (!initRes.ok || (initData.error?.code && initData.error.code !== "ok")) {
-      return NextResponse.json({
-        error: initData.error?.message || `TikTok init error: ${initRes.status}`,
-        details: initData,
-      }, { status: 500 });
+      if (!inboxRes.ok || (initData.error && (initData.error as Record<string,unknown>).code !== "ok")) {
+        const errMsg = (initData.error as Record<string,unknown> | undefined)?.message as string;
+        return NextResponse.json({
+          error: errMsg || `TikTok inbox error: ${inboxRes.status}`,
+          details: initData,
+        }, { status: 500 });
+      }
     }
 
-    const uploadUrl = initData.data?.upload_url;
-    const publishId = initData.data?.publish_id;
+    const uploadUrl = (initData.data as Record<string, unknown>)?.upload_url as string;
+    const publishId = (initData.data as Record<string, unknown>)?.publish_id as string;
 
     if (!uploadUrl) {
       return NextResponse.json({ error: "No upload URL returned", details: initData }, { status: 500 });
@@ -183,7 +237,10 @@ export async function POST(
     return NextResponse.json({
       success: true,
       publish_id: publishId,
-      message: "Video sent to TikTok inbox. Open TikTok Studio to review and publish.",
+      via: usedInbox ? "inbox" : "direct",
+      message: usedInbox
+        ? "Video sent to TikTok inbox. Open TikTok Studio to add title/hashtags and publish."
+        : "Video posted to TikTok! Check your profile in a few minutes.",
     });
   } catch (error) {
     console.error("[tiktok-publish] Error:", error);
