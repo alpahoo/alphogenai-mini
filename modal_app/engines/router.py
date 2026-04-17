@@ -26,6 +26,7 @@ def select_engine(
     duration_seconds: int = 5,
     preferred: str | None = None,
     supabase_client=None,
+    references: dict | None = None,
     **kwargs,
 ) -> str:
     """Select the best engine for the given parameters.
@@ -44,7 +45,14 @@ def select_engine(
         logger.info(f"engine_router: using preferred '{preferred}'")
         return preferred
 
-    # 2. For pro/premium, find highest-priority active API engine
+    # 2. Reference-based routing: character_face → prefer evolink if available
+    if references:
+        from .reference_mapper import has_character_face
+        if has_character_face(references) and is_engine_available("evolink", plan, supabase_client):
+            logger.info(f"engine_router: character_face ref → 'evolink' for plan={plan}")
+            return "evolink"
+
+    # 3. For pro/premium, find highest-priority active API engine
     #    (usually seedance/kling-like; wan_i2v is the GPU local fallback)
     if plan in ("pro", "premium"):
         engines = get_all_engines(supabase_client)

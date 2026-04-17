@@ -77,11 +77,29 @@ export interface JobScene {
   updated_at: string;
 }
 
+// Multi-Reference types (V1)
+export type ReferenceRole = "character_face" | "outfit_style" | "camera_motion" | "mood";
+
+export interface ReferenceItem {
+  role: ReferenceRole;
+  url: string;
+  mime_type?: string;
+  filename?: string;
+  weight?: number; // 0.0-1.0, default 0.7 — UI not exposed in V1
+}
+
+export interface ReferencePayload {
+  images?: ReferenceItem[];
+  videos?: ReferenceItem[];
+  audio?: ReferenceItem[];
+}
+
 export interface CreateJobRequest {
   prompt: string;
   plan?: JobPlan;
   target_duration_seconds?: number;
   preferred_engine?: EngineKey;
+  references?: ReferencePayload;
 }
 
 export interface CreateJobResponse {

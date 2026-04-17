@@ -25,8 +25,9 @@ import { createClient } from "@/lib/supabase/client";
 import { SegmentedControl } from "@/components/create/segmented-control";
 import { ComingSoonSection } from "@/components/create/coming-soon-section";
 import { TemplatePicker } from "@/components/create/template-picker";
+import { ReferenceUpload, buildReferencePayload } from "@/components/create/reference-upload";
 import type { PromptTemplate } from "@/lib/prompt-templates";
-import type { JobPlan, EngineKey } from "@/lib/types";
+import type { JobPlan, EngineKey, ReferenceItem } from "@/lib/types";
 import { ENGINE_DISPLAY_NAMES } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -90,6 +91,7 @@ export default function CreateModePage({
   const [duration, setDuration] = useState("5");
   const [selectedEngine, setSelectedEngine] = useState<EngineKey | "auto">("auto");
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+  const [references, setReferences] = useState<Record<string, ReferenceItem>>({});
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -190,6 +192,7 @@ export default function CreateModePage({
           prompt: trimmed,
           target_duration_seconds: parseInt(duration, 10),
           ...(uploadedImageUrl && { image_url: uploadedImageUrl }),
+          ...(Object.keys(references).length > 0 && { references: buildReferencePayload(references) }),
           ...(selectedEngine !== "auto" && { preferred_engine: selectedEngine }),
         }),
       });
@@ -316,6 +319,13 @@ export default function CreateModePage({
                 </label>
               )}
             </div>
+
+            {/* ── Multi-Reference (V1) ──────────────────────────── */}
+            <ReferenceUpload
+              references={references}
+              onChange={setReferences}
+              locked={plan === "free"}
+            />
 
             {/* ── Duration ───────────────────────────────────────── */}
             <div>

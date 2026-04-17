@@ -804,6 +804,7 @@ def generate_video_complete(
     user_id: Optional[str] = None,
     preferred_engine: Optional[str] = None,
     image_url: Optional[str] = None,
+    references: Optional[dict] = None,
 ):
     import traceback
     from modal_app.engines import init_engines
@@ -839,9 +840,10 @@ def generate_video_complete(
             clip_dur = int(storyboard[0]["duration_sec"]) if storyboard else 5
             engine_key = select_engine(
                 plan=plan, duration_seconds=clip_dur, preferred=preferred_engine,
-                supabase_client=supabase_client_for_engines,
+                supabase_client=supabase_client_for_engines, references=references,
             )
-            log(job_id, f"engine selected: {engine_key}")
+            log(job_id, f"engine selected: {engine_key}"
+                f"{' (with references)' if references else ''}")
 
             # Cost tracking (before generation — recorded even on failure)
             try:
@@ -855,6 +857,7 @@ def generate_video_complete(
             video_bytes, actual_engine = generate_with_fallback(
                 engine_key, prompt=prompt, job_id=job_id, duration_seconds=clip_dur,
                 image_url=image_url, supabase_client=supabase_client_for_engines,
+                references=references,
             )
             if actual_engine != engine_key:
                 log(job_id, f"fallback triggered: {engine_key} → {actual_engine}")
@@ -1055,7 +1058,8 @@ def webhook():
         user_id: Optional[str] = None
         scene_count: int = 1
         preferred_engine: Optional[str] = None
-        image_url: Optional[str] = None  # I2V: user-uploaded first frame
+        image_url: Optional[str] = None
+        references: Optional[dict] = None  # Multi-Reference V1 payload
 
     @web.post("/webhook")
     async def trigger(req: JobRequest, x_webhook_secret: str = Header(None)):
@@ -1075,7 +1079,8 @@ def webhook():
 
         try:
             await generate_video_complete.spawn.aio(
-                req.job_id, req.prompt, req.user_id, req.preferred_engine, req.image_url
+                req.job_id, req.prompt, req.user_id, req.preferred_engine,
+                req.image_url, req.references,
             )
         except Exception as e:
             print(f"[webhook] spawn failed: {e}")

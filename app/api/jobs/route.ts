@@ -16,11 +16,12 @@ export async function POST(req: Request) {
 
     const supabase = createServiceClient();
     const body = await req.json();
-    const { prompt, target_duration_seconds, preferred_engine, image_url } = body as {
+    const { prompt, target_duration_seconds, preferred_engine, image_url, references } = body as {
       prompt: string;
       target_duration_seconds?: unknown;
       preferred_engine?: string;
       image_url?: string;
+      references?: Record<string, unknown>;
     };
 
     // Validate image_url if provided
@@ -28,6 +29,11 @@ export async function POST(req: Request) {
       image_url && typeof image_url === "string" && image_url.startsWith("http")
         ? image_url
         : undefined;
+
+    // Validate references payload (light validation V1)
+    const safeReferences = references && typeof references === "object"
+      ? references
+      : undefined;
 
     // Validate preferred_engine if provided
     const validEngines = ["wan_i2v", "seedance"];
@@ -130,6 +136,7 @@ export async function POST(req: Request) {
         target_duration_seconds: Math.round(targetDuration),
         storyboard,
         ...(safeImageUrl ? { image_url: safeImageUrl } : {}),
+        ...(safeReferences ? { references_payload: safeReferences } : {}),
         ...(user?.id ? { user_id: user.id } : {}),
       })
       .select()
@@ -188,6 +195,7 @@ export async function POST(req: Request) {
           user_id: user?.id ?? null,
           scene_count: storyboard.length,
           ...(safeImageUrl && { image_url: safeImageUrl }),
+          ...(safeReferences && { references: safeReferences }),
           ...(safePreferredEngine && { preferred_engine: safePreferredEngine }),
         }),
       });
