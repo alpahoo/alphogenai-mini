@@ -93,10 +93,25 @@ export default function JobPage() {
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
-  // Social connections — must be declared here (before any conditional returns)
+  // Social connections — declared before any conditional returns (Rules of Hooks)
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [tiktokConnected, setTiktokConnected] = useState(false);
   const [instagramConnected, setInstagramConnected] = useState(false);
+
+  // ── Check social connections (must be before conditional returns) ────────
+  useEffect(() => {
+    if (!email) return;
+    const sb = createClient();
+    sb.from("social_connections")
+      .select("platform")
+      .then(({ data }) => {
+        for (const row of data ?? []) {
+          if (row.platform === "youtube") setYoutubeConnected(true);
+          if (row.platform === "tiktok") setTiktokConnected(true);
+          if (row.platform === "instagram") setInstagramConnected(true);
+        }
+      });
+  }, [email]);
 
   // ── Load user for sidebar + auth gate ───────────────────────
   useEffect(() => {
@@ -209,21 +224,6 @@ export default function JobPage() {
       </div>
     );
   }
-
-  // Check social connections once user is known
-  useEffect(() => {
-    if (!email) return;
-    const sb = createClient();
-    sb.from("social_connections")
-      .select("platform")
-      .then(({ data }) => {
-        for (const row of data ?? []) {
-          if (row.platform === "youtube") setYoutubeConnected(true);
-          if (row.platform === "tiktok") setTiktokConnected(true);
-          if (row.platform === "instagram") setInstagramConnected(true);
-        }
-      });
-  }, [email]);
 
   const isActive = job ? (job.status === "pending" || job.status === "in_progress") : false;
   const isDone = job?.status === "done";
@@ -381,7 +381,7 @@ export default function JobPage() {
               {/* ── Mobile info cards (hidden on desktop) ───── */}
               {job && (
                 <div className="lg:hidden space-y-5">
-                  <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} />
+                  <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} />
                 </div>
               )}
             </motion.div>
@@ -391,7 +391,7 @@ export default function JobPage() {
         {/* ═══ RIGHT: Info sidebar (desktop only) ══════════════ */}
         {job && (
           <div className="hidden lg:flex w-72 flex-col border-l border-border/40 bg-muted/20 p-6 gap-5 overflow-y-auto">
-            <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} />
+            <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} />
           </div>
         )}
       </main>
@@ -411,6 +411,9 @@ function InfoCards({
   elapsed,
   sceneCount,
   isAdmin = false,
+  youtubeConnected = false,
+  tiktokConnected = false,
+  instagramConnected = false,
 }: {
   job: Job;
   isActive: boolean;
@@ -420,6 +423,9 @@ function InfoCards({
   elapsed: number;
   sceneCount: number;
   isAdmin?: boolean;
+  youtubeConnected?: boolean;
+  tiktokConnected?: boolean;
+  instagramConnected?: boolean;
 }) {
   return (
     <>
