@@ -5,7 +5,9 @@ import { NextResponse } from "next/server";
 
 /**
  * POST /api/jobs/[id]/publish/tiktok
- * Uploads video to TikTok via Content Posting API (direct post).
+ * Uploads video to TikTok via Content Posting API — FILE_UPLOAD method.
+ * (PULL_FROM_URL requires verified domain; FILE_UPLOAD has no such constraint)
+ *
  * Body: { title, privacy?: "PUBLIC_TO_EVERYONE"|"MUTUAL_FOLLOW_FRIENDS"|"SELF_ONLY" }
  */
 export async function POST(
@@ -26,7 +28,7 @@ export async function POST(
 
     const supabase = createServiceClient();
 
-    // Get TikTok connection
+    // ── Get TikTok connection ───────────────────────────────────
     const { data: conn } = await supabase
       .from("social_connections")
       .select("*")
@@ -44,7 +46,7 @@ export async function POST(
       authTag: conn.token_auth_tag,
     });
 
-    // Refresh if expired
+    // ── Refresh token if expired ────────────────────────────────
     if (conn.expires_at && new Date(conn.expires_at) < new Date() && conn.refresh_token_encrypted) {
       const refreshToken = decryptSecret({
         encrypted: conn.refresh_token_encrypted,
@@ -76,7 +78,7 @@ export async function POST(
       }
     }
 
-    // Get video URL
+    // ── Get video URL ───────────────────────────────────────────
     const { data: job } = await supabase
       .from("jobs")
       .select("output_url_final, video_url, social_exports")
@@ -88,51 +90,103 @@ export async function POST(
     const socialExports = (job.social_exports as Record<string, string>) || {};
     const videoUrl = socialExports.tiktok || job.output_url_final || job.video_url;
 
-    // TikTok Direct Post API — initialize upload
+    if (!videoUrl) {
+      return NextResponse.json({ error: "No video URL found" }, { status: 400 });
+    }
+
+    // ── Download video bytes from R2 ────────────────────────────
+    const videoRes = await fetch(videoUrl);
+    if (!videoRes.ok) {
+      return NextResponse.json({ error: `Failed to download video: ${videoRes.status}` }, { status: 500 });
+    }
+    const videoBuffer = await videoRes.arrayBuffer();
+    const videoSize = videoBuffer.byteLength;
+
+    // TikTok chunk size: min 5MB except last chunk, max 64MB
+    const chunkSize = 10 * 1024 * 1024; // 10MB
+    const totalChunks = Math.ceil(videoSize / chunkSize);
+
+    console.log(`[tiktok-publish] FILE_UPLOAD: size=${videoSize} chunks=${totalChunks} user=${user.id}`);
+
+    // ── Init upload (FILE_UPLOAD) ───────────────────────────────
     const initRes = await fetch(
       "https://open.tiktokapis.com/v2/post/publish/video/init/",
       {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
+          "Content-Type": "application/json; charset=UTF-8",
         },
         body: JSON.stringify({
           post_info: {
-            title: (title || "").slice(0, 150),
+            title: (title || "AI Generated Video").slice(0, 150),
             privacy_level: privacy || "SELF_ONLY",
             disable_duet: false,
             disable_comment: false,
             disable_stitch: false,
           },
           source_info: {
-            source: "PULL_FROM_URL",
-            video_url: videoUrl,
+            source: "FILE_UPLOAD",
+            video_size: videoSize,
+            chunk_size: chunkSize,
+            total_chunk_count: totalChunks,
           },
         }),
       }
     );
 
     const initData = await initRes.json();
+    console.log("[tiktok-publish] Init response:", JSON.stringify(initData));
 
     if (!initRes.ok || initData.error?.code) {
-      console.error("[tiktok-publish] Init failed:", initData);
       return NextResponse.json({
-        error: initData.error?.message || `TikTok API error: ${initRes.status}`,
+        error: initData.error?.message || `TikTok init error: ${initRes.status}`,
+        details: initData,
       }, { status: 500 });
     }
 
+    const uploadUrl = initData.data?.upload_url;
     const publishId = initData.data?.publish_id;
-    console.log(`[tiktok-publish] Initiated: publish_id=${publishId} (user=${user.id})`);
+
+    if (!uploadUrl) {
+      return NextResponse.json({ error: "No upload URL returned", details: initData }, { status: 500 });
+    }
+
+    // ── Upload chunks ───────────────────────────────────────────
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize, videoSize);
+      const chunk = videoBuffer.slice(start, end);
+
+      const uploadRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "video/mp4",
+          "Content-Range": `bytes ${start}-${end - 1}/${videoSize}`,
+        },
+        body: chunk,
+      });
+
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text();
+        console.error(`[tiktok-publish] Chunk ${i + 1}/${totalChunks} failed:`, uploadRes.status, errText);
+        return NextResponse.json({
+          error: `Chunk upload failed at ${i + 1}/${totalChunks}: ${uploadRes.status}`,
+        }, { status: 500 });
+      }
+
+      console.log(`[tiktok-publish] Chunk ${i + 1}/${totalChunks} uploaded`);
+    }
+
+    console.log(`[tiktok-publish] All chunks uploaded. publish_id=${publishId}`);
 
     return NextResponse.json({
       success: true,
       publish_id: publishId,
-      message: "Video submitted to TikTok. It may take a few minutes to appear on your profile.",
-      note: "TikTok processes the video asynchronously. Check your TikTok app for the post.",
+      message: "Video submitted to TikTok. Check your TikTok app in a few minutes.",
     });
   } catch (error) {
     console.error("[tiktok-publish] Error:", error);
-    return NextResponse.json({ error: "Publish failed" }, { status: 500 });
+    return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
