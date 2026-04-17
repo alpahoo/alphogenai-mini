@@ -422,7 +422,8 @@ export default function CreateModePage({
                         [
                           { key: "auto" as const, label: "Auto", desc: "Best for your plan" },
                           { key: "wan_i2v" as const, label: "Wan 2.2 I2V", desc: "GPU • up to 60s" },
-                          { key: "seedance" as const, label: "Seedance 2.0", desc: "API • up to 15s", proOnly: true },
+                          { key: "seedance" as const, label: "Seedance (Kie.ai)", desc: "API • up to 15s", proOnly: true },
+                          { key: "evolink" as const, label: "Seedance (EvoLink)", desc: "API • 99.9% SLA • up to 15s", proOnly: true },
                         ] as const
                       ).map((opt) => {
                         const locked = opt.proOnly && plan === "free";

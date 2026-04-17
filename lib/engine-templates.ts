@@ -74,12 +74,13 @@ export const ENGINE_TEMPLATES: EngineConfigTemplate[] = [
     label: "EvoLink.ai — Seedance 2.0",
     provider: "EvoLink.ai",
     description:
-      "Seedance 2.0 via EvoLink with 99.9% SLA, multi-reference, V2V editing. Higher cost, premium features.",
+      "Seedance 2.0 via EvoLink. 99.9% SLA, multi-reference, audio included. $0.199/s at 720p.",
     requiredSecrets: ["api_key"],
     defaultMaxDuration: 15,
     defaultCostPerSecond: 0.199,
     config: {
       create_task: {
+        // POST https://api.evolink.ai/v1/videos/generations
         url: "https://api.evolink.ai/v1/videos/generations",
         method: "POST",
         headers: {
@@ -87,18 +88,21 @@ export const ENGINE_TEMPLATES: EngineConfigTemplate[] = [
           "Content-Type": "application/json",
         },
         body: {
-          model: "seedance-2.0",
+          model: "seedance-2.0-text-to-video",
           prompt: "{{prompt}}",
           duration: "{{duration}}",
           quality: "720p",
           aspect_ratio: "16:9",
           generate_audio: true,
+          model_params: { web_search: false },
           first_frame_url: "{{image_url|optional}}",
         },
+        // Response: { id: "task-unified-...", status: "pending" }
         task_id_path: "id",
       },
       poll_task: {
-        url: "https://api.evolink.ai/v1/videos/{{task_id}}",
+        // GET https://api.evolink.ai/v1/tasks/{task_id}
+        url: "https://api.evolink.ai/v1/tasks/{{task_id}}",
         method: "GET",
         headers: {
           Authorization: "Bearer {{secrets.api_key}}",
@@ -106,14 +110,14 @@ export const ENGINE_TEMPLATES: EngineConfigTemplate[] = [
         state_path: "status",
         states: {
           success: ["completed", "success"],
-          failed: ["failed", "error"],
-          waiting: ["queued", "processing", "pending"],
+          failed: ["failed", "fail", "error", "cancelled"],
+          waiting: ["pending", "processing", "queued", "generating"],
         },
         result_url_path: "output.video_url",
         error_msg_path: "error.message",
       },
       polling: {
-        interval_seconds: 10,
+        interval_seconds: 8,
         timeout_seconds: 600,
       },
     },

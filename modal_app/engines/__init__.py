@@ -25,6 +25,7 @@ import logging
 from typing import Callable
 
 from .base import BaseEngine
+from .evolink import EvoLinkEngine
 from .generic_api import GenericApiEngine
 from .router import select_engine
 from .seedance import SeedanceEngine
@@ -36,11 +37,13 @@ logger = logging.getLogger(__name__)
 # Static adapters (hardcoded)
 # ---------------------------------------------------------------------------
 _wan = WanEngine()
-_seedance_legacy = SeedanceEngine()  # fallback if DB has no config
+_seedance_legacy = SeedanceEngine()   # fallback if DB has no Kie.ai config
+_evolink = EvoLinkEngine()            # fallback if DB has no EvoLink config
 
 _STATIC_ADAPTERS: dict[str, BaseEngine] = {
     "wan_i2v": _wan,
     "seedance": _seedance_legacy,  # legacy fallback — overridden by DB config if available
+    "evolink": _evolink,           # static fallback — reads EVOLINK_API_KEY from env
 }
 
 _initialized = False

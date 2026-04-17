@@ -53,7 +53,7 @@ export type SceneStatus =
   | "failed"
   | "skipped";
 
-export type EngineKey = "wan_i2v" | "seedance";
+export type EngineKey = "wan_i2v" | "seedance" | "evolink";
 
 export interface StoryboardScene {
   scene_index: number;
@@ -150,7 +150,8 @@ export const STAGE_ORDER: JobStage[] = [
 
 export const ENGINE_DISPLAY_NAMES: Record<string, string> = {
   wan_i2v: "Wan 2.2 I2V",
-  seedance: "Seedance 2.0",
+  seedance: "Seedance 2.0 (Kie.ai)",
+  evolink: "Seedance 2.0 (EvoLink)",
 };
 
 export function getEngineDisplayName(engine: string | null | undefined): string {
