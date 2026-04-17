@@ -177,9 +177,12 @@ export async function POST(
 
     if (!initRes.ok) {
       const errText = await initRes.text();
-      console.error("[youtube-publish] Init failed:", errText);
+      console.error("[youtube-publish] Init failed:", initRes.status, errText);
+      // Return the actual YouTube error for debugging
+      let ytError: unknown;
+      try { ytError = JSON.parse(errText); } catch { ytError = errText; }
       return NextResponse.json(
-        { error: `YouTube upload init failed: ${initRes.status}` },
+        { error: `YouTube upload init failed: ${initRes.status}`, details: ytError },
         { status: 500 }
       );
     }
