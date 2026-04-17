@@ -47,11 +47,47 @@ export async function POST(
       );
     }
 
-    const accessToken = decryptSecret({
+    let accessToken = decryptSecret({
       encrypted: conn.access_token_encrypted,
       iv: conn.token_iv,
       authTag: conn.token_auth_tag,
     });
+
+    // ── Proactive token refresh (Instagram long-lived tokens expire after 60 days) ──
+    // Refresh if the token expires within 7 days — extends it by another 60 days.
+    // Instagram has no separate refresh_token; you refresh the token itself while it's still valid.
+    const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    if (conn.expires_at && new Date(conn.expires_at) < sevenDaysFromNow) {
+      try {
+        const refreshRes = await fetch(
+          `https://graph.instagram.com/refresh_access_token?` +
+          new URLSearchParams({
+            grant_type: "ig_refresh_token",
+            access_token: accessToken,
+          })
+        );
+        const refreshData = await refreshRes.json();
+
+        if (refreshData.access_token) {
+          accessToken = refreshData.access_token;
+          const { encryptSecret } = await import("@/lib/encryption");
+          const enc = encryptSecret(accessToken);
+          await supabase.from("social_connections").update({
+            access_token_encrypted: enc.encrypted,
+            token_iv: enc.iv,
+            token_auth_tag: enc.authTag,
+            expires_at: new Date(Date.now() + (refreshData.expires_in ?? 5184000) * 1000).toISOString(),
+            updated_at: new Date().toISOString(),
+          }).eq("id", conn.id);
+          console.log(`[instagram-publish] Token refreshed, new expiry in ${refreshData.expires_in ?? 5184000}s`);
+        } else {
+          console.warn("[instagram-publish] Token refresh failed (token may be expired):", refreshData);
+          // Continue with existing token — it may still work if not yet expired
+        }
+      } catch (e) {
+        console.warn("[instagram-publish] Token refresh error (non-fatal):", e);
+      }
+    }
 
     const igUserId = conn.channel_id;
 
