@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateStoryboard } from "@/lib/storyboard";
 import { isEvoLinkEngine, createEvoLinkTask, EVOLINK_ENGINES } from "@/lib/evolink-client";
+import { enhancePrompt } from "@/lib/prompt-enhancer";
 import type { JobPlan } from "@/lib/types";
 
 const FREE_QUOTA_24H = 1; // max free jobs per 24h per user (pre-Stripe)
@@ -117,9 +118,13 @@ export async function POST(req: Request) {
         ? Math.round(rawDuration)
         : plan === "pro" ? 15 : 5;
 
-    // Generate storyboard server-side
+    // ── Enhance prompt via EvoLink LLM (transparent, non-blocking) ─────
+    // Falls back silently to original if EvoLink is unavailable.
+    const enhancedPrompt = await enhancePrompt(prompt.trim());
+
+    // Generate storyboard from enhanced prompt (scene prompts inherit the enrichment)
     const storyboard = generateStoryboard(
-      prompt.trim(),
+      enhancedPrompt,
       safeDuration,
       plan
     );
@@ -127,6 +132,7 @@ export async function POST(req: Request) {
     const targetDuration = storyboard.reduce((s, sc) => s + sc.duration_sec, 0);
 
     // Insert job as "pending"
+    // prompt = original (displayed to user), storyboard entries use enhancedPrompt
     const { data: job, error: insertError } = await supabase
       .from("jobs")
       .insert({
@@ -167,7 +173,7 @@ export async function POST(req: Request) {
       try {
         const taskId = await createEvoLinkTask({
           engineKey,
-          prompt: prompt.trim(),
+          prompt: enhancedPrompt,   // enriched cinematically
           duration: safeDuration,
           imageUrl: safeImageUrl,
         });
@@ -219,7 +225,7 @@ export async function POST(req: Request) {
         },
         body: JSON.stringify({
           job_id: job.id,
-          prompt: prompt.trim(),
+          prompt: enhancedPrompt,   // enriched cinematically
           plan,
           user_id: user?.id ?? null,
           scene_count: storyboard.length,

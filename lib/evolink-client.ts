@@ -15,6 +15,54 @@
 const EVOLINK_API = "https://api.evolink.ai/v1";
 
 // ---------------------------------------------------------------------------
+// LLM API (OpenAI-compatible) — same API key, different endpoint
+// ---------------------------------------------------------------------------
+
+/**
+ * Call EvoLink's OpenAI-compatible chat completions endpoint.
+ * Used for prompt enhancement, metadata generation, storyboard LLM, etc.
+ *
+ * Default model: deepseek-chat (~$0.07/1M tokens — very cheap for short prompts)
+ * Alternatives: "gemini-3.1-flash-lite-preview" (even cheaper), "claude-sonnet-4-6"
+ */
+export async function callEvoLinkLLM(
+  systemPrompt: string,
+  userMessage: string,
+  model = "deepseek-chat"
+): Promise<string> {
+  const apiKey = process.env.EVOLINK_API_KEY;
+  if (!apiKey) throw new Error("EVOLINK_API_KEY not configured");
+
+  const res = await fetch(`${EVOLINK_API}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey.trim()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+      max_tokens: 400,
+      temperature: 0.7,
+    }),
+    signal: AbortSignal.timeout(8000), // 8s max — never block job creation
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText);
+    throw new Error(`EvoLink LLM failed (${res.status}): ${err.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content as string | undefined;
+  if (!content) throw new Error("EvoLink LLM returned empty content");
+  return content.trim();
+}
+
+// ---------------------------------------------------------------------------
 // Engine registry — maps our engine keys to EvoLink model IDs
 // ---------------------------------------------------------------------------
 
