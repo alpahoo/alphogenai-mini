@@ -206,17 +206,21 @@ export default function JobPage() {
   }
 
   const [youtubeConnected, setYoutubeConnected] = useState(false);
+  const [tiktokConnected, setTiktokConnected] = useState(false);
+  const [instagramConnected, setInstagramConnected] = useState(false);
 
-  // Check YouTube connection once user is known
+  // Check social connections once user is known
   useEffect(() => {
     if (!email) return;
     const sb = createClient();
     sb.from("social_connections")
-      .select("id")
-      .eq("platform", "youtube")
-      .maybeSingle()
+      .select("platform")
       .then(({ data }) => {
-        if (data) setYoutubeConnected(true);
+        for (const row of data ?? []) {
+          if (row.platform === "youtube") setYoutubeConnected(true);
+          if (row.platform === "tiktok") setTiktokConnected(true);
+          if (row.platform === "instagram") setInstagramConnected(true);
+        }
       });
   }, [email]);
 
@@ -476,6 +480,8 @@ function InfoCards({
           videoUrl={job.output_url_final || job.video_url || ""}
           existingExports={(job as Record<string, unknown>).social_exports as Record<string, string> | undefined}
           youtubeConnected={youtubeConnected}
+          tiktokConnected={tiktokConnected}
+          instagramConnected={instagramConnected}
         />
       )}
 

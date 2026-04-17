@@ -22,6 +22,8 @@ interface SocialExportPanelProps {
   videoUrl: string;
   existingExports?: Record<string, string>;
   youtubeConnected?: boolean;
+  tiktokConnected?: boolean;
+  instagramConnected?: boolean;
 }
 
 const FORMATS = [
@@ -30,7 +32,7 @@ const FORMATS = [
   { key: "youtube", label: "YouTube", ratio: "16:9", icon: Monitor, color: "text-red-400" },
 ] as const;
 
-export function SocialExportPanel({ jobId, plan, videoUrl, existingExports, youtubeConnected }: SocialExportPanelProps) {
+export function SocialExportPanel({ jobId, plan, videoUrl, existingExports, youtubeConnected, tiktokConnected, instagramConnected }: SocialExportPanelProps) {
   const [exports, setExports] = useState<Record<string, string>>(existingExports || {});
   const [exporting, setExporting] = useState(false);
   const [metadata, setMetadata] = useState<SocialMetadata | null>(null);
@@ -293,15 +295,77 @@ export function SocialExportPanel({ jobId, plan, videoUrl, existingExports, yout
           </div>
         )}
 
-        {!youtubeConnected && (
-          <a
-            href="/api/auth/youtube/connect"
-            className="mb-3 flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10"
+        {/* TikTok */}
+        {tiktokConnected && metadata && (
+          <button
+            onClick={async () => {
+              if (!confirm(`Post to TikTok: "${metadata.title}"?`)) return;
+              setPublishing(true);
+              try {
+                const res = await fetch(`/api/jobs/${jobId}/publish/tiktok`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ title: metadata.description_tiktok }),
+                });
+                const data = await res.json();
+                setPublishResult(data.success ? { url: "tiktok://posted" } : { error: data.error });
+              } catch { setPublishResult({ error: "TikTok publish failed" }); }
+              setPublishing(false);
+            }}
+            disabled={publishing}
+            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-black border border-white/20 px-4 py-2.5 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-50"
           >
-            <Monitor className="h-3.5 w-3.5" />
-            Connect YouTube
-          </a>
+            {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Smartphone className="h-3.5 w-3.5" />}
+            Publish to TikTok
+          </button>
         )}
+
+        {/* Instagram */}
+        {instagramConnected && metadata && (
+          <button
+            onClick={async () => {
+              if (!confirm(`Post to Instagram: "${metadata.title}"?`)) return;
+              setPublishing(true);
+              try {
+                const res = await fetch(`/api/jobs/${jobId}/publish/instagram`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ caption: metadata.description_instagram }),
+                });
+                const data = await res.json();
+                setPublishResult(data.success ? { url: "instagram://posted" } : { error: data.error });
+              } catch { setPublishResult({ error: "Instagram publish failed" }); }
+              setPublishing(false);
+            }}
+            disabled={publishing}
+            className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-500 px-4 py-2.5 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-50"
+          >
+            {publishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
+            Publish to Instagram
+          </button>
+        )}
+
+        {/* Connect buttons for unconnected platforms */}
+        <div className="flex flex-col gap-1.5 mb-3">
+          {!youtubeConnected && (
+            <a href="/api/auth/youtube/connect"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10">
+              <Monitor className="h-3.5 w-3.5" /> Connect YouTube
+            </a>
+          )}
+          {!tiktokConnected && (
+            <a href="/api/auth/tiktok/connect"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-xs font-medium text-white/70 hover:bg-white/10">
+              <Smartphone className="h-3.5 w-3.5" /> Connect TikTok
+            </a>
+          )}
+          {!instagramConnected && (
+            <a href="/api/auth/instagram/connect"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/5 px-4 py-2 text-xs font-medium text-purple-400 hover:bg-purple-500/10">
+              <Square className="h-3.5 w-3.5" /> Connect Instagram
+            </a>
+          )}
+        </div>
 
         {metadata ? (
           <div className="space-y-3">
