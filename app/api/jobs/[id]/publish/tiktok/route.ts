@@ -102,8 +102,11 @@ export async function POST(
     const videoBuffer = await videoRes.arrayBuffer();
     const videoSize = videoBuffer.byteLength;
 
-    // TikTok chunk size: min 5MB except last chunk, max 64MB
-    const chunkSize = 10 * 1024 * 1024; // 10MB
+    // TikTok rules:
+    // - chunk_size must be between 5MB and 128MB for multi-chunk
+    // - If only 1 chunk, chunk_size must equal video_size exactly
+    const PREFERRED_CHUNK = 10 * 1024 * 1024; // 10MB
+    const chunkSize = videoSize <= PREFERRED_CHUNK ? videoSize : PREFERRED_CHUNK;
     const totalChunks = Math.ceil(videoSize / chunkSize);
 
     console.log(`[tiktok-publish] FILE_UPLOAD: size=${videoSize} chunks=${totalChunks} user=${user.id}`);
