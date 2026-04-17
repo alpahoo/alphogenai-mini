@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle2,
   XCircle,
@@ -10,6 +10,7 @@ import {
   Clock,
   Film,
   Plus,
+  Trash2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -60,6 +61,7 @@ function formatDate(iso: string) {
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -77,7 +79,7 @@ export default function ProjectsPage() {
           )
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
-          .limit(20);
+          .limit(50);
 
         if (data) setProjects(data);
       } catch {
@@ -88,6 +90,23 @@ export default function ProjectsPage() {
     }
     load();
   }, []);
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm("Delete this project? This cannot be undone.")) return;
+    setDeleting(id);
+    try {
+      const res = await fetch(`/api/jobs/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setProjects((prev) => prev.filter((p) => p.id !== id));
+      }
+    } catch {
+      // fail silently
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   return (
     <div className="px-8 py-10 max-w-5xl mx-auto">
@@ -136,50 +155,73 @@ export default function ProjectsPage() {
         </motion.div>
       ) : (
         <div className="space-y-2">
-          {projects.map((project, i) => (
-            <motion.div
-              key={project.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25, delay: i * 0.03 }}
-            >
-              <Link
-                href={`/jobs/${project.id}`}
-                className="flex items-center gap-4 rounded-xl border border-border/50 bg-card/80 px-5 py-4 backdrop-blur-sm transition-all duration-150 hover:border-primary/30 hover:bg-card"
+          <AnimatePresence initial={false}>
+            {projects.map((project, i) => (
+              <motion.div
+                key={project.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, x: -20, height: 0, marginBottom: 0 }}
+                transition={{ duration: 0.25, delay: i * 0.03 }}
+                className="group relative"
               >
-                {/* Thumbnail placeholder */}
-                <div className="flex h-12 w-20 shrink-0 items-center justify-center rounded-lg bg-muted/50">
-                  {project.output_url_final ? (
-                    <Film className="h-5 w-5 text-primary/60" />
-                  ) : (
-                    <Film className="h-5 w-5 text-muted-foreground/30" />
-                  )}
-                </div>
-
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {project.prompt}
-                  </p>
-                  <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {formatDate(project.created_at)}
-                    </span>
-                    {project.target_duration_seconds && (
-                      <span>{project.target_duration_seconds}s</span>
+                <Link
+                  href={`/jobs/${project.id}`}
+                  className="flex items-center gap-4 rounded-xl border border-border/50 bg-card/80 px-5 py-4 pr-14 backdrop-blur-sm transition-all duration-150 hover:border-primary/30 hover:bg-card"
+                >
+                  {/* Thumbnail */}
+                  <div className="flex h-12 w-20 shrink-0 items-center justify-center rounded-lg bg-muted/50 overflow-hidden">
+                    {project.output_url_final ? (
+                      <video
+                        src={project.output_url_final}
+                        className="h-full w-full object-cover"
+                        preload="metadata"
+                        muted
+                      />
+                    ) : (
+                      <Film className="h-5 w-5 text-muted-foreground/30" />
                     )}
-                    <span className="uppercase text-[10px]">
-                      {project.plan}
-                    </span>
                   </div>
-                </div>
 
-                {/* Status */}
-                {statusBadge(project.status)}
-              </Link>
-            </motion.div>
-          ))}
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {project.prompt}
+                    </p>
+                    <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {formatDate(project.created_at)}
+                      </span>
+                      {project.target_duration_seconds && (
+                        <span>{project.target_duration_seconds}s</span>
+                      )}
+                      <span className="uppercase text-[10px]">
+                        {project.plan}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Status */}
+                  {statusBadge(project.status)}
+                </Link>
+
+                {/* Delete button — absolute right, visible on hover */}
+                <button
+                  onClick={(e) => handleDelete(e, project.id)}
+                  disabled={deleting === project.id}
+                  title="Delete project"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all disabled:opacity-50"
+                >
+                  {deleting === project.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                </button>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       )}
     </div>

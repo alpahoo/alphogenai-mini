@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 
@@ -68,5 +69,56 @@ export async function GET(
     const message =
       error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/jobs/[id]
+ * Permanently deletes a job owned by the authenticated user.
+ */
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+
+    // Verify ownership via auth client
+    const supabaseAuth = await createClient();
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    const supabase = createServiceClient();
+
+    // Check the job belongs to this user
+    const { data: job } = await supabase
+      .from("jobs")
+      .select("id, user_id")
+      .eq("id", id)
+      .single();
+
+    if (!job) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    if (job.user_id !== user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // Delete scenes first (FK constraint)
+    await supabase.from("job_scenes").delete().eq("job_id", id);
+
+    // Delete the job
+    const { error } = await supabase.from("jobs").delete().eq("id", id);
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error: unknown) {
+    console.error("Error in DELETE /api/jobs/[id]:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
