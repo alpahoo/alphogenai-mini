@@ -137,7 +137,8 @@ export async function POST(
     const initData = await initRes.json();
     console.log("[tiktok-publish] Init response:", JSON.stringify(initData));
 
-    if (!initRes.ok || initData.error?.code) {
+    // TikTok returns error.code = "ok" on success — "ok" is truthy, so check explicitly
+    if (!initRes.ok || (initData.error?.code && initData.error.code !== "ok")) {
       return NextResponse.json({
         error: initData.error?.message || `TikTok init error: ${initRes.status}`,
         details: initData,
