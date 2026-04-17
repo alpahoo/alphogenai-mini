@@ -111,33 +111,12 @@ export async function POST(
 
     console.log(`[tiktok-publish] FILE_UPLOAD: size=${videoSize} chunks=${totalChunks} user=${user.id}`);
 
-    // ── Query creator info (required before Direct Post) ───────
-    const creatorRes = await fetch(
-      "https://open.tiktokapis.com/v2/post/publish/creator_info/query/",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json; charset=UTF-8",
-        },
-        body: JSON.stringify({}),
-      }
-    );
-    const creatorData = await creatorRes.json();
-    console.log("[tiktok-publish] creator_info:", JSON.stringify(creatorData));
-
-    const creator = creatorData.data ?? {};
-    // Use creator's allowed privacy levels; fall back to SELF_ONLY
-    const allowedPrivacy: string[] = creator.privacy_level_options ?? ["SELF_ONLY"];
-    const privacyLevel = allowedPrivacy.includes(privacy ?? "")
-      ? privacy
-      : allowedPrivacy.includes("SELF_ONLY")
-        ? "SELF_ONLY"
-        : allowedPrivacy[0];
-
-    // ── Init upload (FILE_UPLOAD) ───────────────────────────────
+    // ── Init upload via INBOX (draft → TikTok Studio) ──────────
+    // Using inbox instead of direct post: no content-sharing-guidelines
+    // restrictions, no creator_info pre-check required.
+    // Video appears as a draft in the creator's TikTok Studio inbox.
     const initRes = await fetch(
-      "https://open.tiktokapis.com/v2/post/publish/video/init/",
+      "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/",
       {
         method: "POST",
         headers: {
@@ -145,13 +124,6 @@ export async function POST(
           "Content-Type": "application/json; charset=UTF-8",
         },
         body: JSON.stringify({
-          post_info: {
-            title: (title || "AI Generated Video").slice(0, 150),
-            privacy_level: privacyLevel,
-            disable_duet: creator.duet_disabled ?? true,
-            disable_comment: creator.comment_disabled ?? false,
-            disable_stitch: creator.stitch_disabled ?? true,
-          },
           source_info: {
             source: "FILE_UPLOAD",
             video_size: videoSize,
@@ -210,7 +182,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       publish_id: publishId,
-      message: "Video submitted to TikTok. Check your TikTok app in a few minutes.",
+      message: "Video sent to TikTok inbox. Open TikTok Studio to review and publish.",
     });
   } catch (error) {
     console.error("[tiktok-publish] Error:", error);
