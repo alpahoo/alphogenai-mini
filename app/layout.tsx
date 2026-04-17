@@ -12,6 +12,10 @@ export const metadata: Metadata = {
   description:
     "Transform text prompts into stunning AI-generated videos with synchronized audio.",
   keywords: "AI video, text to video, video generation, generative AI",
+  other: {
+    // TikTok domain verification
+    "tiktok-domain-verification": "zqvWqGoGXB0OzKIXcJXb9RF7OTNpEVFO",
+  },
 };
 
 export default function RootLayout({
