@@ -25,16 +25,16 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Feature flags (legacy — prefer DB status)
+# Feature flags
 # ---------------------------------------------------------------------------
 ENABLE_MULTI_GENERATION = False
 ENABLE_SEEDANCE = os.environ.get("ENABLE_SEEDANCE", "").lower() == "true"
 
 # ---------------------------------------------------------------------------
 # Hardcoded fallback (used only if DB is unreachable)
+# Modal handles: wan_i2v (GPU local) and seedance (legacy Kie.ai).
+# EvoLink engines are handled directly by Next.js — not listed here.
 # ---------------------------------------------------------------------------
-ENABLE_EVOLINK = os.environ.get("EVOLINK_API_KEY", "") != ""
-
 HARDCODED_ENGINES: dict[str, dict] = {
     "seedance": {
         "name": "Seedance 2.0 (Kie.ai)",
@@ -44,15 +44,6 @@ HARDCODED_ENGINES: dict[str, dict] = {
         "max_duration": 15,
         "gpu": None,
         "priority": 90,
-    },
-    "evolink": {
-        "name": "Seedance 2.0 (EvoLink)",
-        "type": "api",
-        "status": "active" if ENABLE_EVOLINK else "coming_soon",
-        "plans": ["pro", "premium"],
-        "max_duration": 15,
-        "gpu": None,
-        "priority": 85,  # Slightly lower than Kie.ai (higher cost)
     },
     "wan_i2v": {
         "name": "Wan 2.2 I2V",

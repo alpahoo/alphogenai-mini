@@ -2,10 +2,14 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateStoryboard } from "@/lib/storyboard";
+import { isEvoLinkEngine, createEvoLinkTask, EVOLINK_ENGINES } from "@/lib/evolink-client";
 import type { JobPlan } from "@/lib/types";
 
 const FREE_QUOTA_24H = 1; // max free jobs per 24h per user (pre-Stripe)
 const MAX_ACTIVE_JOBS = 1; // max concurrent jobs per user
+
+// All valid engine keys (Modal + EvoLink)
+const VALID_ENGINES = ["wan_i2v", "seedance", ...Object.keys(EVOLINK_ENGINES)];
 
 export async function POST(req: Request) {
   try {
@@ -30,15 +34,14 @@ export async function POST(req: Request) {
         ? image_url
         : undefined;
 
-    // Validate references payload (light validation V1)
+    // Validate references payload
     const safeReferences = references && typeof references === "object"
       ? references
       : undefined;
 
-    // Validate preferred_engine if provided
-    const validEngines = ["wan_i2v", "seedance"];
+    // Validate preferred_engine
     const safePreferredEngine =
-      preferred_engine && validEngines.includes(preferred_engine)
+      preferred_engine && VALID_ENGINES.includes(preferred_engine)
         ? preferred_engine
         : undefined;
 
@@ -72,7 +75,6 @@ export async function POST(req: Request) {
 
     // --- quota check (authenticated users only) -----------------------
     if (user?.id) {
-      // 1. Check active jobs
       const { count: activeCount } = await supabase
         .from("jobs")
         .select("id", { count: "exact", head: true })
@@ -86,7 +88,6 @@ export async function POST(req: Request) {
         );
       }
 
-      // 2. Check 24h free quota (pro users: unlimited)
       if (plan === "free") {
         const twentyFourHoursAgo = new Date(
           Date.now() - 24 * 60 * 60 * 1000
@@ -116,7 +117,7 @@ export async function POST(req: Request) {
         ? Math.round(rawDuration)
         : plan === "pro" ? 15 : 5;
 
-    // Generate storyboard server-side (scene_count is NEVER taken from client)
+    // Generate storyboard server-side
     const storyboard = generateStoryboard(
       prompt.trim(),
       safeDuration,
@@ -125,7 +126,7 @@ export async function POST(req: Request) {
 
     const targetDuration = storyboard.reduce((s, sc) => s + sc.duration_sec, 0);
 
-    // Insert as "pending" — webhook will set "in_progress" before spawning.
+    // Insert job as "pending"
     const { data: job, error: insertError } = await supabase
       .from("jobs")
       .insert({
@@ -147,7 +148,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
 
-    // --- insert scenes into job_scenes --------------------------------
+    // Insert scenes
     const sceneRows = storyboard.map((sc) => ({
       job_id: job.id,
       scene_index: sc.scene_index,
@@ -156,17 +157,45 @@ export async function POST(req: Request) {
       duration_sec: sc.duration_sec,
       status: "pending" as const,
     }));
+    await supabase.from("job_scenes").insert(sceneRows);
 
-    const { error: scenesError } = await supabase
-      .from("job_scenes")
-      .insert(sceneRows);
+    // ── Route: EvoLink (direct REST) vs Modal (GPU) ──────────────────────
+    const engineKey = safePreferredEngine ?? "wan_i2v";
 
-    if (scenesError) {
-      console.error("Failed to insert scenes:", scenesError);
-      // Non-fatal: job still exists, pipeline can re-derive scenes from storyboard
+    if (isEvoLinkEngine(engineKey)) {
+      // ── EvoLink path: call API directly, no Modal ──────────────────────
+      try {
+        const taskId = await createEvoLinkTask({
+          engineKey,
+          prompt: prompt.trim(),
+          duration: safeDuration,
+          imageUrl: safeImageUrl,
+        });
+
+        await supabase
+          .from("jobs")
+          .update({
+            status: "in_progress",
+            current_stage: "generating_scene_1",
+            engine_used: engineKey,
+            external_task_id: taskId,
+          })
+          .eq("id", job.id);
+
+        console.log(`[jobs] EvoLink task created: job=${job.id} engine=${engineKey} task=${taskId}`);
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.error(`[jobs] EvoLink create failed:`, errMsg);
+        await supabase
+          .from("jobs")
+          .update({ status: "failed", error_message: `EvoLink error: ${errMsg}` })
+          .eq("id", job.id);
+      }
+
+      return NextResponse.json({ success: true, jobId: job.id, job });
     }
 
-    // --- trigger Modal ------------------------------------------------
+    // ── Modal path: GPU models (wan_i2v, seedance legacy) ─────────────
     const modalUrl = process.env.MODAL_WEBHOOK_URL;
     if (!modalUrl) {
       await supabase
@@ -196,7 +225,8 @@ export async function POST(req: Request) {
           scene_count: storyboard.length,
           ...(safeImageUrl && { image_url: safeImageUrl }),
           ...(safeReferences && { references: safeReferences }),
-          ...(safePreferredEngine && { preferred_engine: safePreferredEngine }),
+          // Only pass wan/seedance engines to Modal
+          preferred_engine: engineKey === "wan_i2v" ? "wan_i2v" : undefined,
         }),
       });
 
@@ -211,13 +241,11 @@ export async function POST(req: Request) {
           })
           .eq("id", job.id);
       } else {
-        // Webhook accepted — mark generating immediately so frontend
-        // never polls "pending" after this point.
         await supabase
           .from("jobs")
           .update({ status: "in_progress", current_stage: "spawning_pipeline" })
           .eq("id", job.id)
-          .eq("status", "pending"); // only if still pending (avoid overwriting failure)
+          .eq("status", "pending");
       }
     } catch (fetchError) {
       const errMsg =
