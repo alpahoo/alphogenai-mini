@@ -93,6 +93,11 @@ export default function JobPage() {
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
+  // Social connections — must be declared here (before any conditional returns)
+  const [youtubeConnected, setYoutubeConnected] = useState(false);
+  const [tiktokConnected, setTiktokConnected] = useState(false);
+  const [instagramConnected, setInstagramConnected] = useState(false);
+
   // ── Load user for sidebar + auth gate ───────────────────────
   useEffect(() => {
     async function load() {
@@ -204,10 +209,6 @@ export default function JobPage() {
       </div>
     );
   }
-
-  const [youtubeConnected, setYoutubeConnected] = useState(false);
-  const [tiktokConnected, setTiktokConnected] = useState(false);
-  const [instagramConnected, setInstagramConnected] = useState(false);
 
   // Check social connections once user is known
   useEffect(() => {
