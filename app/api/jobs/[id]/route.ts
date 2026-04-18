@@ -82,8 +82,16 @@ export async function GET(
             })
             .eq("id", id)
             .eq("status", "in_progress");
+
+        } else {
+          // Still processing — heartbeat: keep updated_at fresh so the
+          // pg_cron watchdog doesn't kill this job after 30 minutes.
+          await supabase
+            .from("jobs")
+            .update({ updated_at: new Date().toISOString() })
+            .eq("id", id)
+            .in("status", ["pending", "in_progress"]);
         }
-        // "pending" | "processing" → no action, return current state
       } catch (pollErr) {
         // Non-fatal: log and return current job state
         console.warn(`[jobs/status] EvoLink poll error (job=${id}):`, pollErr instanceof Error ? pollErr.message : pollErr);

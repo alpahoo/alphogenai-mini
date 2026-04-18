@@ -263,21 +263,36 @@ export async function getEvoLinkTask(taskId: string): Promise<EvoLinkTaskResult>
 
   const data = await res.json();
 
-  // Support both unified API ("status") and legacy ("state") field names
-  const state: string = data.status || data.state || "unknown";
+  // Support multiple status field names (unified API vs legacy)
+  const state: string = (
+    (data.status as string) ||
+    (data.state as string) ||
+    (data.task_status as string) ||
+    "unknown"
+  ).toLowerCase();
 
-  if (state === "completed" || state === "success") {
+  // ── Terminal: completed ────────────────────────────────────────────────
+  if (["completed", "success", "succeed", "succeeded", "done", "finished"].includes(state)) {
     const output: Record<string, unknown> = (data.output as Record<string, unknown>) || {};
     const result: Record<string, unknown> = (data.result as Record<string, unknown>) || {};
+    const generations = (data.data as Record<string, unknown>[] | undefined) ?? [];
 
     const videoUrl =
       (output.video_url as string | undefined) ||
       (result.video_url as string | undefined) ||
       (data.video_url as string | undefined) ||
       ((output.videos as string[] | undefined) || [])[0] ||
-      ((result.videos as string[] | undefined) || [])[0];
+      ((result.videos as string[] | undefined) || [])[0] ||
+      // EvoLink unified response: data[0].url or data[0].video
+      (generations[0]?.url as string | undefined) ||
+      (generations[0]?.video as string | undefined) ||
+      (generations[0]?.video_url as string | undefined);
 
     if (!videoUrl) {
+      console.error(
+        `[evolink] task ${taskId} completed but no URL found. Response keys: ${Object.keys(data).join(", ")}`,
+        JSON.stringify(data).slice(0, 500)
+      );
       throw new Error(
         `EvoLink task ${taskId} completed but no video URL found. Keys: ${Object.keys(data).join(", ")}`
       );
@@ -286,7 +301,8 @@ export async function getEvoLinkTask(taskId: string): Promise<EvoLinkTaskResult>
     return { status: "completed", videoUrl };
   }
 
-  if (["failed", "fail", "error", "cancelled", "canceled"].includes(state)) {
+  // ── Terminal: failed ───────────────────────────────────────────────────
+  if (["failed", "fail", "failure", "error", "cancelled", "canceled"].includes(state)) {
     const errData = data.error as Record<string, unknown> | string | undefined;
     const error =
       typeof errData === "string"
@@ -294,11 +310,19 @@ export async function getEvoLinkTask(taskId: string): Promise<EvoLinkTaskResult>
         : (errData?.message as string) ||
           (data.error_message as string) ||
           (data.failMsg as string) ||
+          (data.message as string) ||
           "Unknown error";
 
     return { status: "failed", error };
   }
 
-  // still in progress
-  return { status: state === "pending" ? "pending" : "processing" };
+  // ── In progress ────────────────────────────────────────────────────────
+  // Log unknown states so we can catch new EvoLink status values in production
+  if (!["pending", "processing", "queued", "running", "in_progress"].includes(state)) {
+    console.warn(
+      `[evolink] task ${taskId} — unknown state "${state}". Full response: ${JSON.stringify(data).slice(0, 400)}`
+    );
+  }
+
+  return { status: state === "pending" || state === "queued" ? "pending" : "processing" };
 }
