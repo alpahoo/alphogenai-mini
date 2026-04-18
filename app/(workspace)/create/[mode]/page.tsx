@@ -420,14 +420,21 @@ export default function CreateModePage({
                     <div className="flex gap-2 flex-wrap">
                       {(
                         [
-                          { key: "auto" as const, label: "Auto", desc: "Best for your plan" },
-                          { key: "wan_i2v" as const, label: "Wan 2.2 I2V", desc: "GPU • up to 60s" },
-                          { key: "evolink" as const, label: "Seedance 2.0", desc: "EvoLink • 720p • up to 15s", proOnly: true },
-                          { key: "evolink_fast" as const, label: "Seedance 2.0 Fast", desc: "EvoLink • faster & cheaper", proOnly: true },
-                          { key: "kling_o3" as const, label: "Kling O3", desc: "EvoLink • 720p/1080p • up to 15s", proOnly: true },
+                          { key: "auto" as const,         label: "Auto",              desc: "Best for your plan",                gate: null },
+                          { key: "wan_i2v" as const,      label: "Wan 2.2 I2V",       desc: "GPU • up to 60s",                  gate: null },
+                          { key: "evolink" as const,      label: "Seedance 2.0",      desc: "EvoLink • 720p • up to 15s",       gate: "pro" },
+                          { key: "evolink_fast" as const, label: "Seedance 2.0 Fast", desc: "EvoLink • 720p • faster",          gate: "pro" },
+                          { key: "wan_26" as const,       label: "WAN 2.6",           desc: "EvoLink • 720p • no cold start",   gate: "pro" },
+                          { key: "kling_o3" as const,     label: "Kling O3",          desc: "EvoLink • 1080p • up to 15s",      gate: "pro" },
+                          { key: "kling_v3" as const,     label: "Kling 3.0",         desc: "EvoLink • 1080p • latest Kling",   gate: "pro" },
+                          { key: "hailuo" as const,       label: "Hailuo 2.3",        desc: "EvoLink • 1080p • 6-10s",          gate: "pro" },
+                          { key: "hailuo_fast" as const,  label: "Hailuo 2.3 Fast",   desc: "EvoLink • 1080p • faster",         gate: "pro" },
+                          { key: "sora_2" as const,       label: "Sora 2 Pro",        desc: "EvoLink • 1080p • up to 12s",      gate: "premium" },
                         ] as const
                       ).map((opt) => {
-                        const locked = opt.proOnly && plan === "free";
+                        const locked =
+                          (opt.gate === "premium" && plan !== "premium") ||
+                          (opt.gate === "pro" && plan === "free");
                         const active = selectedEngine === opt.key;
                         return (
                           <button
@@ -442,7 +449,7 @@ export default function CreateModePage({
                                 ? "border-border/20 bg-muted/10 text-muted-foreground/40 cursor-not-allowed"
                                 : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground cursor-pointer"
                             }`}
-                            title={locked ? "Pro/Premium only" : opt.desc}
+                            title={locked ? `${opt.gate === "premium" ? "Premium" : "Pro"} only` : opt.desc}
                           >
                             <Cpu className="inline h-3 w-3 mr-1" />
                             {opt.label}
@@ -453,7 +460,7 @@ export default function CreateModePage({
                     </div>
                     {plan === "free" && (
                       <p className="text-[10px] text-muted-foreground/50 mt-1.5">
-                        Seedance requires <Link href="/pricing" className="text-primary hover:underline">Pro plan</Link>
+                        Advanced models require <Link href="/pricing" className="text-primary hover:underline">Pro or Premium</Link>
                       </p>
                     )}
                   </div>

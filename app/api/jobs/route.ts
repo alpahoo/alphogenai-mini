@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       ? references
       : undefined;
 
-    // Validate preferred_engine
+    // Validate preferred_engine — plan gate applied after plan is resolved below
     const safePreferredEngine =
       preferred_engine && VALID_ENGINES.includes(preferred_engine)
         ? preferred_engine
@@ -109,6 +109,20 @@ export async function POST(req: Request) {
             { status: 429 }
           );
         }
+      }
+    }
+
+    // --- engine plan gate (server-side) ------------------------------------
+    // Verify the requested engine is allowed for the user's plan.
+    // Free users can only use Modal engines (wan_i2v). EvoLink engines
+    // require Pro+; sora_2 requires Premium.
+    if (safePreferredEngine && isEvoLinkEngine(safePreferredEngine)) {
+      const engineConfig = EVOLINK_ENGINES[safePreferredEngine];
+      if (engineConfig && !engineConfig.plans.includes(plan)) {
+        return NextResponse.json(
+          { error: "This model requires a higher plan. Upgrade to Pro or Premium.", upgrade: true },
+          { status: 403 }
+        );
       }
     }
 

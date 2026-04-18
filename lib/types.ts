@@ -53,7 +53,17 @@ export type SceneStatus =
   | "failed"
   | "skipped";
 
-export type EngineKey = "wan_i2v" | "seedance" | "evolink" | "evolink_fast" | "kling_o3";
+export type EngineKey =
+  | "wan_i2v"
+  | "seedance"
+  | "evolink"
+  | "evolink_fast"
+  | "kling_o3"
+  | "kling_v3"
+  | "wan_26"
+  | "hailuo"
+  | "hailuo_fast"
+  | "sora_2";
 
 export interface StoryboardScene {
   scene_index: number;
@@ -154,6 +164,11 @@ export const ENGINE_DISPLAY_NAMES: Record<string, string> = {
   evolink: "Seedance 2.0",
   evolink_fast: "Seedance 2.0 Fast",
   kling_o3: "Kling O3",
+  kling_v3: "Kling 3.0",
+  wan_26: "WAN 2.6",
+  hailuo: "Hailuo 2.3",
+  hailuo_fast: "Hailuo 2.3 Fast",
+  sora_2: "Sora 2 Pro",
 };
 
 export function getEngineDisplayName(engine: string | null | undefined): string {

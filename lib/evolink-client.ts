@@ -73,6 +73,10 @@ export interface EvoLinkEngineConfig {
   imageModel?: string;
   /** Max supported duration in seconds */
   maxDuration: number;
+  /** Min supported duration in seconds (some models require e.g. 6s) */
+  minDuration?: number;
+  /** Video quality (default "720p") */
+  quality?: string;
   /** Display label */
   label: string;
   /** Short description for the UI */
@@ -82,6 +86,7 @@ export interface EvoLinkEngineConfig {
 }
 
 export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
+  // ── Seedance ───────────────────────────────────────────────────────────────
   evolink: {
     model: "seedance-2.0-text-to-video",
     imageModel: "seedance-2.0-image-to-video",
@@ -98,13 +103,61 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
     desc: "EvoLink • 720p • faster & cheaper",
     plans: ["pro", "premium"],
   },
+  // ── Kling ─────────────────────────────────────────────────────────────────
   kling_o3: {
     model: "kling-o3-text-to-video",
     imageModel: "kling-o3-image-to-video",
     maxDuration: 15,
     label: "Kling O3",
-    desc: "EvoLink • 720p/1080p • up to 15s",
+    desc: "EvoLink • 1080p • up to 15s",
     plans: ["pro", "premium"],
+  },
+  kling_v3: {
+    model: "kling-v3-text-to-video",
+    imageModel: "kling-v3-image-to-video",
+    maxDuration: 15,
+    label: "Kling 3.0",
+    desc: "EvoLink • 1080p • latest Kling",
+    plans: ["pro", "premium"],
+  },
+  // ── WAN 2.6 (via EvoLink — no GPU cold start) ─────────────────────────────
+  wan_26: {
+    model: "wan2.6-text-to-video",
+    imageModel: "wan2.6-image-to-video",
+    maxDuration: 15,
+    label: "WAN 2.6",
+    desc: "EvoLink • 720p • no cold start",
+    plans: ["pro", "premium"],
+  },
+  // ── Hailuo (MiniMax) ──────────────────────────────────────────────────────
+  hailuo: {
+    model: "MiniMax-Hailuo-2.3",
+    imageModel: "MiniMax-Hailuo-2.3",
+    maxDuration: 10,
+    minDuration: 6,
+    quality: "1080p",
+    label: "Hailuo 2.3",
+    desc: "EvoLink • 1080p • 6-10s",
+    plans: ["pro", "premium"],
+  },
+  hailuo_fast: {
+    model: "MiniMax-Hailuo-2.3-Fast",
+    imageModel: "MiniMax-Hailuo-2.3-Fast",
+    maxDuration: 10,
+    minDuration: 6,
+    quality: "1080p",
+    label: "Hailuo 2.3 Fast",
+    desc: "EvoLink • 1080p • faster",
+    plans: ["pro", "premium"],
+  },
+  // ── Sora 2 ────────────────────────────────────────────────────────────────
+  sora_2: {
+    model: "sora-2-pro-preview",
+    maxDuration: 12,
+    quality: "1080p",
+    label: "Sora 2 Pro",
+    desc: "EvoLink • 1080p • up to 12s",
+    plans: ["premium"],
   },
 };
 
@@ -138,13 +191,14 @@ export async function createEvoLinkTask(params: CreateTaskParams): Promise<strin
   const model =
     params.imageUrl && config.imageModel ? config.imageModel : config.model;
 
-  const clampedDuration = Math.max(4, Math.min(config.maxDuration, params.duration));
+  const minDur = config.minDuration ?? 4;
+  const clampedDuration = Math.max(minDur, Math.min(config.maxDuration, params.duration));
 
   const body: Record<string, unknown> = {
     model,
     prompt: params.prompt,
     duration: clampedDuration,
-    quality: "720p",
+    quality: config.quality ?? "720p",
     aspect_ratio: "16:9",
     generate_audio: true,
     model_params: { web_search: false },
