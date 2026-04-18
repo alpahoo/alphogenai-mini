@@ -1,11 +1,15 @@
 /**
- * AI-powered social media metadata generator (V1 — template + keyword-based).
+ * Social metadata generation — AI-crafted titles, hashtags, and
+ * platform-specific descriptions via EvoLink LLM (DeepSeek).
  *
- * Generates platform-optimized title, hashtags, and descriptions
- * from the video prompt. Uses keyword extraction + smart templates.
- *
- * V2 (future): will call Claude/GPT API for creative copy.
+ * Falls back to keyword-template generation if LLM is unavailable.
  */
+
+import { callEvoLinkLLM } from "./evolink-client";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 export interface SocialMetadata {
   title: string;
@@ -15,113 +19,126 @@ export interface SocialMetadata {
   description_instagram: string;
 }
 
-// Keyword categories for smart tagging
-const KEYWORD_MAP: Record<string, string[]> = {
-  cinematic: ["cinematic", "film", "movie", "dramatic", "hollywood", "anamorphic", "lens flare"],
-  nature: ["ocean", "forest", "mountain", "sunset", "sunrise", "sky", "waves", "beach", "flower"],
-  scifi: ["space", "astronaut", "mars", "alien", "futuristic", "cyberpunk", "robot", "sci-fi"],
-  action: ["chase", "fight", "explosion", "running", "fast", "race", "speed", "dynamic"],
-  emotional: ["crying", "tears", "smile", "love", "sad", "happy", "joy", "fear", "wonder"],
-  beauty: ["beautiful", "elegant", "stunning", "gorgeous", "aesthetic", "luxury", "premium"],
-  food: ["cooking", "food", "restaurant", "chef", "recipe", "eating", "delicious", "kitchen"],
-  animal: ["cat", "dog", "bird", "animal", "pet", "puppy", "kitten", "wildlife"],
-  fashion: ["fashion", "model", "dress", "style", "outfit", "designer", "runway"],
-  tech: ["tech", "smartphone", "gadget", "digital", "product", "device", "innovation"],
-};
+// ---------------------------------------------------------------------------
+// LLM generation
+// ---------------------------------------------------------------------------
 
-const BASE_HASHTAGS = ["#aivideo", "#alphogenai", "#aigeneratedvideo", "#aiart"];
+const SYSTEM_PROMPT = `You are an expert social media content strategist for AI-generated videos.
 
-const TITLE_HOOKS = [
-  "Watch this",
-  "You won't believe",
-  "This is incredible",
-  "AI just created",
-  "Must see",
-  "Unreal",
-  "Mind-blowing",
-  "Epic",
-  "Stunning",
-  "POV:",
-];
+Given a video prompt, generate platform-optimized metadata.
 
-const TIKTOK_HOOKS = [
-  "Wait for it... 🔥",
-  "This is what AI can do now 🤯",
-  "POV: AI generates this video ✨",
-  "Watch until the end 👀",
-  "AI magic is real 🪄",
-];
+Return ONLY valid JSON — no explanation, no markdown, no code block:
+{
+  "title": "...",
+  "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5", "#tag6", "#tag7", "#tag8"],
+  "description_tiktok": "...",
+  "description_youtube": "...",
+  "description_instagram": "..."
+}
+
+Rules:
+- title: max 70 chars, catchy and intriguing, 1-2 relevant emojis, no surrounding quotes
+- hashtags: 8-10 tags — always include #aivideo and #alphogenai, add niche topic tags relevant to the video content
+- description_tiktok: max 150 chars, strong hook on first line, casual & punchy, 2-3 emojis, NO hashtags here
+- description_youtube: 200-280 chars, SEO-friendly, descriptive, professional, mentions "AI-generated", no emojis
+- description_instagram: 150-200 chars of storytelling + emojis, then hashtags on a new line
+- Write in English unless the input is clearly in another language (then use that language)
+- Each description must be unique and platform-appropriate — don't repeat`;
 
 /**
- * Generate social media metadata from a video prompt.
+ * Generate social media metadata for a video.
+ * Async — calls EvoLink LLM (DeepSeek). Falls back to templates on error.
  */
-export function generateSocialMetadata(prompt: string, engine?: string): SocialMetadata {
-  const promptLower = prompt.toLowerCase();
+export async function generateSocialMetadata(
+  videoPrompt: string,
+  engine?: string
+): Promise<SocialMetadata> {
+  // Strip internal [Scene X/Y] markers before sending to LLM
+  const cleanPrompt = videoPrompt
+    .replace(/\[Scene \d+\/\d+\]\s*/g, "")
+    .trim();
 
-  // Extract keywords + categories
-  const matchedCategories: string[] = [];
-  for (const [category, keywords] of Object.entries(KEYWORD_MAP)) {
-    if (keywords.some((kw) => promptLower.includes(kw))) {
-      matchedCategories.push(category);
+  if (process.env.EVOLINK_API_KEY) {
+    try {
+      const raw = await callEvoLinkLLM(SYSTEM_PROMPT, cleanPrompt, "deepseek-chat");
+
+      // Strip markdown code blocks if model wrapped it anyway
+      const cleaned = raw
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```$/, "")
+        .trim();
+
+      const parsed = JSON.parse(cleaned) as Partial<SocialMetadata>;
+
+      if (
+        parsed.title &&
+        Array.isArray(parsed.hashtags) &&
+        parsed.description_tiktok &&
+        parsed.description_youtube &&
+        parsed.description_instagram
+      ) {
+        return parsed as SocialMetadata;
+      }
+      console.warn("[social-metadata] LLM response missing fields, using template fallback");
+    } catch (e) {
+      console.warn("[social-metadata] LLM failed, using template fallback:", e instanceof Error ? e.message : e);
     }
   }
 
-  // Build hashtags
+  return templateFallback(cleanPrompt, engine);
+}
+
+// ---------------------------------------------------------------------------
+// Template fallback — works without any API key
+// ---------------------------------------------------------------------------
+
+const KEYWORD_MAP: Record<string, string[]> = {
+  cinematic: ["cinematic", "film", "movie", "dramatic", "hollywood", "lens flare"],
+  nature: ["ocean", "forest", "mountain", "sunset", "sky", "waves", "beach", "flower"],
+  scifi: ["space", "astronaut", "mars", "alien", "futuristic", "cyberpunk", "robot"],
+  action: ["chase", "fight", "explosion", "running", "race", "speed", "dynamic"],
+  emotional: ["crying", "tears", "smile", "love", "sad", "happy", "joy", "wonder"],
+  beauty: ["beautiful", "elegant", "stunning", "gorgeous", "luxury", "aesthetic"],
+  food: ["cooking", "food", "restaurant", "chef", "recipe", "eating", "kitchen"],
+  animal: ["cat", "dog", "bird", "animal", "pet", "puppy", "kitten", "wildlife"],
+  fashion: ["fashion", "model", "dress", "style", "outfit", "runway"],
+  tech: ["tech", "smartphone", "gadget", "digital", "product", "device"],
+};
+
+const BASE_HASHTAGS = ["#aivideo", "#alphogenai", "#aigeneratedvideo", "#aiart", "#fyp", "#trending"];
+
+function templateFallback(prompt: string, engine?: string): SocialMetadata {
+  const lower = prompt.toLowerCase();
+  const matched = Object.entries(KEYWORD_MAP)
+    .filter(([, kws]) => kws.some((k) => lower.includes(k)))
+    .map(([cat]) => cat);
+
   const hashtags = [...BASE_HASHTAGS];
-  if (matchedCategories.includes("cinematic")) hashtags.push("#cinematic", "#filmmaking");
-  if (matchedCategories.includes("nature")) hashtags.push("#nature", "#beautiful", "#aesthetic");
-  if (matchedCategories.includes("scifi")) hashtags.push("#scifi", "#space", "#futuristic");
-  if (matchedCategories.includes("action")) hashtags.push("#action", "#epic", "#intense");
-  if (matchedCategories.includes("emotional")) hashtags.push("#emotional", "#feelthis", "#touching");
-  if (matchedCategories.includes("beauty")) hashtags.push("#aesthetic", "#luxury", "#stunning");
-  if (matchedCategories.includes("food")) hashtags.push("#foodie", "#asmr", "#cooking");
-  if (matchedCategories.includes("animal")) hashtags.push("#cute", "#animals", "#pet");
-  if (matchedCategories.includes("fashion")) hashtags.push("#fashion", "#style", "#ootd");
-  if (matchedCategories.includes("tech")) hashtags.push("#tech", "#gadget", "#innovation");
-  hashtags.push("#viral", "#trending", "#foryou", "#fyp");
+  if (matched.includes("cinematic")) hashtags.push("#cinematic", "#filmmaking");
+  if (matched.includes("nature")) hashtags.push("#nature", "#aesthetic");
+  if (matched.includes("scifi")) hashtags.push("#scifi", "#space", "#futuristic");
+  if (matched.includes("action")) hashtags.push("#action", "#epic");
+  if (matched.includes("animal")) hashtags.push("#cute", "#animals");
+  if (matched.includes("food")) hashtags.push("#foodie", "#cooking");
+  if (matched.includes("fashion")) hashtags.push("#fashion", "#style");
+  if (matched.includes("tech")) hashtags.push("#tech", "#innovation");
+  hashtags.push("#viral");
+  const uniqueTags = [...new Set(hashtags)].slice(0, 12);
 
-  // Deduplicate
-  const uniqueHashtags = [...new Set(hashtags)].slice(0, 15);
+  const keyPhrase = prompt.split(/[,.;]/)[0]?.trim() || prompt;
+  const short = keyPhrase.split(" ").slice(0, 10).join(" ");
 
-  // Extract key phrase (first meaningful part of prompt, up to ~10 words)
-  const cleanPrompt = prompt
-    .replace(/\[.*?\]/g, "") // Remove [HOOK], [ACTION] etc.
-    .replace(/\s+/g, " ")
-    .trim();
-  const keyPhrase = cleanPrompt.split(/[,.;]/).filter(Boolean)[0]?.trim() || cleanPrompt;
-  const shortPhrase =
-    keyPhrase.split(" ").length > 10
-      ? keyPhrase.split(" ").slice(0, 10).join(" ") + "..."
-      : keyPhrase;
-
-  // Title (catchy)
-  const hook = TITLE_HOOKS[Math.floor(Math.random() * TITLE_HOOKS.length)];
-  const emoji = matchedCategories.includes("scifi")
-    ? "🚀"
-    : matchedCategories.includes("nature")
-    ? "🌿"
-    : matchedCategories.includes("food")
-    ? "🍳"
-    : matchedCategories.includes("animal")
-    ? "🐾"
+  const emoji = matched.includes("scifi") ? "🚀"
+    : matched.includes("nature") ? "🌿"
+    : matched.includes("food") ? "🍳"
+    : matched.includes("animal") ? "🐾"
     : "✨";
-  const title = `${hook} ${emoji} ${shortPhrase}`;
-
-  // TikTok description (short, hook-driven)
-  const tiktokHook = TIKTOK_HOOKS[Math.floor(Math.random() * TIKTOK_HOOKS.length)];
-  const description_tiktok = `${tiktokHook}\n\n${shortPhrase}\n\nMade with AI by @AlphoGenAI\n\n${uniqueHashtags.slice(0, 10).join(" ")}`;
-
-  // YouTube description (detailed, SEO-friendly)
-  const description_youtube = `${shortPhrase}\n\nThis video was generated entirely by AI using ${engine ?? "advanced AI models"} on AlphoGenAI — the AI video creation platform.\n\n🔗 Try it yourself: https://alphogen.com\n\n---\n${uniqueHashtags.join(" ")}\n\n#Shorts`;
-
-  // Instagram (clean, aesthetic)
-  const description_instagram = `${shortPhrase} ${emoji}\n\nGenerated with AI ${emoji}\n\n${uniqueHashtags.slice(0, 12).join(" ")}\n\n—\nCreate yours at alphogen.com`;
 
   return {
-    title,
-    hashtags: uniqueHashtags,
-    description_tiktok,
-    description_youtube,
-    description_instagram,
+    title: `${short} ${emoji}`.slice(0, 70),
+    hashtags: uniqueTags,
+    description_tiktok: `Wait for it... 🤯\n${short}\n\nMade with AI ✨`,
+    description_youtube: `AI-generated cinematic video: ${short}. Created with ${engine ?? "advanced AI models"} on AlphoGenAI — try it at alphogen.com`,
+    description_instagram: `${short} ${emoji}\n\nGenerated with AI on AlphoGenAI 🎬\n\n${uniqueTags.slice(0, 10).join(" ")}`,
   };
 }
