@@ -1,10 +1,16 @@
 /**
- * Phase 2 — Storyboard generator (TypeScript mirror of workers/storyboard_generator.py)
+ * Storyboard generator — splits a prompt into N cinematic scenes.
  *
- * Splits a user prompt into N scenes based on target_duration.
- * Pure logic, deterministic, no LLM.
+ * Two steps:
+ *  1. generateStoryboard() — deterministic structure (duration, scene count, engine)
+ *  2. enrichStoryboardWithLLM() — replaces template prompts with distinct
+ *     cinematographer-crafted scene descriptions via EvoLink LLM (DeepSeek)
+ *
+ * Single-scene jobs skip LLM (enhanced prompt already handles it).
+ * Falls back silently to template prompts if LLM unavailable.
  */
 import { type JobPlan, type EngineKey, PLAN_MAX_DURATION } from "./types";
+import { callEvoLinkLLM } from "./evolink-client";
 
 export interface StoryboardEntry {
   scene_index: number;
@@ -97,4 +103,77 @@ function scenePrompt(basePrompt: string, index: number, total: number): string {
   const trimmed = basePrompt.trim();
   if (total === 1) return trimmed;
   return `[Scene ${index + 1}/${total}] ${trimmed}`;
+}
+
+// ---------------------------------------------------------------------------
+// LLM enrichment — distinct cinematic prompts per scene
+// ---------------------------------------------------------------------------
+
+const STORYBOARD_SYSTEM_PROMPT = `You are a cinematographer writing AI video generation prompts for a multi-scene short film.
+
+Given a video concept and the number of scenes, write distinct cinematic prompts — one per scene — that together form a coherent visual story.
+
+Return ONLY a valid JSON array of exactly N strings:
+["scene 1 prompt", "scene 2 prompt", ...]
+
+Rules:
+- Each scene covers ~5 seconds of footage — describe ONE specific visual moment
+- Use DIFFERENT camera angles per scene (e.g. wide establishing → medium → close-up)
+- Create a clear visual arc: Establish → Develop → Climax (or Build → Peak → Resolution)
+- Each prompt must be self-contained and work as a standalone video generation prompt
+- Always include: main subject + action, camera angle, lighting mood, atmosphere
+- Max 200 characters per scene prompt
+- Write in English
+- Output ONLY the JSON array — no explanation, no markdown`;
+
+/**
+ * Enrich a storyboard's scene prompts using EvoLink LLM.
+ * Only applies to multi-scene storyboards (≥ 2 scenes).
+ * Falls back silently to template prompts on any error.
+ */
+export async function enrichStoryboardWithLLM(
+  entries: StoryboardEntry[],
+  basePrompt: string
+): Promise<StoryboardEntry[]> {
+  // Single scene: enhanced prompt is already good, no need for LLM
+  if (entries.length <= 1) return entries;
+
+  // Skip if no API key configured
+  if (!process.env.EVOLINK_API_KEY) return entries;
+
+  try {
+    const userMessage = JSON.stringify({
+      concept: basePrompt,
+      scenes: entries.length,
+      seconds_per_scene: entries[0]?.duration_sec ?? 5,
+    });
+
+    const raw = await callEvoLinkLLM(STORYBOARD_SYSTEM_PROMPT, userMessage, "deepseek-chat");
+
+    // Strip markdown code blocks if model added them
+    const cleaned = raw
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
+
+    const prompts = JSON.parse(cleaned) as unknown[];
+
+    if (!Array.isArray(prompts) || prompts.length !== entries.length) {
+      console.warn(`[storyboard-llm] Expected ${entries.length} prompts, got ${prompts.length ?? "non-array"}`);
+      return entries;
+    }
+
+    const enriched = entries.map((entry, i) => ({
+      ...entry,
+      prompt: typeof prompts[i] === "string" && (prompts[i] as string).length > 5
+        ? (prompts[i] as string)
+        : entry.prompt,
+    }));
+
+    console.log(`[storyboard-llm] Enriched ${entries.length} scenes for: "${basePrompt.slice(0, 50)}"`);
+    return enriched;
+  } catch (e) {
+    console.warn("[storyboard-llm] Failed (non-fatal), using template prompts:", e instanceof Error ? e.message : e);
+    return entries;
+  }
 }

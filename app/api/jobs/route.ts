@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { generateStoryboard } from "@/lib/storyboard";
+import { generateStoryboard, enrichStoryboardWithLLM } from "@/lib/storyboard";
 import { isEvoLinkEngine, createEvoLinkTask, EVOLINK_ENGINES } from "@/lib/evolink-client";
 import { enhancePrompt } from "@/lib/prompt-enhancer";
 import type { JobPlan } from "@/lib/types";
@@ -122,12 +122,12 @@ export async function POST(req: Request) {
     // Falls back silently to original if EvoLink is unavailable.
     const enhancedPrompt = await enhancePrompt(prompt.trim());
 
-    // Generate storyboard from enhanced prompt (scene prompts inherit the enrichment)
-    const storyboard = generateStoryboard(
-      enhancedPrompt,
-      safeDuration,
-      plan
-    );
+    // Generate storyboard structure (duration math, scene count, engine)
+    const storyboardBase = generateStoryboard(enhancedPrompt, safeDuration, plan);
+
+    // For multi-scene jobs: enrich each scene with distinct LLM-crafted prompts
+    // Single-scene jobs already have the enhanced prompt — no LLM needed
+    const storyboard = await enrichStoryboardWithLLM(storyboardBase, enhancedPrompt);
 
     const targetDuration = storyboard.reduce((s, sc) => s + sc.duration_sec, 0);
 
