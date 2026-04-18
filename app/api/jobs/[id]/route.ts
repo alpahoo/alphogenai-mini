@@ -2,13 +2,16 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { isEvoLinkEngine, getEvoLinkTask } from "@/lib/evolink-client";
-import { downloadAndUploadToR2 } from "@/lib/r2";
-import { v4 as uuidv4 } from "uuid";
+
+// Give this route enough time to poll EvoLink and write to Supabase.
+// No large file downloads happen here — EvoLink URLs are stored directly.
+export const maxDuration = 30;
 
 /**
  * GET /api/jobs/[id]
- * Fetch job status. For EvoLink jobs, lazily polls EvoLink API and
- * triggers R2 upload on completion — no Modal, no cold start.
+ * Fetch job status. For EvoLink jobs, lazily polls EvoLink API on each
+ * frontend call (every 5 s). When completed, stores the EvoLink CDN URL
+ * directly — no file download, no R2 upload in this request (avoids timeout).
  */
 export async function GET(
   _req: Request,
@@ -34,73 +37,42 @@ export async function GET(
     }
 
     // ── EvoLink lazy polling ────────────────────────────────────────────
-    // If this is an active EvoLink job, check its status on every frontend poll.
-    // When EvoLink completes, we download the video and upload to R2 inline.
+    // Check EvoLink task status on every frontend poll (every 5 s).
+    // When EvoLink completes, we store the CDN URL directly — no download,
+    // no R2 upload inside this request (that would time out Vercel).
+    // R2 archival can happen asynchronously via a separate background job.
     if (
       job.external_task_id &&
       job.status === "in_progress" &&
-      job.current_stage !== "uploading" &&
+      job.current_stage !== "completed" &&
       isEvoLinkEngine(job.engine_used ?? "")
     ) {
       try {
         const evolinkResult = await getEvoLinkTask(job.external_task_id);
 
         if (evolinkResult.status === "completed" && evolinkResult.videoUrl) {
-          // Claim the "uploading" slot atomically — prevents duplicate uploads
-          // if two polls arrive simultaneously when EvoLink completes.
-          const { count: claimed } = await supabase
+          // Atomic claim — only one concurrent poll wins this update.
+          // We guard on status="in_progress" so a duplicate poll after "done"
+          // is written is a safe no-op.
+          const { error: claimErr } = await supabase
             .from("jobs")
-            .update({ current_stage: "uploading" })
+            .update({
+              status: "done",
+              current_stage: "completed",
+              // Store EvoLink CDN URL directly — fast, no timeout risk.
+              // These URLs are permanent (EvoLink CDN, not pre-signed).
+              video_url: evolinkResult.videoUrl,
+              output_url_final: evolinkResult.videoUrl,
+              updated_at: new Date().toISOString(),
+            })
             .eq("id", id)
-            .eq("current_stage", "generating_scene_1")
-            .select("id", { count: "exact", head: true });
+            .eq("status", "in_progress"); // atomic guard
 
-          if (claimed && claimed > 0) {
-            // We won the race — do the upload
-            try {
-              const r2Key = `videos/${uuidv4()}.mp4`;
-              const r2Url = await downloadAndUploadToR2(evolinkResult.videoUrl, r2Key);
-
-              await supabase
-                .from("jobs")
-                .update({
-                  status: "done",
-                  current_stage: "completed",
-                  output_url_final: r2Url,
-                  video_url: r2Url,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq("id", id);
-
-              console.log(`[jobs/status] EvoLink done: job=${id} r2=${r2Url}`);
-
-              // Return updated job immediately
-              const { data: updatedJob } = await supabase
-                .from("jobs")
-                .select("*")
-                .eq("id", id)
-                .single();
-
-              if (updatedJob) {
-                return NextResponse.json({
-                  success: true,
-                  job: formatJob(updatedJob),
-                  scenes: [],
-                });
-              }
-            } catch (uploadErr) {
-              const errMsg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
-              console.error(`[jobs/status] EvoLink upload failed: job=${id}`, errMsg);
-              await supabase
-                .from("jobs")
-                .update({
-                  status: "failed",
-                  error_message: `Upload failed: ${errMsg}`,
-                })
-                .eq("id", id);
-            }
+          if (!claimErr) {
+            console.log(`[jobs/status] EvoLink done: job=${id} url=${evolinkResult.videoUrl.slice(0, 80)}`);
           }
-          // else: another request already claimed upload — fall through and return current state
+          // Whether we won or lost the race, fall through and return latest state
+
         } else if (evolinkResult.status === "failed") {
           await supabase
             .from("jobs")
@@ -108,12 +80,13 @@ export async function GET(
               status: "failed",
               error_message: evolinkResult.error || "EvoLink generation failed",
             })
-            .eq("id", id);
+            .eq("id", id)
+            .eq("status", "in_progress");
         }
-        // status "pending" | "processing" → no action, return current state
+        // "pending" | "processing" → no action, return current state
       } catch (pollErr) {
-        // Non-fatal: log and return current job state without failing the request
-        console.warn(`[jobs/status] EvoLink poll error (job=${id}):`, pollErr);
+        // Non-fatal: log and return current job state
+        console.warn(`[jobs/status] EvoLink poll error (job=${id}):`, pollErr instanceof Error ? pollErr.message : pollErr);
       }
     }
 

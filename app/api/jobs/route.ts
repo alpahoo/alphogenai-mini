@@ -6,6 +6,10 @@ import { isEvoLinkEngine, createEvoLinkTask, EVOLINK_ENGINES } from "@/lib/evoli
 import { enhancePrompt } from "@/lib/prompt-enhancer";
 import type { JobPlan } from "@/lib/types";
 
+// LLM calls (enhancePrompt + enrichStoryboardWithLLM) can add 4-8 s on top of
+// the normal Supabase + EvoLink/Modal round-trips. 60 s is safe on Vercel Pro.
+export const maxDuration = 60;
+
 const FREE_QUOTA_24H = 1; // max free jobs per 24h per user (pre-Stripe)
 const MAX_ACTIVE_JOBS = 1; // max concurrent jobs per user
 
