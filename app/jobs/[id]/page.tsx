@@ -77,6 +77,18 @@ function sceneStatusIcon(status: string) {
 function friendlyError(raw: string | null | undefined): string {
   if (!raw) return "Something went wrong during generation. This can happen due to high demand or temporary issues.";
   const msg = raw.toLowerCase();
+  if (
+    msg.includes("content rights") ||
+    msg.includes("third-party") ||
+    msg.includes("third party") ||
+    msg.includes("trademark") ||
+    msg.includes("copyright") ||
+    msg.includes("brand logo") ||
+    msg.includes("copyrighted ip")
+  )
+    return "Your prompt may reference copyrighted content (brand names, logos, movie characters, celebrities). Rephrase with generic descriptions and try again.";
+  if (msg.includes("nsfw") || msg.includes("unsafe") || msg.includes("policy violation"))
+    return "Your prompt was flagged by the safety filter. Try rephrasing with different wording.";
   if (msg.includes("insufficient_quota") || msg.includes("insufficient credits"))
     return "Insufficient credits on the generation account. Please contact support.";
   if (msg.includes("exceeded 2 hour") || msg.includes("exceeded 30 minute"))

@@ -188,13 +188,30 @@ export async function POST(req: Request) {
 
     if (isEvoLinkEngine(engineKey)) {
       // ── EvoLink path: call API directly, no Modal ──────────────────────
+      // EvoLink generates ONE video (not a multi-scene script), so we must
+      // send a SINGLE clean cinematic prompt. Sending the raw user input
+      // with "[SCENE 1 - SETUP]" markers triggers EvoLink's content-policy
+      // filter ("may violate third-party content rights").
+      //
+      // Priority:
+      //   1. storyboard[0].prompt — first scene, already LLM-enriched & clean
+      //   2. enhancedPrompt — if no storyboard (shouldn't happen in practice)
+      //   3. raw prompt with markers stripped as fallback
+      const rawEvoLinkPrompt = storyboard[0]?.prompt || enhancedPrompt || prompt.trim();
+      const evolinkPrompt = rawEvoLinkPrompt
+        .replace(/\[SCENE\s*\d+[^\]]*\]/gi, "") // strip "[SCENE 1 - SETUP]" markers
+        .replace(/\s+/g, " ")                   // collapse whitespace
+        .trim()
+        .slice(0, 500);                         // EvoLink safe length
+
       try {
         const taskId = await createEvoLinkTask({
           engineKey,
-          prompt: enhancedPrompt,   // enriched cinematically
+          prompt: evolinkPrompt,
           duration: safeDuration,
           imageUrl: safeImageUrl,
         });
+        console.log(`[jobs] EvoLink prompt (${evolinkPrompt.length} chars): "${evolinkPrompt.slice(0, 120)}..."`);
 
         await supabase
           .from("jobs")
