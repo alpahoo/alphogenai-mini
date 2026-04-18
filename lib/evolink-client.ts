@@ -273,31 +273,39 @@ export async function getEvoLinkTask(taskId: string): Promise<EvoLinkTaskResult>
 
   // ── Terminal: completed ────────────────────────────────────────────────
   if (["completed", "success", "succeed", "succeeded", "done", "finished"].includes(state)) {
+    // EvoLink unified API (confirmed format):
+    //   { "id": "task-unified-...", "status": "completed", "results": ["https://..."] }
+    // Legacy / fallback fields also checked for safety.
     const output: Record<string, unknown> = (data.output as Record<string, unknown>) || {};
     const result: Record<string, unknown> = (data.result as Record<string, unknown>) || {};
     const generations = (data.data as Record<string, unknown>[] | undefined) ?? [];
 
     const videoUrl =
+      // ── PRIMARY: EvoLink unified API ──────────────────────────────────
+      ((data.results as string[] | undefined) ?? [])[0] ||
+      // ── FALLBACK: other field patterns ────────────────────────────────
       (output.video_url as string | undefined) ||
       (result.video_url as string | undefined) ||
       (data.video_url as string | undefined) ||
       ((output.videos as string[] | undefined) || [])[0] ||
       ((result.videos as string[] | undefined) || [])[0] ||
-      // EvoLink unified response: data[0].url or data[0].video
       (generations[0]?.url as string | undefined) ||
       (generations[0]?.video as string | undefined) ||
       (generations[0]?.video_url as string | undefined);
 
     if (!videoUrl) {
+      // Log the full response so we can diagnose any future format changes
       console.error(
-        `[evolink] task ${taskId} completed but no URL found. Response keys: ${Object.keys(data).join(", ")}`,
-        JSON.stringify(data).slice(0, 500)
+        `[evolink] task ${taskId} completed but no URL found.\n` +
+        `Response keys: ${Object.keys(data).join(", ")}\n` +
+        `Full: ${JSON.stringify(data).slice(0, 600)}`
       );
       throw new Error(
-        `EvoLink task ${taskId} completed but no video URL found. Keys: ${Object.keys(data).join(", ")}`
+        `EvoLink task completed but no video URL found. Keys: ${Object.keys(data).join(", ")}`
       );
     }
 
+    console.log(`[evolink] task ${taskId} completed → ${videoUrl.slice(0, 80)}`);
     return { status: "completed", videoUrl };
   }
 

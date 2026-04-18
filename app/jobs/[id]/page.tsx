@@ -72,6 +72,27 @@ function sceneStatusIcon(status: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Human-readable error messages
+// ---------------------------------------------------------------------------
+function friendlyError(raw: string | null | undefined): string {
+  if (!raw) return "Something went wrong during generation. This can happen due to high demand or temporary issues.";
+  const msg = raw.toLowerCase();
+  if (msg.includes("insufficient_quota") || msg.includes("insufficient credits"))
+    return "Insufficient credits on the generation account. Please contact support.";
+  if (msg.includes("exceeded 2 hour") || msg.includes("exceeded 30 minute"))
+    return "Generation timed out — the model took too long. Please try again.";
+  if (msg.includes("timeout"))
+    return "Generation timed out. Please try again.";
+  if (msg.includes("invalid model") || msg.includes("model not found"))
+    return "The selected model is currently unavailable. Try a different model.";
+  if (msg.includes("rate limit") || msg.includes("too many requests"))
+    return "Rate limit reached. Please wait a moment and try again.";
+  if (msg.includes("pipeline not configured"))
+    return "Generation pipeline not configured. Please contact support.";
+  return "Generation failed. See details below.";
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 export default function JobPage() {
@@ -300,10 +321,18 @@ export default function JobPage() {
                       <AlertCircle className="h-7 w-7 text-destructive" />
                     </div>
                     <h2 className="text-lg font-semibold mb-1">Generation failed</h2>
-                    <p className="text-sm text-muted-foreground max-w-md mb-6">
-                      Something went wrong during generation. This can happen due to high demand or temporary issues.
+                    <p className="text-sm text-muted-foreground max-w-md">
+                      {friendlyError(job?.error_message)}
                     </p>
-                    <div className="flex gap-3">
+                    {/* Raw error detail — useful for debugging */}
+                    {job?.error_message && (
+                      <p className="mt-2 max-w-md rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 font-mono text-[11px] text-destructive/70 text-left break-all">
+                        {job.error_message.length > 200
+                          ? job.error_message.slice(0, 200) + "…"
+                          : job.error_message}
+                      </p>
+                    )}
+                    <div className="mt-6 flex gap-3">
                       <Link href="/create" className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:brightness-110">
                         <Wand2 className="h-4 w-4" /> Try again
                       </Link>
