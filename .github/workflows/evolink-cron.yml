@@ -1,0 +1,49 @@
+name: EvoLink cron safety net
+
+# Server-side poller for EvoLink jobs. Complements the frontend lazy-poll
+# in GET /api/jobs/[id] — catches jobs whose users closed the tab before
+# the task finished, so they still get marked as done/failed.
+#
+# Why this workflow (not vercel.json crons):
+#   Hobby plan on Vercel only allows daily crons. This workflow runs every
+#   5 min on GitHub's free scheduler — plenty for a safety net.
+#
+# Setup (one-time):
+#   1. Add repo secret CRON_SECRET (Settings → Secrets → Actions → New)
+#      with the same value set in Vercel project env var CRON_SECRET.
+
+on:
+  schedule:
+    # Every 5 minutes. GitHub Actions minimum interval is 5 min and can
+    # be delayed up to 10-30 min during peak load — acceptable for a safety net.
+    - cron: "*/5 * * * *"
+  workflow_dispatch: # manual trigger from the Actions tab
+
+# Only one run at a time — avoid overlapping pollers.
+concurrency:
+  group: evolink-cron
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping EvoLink poller
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET repo secret is not set"
+            exit 1
+          fi
+          response=$(curl -sS -w "\nHTTP_CODE:%{http_code}" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            --max-time 60 \
+            https://www.alphogen.com/api/cron/evolink-poll)
+          echo "$response"
+          http_code=$(echo "$response" | tail -n1 | sed 's/HTTP_CODE://')
+          if [ "$http_code" != "200" ]; then
+            echo "::error::Unexpected HTTP $http_code"
+            exit 1
+          fi
