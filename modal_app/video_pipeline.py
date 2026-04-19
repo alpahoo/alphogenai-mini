@@ -495,6 +495,169 @@ def assemble_scenes(job_id: str, clip_urls: list) -> bytes:
         return video_bytes
 
 
+# ===========================================================================
+# Scene chaining helpers (EvoLink multi-scene continuity via first_frame)
+# ===========================================================================
+
+@app.function(image=base_image, secrets=[secrets], timeout=180, retries=0)
+def extract_last_frame(job_id: str, scene_index: int, video_url: str) -> str:
+    """
+    Download `video_url`, extract the last frame as JPEG via ffmpeg, upload to R2.
+    Writes the R2 URL back to job_scenes[scene_index].last_frame_url.
+
+    Used by the multi-scene EvoLink chaining path: the extracted frame is fed
+    as `first_frame_url` into the next scene so characters / composition stay
+    visually continuous across cuts.
+    """
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    import httpx
+
+    log(job_id, f"extract_last_frame scene={scene_index} url={video_url[:80]}")
+
+    with tempfile.TemporaryDirectory(prefix=f"lastframe_{job_id}_") as tmpdir:
+        tmppath = Path(tmpdir)
+        video_path = tmppath / "input.mp4"
+        frame_path = tmppath / "last.jpg"
+
+        # Download video
+        with httpx.Client(timeout=120.0, follow_redirects=True) as client:
+            resp = client.get(video_url)
+            resp.raise_for_status()
+            video_path.write_bytes(resp.content)
+        log(job_id, f"extract_last_frame downloaded {len(resp.content)/1e6:.1f} MB")
+
+        # Probe duration so we seek just before EOF (a plain -sseof 0 sometimes
+        # lands on a black frame in AV1/H.265 streams; seeking to duration-100ms
+        # gives a clean I-frame snapshot in practice).
+        try:
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error",
+                 "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1",
+                 str(video_path)],
+                capture_output=True, text=True, check=True,
+            )
+            duration = float(probe.stdout.strip())
+            seek = max(0.0, duration - 0.1)
+        except Exception as e:
+            log(job_id, f"ffprobe failed ({e}); falling back to -sseof")
+            seek = None
+
+        if seek is not None:
+            cmd = ["ffmpeg", "-y", "-ss", f"{seek:.3f}", "-i", str(video_path),
+                   "-frames:v", "1", "-q:v", "2", str(frame_path)]
+        else:
+            cmd = ["ffmpeg", "-y", "-sseof", "-0.2", "-i", str(video_path),
+                   "-frames:v", "1", "-q:v", "2", str(frame_path)]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0 or not frame_path.exists():
+            raise RuntimeError(f"ffmpeg extract failed: {result.stderr[-300:]}")
+
+        frame_bytes = frame_path.read_bytes()
+        log(job_id, f"extract_last_frame frame={len(frame_bytes)/1024:.0f} KB")
+
+    # Upload JPEG to R2 under frames/ prefix
+    import boto3
+    from botocore.config import Config
+
+    r2_endpoint = os.environ.get("R2_ENDPOINT")
+    r2_key_id   = os.environ.get("R2_ACCESS_KEY_ID")
+    r2_secret   = os.environ.get("R2_SECRET_ACCESS_KEY")
+    r2_bucket   = os.environ.get("R2_BUCKET_NAME", "alphogenai-assets")
+    if not all([r2_endpoint, r2_key_id, r2_secret]):
+        raise RuntimeError("R2 credentials missing")
+
+    s3 = boto3.client(
+        "s3", endpoint_url=r2_endpoint,
+        aws_access_key_id=r2_key_id, aws_secret_access_key=r2_secret,
+        config=Config(signature_version="s3v4"), region_name="auto",
+    )
+    key = f"frames/{job_id}_scene_{scene_index:02d}_last.jpg"
+    s3.put_object(Bucket=r2_bucket, Key=key, Body=frame_bytes, ContentType="image/jpeg")
+
+    public_url = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")
+    frame_url = f"{public_url}/{key}"
+    log(job_id, f"extract_last_frame → {frame_url}")
+
+    # Persist so the Next.js poller can fire the next EvoLink scene with it
+    update_scene(job_id, scene_index, last_frame_url=frame_url)
+    return frame_url
+
+
+@app.function(image=base_image, secrets=[secrets], timeout=900, retries=0)
+def concat_and_finalize(job_id: str) -> str:
+    """
+    Concatenate every done scene of `job_id` (ordered by scene_index) into a
+    single MP4, upload to R2, mark the job as done.
+
+    Reads clip_urls directly from Supabase job_scenes — no client payload
+    trusted.  If only one scene is done we short-circuit and just mark the
+    job done with that clip_url.
+    """
+    import traceback
+
+    try:
+        sb = get_supabase_client()
+        res = sb.table("job_scenes") \
+            .select("scene_index, clip_url, status") \
+            .eq("job_id", job_id) \
+            .order("scene_index") \
+            .execute()
+        rows = res.data or []
+        clip_urls = [r["clip_url"] for r in rows
+                     if r.get("status") == "done" and r.get("clip_url")]
+
+        if not clip_urls:
+            raise RuntimeError(f"no done scenes for job {job_id}")
+
+        log(job_id, f"concat_and_finalize: {len(clip_urls)} clip(s)")
+
+        if len(clip_urls) == 1:
+            # Single scene path: nothing to concat
+            only = clip_urls[0]
+            update_job(job_id, status="done", current_stage="completed",
+                       video_url=only, output_url_final=only)
+            return only
+
+        # Read plan for watermark decision
+        job_row = sb.table("jobs").select("plan").eq("id", job_id).single().execute()
+        plan = (job_row.data or {}).get("plan", "free")
+
+        update_job(job_id, current_stage="encoding")
+        final_bytes = assemble_scenes.remote(job_id, clip_urls)
+
+        if plan == "free":
+            try:
+                final_bytes = add_watermark.remote(final_bytes)
+            except Exception as e:
+                log(job_id, f"watermark skipped: {e}")
+
+        update_job(job_id, current_stage="uploading")
+        final_url = upload_to_r2(final_bytes, job_id, suffix="_final")
+        log(job_id, f"concat_and_finalize uploaded → {final_url}")
+
+        update_job(
+            job_id,
+            status="done",
+            current_stage="completed",
+            video_url=final_url,
+            output_url_final=final_url,
+        )
+        return final_url
+    except Exception as e:
+        tb = traceback.format_exc()
+        log(job_id, f"concat_and_finalize FAILED:\n{tb}")
+        update_job(
+            job_id, status="failed", current_stage="failed",
+            error_message=f"concat_failed: {str(e)[:400]}",
+        )
+        _report_sentry(e, job_id=job_id, stage="concat")
+        raise
+
+
 # ---------------------------------------------------------------------------
 # Audio generation (AudioLDM2 on A10G — for Wan only, Seedance has native audio)
 # ---------------------------------------------------------------------------
@@ -1061,6 +1224,14 @@ def webhook():
         image_url: Optional[str] = None
         references: Optional[dict] = None  # Multi-Reference V1 payload
 
+    class FrameExtractRequest(BaseModel):
+        job_id: str
+        scene_index: int
+        video_url: str
+
+    class ConcatRequest(BaseModel):
+        job_id: str
+
     @web.post("/webhook")
     async def trigger(req: JobRequest, x_webhook_secret: str = Header(None)):
         expected = os.environ.get("MODAL_WEBHOOK_SECRET")
@@ -1094,6 +1265,43 @@ def webhook():
                 pass
             raise HTTPException(status_code=500, detail=str(e)[:200])
 
+        return {"success": True, "job_id": req.job_id}
+
+    @web.post("/extract-frame")
+    async def extract_frame(req: FrameExtractRequest, x_webhook_secret: str = Header(None)):
+        """Trigger ffmpeg last-frame extraction for a scene (multi-scene chaining).
+
+        Spawns extract_last_frame on Modal (base_image, has ffmpeg). Returns
+        immediately with 202-style success — the Next.js poller picks up the
+        new last_frame_url on the next GET.
+        """
+        expected = os.environ.get("MODAL_WEBHOOK_SECRET")
+        if expected and x_webhook_secret != expected:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        try:
+            await extract_last_frame.spawn.aio(req.job_id, req.scene_index, req.video_url)
+        except Exception as e:
+            print(f"[webhook /extract-frame] spawn failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e)[:200])
+        return {"success": True, "job_id": req.job_id, "scene_index": req.scene_index}
+
+    @web.post("/concat-scenes")
+    async def concat_scenes(req: ConcatRequest, x_webhook_secret: str = Header(None)):
+        """Trigger final concat of all done scenes for a job.
+
+        Spawns concat_and_finalize on Modal (reads clip_urls server-side from
+        Supabase, never trusting client payload). Job is marked done when the
+        Modal function finishes; the Next.js poller observes the new
+        video_url.
+        """
+        expected = os.environ.get("MODAL_WEBHOOK_SECRET")
+        if expected and x_webhook_secret != expected:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        try:
+            await concat_and_finalize.spawn.aio(req.job_id)
+        except Exception as e:
+            print(f"[webhook /concat-scenes] spawn failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e)[:200])
         return {"success": True, "job_id": req.job_id}
 
     @web.post("/flush-cache")

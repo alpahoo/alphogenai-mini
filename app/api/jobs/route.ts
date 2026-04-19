@@ -2,7 +2,12 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateStoryboard, enrichStoryboardWithLLM } from "@/lib/storyboard";
-import { isEvoLinkEngine, createEvoLinkTask, EVOLINK_ENGINES } from "@/lib/evolink-client";
+import {
+  isEvoLinkEngine,
+  createEvoLinkTask,
+  engineSupportsFirstFrame,
+  EVOLINK_ENGINES,
+} from "@/lib/evolink-client";
 import { enhancePrompt } from "@/lib/prompt-enhancer";
 import type { JobPlan } from "@/lib/types";
 
@@ -16,6 +21,24 @@ const MAX_ACTIVE_JOBS = 1; // max concurrent jobs per user
 // All valid engine keys (Modal + EvoLink)
 const VALID_ENGINES = ["wan_i2v", "seedance", ...Object.keys(EVOLINK_ENGINES)];
 
+// Hard cap on multi-scene chaining length (defense in depth — storyboard
+// is already capped per-plan). Even premium can't ask EvoLink for >6 chained
+// scenes — beyond that, generation cost & wait time become unreasonable.
+const MAX_CHAIN_LENGTH = 6;
+
+/**
+ * Strip "[SCENE N - LABEL]" markers and tighten whitespace before sending to
+ * EvoLink. Markers leak into prompts when the LLM enricher prepends labels;
+ * EvoLink's content-policy filter sometimes flags them as suspicious.
+ */
+function cleanEvoLinkPrompt(raw: string): string {
+  return raw
+    .replace(/\[SCENE\s*\d+[^\]]*\]/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 500);
+}
+
 export async function POST(req: Request) {
   try {
     const authClient = await createClient();
@@ -25,13 +48,25 @@ export async function POST(req: Request) {
 
     const supabase = createServiceClient();
     const body = await req.json();
-    const { prompt, target_duration_seconds, preferred_engine, image_url, references } = body as {
+    const {
+      prompt,
+      target_duration_seconds,
+      preferred_engine,
+      image_url,
+      references,
+      multi_scene_chain,
+    } = body as {
       prompt: string;
       target_duration_seconds?: unknown;
       preferred_engine?: string;
       image_url?: string;
       references?: Record<string, unknown>;
+      multi_scene_chain?: boolean;
     };
+
+    // Default ON. Only set OFF if explicitly false (the user toggled it off
+    // in Advanced settings, or the chosen engine doesn't support I2V).
+    const chainOptIn = multi_scene_chain !== false;
 
     // Validate image_url if provided
     const safeImageUrl =
@@ -160,6 +195,7 @@ export async function POST(req: Request) {
         current_stage: "queued",
         target_duration_seconds: Math.round(targetDuration),
         storyboard,
+        multi_scene_chain: chainOptIn,
         ...(safeImageUrl ? { image_url: safeImageUrl } : {}),
         ...(safeReferences ? { references_payload: safeReferences } : {}),
         ...(user?.id ? { user_id: user.id } : {}),
@@ -187,32 +223,65 @@ export async function POST(req: Request) {
     const engineKey = safePreferredEngine ?? "wan_i2v";
 
     if (isEvoLinkEngine(engineKey)) {
-      // ── EvoLink path: call API directly, no Modal ──────────────────────
-      // EvoLink generates ONE video (not a multi-scene script), so we must
-      // send a SINGLE clean cinematic prompt. Sending the raw user input
-      // with "[SCENE 1 - SETUP]" markers triggers EvoLink's content-policy
-      // filter ("may violate third-party content rights").
+      // ── EvoLink path ───────────────────────────────────────────────────
+      // EvoLink generates ONE video per task. For multi-scene jobs we fire
+      // ONLY scene 0 here; the GET poller advances the chain (scene N done
+      // → extract last frame → fire scene N+1 with first_frame=that frame).
       //
-      // Priority:
-      //   1. storyboard[0].prompt — first scene, already LLM-enriched & clean
-      //   2. enhancedPrompt — if no storyboard (shouldn't happen in practice)
-      //   3. raw prompt with markers stripped as fallback
-      const rawEvoLinkPrompt = storyboard[0]?.prompt || enhancedPrompt || prompt.trim();
-      const evolinkPrompt = rawEvoLinkPrompt
-        .replace(/\[SCENE\s*\d+[^\]]*\]/gi, "") // strip "[SCENE 1 - SETUP]" markers
-        .replace(/\s+/g, " ")                   // collapse whitespace
-        .trim()
-        .slice(0, 500);                         // EvoLink safe length
+      // Chaining is enabled when ALL of:
+      //   - storyboard has ≥2 scenes
+      //   - user didn't opt out (chainOptIn)
+      //   - selected EvoLink engine supports image-to-video (i.e. has
+      //     imageModel — Sora 2 is the notable exception)
+      //   - storyboard length ≤ MAX_CHAIN_LENGTH (defense in depth)
+      //
+      // When chaining is OFF (Sora 2 or user-disabled), the GET poller
+      // still fires scenes sequentially but without first_frame_url, so
+      // continuity is lost but each scene still renders.
+      const sceneCount = storyboard.length;
+      const chainable =
+        sceneCount > 1 &&
+        sceneCount <= MAX_CHAIN_LENGTH &&
+        chainOptIn &&
+        engineSupportsFirstFrame(engineKey);
+
+      // Scene 0 prompt — clean for EvoLink content-policy filter
+      const scene0Raw = storyboard[0]?.prompt || enhancedPrompt || prompt.trim();
+      const scene0Prompt = cleanEvoLinkPrompt(scene0Raw);
+
+      // Scene 0 first_frame: user-provided reference image (Character Face,
+      // etc.) when present.  Subsequent scenes will receive the last frame
+      // of the previous scene as first_frame (set by the GET poller).
+      const scene0FirstFrame = safeImageUrl;
+      const scene0Duration = Math.round(storyboard[0]?.duration_sec ?? safeDuration);
 
       try {
         const taskId = await createEvoLinkTask({
           engineKey,
-          prompt: evolinkPrompt,
-          duration: safeDuration,
-          imageUrl: safeImageUrl,
+          prompt: scene0Prompt,
+          duration: scene0Duration,
+          imageUrl: scene0FirstFrame,
         });
-        console.log(`[jobs] EvoLink prompt (${evolinkPrompt.length} chars): "${evolinkPrompt.slice(0, 120)}..."`);
+        console.log(
+          `[jobs] EvoLink scene 0: job=${job.id} engine=${engineKey} ` +
+          `chain=${chainable ? "ON" : "OFF"} scenes=${sceneCount} ` +
+          `task=${taskId} prompt="${scene0Prompt.slice(0, 80)}..."`
+        );
 
+        // Per-scene tracking: scene 0 is now generating
+        await supabase
+          .from("job_scenes")
+          .update({
+            status: "generating",
+            external_task_id: taskId,
+          })
+          .eq("job_id", job.id)
+          .eq("scene_index", 0);
+
+        // Job-level: keep external_task_id pointing at the *active* scene's
+        // EvoLink task for legacy single-scene polling code paths and quick
+        // log inspection. The GET poller updates this each time it advances
+        // the chain.
         await supabase
           .from("jobs")
           .update({
@@ -220,17 +289,24 @@ export async function POST(req: Request) {
             current_stage: "generating_scene_1",
             engine_used: engineKey,
             external_task_id: taskId,
+            // Persist chain decision for the poller (already on jobs row,
+            // but make sure it's set to the EFFECTIVE value, not just the
+            // user request — Sora 2 forces OFF here regardless of toggle).
+            multi_scene_chain: chainable,
           })
           .eq("id", job.id);
-
-        console.log(`[jobs] EvoLink task created: job=${job.id} engine=${engineKey} task=${taskId}`);
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
-        console.error(`[jobs] EvoLink create failed:`, errMsg);
+        console.error(`[jobs] EvoLink scene 0 create failed:`, errMsg);
         await supabase
           .from("jobs")
           .update({ status: "failed", error_message: `EvoLink error: ${errMsg}` })
           .eq("id", job.id);
+        await supabase
+          .from("job_scenes")
+          .update({ status: "failed", error_message: errMsg.slice(0, 400) })
+          .eq("job_id", job.id)
+          .eq("scene_index", 0);
       }
 
       return NextResponse.json({ success: true, jobId: job.id, job });

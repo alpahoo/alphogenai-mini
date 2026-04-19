@@ -166,6 +166,17 @@ export function isEvoLinkEngine(engineKey: string): boolean {
   return engineKey in EVOLINK_ENGINES;
 }
 
+/**
+ * Returns true if the given EvoLink engine supports image-to-video.
+ * Used by the multi-scene chaining path: engines without an `imageModel`
+ * (e.g. Sora 2) cannot accept a `first_frame_url`, so chaining must
+ * fall back to independent sequential generation.
+ */
+export function engineSupportsFirstFrame(engineKey: string): boolean {
+  const cfg = EVOLINK_ENGINES[engineKey];
+  return Boolean(cfg?.imageModel);
+}
+
 // ---------------------------------------------------------------------------
 // Task creation
 // ---------------------------------------------------------------------------
@@ -204,7 +215,10 @@ export async function createEvoLinkTask(params: CreateTaskParams): Promise<strin
     model_params: { web_search: false },
   };
 
-  if (params.imageUrl) {
+  // Only wire first_frame_url when the engine actually supports I2V.
+  // Sending it to a T2V-only engine (e.g. Sora 2) would be rejected by
+  // EvoLink's validation layer.
+  if (params.imageUrl && config.imageModel) {
     body.first_frame_url = params.imageUrl;
   }
 

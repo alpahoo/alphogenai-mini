@@ -19,6 +19,7 @@ import {
   Cpu,
   Film,
   Crown,
+  Link2,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -99,6 +100,10 @@ export default function CreateModePage({
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  // Multi-scene continuity: when ON, scene N+1 starts from the last frame
+  // of scene N so characters & composition stay consistent across cuts.
+  // Default ON; user can opt out in Advanced settings.
+  const [multiSceneChain, setMultiSceneChain] = useState(true);
 
   const handleTemplateSelect = (template: PromptTemplate) => {
     setPrompt(template.prompt);
@@ -194,6 +199,8 @@ export default function CreateModePage({
           ...(uploadedImageUrl && { image_url: uploadedImageUrl }),
           ...(Object.keys(references).length > 0 && { references: buildReferencePayload(references) }),
           ...(selectedEngine !== "auto" && { preferred_engine: selectedEngine }),
+          // Only send when explicitly disabled — backend defaults to ON
+          ...(multiSceneChain === false && { multi_scene_chain: false }),
         }),
       });
       const data = await res.json();
@@ -464,6 +471,53 @@ export default function CreateModePage({
                       </p>
                     )}
                   </div>
+
+                  {/* ── Multi-scene continuity ──────────────────────── */}
+                  {/* Only matters when the storyboard has ≥2 scenes. For Pro      */}
+                  {/* (3 scenes max) & Premium (5 scenes max), this chains each   */}
+                  {/* scene from the previous one's last frame — characters stay   */}
+                  {/* visually consistent across cuts.                            */}
+                  {plan !== "free" && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">
+                        Multi-scene continuity
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setMultiSceneChain((v) => !v)}
+                        className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-[11px] font-medium transition-all ${
+                          multiSceneChain
+                            ? "border-primary/50 bg-primary/10 text-primary"
+                            : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground"
+                        }`}
+                        title={
+                          multiSceneChain
+                            ? "Each scene starts from the previous scene's last frame"
+                            : "Scenes generated independently (may look visually disconnected)"
+                        }
+                      >
+                        <span className="flex items-center gap-2">
+                          <Link2 className="h-3 w-3" />
+                          Chain scenes from last frame
+                        </span>
+                        <span
+                          className={`relative inline-flex h-4 w-7 rounded-full transition-colors ${
+                            multiSceneChain ? "bg-primary" : "bg-muted-foreground/30"
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-0.5 h-3 w-3 rounded-full bg-background transition-transform ${
+                              multiSceneChain ? "translate-x-3.5" : "translate-x-0.5"
+                            }`}
+                          />
+                        </span>
+                      </button>
+                      <p className="text-[10px] text-muted-foreground/50 mt-1.5">
+                        Recommended for story videos. Disable for stylistically
+                        diverse cuts or when using Sora 2 (no I2V).
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
