@@ -215,11 +215,18 @@ export async function createEvoLinkTask(params: CreateTaskParams): Promise<strin
     model_params: { web_search: false },
   };
 
-  // Only wire first_frame_url when the engine actually supports I2V.
+  // Only wire the image when the engine actually supports I2V.
   // Sending it to a T2V-only engine (e.g. Sora 2) would be rejected by
   // EvoLink's validation layer.
+  //
+  // EvoLink's I2V engines use different field names:
+  //   - Seedance 2.0 / 2.0-fast → `image_urls: [url]`  (array form, required)
+  //   - Kling, WAN, Hailuo        → `first_frame_url: url`  (string form)
+  // We send BOTH so the gateway routes correctly regardless of engine —
+  // unknown fields are silently ignored by EvoLink's parser.
   if (params.imageUrl && config.imageModel) {
     body.first_frame_url = params.imageUrl;
+    body.image_urls = [params.imageUrl];
   }
 
   const res = await fetch(`${EVOLINK_API}/videos/generations`, {
