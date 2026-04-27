@@ -21,11 +21,15 @@ const PUBLIC_PATHS = new Set<string>([
   "/pricing",
   "/privacy",
   "/terms",
+  "/blog",
 ]);
 
 export function SiteShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "/";
-  const showChrome = PUBLIC_PATHS.has(pathname);
+  // Blog has dynamic /blog/[slug] children — match those too without
+  // listing each slug in the Set.
+  const showChrome =
+    PUBLIC_PATHS.has(pathname) || pathname.startsWith("/blog/");
 
   if (!showChrome) {
     return <>{children}</>;

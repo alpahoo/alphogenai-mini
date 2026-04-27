@@ -29,6 +29,12 @@ export function SiteHeader() {
             About
           </Link>
           <Link
+            href="/blog"
+            className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-card/60 hover:text-foreground"
+          >
+            Blog
+          </Link>
+          <Link
             href="/pricing"
             className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-card/60 hover:text-foreground"
           >

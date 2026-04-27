@@ -21,6 +21,12 @@ export function SiteFooter() {
               About
             </Link>
             <Link
+              href="/blog"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Blog
+            </Link>
+            <Link
               href="/pricing"
               className="text-muted-foreground transition-colors hover:text-foreground"
             >

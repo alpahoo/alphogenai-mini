@@ -49,7 +49,7 @@ export default function AboutPage() {
         </section>
 
         {/* Mission */}
-        <section className="mt-16 rounded-2xl border border-border/50 bg-card/40 p-8 backdrop-blur-sm sm:p-10">
+        <section className="mt-16">
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-primary">
             Mission
           </h2>
