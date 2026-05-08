@@ -18,6 +18,7 @@ import { SiteFooter } from "./site-footer";
 const PUBLIC_PATHS = new Set<string>([
   "/",
   "/about",
+  "/technology",
   "/pricing",
   "/privacy",
   "/terms",

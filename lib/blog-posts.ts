@@ -60,7 +60,7 @@ export const POSTS: BlogPost[] = [
       { type: "h2", text: "What's next" },
       {
         type: "p",
-        text: "We're rolling out the same chaining approach across all our supported engines (Wan 2.6, Seedance 2.0, Hailuo, Kling) and exposing per-scene controls so creators can pin a character reference image at the start and let it propagate. Reference-driven multi-scene is the next milestone.",
+        text: "We're rolling out the same chaining approach across all our supported engines (Wan 2.6, Wan 2.7, Happy Horse 1.0) and exposing per-scene controls so creators can pin a character reference image at the start and let it propagate. Reference-driven multi-scene is the next milestone.",
       },
     ],
   },
@@ -97,7 +97,7 @@ export const POSTS: BlogPost[] = [
       { type: "h2", text: "The orchestration layer" },
       {
         type: "p",
-        text: "On top of those primitives, we built a small unified API — EvoLink — that abstracts every supported generative video engine behind a single shape. The same job specification can run on Wan 2.6, Seedance 2.0, Hailuo, or Kling, and our router picks the right one based on quality, latency, and price for the user's plan.",
+        text: "On top of those primitives, we built a small unified API that abstracts every supported generative video engine behind a single shape. The same job specification can run on Wan 2.6, Wan 2.7, or Happy Horse 1.0, and our router picks the right one based on quality, latency, and price for the user's plan.",
       },
       {
         type: "p",
