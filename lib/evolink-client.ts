@@ -78,6 +78,8 @@ export interface EvoLinkEngineConfig {
   model: string;
   /** EvoLink model ID for image-to-video (if image_url provided) */
   imageModel?: string;
+  /** EvoLink model ID for reference-to-video (when reference_image_urls present) */
+  referenceModel?: string;
   /** Max supported duration in seconds */
   maxDuration: number;
   /** Min supported duration in seconds (some models require e.g. 6s) */
@@ -97,6 +99,7 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
   evolink: {
     model: "seedance-2.0-text-to-video",
     imageModel: "seedance-2.0-image-to-video",
+    referenceModel: "seedance-2.0-reference-to-video",
     maxDuration: 15,
     label: "Seedance 2.0",
     desc: "EvoLink • 720p • up to 15s",
@@ -105,6 +108,7 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
   evolink_fast: {
     model: "seedance-2.0-fast-text-to-video",
     imageModel: "seedance-2.0-fast-image-to-video",
+    referenceModel: "seedance-2.0-fast-reference-to-video",
     maxDuration: 15,
     label: "Seedance 2.0 Fast",
     desc: "EvoLink • 720p • faster & cheaper",
@@ -114,6 +118,7 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
   kling_o3: {
     model: "kling-o3-text-to-video",
     imageModel: "kling-o3-image-to-video",
+    referenceModel: "kling-o3-reference-to-video",
     maxDuration: 15,
     label: "Kling O3",
     desc: "EvoLink • 1080p • up to 15s",
@@ -131,6 +136,7 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
   wan_26: {
     model: "wan2.6-text-to-video",
     imageModel: "wan2.6-image-to-video",
+    referenceModel: "wan2.6-reference-video",
     maxDuration: 15,
     label: "WAN 2.6",
     desc: "EvoLink • 720p • no cold start",
@@ -247,11 +253,43 @@ export async function createEvoLinkTask(params: CreateTaskParams): Promise<strin
   const config = EVOLINK_ENGINES[params.engineKey];
   if (!config) throw new Error(`Unknown EvoLink engine: ${params.engineKey}`);
 
-  const model =
-    params.imageUrl && config.imageModel ? config.imageModel : config.model;
-
   const minDur = config.minDuration ?? 4;
   const clampedDuration = Math.max(minDur, Math.min(config.maxDuration, params.duration));
+
+  // ── Resolve reference image URLs FIRST (needed for model selection) ────
+  // Videos/audio refs are intentionally NOT mapped here — the V1 bucket is
+  // image-only. Will be revisited when the bucket allows video/audio types.
+  let refImageUrls: string[] = [];
+  const refImages = params.references?.images;
+  if (Array.isArray(refImages) && refImages.length > 0) {
+    const limited = refImages.slice(0, MAX_REFERENCE_IMAGES);
+    // Parallel sign — Promise.all keeps latency at ~one round-trip instead of N×
+    const resolved = await Promise.all(limited.map(resolveReferenceUrl));
+    refImageUrls = resolved.filter((u): u is string => Boolean(u));
+
+    if (refImageUrls.length < limited.length) {
+      // Log counts only — never the URLs themselves (PII risk if filename
+      // ever leaks into storage_path).
+      console.warn(
+        `[evolink] references: ${refImageUrls.length}/${limited.length} resolved ` +
+          `for engine=${params.engineKey} (others skipped: sign failed or invalid shape)`,
+      );
+    }
+  }
+
+  // ── Model selection (priority: referenceModel > imageModel > model) ────
+  // Reference-to-video takes precedence: if we have resolved reference images
+  // AND the engine defines a dedicated referenceModel, use it. This is critical
+  // because T2V models silently IGNORE reference_image_urls — only the
+  // dedicated reference-to-video variant actually processes them.
+  let model: string;
+  if (refImageUrls.length > 0 && config.referenceModel) {
+    model = config.referenceModel;
+  } else if (params.imageUrl && config.imageModel) {
+    model = config.imageModel;
+  } else {
+    model = config.model;
+  }
 
   const body: Record<string, unknown> = {
     model,
@@ -277,35 +315,16 @@ export async function createEvoLinkTask(params: CreateTaskParams): Promise<strin
     body.image_urls = [params.imageUrl];
   }
 
-  // ── V1 Multi-Reference: append reference_image_urls when image refs exist
-  //
-  // Always send the field if any image refs are present — engines that don't
-  // support reference-to-video (Sora 2, Kling, Hailuo) silently ignore the
-  // field per EvoLink's permissive parser (same precedent as `first_frame_url`
-  // + `image_urls` sent together above).
-  //
-  // Videos/audio refs are intentionally NOT mapped here — the V1 bucket is
-  // image-only. Will be revisited when the bucket allows video/audio types.
-  const refImages = params.references?.images;
-  if (Array.isArray(refImages) && refImages.length > 0) {
-    const limited = refImages.slice(0, MAX_REFERENCE_IMAGES);
-    // Parallel sign — Promise.all keeps latency at ~one round-trip instead of N×
-    const resolved = await Promise.all(limited.map(resolveReferenceUrl));
-    const refImageUrls = resolved.filter((u): u is string => Boolean(u));
-
-    if (refImageUrls.length > 0) {
-      body.reference_image_urls = refImageUrls;
-    }
-
-    if (refImageUrls.length < limited.length) {
-      // Log counts only — never the URLs themselves (PII risk if filename
-      // ever leaks into storage_path).
-      console.warn(
-        `[evolink] references: ${refImageUrls.length}/${limited.length} resolved ` +
-          `for engine=${params.engineKey} (others skipped: sign failed or invalid shape)`,
-      );
-    }
+  // ── V1 Multi-Reference: attach reference_image_urls to body ────────────
+  if (refImageUrls.length > 0) {
+    body.reference_image_urls = refImageUrls;
   }
+
+  console.log(
+    `[evolink] createTask: engine=${params.engineKey} model=${model} ` +
+    `refs=${refImageUrls.length} imageUrl=${Boolean(params.imageUrl)} ` +
+    `duration=${clampedDuration}s`
+  );
 
   const res = await fetch(`${EVOLINK_API}/videos/generations`, {
     method: "POST",
