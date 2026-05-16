@@ -5,7 +5,6 @@ import {
   Users,
   Film,
   DollarSign,
-  Cpu,
   Loader2,
   TrendingUp,
   XCircle,
@@ -101,8 +100,6 @@ export default function AdminDashboard() {
     })
   );
 
-  const activeEngines = Object.keys(stats.engineStats).length;
-
   const dailyJobs = stats.jobsLast7Days.map((d) => ({
     ...d,
     label: new Date(d.date + "T00:00:00").toLocaleDateString("en", {
@@ -190,7 +187,7 @@ export default function AdminDashboard() {
                 borderRadius: 8,
                 fontSize: 12,
               }}
-              formatter={(value: number) => [`$${value.toFixed(4)}`, "Cost"]}
+              formatter={(value) => [`$${Number(value ?? 0).toFixed(4)}`, "Cost"]}
             />
             <Area
               type="monotone"
@@ -247,10 +244,14 @@ export default function AdminDashboard() {
                 <Legend formatter={(v: string) => <span className="text-xs text-muted-foreground">{v}</span>} />
                 <Tooltip
                   contentStyle={{ backgroundColor: "#1c1c1e", border: "1px solid #333", borderRadius: 8, fontSize: 12 }}
-                  formatter={(value: number, _name: string, props: { payload?: { cost?: number } }) => [
-                    `${value} jobs · $${props.payload?.cost?.toFixed(4) ?? "0"}`,
-                    "",
-                  ]}
+                  formatter={(value, _name, item) => {
+                    // Recharts types `item.payload` as `unknown` — narrow safely
+                    const payload = (item as { payload?: { cost?: number } }).payload;
+                    return [
+                      `${Number(value ?? 0)} jobs · $${payload?.cost?.toFixed(4) ?? "0"}`,
+                      "",
+                    ];
+                  }}
                 />
               </PieChart>
             </ResponsiveContainer>

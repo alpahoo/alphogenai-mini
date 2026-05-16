@@ -14,7 +14,6 @@ import {
   CheckCircle,
   XCircle,
   PlayCircle,
-  FileText,
 } from "lucide-react";
 import { ENGINE_TEMPLATES, getTemplate } from "@/lib/engine-templates";
 

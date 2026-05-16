@@ -180,17 +180,12 @@ export default function WorkspaceHome() {
             <div className="grid gap-3 sm:grid-cols-3">
               {family.items.map((item) => {
                 const disabled = !family.active;
-                const Comp = disabled ? "div" : Link;
-                return (
-                  <Comp
-                    key={item.label}
-                    {...(disabled ? {} : { href: item.href })}
-                    className={`group flex items-start gap-3 rounded-xl border border-border/50 bg-card/80 p-4 backdrop-blur-sm transition-all duration-150 ${
-                      disabled
-                        ? "cursor-not-allowed opacity-40"
-                        : "hover:border-primary/50 hover:bg-card"
-                    }`}
-                  >
+                // Split disabled (div, no href) vs active (Link, with href) so
+                // TypeScript can narrow Link's required `href` prop.
+                const baseClass =
+                  "group flex items-start gap-3 rounded-xl border border-border/50 bg-card/80 p-4 backdrop-blur-sm transition-all duration-150";
+                const inner = (
+                  <>
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                       <item.icon className="h-4 w-4" />
                     </div>
@@ -200,7 +195,26 @@ export default function WorkspaceHome() {
                         {item.description}
                       </p>
                     </div>
-                  </Comp>
+                  </>
+                );
+                if (disabled) {
+                  return (
+                    <div
+                      key={item.label}
+                      className={`${baseClass} cursor-not-allowed opacity-40`}
+                    >
+                      {inner}
+                    </div>
+                  );
+                }
+                return (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    className={`${baseClass} hover:border-primary/50 hover:bg-card`}
+                  >
+                    {inner}
+                  </Link>
                 );
               })}
             </div>

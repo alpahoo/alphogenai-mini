@@ -526,7 +526,7 @@ function InfoCards({
           jobId={job.id}
           plan={job.plan}
           videoUrl={job.output_url_final || job.video_url || ""}
-          existingExports={(job as Record<string, unknown>).social_exports as Record<string, string> | undefined}
+          existingExports={job.social_exports ?? undefined}
           youtubeConnected={youtubeConnected}
           tiktokConnected={tiktokConnected}
           instagramConnected={instagramConnected}

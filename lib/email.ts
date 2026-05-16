@@ -49,12 +49,12 @@ export async function sendVideoReadyEmail(notification: JobNotification): Promis
  * Send "video failed" email when job fails.
  */
 export async function sendVideoFailedEmail(notification: JobNotification): Promise<void> {
-  const { to, jobId, prompt, errorMessage } = notification;
-  const jobLink = `${APP_URL}/jobs/${jobId}`;
+  const { to, prompt, errorMessage } = notification;
+  // Note: failed-email template intentionally lands user on /create (Try again),
+  // not on the job page — keep here for context if we ever change the UX.
   const promptShort = prompt.length > 100 ? prompt.slice(0, 100) + "..." : prompt;
 
   const html = renderVideoFailedHtml({
-    jobLink,
     promptShort,
     errorMessage: errorMessage || "An unknown error occurred",
   });
@@ -140,11 +140,9 @@ function renderVideoReadyHtml({
 }
 
 function renderVideoFailedHtml({
-  jobLink,
   promptShort,
   errorMessage,
 }: {
-  jobLink: string;
   promptShort: string;
   errorMessage: string;
 }): string {

@@ -31,7 +31,8 @@ export async function GET() {
   }
 
   // Map costs by engine
-  const costByEngine = new Map<string, (typeof costsRes.data)[0] | null>();
+  type CostRow = NonNullable<typeof costsRes.data>[number];
+  const costByEngine = new Map<string, CostRow | null>();
   for (const row of costsRes.data ?? []) {
     costByEngine.set(row.engine_id, row);
   }

@@ -60,7 +60,10 @@ export function mergeAppMetadata(
  *   - null          → legacy event (no metadata) — caller decides via fallback
  */
 export function resolveAppId(event: Stripe.Event): string | null {
-  const obj = event.data.object as Record<string, unknown>;
+  // Stripe.Event.data.object is a union of 80+ resource types — none have
+  // an index signature. Cast through `unknown` to satisfy TS strict cast rules
+  // (the runtime shape is always object-like, this is safe).
+  const obj = event.data.object as unknown as Record<string, unknown>;
 
   // Priority 1: direct metadata on the event object
   const directMeta = (obj.metadata ?? null) as Record<string, string> | null;

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Loader2, Plus, Cpu, DollarSign, Settings, RefreshCw, Download } from "lucide-react";
+import { Loader2, Plus, Cpu, RefreshCw, Download } from "lucide-react";
 
 interface Engine {
   id: string;

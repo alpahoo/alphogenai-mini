@@ -6,12 +6,6 @@ const nextConfig: NextConfig = {
     formats: ["image/avif", "image/webp"],
   },
   transpilePackages: ["lucide-react"],
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   webpack: (config) => {
     config.externals = [...(config.externals || []), { remotion: "remotion" }];
     return config;
@@ -21,6 +15,8 @@ const nextConfig: NextConfig = {
 // Always wrap with Sentry — init files check DSN at runtime.
 // NOTE: `disableLogger` was removed in @sentry/nextjs v10. Default behaviour
 // already tree-shakes debug logs in production, so no replacement is needed.
+// NOTE: `hideSourceMaps` was also removed — production source maps are
+// already hidden by default in v10.
 export default withSentryConfig(nextConfig, {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
@@ -28,5 +24,4 @@ export default withSentryConfig(nextConfig, {
   widenClientFileUpload: true,
   tunnelRoute: "/monitoring",
   silent: !process.env.CI,
-  hideSourceMaps: true,
 });
