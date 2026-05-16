@@ -12,7 +12,14 @@
  * Docs: https://docs.evolink.ai
  */
 
+import { signReferenceUrl } from "@/lib/r2";
+import type { ReferencePayload, ReferenceItem } from "@/lib/types";
+
 const EVOLINK_API = "https://api.evolink.ai/v1";
+
+// V1 Multi-Reference cap — Kie.ai / EvoLink reference variants accept up to
+// 9 reference images. Anything past 9 would be rejected by the provider.
+const MAX_REFERENCE_IMAGES = 9;
 
 // ---------------------------------------------------------------------------
 // LLM API (OpenAI-compatible) — same API key, different endpoint
@@ -186,6 +193,47 @@ export interface CreateTaskParams {
   prompt: string;
   duration: number;
   imageUrl?: string;
+  /**
+   * V1 Multi-Reference: structured reference payload (images only — videos
+   * and audio are out of scope for V1 since the private bucket is image-only).
+   * Image refs are resolved (signed if `storage_path` present, otherwise the
+   * legacy `url` is used directly) and sent as `reference_image_urls[]` —
+   * engines that don't support reference-to-video (Sora 2, Kling, Hailuo)
+   * silently ignore the field per EvoLink's permissive parser.
+   */
+  references?: ReferencePayload | null;
+}
+
+/**
+ * Resolve one ReferenceItem to a URL ready to ship to the provider.
+ * Priority: storage_path (sign on-demand, TTL 6h) → legacy `url` → null.
+ * Returns null on any error — caller skips the ref + logs a warning.
+ *
+ * Per future-proof-notes §3.8 — never persist signed URLs; sign on-demand.
+ */
+async function resolveReferenceUrl(ref: unknown): Promise<string | null> {
+  if (!ref || typeof ref !== "object") return null;
+  const r = ref as Partial<ReferenceItem>;
+
+  // V1 path: signed URL from canonical storage_path
+  if (typeof r.storage_path === "string" && r.storage_path.length > 0) {
+    try {
+      return await signReferenceUrl(r.storage_path, 21600);
+    } catch (e) {
+      console.warn(
+        "[evolink] sign reference failed, skipping:",
+        e instanceof Error ? e.message : String(e),
+      );
+      return null;
+    }
+  }
+
+  // Legacy V0 fallback: ref.url is an R2 public URL (never expires)
+  if (typeof r.url === "string" && r.url.startsWith("http")) {
+    return r.url;
+  }
+
+  return null;
 }
 
 /**
@@ -227,6 +275,36 @@ export async function createEvoLinkTask(params: CreateTaskParams): Promise<strin
   if (params.imageUrl && config.imageModel) {
     body.first_frame_url = params.imageUrl;
     body.image_urls = [params.imageUrl];
+  }
+
+  // ── V1 Multi-Reference: append reference_image_urls when image refs exist
+  //
+  // Always send the field if any image refs are present — engines that don't
+  // support reference-to-video (Sora 2, Kling, Hailuo) silently ignore the
+  // field per EvoLink's permissive parser (same precedent as `first_frame_url`
+  // + `image_urls` sent together above).
+  //
+  // Videos/audio refs are intentionally NOT mapped here — the V1 bucket is
+  // image-only. Will be revisited when the bucket allows video/audio types.
+  const refImages = params.references?.images;
+  if (Array.isArray(refImages) && refImages.length > 0) {
+    const limited = refImages.slice(0, MAX_REFERENCE_IMAGES);
+    // Parallel sign — Promise.all keeps latency at ~one round-trip instead of N×
+    const resolved = await Promise.all(limited.map(resolveReferenceUrl));
+    const refImageUrls = resolved.filter((u): u is string => Boolean(u));
+
+    if (refImageUrls.length > 0) {
+      body.reference_image_urls = refImageUrls;
+    }
+
+    if (refImageUrls.length < limited.length) {
+      // Log counts only — never the URLs themselves (PII risk if filename
+      // ever leaks into storage_path).
+      console.warn(
+        `[evolink] references: ${refImageUrls.length}/${limited.length} resolved ` +
+          `for engine=${params.engineKey} (others skipped: sign failed or invalid shape)`,
+      );
+    }
   }
 
   const res = await fetch(`${EVOLINK_API}/videos/generations`, {

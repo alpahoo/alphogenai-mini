@@ -261,6 +261,11 @@ export async function POST(req: Request) {
           prompt: scene0Prompt,
           duration: scene0Duration,
           imageUrl: scene0FirstFrame,
+          // V1 Multi-Reference: forward image refs to EvoLink. The same
+          // payload is also persisted on `jobs.references_payload`, so the
+          // GET poller (`fireNextScene`) can re-use it for scenes 1..N —
+          // character continuity persists across the whole multi-scene render.
+          references: safeReferences as Parameters<typeof createEvoLinkTask>[0]["references"],
         });
         console.log(
           `[jobs] EvoLink scene 0: job=${job.id} engine=${engineKey} ` +

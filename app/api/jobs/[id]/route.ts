@@ -424,6 +424,14 @@ async function fireNextScene(
     `firstFrame=${firstFrameUrl ? firstFrameUrl.slice(0, 60) + "..." : "none"}`
   );
 
+  // V1 Multi-Reference: propagate refs from the job row to every chained
+  // scene so character_face / style remain consistent across the whole
+  // multi-scene render (not just scene 0). The shape on the DB row matches
+  // the ReferencePayload contract; runtime-safe inside createEvoLinkTask.
+  const jobReferences = job.references_payload as
+    | Parameters<typeof createEvoLinkTask>[0]["references"]
+    | undefined;
+
   let taskId: string;
   try {
     taskId = await createEvoLinkTask({
@@ -431,6 +439,7 @@ async function fireNextScene(
       prompt,
       duration,
       imageUrl: firstFrameUrl,
+      references: jobReferences,
     });
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e);
