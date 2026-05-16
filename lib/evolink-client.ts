@@ -133,10 +133,12 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
     plans: ["pro", "premium"],
   },
   // ── WAN 2.6 (via EvoLink — no GPU cold start) ─────────────────────────────
+  // NOTE: wan2.6-reference-video requires VIDEO input — cannot be used with
+  // image-only references. Image refs are passed via image_urls to the I2V model
+  // as a fallback (EvoLink ignores unknown fields on non-reference models).
   wan_26: {
     model: "wan2.6-text-to-video",
     imageModel: "wan2.6-image-to-video",
-    referenceModel: "wan2.6-reference-video",
     maxDuration: 15,
     label: "WAN 2.6",
     desc: "EvoLink • 720p • no cold start",
@@ -280,11 +282,12 @@ export async function createEvoLinkTask(params: CreateTaskParams): Promise<strin
   // ── Model selection (priority: referenceModel > imageModel > model) ────
   // Reference-to-video takes precedence: if we have resolved reference images
   // AND the engine defines a dedicated referenceModel, use it. This is critical
-  // because T2V models silently IGNORE reference_image_urls — only the
-  // dedicated reference-to-video variant actually processes them.
+  // because T2V/I2V models do NOT process reference images — only the
+  // dedicated reference-to-video variant (Seedance, Kling O3) uses them.
+  const useReferenceModel = refImageUrls.length > 0 && Boolean(config.referenceModel);
   let model: string;
-  if (refImageUrls.length > 0 && config.referenceModel) {
-    model = config.referenceModel;
+  if (useReferenceModel) {
+    model = config.referenceModel!;
   } else if (params.imageUrl && config.imageModel) {
     model = config.imageModel;
   } else {
@@ -301,22 +304,32 @@ export async function createEvoLinkTask(params: CreateTaskParams): Promise<strin
     model_params: { web_search: false },
   };
 
-  // Only wire the image when the engine actually supports I2V.
-  // Sending it to a T2V-only engine (e.g. Sora 2) would be rejected by
-  // EvoLink's validation layer.
-  //
-  // EvoLink's I2V engines use different field names:
-  //   - Seedance 2.0 / 2.0-fast → `image_urls: [url]`  (array form, required)
-  //   - Kling, WAN, Hailuo        → `first_frame_url: url`  (string form)
-  // We send BOTH so the gateway routes correctly regardless of engine —
-  // unknown fields are silently ignored by EvoLink's parser.
-  if (params.imageUrl && config.imageModel) {
+  // ── Wire images to body based on selected model path ───────────────────
+  if (useReferenceModel) {
+    // Reference-to-video models (Seedance, Kling O3) use `image_urls` for
+    // reference images. If a first-frame imageUrl is also present, include
+    // it as the first element so the model uses it as the opening frame.
+    const allImages = [
+      ...(params.imageUrl ? [params.imageUrl] : []),
+      ...refImageUrls,
+    ];
+    body.image_urls = allImages;
+  } else if (params.imageUrl && config.imageModel) {
+    // Image-to-video path (no refs, just first frame).
+    // EvoLink's I2V engines use different field names:
+    //   - Seedance 2.0 / 2.0-fast → `image_urls: [url]`  (array form)
+    //   - Kling, WAN, Hailuo      → `first_frame_url: url`  (string form)
+    // We send BOTH so the gateway routes correctly regardless of engine —
+    // unknown fields are silently ignored by EvoLink's parser.
     body.first_frame_url = params.imageUrl;
     body.image_urls = [params.imageUrl];
   }
 
-  // ── V1 Multi-Reference: attach reference_image_urls to body ────────────
-  if (refImageUrls.length > 0) {
+  // Engines WITHOUT a referenceModel (WAN 2.6, Hailuo, Sora 2) that still
+  // receive refs: pass as `reference_image_urls` — silently ignored by these
+  // models (EvoLink permissive parser). This is a best-effort fallback; the
+  // user won't get reference-guided output but won't get an error either.
+  if (refImageUrls.length > 0 && !useReferenceModel) {
     body.reference_image_urls = refImageUrls;
   }
 
