@@ -96,6 +96,11 @@ export type ReferenceRole = "character_face" | "outfit_style" | "camera_motion" 
 export interface ReferenceItem {
   role: ReferenceRole;
   url: string;
+  // V1 Étape A: canonical storage path inside the private `references` bucket
+  // (shape `{user_id}/{uuid}.{ext}`). Source of truth — the `url` field above
+  // is just a transient signed-URL for UI preview. Legacy V0 references
+  // (with only `url`) remain valid; this field is optional for backward compat.
+  storage_path?: string;
   mime_type?: string;
   filename?: string;
   weight?: number; // 0.0-1.0, default 0.7 — UI not exposed in V1

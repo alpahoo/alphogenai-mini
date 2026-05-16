@@ -34,13 +34,22 @@ export function ReferenceUpload({ references, onChange, locked }: ReferenceUploa
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      // V1 Étape A: target the private `references` bucket. The route
+      // returns { url: <6h signed URL>, storage_path: "<user_id>/<uuid>.<ext>" }.
+      // `storage_path` is the source of truth; `url` is preview-only.
+      const res = await fetch("/api/upload?bucket=references", {
+        method: "POST",
+        body: formData,
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
 
       const ref: ReferenceItem = {
         role: slot.role,
         url: data.url,
+        // V1: persist canonical path. May be undefined for legacy / fallback
+        // (older deploys), in which case downstream code uses `url` directly.
+        ...(typeof data.storage_path === "string" && { storage_path: data.storage_path }),
         mime_type: file.type,
         filename: file.name,
         weight: 0.7, // V1 default, not exposed in UI
