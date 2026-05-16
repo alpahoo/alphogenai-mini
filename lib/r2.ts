@@ -63,3 +63,45 @@ export async function downloadAndUploadToR2(
 
   return uploadBufferToR2(buffer, destKey, "video/mp4");
 }
+
+// ---------------------------------------------------------------------------
+// Multi-Reference V1 — signed URL helper for the PRIVATE Supabase Storage
+// bucket `references`.
+//
+// NOTE: This is a separate storage backend from R2. The helper lives in this
+// file (rather than a new module) per the "no new module" constraint of the
+// V1 brief. Despite the file name, this helper does NOT use R2 — it uses
+// the Supabase Storage SDK with the service-role client.
+//
+// Per future-proof-notes §3.8: always store the storage path as source of
+// truth, never store the signed URL. Sign on-demand just before the consumer
+// (e.g. external video provider) needs to fetch the file.
+// ---------------------------------------------------------------------------
+
+/**
+ * Mint a temporary signed URL for a file in the private `references` bucket.
+ *
+ * @param path         Storage path under bucket root, e.g.
+ *                     "<user_id>/<job_id>/<uuid>.png"
+ * @param ttlSeconds   URL validity in seconds (default 6h = 21600)
+ * @returns            Signed URL valid for `ttlSeconds`. NEVER persist to DB.
+ * @throws             If Supabase env vars are missing or signing fails.
+ */
+export async function signReferenceUrl(
+  path: string,
+  ttlSeconds = 21600,
+): Promise<string> {
+  // Lazy import to avoid loading the Supabase service client in code paths
+  // (browser bundles) that only need the R2 helpers above.
+  const { createServiceClient } = await import("@/lib/supabase/service");
+  const supabase = createServiceClient();
+  const { data, error } = await supabase.storage
+    .from("references")
+    .createSignedUrl(path, ttlSeconds);
+  if (error || !data?.signedUrl) {
+    throw new Error(
+      `signReferenceUrl failed for path=${path}: ${error?.message ?? "no signedUrl in response"}`,
+    );
+  }
+  return data.signedUrl;
+}
