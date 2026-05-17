@@ -130,6 +130,9 @@ export default function CreateModePage({
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetch("/api/upload", { method: "POST", body: formData });
+      if (!res.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Upload server error — please retry.");
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
       setUploadedImageUrl(data.url);
@@ -203,6 +206,17 @@ export default function CreateModePage({
           ...(multiSceneChain === false && { multi_scene_chain: false }),
         }),
       });
+
+      // Guard against non-JSON responses (Vercel error pages, timeouts, etc.)
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error(
+          res.status >= 500
+            ? "Server error — please try again in a few seconds."
+            : `Unexpected response (${res.status}). Please refresh and retry.`
+        );
+      }
+
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 429 && data.upgrade) setShowUpgrade(true);

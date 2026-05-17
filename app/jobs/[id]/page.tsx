@@ -174,6 +174,9 @@ export default function JobPage() {
   const fetchJob = useCallback(async () => {
     try {
       const res = await fetch(`/api/jobs/${params.id}`);
+      if (!res.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Server error — retrying...");
+      }
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 404) { setAuthState("denied"); return "error"; }
