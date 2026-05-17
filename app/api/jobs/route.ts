@@ -9,7 +9,8 @@ import {
   EVOLINK_ENGINES,
 } from "@/lib/evolink-client";
 import { enhancePrompt } from "@/lib/prompt-enhancer";
-import type { JobPlan, ReferencePayload, ReferenceItem } from "@/lib/types";
+import type { JobPlan, ReferencePayload } from "@/lib/types";
+import { validateReferences } from "@/lib/validate-references";
 
 // LLM calls (enhancePrompt + enrichStoryboardWithLLM) can add 4-8 s on top of
 // the normal Supabase + EvoLink/Modal round-trips. 60 s is safe on Vercel Pro.
@@ -26,106 +27,8 @@ const VALID_ENGINES = ["wan_i2v", "seedance", ...Object.keys(EVOLINK_ENGINES)];
 // scenes — beyond that, generation cost & wait time become unreasonable.
 const MAX_CHAIN_LENGTH = 6;
 
-// ---------------------------------------------------------------------------
-// V1 Étape C — Reference validation (server-side)
-// ---------------------------------------------------------------------------
-
-const MAX_REFERENCE_IMAGES = 9; // EvoLink cap
-
-/** Valid roles per media category (Étape C) */
-const VALID_ROLES: Record<string, readonly string[]> = {
-  images: ["character_face", "outfit_style"],
-  videos: ["camera_motion"],
-  audio: ["mood"],
-};
-
-/**
- * Validate the references payload. Returns null if valid, or a
- * `{ error, code, status }` object for the first violation found.
- */
-function validateReferences(
-  refs: ReferencePayload,
-  userId: string | undefined,
-): { error: string; code: string; status: number } | null {
-  // 2.1 — Max image count
-  if (Array.isArray(refs.images) && refs.images.length > MAX_REFERENCE_IMAGES) {
-    return {
-      error: `Too many reference images (max ${MAX_REFERENCE_IMAGES})`,
-      code: "TOO_MANY_REFERENCE_IMAGES",
-      status: 400,
-    };
-  }
-
-  // 2.2 — Role validation per category + 2.3 — storage_path ownership
-  for (const [category, items] of Object.entries(refs)) {
-    const allowedRoles = VALID_ROLES[category];
-    if (!allowedRoles || !Array.isArray(items)) continue;
-
-    for (const item of items as ReferenceItem[]) {
-      // Role validation
-      if (item.role && !allowedRoles.includes(item.role)) {
-        return {
-          error: `Invalid reference role "${item.role}" for category "${category}". Allowed: ${allowedRoles.join(", ")}`,
-          code: "INVALID_REFERENCE_ROLE",
-          status: 400,
-        };
-      }
-
-      // Storage path ownership (only when storage_path is present — V0
-      // legacy refs with only `url` are allowed through for compat)
-      if (typeof item.storage_path === "string") {
-        const sp = item.storage_path;
-
-        // Empty / whitespace-only
-        if (sp.trim().length === 0) {
-          return {
-            error: "Storage path does not belong to user",
-            code: "STORAGE_PATH_OWNERSHIP_MISMATCH",
-            status: 400,
-          };
-        }
-
-        // Path traversal
-        if (sp.includes("..")) {
-          return {
-            error: "Storage path does not belong to user",
-            code: "STORAGE_PATH_OWNERSHIP_MISMATCH",
-            status: 400,
-          };
-        }
-
-        // Must not start with "/" (absolute path in bucket)
-        if (sp.startsWith("/")) {
-          return {
-            error: "Storage path does not belong to user",
-            code: "STORAGE_PATH_OWNERSHIP_MISMATCH",
-            status: 400,
-          };
-        }
-
-        // Must not start with "references/" (bucket name leak into path)
-        if (sp.startsWith("references/")) {
-          return {
-            error: "Storage path does not belong to user",
-            code: "STORAGE_PATH_OWNERSHIP_MISMATCH",
-            status: 400,
-          };
-        }
-
-        // Ownership: must start with user's ID
-        if (userId && !sp.startsWith(`${userId}/`)) {
-          return {
-            error: "Storage path does not belong to user",
-            code: "STORAGE_PATH_OWNERSHIP_MISMATCH",
-            status: 400,
-          };
-        }
-      }
-    }
-  }
-
-  return null; // All checks passed
-}
+// V1 Étape C — Reference validation imported from lib/validate-references.ts
+// (pure function, extracted for testability)
 
 /**
  * Strip "[SCENE N - LABEL]" markers and tighten whitespace before sending to
