@@ -26,10 +26,13 @@ import { Sidebar } from "@/components/workspace/sidebar";
 import { JobCostBadge } from "@/components/job/JobCostBadge";
 import { SocialExportPanel } from "@/components/job/social-export-panel";
 import { SHOW_COST_TRACKING_UI, isAdminEmail } from "@/lib/flags";
+import { useJobRealtime } from "@/lib/use-job-realtime";
 import type { Job, JobStage, JobScene } from "@/lib/types";
 import { STAGE_ORDER, getEngineDisplayName } from "@/lib/types";
 
-const POLL_INTERVAL = 5000;
+// Reduced from 5s → 15s now that Realtime handles UI freshness.
+// The poll still drives the EvoLink state machine (scene advancement).
+const POLL_INTERVAL = 15_000;
 
 // ---------------------------------------------------------------------------
 // Stage labels — premium, user-friendly
@@ -145,6 +148,32 @@ export default function JobPage() {
         }
       });
   }, [email]);
+
+  // ── Realtime subscription (instant UI updates) ─────────────
+  const isJobActive = job ? (job.status === "pending" || job.status === "in_progress") : false;
+
+  useJobRealtime(
+    params.id,
+    // Job row changed — merge into state
+    useCallback((updated: Partial<Job>) => {
+      setJob((prev) => prev ? { ...prev, ...updated } as Job : prev);
+    }, []),
+    // Scene row changed — merge into scenes array
+    useCallback((updated: Partial<JobScene>) => {
+      if (updated.scene_index == null) return;
+      setScenes((prev) => {
+        const idx = prev.findIndex((s) => s.scene_index === updated.scene_index);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = { ...next[idx], ...updated } as JobScene;
+          return next;
+        }
+        // New scene (INSERT) — append
+        return [...prev, updated as JobScene];
+      });
+    }, []),
+    isJobActive // only subscribe while job is in flight
+  );
 
   // ── Load user for sidebar + auth gate ───────────────────────
   useEffect(() => {
