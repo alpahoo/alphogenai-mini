@@ -116,7 +116,7 @@ async function uploadToR2Legacy(req: Request): Promise<NextResponse> {
       );
     }
 
-    // Upload to R2
+    // Build key
     const extMap: Record<string, string> = {
       "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
       "video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm",
@@ -127,29 +127,91 @@ async function uploadToR2Legacy(req: Request): Promise<NextResponse> {
     const key = `${typeConfig.folder}/${uuidv4()}.${ext}`;
     const bytes = await file.arrayBuffer();
 
-    const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
-
-    const s3 = new S3Client({
-      region: "auto",
-      endpoint: process.env.R2_ENDPOINT!,
-      credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-      },
-    });
-
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET_NAME || "alphogenai-assets",
-        Key: key,
-        Body: Buffer.from(bytes),
-        ContentType: file.type,
-      })
+    // ── Check R2 env vars ─────────────────────────────────────────────────
+    const r2Configured = !!(
+      process.env.R2_ENDPOINT &&
+      process.env.R2_ACCESS_KEY_ID &&
+      process.env.R2_SECRET_ACCESS_KEY
     );
 
-    const publicUrl = `${(process.env.R2_PUBLIC_URL || "").replace(/\/+$/, "")}/${key}`;
+    if (r2Configured) {
+      // ── Primary path: Cloudflare R2 (zero egress, permanent public URL) ─
+      const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
 
-    return NextResponse.json({ url: publicUrl });
+      const s3 = new S3Client({
+        region: "auto",
+        endpoint: process.env.R2_ENDPOINT!,
+        credentials: {
+          accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+          secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+        },
+      });
+
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME || "alphogenai-assets",
+          Key: key,
+          Body: Buffer.from(bytes),
+          ContentType: file.type,
+        })
+      );
+
+      const publicUrl = `${(process.env.R2_PUBLIC_URL || "").replace(/\/+$/, "")}/${key}`;
+      return NextResponse.json({ url: publicUrl });
+    }
+
+    // ── Fallback: Supabase Storage (when R2 env vars are not yet set) ─────
+    // Only images can fall back — the `references` bucket only accepts
+    // image/jpeg, image/png, image/webp. Video/audio uploads require R2.
+    const isImage = file.type.startsWith("image/");
+    if (!isImage) {
+      console.error(
+        `[upload] R2 not configured and file type "${file.type}" cannot use Supabase fallback`
+      );
+      return NextResponse.json(
+        { error: "Upload service not configured. Please contact support." },
+        { status: 503 }
+      );
+    }
+
+    console.warn("[upload] R2 env vars missing — falling back to Supabase Storage");
+
+    const { createServiceClient } = await import("@/lib/supabase/service");
+    const serviceClient = createServiceClient();
+
+    // Store under user's folder to respect ownership model.
+    // Path: `{user_id}/i2v/{uuid}.{ext}` — separate from multi-ref uploads.
+    const storagePath = `${user.id}/i2v/${uuidv4()}.${ext}`;
+
+    const { error: uploadError } = await serviceClient.storage
+      .from("references")
+      .upload(storagePath, Buffer.from(bytes), {
+        contentType: file.type,
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error("[upload] Supabase Storage fallback failed:", uploadError.message);
+      return NextResponse.json(
+        { error: "Upload service temporarily unavailable" },
+        { status: 503 }
+      );
+    }
+
+    // Signed URL valid 24h — enough for EvoLink/Modal to fetch the first frame.
+    const { data: signed, error: signError } = await serviceClient.storage
+      .from("references")
+      .createSignedUrl(storagePath, 86400);
+
+    if (signError || !signed?.signedUrl) {
+      console.error("[upload] Supabase Storage sign failed:", signError?.message);
+      return NextResponse.json(
+        { error: "Upload succeeded but URL generation failed" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ url: signed.signedUrl });
   } catch (error) {
     console.error("[upload] Error:", error);
     return NextResponse.json(
