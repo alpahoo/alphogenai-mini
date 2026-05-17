@@ -28,9 +28,11 @@ export async function GET(req: Request) {
   }
 
   let userId: string;
+  let returnTo = "/home";
   try {
     const decoded = JSON.parse(Buffer.from(state, "base64url").toString());
     userId = decoded.userId;
+    if (decoded.returnTo) returnTo = decoded.returnTo;
   } catch {
     return NextResponse.redirect(`${siteUrl}/home?instagram_error=invalid_state`);
   }
@@ -123,9 +125,9 @@ export async function GET(req: Request) {
     console.log(
       `[instagram-cb] Connected: user=${userId} ig_user=${resolvedIgUserId} username=${username}`
     );
-    return NextResponse.redirect(`${siteUrl}/home?instagram_connected=true`);
+    return NextResponse.redirect(`${siteUrl}${returnTo}?instagram_connected=true`);
   } catch (e) {
     console.error("[instagram-cb] Exception:", e);
-    return NextResponse.redirect(`${siteUrl}/home?instagram_error=exception`);
+    return NextResponse.redirect(`${siteUrl}${returnTo}?instagram_error=exception`);
   }
 }

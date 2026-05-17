@@ -21,9 +21,11 @@ export async function GET(req: Request) {
   }
 
   let userId: string;
+  let returnTo = "/home";
   try {
     const decoded = JSON.parse(Buffer.from(state, "base64url").toString());
     userId = decoded.userId;
+    if (decoded.returnTo) returnTo = decoded.returnTo;
   } catch {
     return NextResponse.redirect(`${siteUrl}/home?tiktok_error=invalid_state`);
   }
@@ -87,9 +89,9 @@ export async function GET(req: Request) {
     );
 
     console.log(`[tiktok-oauth] Connected: user=${userId} name=${displayName}`);
-    return NextResponse.redirect(`${siteUrl}/home?tiktok_connected=true`);
+    return NextResponse.redirect(`${siteUrl}${returnTo}?tiktok_connected=true`);
   } catch (e) {
     console.error("[tiktok-oauth] Exception:", e);
-    return NextResponse.redirect(`${siteUrl}/home?tiktok_error=exception`);
+    return NextResponse.redirect(`${siteUrl}${returnTo}?tiktok_error=exception`);
   }
 }

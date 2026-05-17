@@ -133,19 +133,23 @@ export default function JobPage() {
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [tiktokConnected, setTiktokConnected] = useState(false);
   const [instagramConnected, setInstagramConnected] = useState(false);
+  const [channelNames, setChannelNames] = useState<Record<string, string>>({});
 
   // ── Check social connections (must be before conditional returns) ────────
   useEffect(() => {
     if (!email) return;
     const sb = createClient();
     sb.from("social_connections")
-      .select("platform")
+      .select("platform, channel_name")
       .then(({ data }) => {
+        const names: Record<string, string> = {};
         for (const row of data ?? []) {
           if (row.platform === "youtube") setYoutubeConnected(true);
           if (row.platform === "tiktok") setTiktokConnected(true);
           if (row.platform === "instagram") setInstagramConnected(true);
+          if (row.channel_name) names[row.platform] = row.channel_name;
         }
+        setChannelNames(names);
       });
   }, [email]);
 
@@ -454,7 +458,7 @@ export default function JobPage() {
               {/* ── Mobile info cards (hidden on desktop) ───── */}
               {job && (
                 <div className="lg:hidden space-y-5">
-                  <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} />
+                  <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} channelNames={channelNames} />
                 </div>
               )}
             </motion.div>
@@ -464,7 +468,7 @@ export default function JobPage() {
         {/* ═══ RIGHT: Info sidebar (desktop only) ══════════════ */}
         {job && (
           <div className="hidden lg:flex w-72 flex-col border-l border-border/40 bg-muted/20 p-6 gap-5 overflow-y-auto">
-            <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} />
+            <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} channelNames={channelNames} />
           </div>
         )}
       </main>
@@ -487,6 +491,7 @@ function InfoCards({
   youtubeConnected = false,
   tiktokConnected = false,
   instagramConnected = false,
+  channelNames = {},
 }: {
   job: Job;
   isActive: boolean;
@@ -499,6 +504,7 @@ function InfoCards({
   youtubeConnected?: boolean;
   tiktokConnected?: boolean;
   instagramConnected?: boolean;
+  channelNames?: Record<string, string>;
 }) {
   return (
     <>
@@ -562,6 +568,7 @@ function InfoCards({
           youtubeConnected={youtubeConnected}
           tiktokConnected={tiktokConnected}
           instagramConnected={instagramConnected}
+          channelNames={channelNames}
         />
       )}
 

@@ -25,6 +25,7 @@ interface SocialExportPanelProps {
   youtubeConnected?: boolean;
   tiktokConnected?: boolean;
   instagramConnected?: boolean;
+  channelNames?: Record<string, string>;
 }
 
 const FORMATS = [
@@ -33,7 +34,7 @@ const FORMATS = [
   { key: "youtube", label: "YouTube", ratio: "16:9", icon: Monitor, color: "text-red-400" },
 ] as const;
 
-export function SocialExportPanel({ jobId, plan, videoUrl, existingExports, youtubeConnected, tiktokConnected, instagramConnected }: SocialExportPanelProps) {
+export function SocialExportPanel({ jobId, plan, videoUrl, existingExports, youtubeConnected, tiktokConnected, instagramConnected, channelNames = {} }: SocialExportPanelProps) {
   const [exports, setExports] = useState<Record<string, string>>(existingExports || {});
   const [exporting, setExporting] = useState(false);
   const [metadata, setMetadata] = useState<SocialMetadata | null>(null);
@@ -329,7 +330,7 @@ export function SocialExportPanel({ jobId, plan, videoUrl, existingExports, yout
               )}
               {!metadata && (
                 <div className="flex flex-1 items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-400">
-                  <Monitor className="h-3.5 w-3.5" /> YouTube connected
+                  <Monitor className="h-3.5 w-3.5" /> {channelNames.youtube ? `${channelNames.youtube}` : "YouTube connected"}
                 </div>
               )}
               <button
@@ -342,7 +343,7 @@ export function SocialExportPanel({ jobId, plan, videoUrl, existingExports, yout
               </button>
             </div>
           ) : (
-            <a href="/api/auth/youtube/connect"
+            <a href={`/api/auth/youtube/connect?return_to=/jobs/${jobId}`}
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10">
               <Monitor className="h-3.5 w-3.5" /> Connect YouTube
             </a>
@@ -376,7 +377,7 @@ export function SocialExportPanel({ jobId, plan, videoUrl, existingExports, yout
               )}
               {!metadata && (
                 <div className="flex flex-1 items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs text-white/70">
-                  <Smartphone className="h-3.5 w-3.5" /> TikTok connected
+                  <Smartphone className="h-3.5 w-3.5" /> {channelNames.tiktok ? `${channelNames.tiktok}` : "TikTok connected"}
                 </div>
               )}
               <button
@@ -389,7 +390,7 @@ export function SocialExportPanel({ jobId, plan, videoUrl, existingExports, yout
               </button>
             </div>
           ) : (
-            <a href="/api/auth/tiktok/connect"
+            <a href={`/api/auth/tiktok/connect?return_to=/jobs/${jobId}`}
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/20 bg-white/5 px-4 py-2 text-xs font-medium text-white/70 hover:bg-white/10">
               <Smartphone className="h-3.5 w-3.5" /> Connect TikTok
             </a>
@@ -423,7 +424,7 @@ export function SocialExportPanel({ jobId, plan, videoUrl, existingExports, yout
               )}
               {!metadata && (
                 <div className="flex flex-1 items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/5 px-3 py-2 text-xs text-purple-400">
-                  <Square className="h-3.5 w-3.5" /> Instagram connected
+                  <Square className="h-3.5 w-3.5" /> {channelNames.instagram ? `${channelNames.instagram}` : "Instagram connected"}
                 </div>
               )}
               <button
@@ -436,7 +437,7 @@ export function SocialExportPanel({ jobId, plan, videoUrl, existingExports, yout
               </button>
             </div>
           ) : (
-            <a href="/api/auth/instagram/connect"
+            <a href={`/api/auth/instagram/connect?return_to=/jobs/${jobId}`}
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/5 px-4 py-2 text-xs font-medium text-purple-400 hover:bg-purple-500/10">
               <Square className="h-3.5 w-3.5" /> Connect Instagram
             </a>

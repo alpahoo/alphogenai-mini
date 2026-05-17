@@ -5,8 +5,10 @@ import { NextResponse } from "next/server";
  * GET /api/auth/instagram/connect
  * Initiates Instagram OAuth via the new Instagram Business API.
  * Uses instagram.com/oauth/authorize (not Facebook dialog).
+ *
+ * Accepts optional ?return_to=/jobs/xxx to redirect back after OAuth.
  */
-export async function GET() {
+export async function GET(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
@@ -22,7 +24,11 @@ export async function GET() {
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
   const redirectUri = `${siteUrl}/api/auth/instagram/callback`;
-  const state = Buffer.from(JSON.stringify({ userId: user.id, ts: Date.now() })).toString("base64url");
+
+  const reqUrl = new URL(req.url);
+  const returnTo = reqUrl.searchParams.get("return_to") || "/home";
+
+  const state = Buffer.from(JSON.stringify({ userId: user.id, ts: Date.now(), returnTo })).toString("base64url");
 
   // New Instagram Business API scopes
   const scope = [

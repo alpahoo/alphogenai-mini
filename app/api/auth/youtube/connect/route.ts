@@ -5,8 +5,10 @@ import { NextResponse } from "next/server";
  * GET /api/auth/youtube/connect
  * Initiates Google OAuth 2.0 flow for YouTube access.
  * Redirects to Google's consent screen.
+ *
+ * Accepts optional ?return_to=/jobs/xxx to redirect back after OAuth.
  */
-export async function GET() {
+export async function GET(req: Request) {
   // Auth check
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -27,8 +29,16 @@ export async function GET() {
     "https://www.googleapis.com/auth/youtube.readonly",
   ].join(" ");
 
-  // Include user_id in state for security (CSRF protection)
-  const state = Buffer.from(JSON.stringify({ userId: user.id, ts: Date.now() })).toString("base64url");
+  // Capture return_to from query string (e.g., /jobs/abc-123)
+  const url = new URL(req.url);
+  const returnTo = url.searchParams.get("return_to") || "/home";
+
+  // Include user_id + return path in state for security (CSRF protection)
+  const state = Buffer.from(JSON.stringify({
+    userId: user.id,
+    ts: Date.now(),
+    returnTo,
+  })).toString("base64url");
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -40,6 +50,6 @@ export async function GET() {
     state,
   });
 
-  const url = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
-  return NextResponse.redirect(url);
+  const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+  return NextResponse.redirect(oauthUrl);
 }

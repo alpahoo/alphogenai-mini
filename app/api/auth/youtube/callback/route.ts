@@ -25,9 +25,11 @@ export async function GET(req: Request) {
 
   // Decode state
   let userId: string;
+  let returnTo = "/home";
   try {
     const decoded = JSON.parse(Buffer.from(state, "base64url").toString());
     userId = decoded.userId;
+    if (decoded.returnTo) returnTo = decoded.returnTo;
     if (!userId) throw new Error("no userId");
   } catch {
     return NextResponse.redirect(`${siteUrl}/home?youtube_error=invalid_state`);
@@ -104,7 +106,7 @@ export async function GET(req: Request) {
     console.log(
       `[youtube-oauth] Connected: user=${userId} channel=${channel?.snippet?.title ?? "?"}`
     );
-    return NextResponse.redirect(`${siteUrl}/home?youtube_connected=true`);
+    return NextResponse.redirect(`${siteUrl}${returnTo}?youtube_connected=true`);
   } catch (e) {
     console.error("[youtube-oauth] Exception:", e);
     return NextResponse.redirect(`${siteUrl}/home?youtube_error=exception`);

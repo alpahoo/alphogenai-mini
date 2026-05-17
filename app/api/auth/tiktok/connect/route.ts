@@ -4,8 +4,10 @@ import { NextResponse } from "next/server";
 /**
  * GET /api/auth/tiktok/connect
  * Initiates TikTok OAuth 2.0 flow (Login Kit for Web).
+ *
+ * Accepts optional ?return_to=/jobs/xxx to redirect back after OAuth.
  */
-export async function GET() {
+export async function GET(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
@@ -20,7 +22,10 @@ export async function GET() {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
   const redirectUri = `${siteUrl}/api/auth/tiktok/callback`;
 
-  const state = Buffer.from(JSON.stringify({ userId: user.id, ts: Date.now() })).toString("base64url");
+  const reqUrl = new URL(req.url);
+  const returnTo = reqUrl.searchParams.get("return_to") || "/home";
+
+  const state = Buffer.from(JSON.stringify({ userId: user.id, ts: Date.now(), returnTo })).toString("base64url");
 
   // TikTok OAuth v2 scopes for video upload
   const scope = "user.info.basic,video.publish,video.upload";
