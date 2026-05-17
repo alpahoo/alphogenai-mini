@@ -72,6 +72,17 @@ const EXAMPLE_PROMPTS = [
 ];
 
 // ---------------------------------------------------------------------------
+// UI-only metadata — reference support capability per engine.
+// NOT a routing/runtime source of truth. Purely informational badges.
+// See evolink-client.ts `referenceModel` for the actual runtime logic.
+// ---------------------------------------------------------------------------
+const ENGINE_REF_SUPPORT: Set<string> = new Set([
+  "evolink",      // Seedance 2.0
+  "evolink_fast", // Seedance 2.0 Fast
+  "kling_o3",     // Kling O3
+]);
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 export default function CreateModePage({
@@ -346,6 +357,7 @@ export default function CreateModePage({
               references={references}
               onChange={setReferences}
               locked={plan === "free"}
+              engineSupportsRefs={selectedEngine === "auto" || ENGINE_REF_SUPPORT.has(selectedEngine)}
             />
 
             {/* ── Duration ───────────────────────────────────────── */}
@@ -470,10 +482,23 @@ export default function CreateModePage({
                                 ? "border-border/20 bg-muted/10 text-muted-foreground/40 cursor-not-allowed"
                                 : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground cursor-pointer"
                             }`}
-                            title={locked ? `${opt.gate === "premium" ? "Premium" : "Pro"} only` : opt.desc}
+                            title={
+                              locked
+                                ? `${opt.gate === "premium" ? "Premium" : "Pro"} only`
+                                : opt.key !== "auto" && !ENGINE_REF_SUPPORT.has(opt.key)
+                                ? `${opt.desc} · Character references not supported`
+                                : ENGINE_REF_SUPPORT.has(opt.key)
+                                ? `${opt.desc} · Supports character references`
+                                : opt.desc
+                            }
                           >
                             <Cpu className="inline h-3 w-3 mr-1" />
                             {opt.label}
+                            {!locked && ENGINE_REF_SUPPORT.has(opt.key) && (
+                              <span className="ml-1 inline-flex rounded-sm bg-emerald-500/15 px-1 py-px text-[8px] font-semibold text-emerald-400 leading-tight align-middle">
+                                Refs
+                              </span>
+                            )}
                             {locked && <Lock className="inline h-2.5 w-2.5 ml-1 opacity-50" />}
                           </button>
                         );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Upload, X, Loader2, Lock, User, Palette, Camera, Music } from "lucide-react";
+import { Upload, X, Loader2, Lock, User, Palette, Camera, Music, AlertTriangle, Sparkles } from "lucide-react";
 import type { ReferenceItem, ReferenceRole } from "@/lib/types";
 
 interface ReferenceSlot {
@@ -20,14 +20,21 @@ const SLOTS: ReferenceSlot[] = [
   { role: "mood", label: "Mood / Rhythm", hint: "Audio mood reference", icon: Music, accept: "audio/*", mediaType: "audio" },
 ];
 
+// V1 does not support video/audio reference slots yet — mark as coming soon.
+const COMING_SOON_ROLES: Set<ReferenceRole> = new Set(["camera_motion", "mood"]);
+
 interface ReferenceUploadProps {
   references: Record<string, ReferenceItem>;
   onChange: (refs: Record<string, ReferenceItem>) => void;
   locked?: boolean;
+  /** Whether the currently selected engine supports character references.
+   *  When false AND image refs are uploaded, a non-blocking warning is shown. */
+  engineSupportsRefs?: boolean;
 }
 
-export function ReferenceUpload({ references, onChange, locked }: ReferenceUploadProps) {
+export function ReferenceUpload({ references, onChange, locked, engineSupportsRefs = true }: ReferenceUploadProps) {
   const [uploading, setUploading] = useState<string | null>(null);
+  const hasImageRefs = !!(references.character_face || references.outfit_style);
 
   const handleUpload = async (slot: ReferenceSlot, file: File) => {
     setUploading(slot.role);
@@ -94,15 +101,21 @@ export function ReferenceUpload({ references, onChange, locked }: ReferenceUploa
           const ref = references[slot.role];
           const isUploading = uploading === slot.role;
           const Icon = slot.icon;
+          const isComingSoon = COMING_SOON_ROLES.has(slot.role);
 
           return (
             <div
               key={slot.role}
-              className="rounded-lg border border-border/30 bg-background/30 p-2.5"
+              className={`rounded-lg border border-border/30 bg-background/30 p-2.5${isComingSoon ? " opacity-60" : ""}`}
             >
               <div className="flex items-center gap-2 mb-1.5">
                 <Icon className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-[11px] font-medium">{slot.label}</span>
+                {isComingSoon && (
+                  <span className="rounded-sm bg-muted/40 px-1 py-px text-[8px] font-medium text-muted-foreground/60 leading-tight">
+                    Coming soon
+                  </span>
+                )}
               </div>
 
               {ref ? (
@@ -119,20 +132,26 @@ export function ReferenceUpload({ references, onChange, locked }: ReferenceUploa
                   </button>
                 </div>
               ) : (
-                <label className="flex h-10 cursor-pointer items-center justify-center rounded-md border border-dashed border-border/30 bg-muted/5 text-[10px] text-muted-foreground/60 hover:border-border hover:bg-muted/10 transition-colors">
-                  <input
-                    type="file"
-                    accept={slot.accept}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) handleUpload(slot, f);
-                      e.target.value = "";
-                    }}
-                    className="hidden"
-                    disabled={isUploading}
-                  />
+                <label className={`flex h-10 items-center justify-center rounded-md border border-dashed border-border/30 bg-muted/5 text-[10px] text-muted-foreground/60 transition-colors${
+                  isComingSoon ? " cursor-default" : " cursor-pointer hover:border-border hover:bg-muted/10"
+                }`}>
+                  {!isComingSoon && (
+                    <input
+                      type="file"
+                      accept={slot.accept}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) handleUpload(slot, f);
+                        e.target.value = "";
+                      }}
+                      className="hidden"
+                      disabled={isUploading}
+                    />
+                  )}
                   {isUploading ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : isComingSoon ? (
+                    <span className="text-muted-foreground/40">Not available yet</span>
                   ) : (
                     <span className="flex items-center gap-1">
                       <Upload className="h-3 w-3" />
@@ -145,6 +164,24 @@ export function ReferenceUpload({ references, onChange, locked }: ReferenceUploa
           );
         })}
       </div>
+
+      {/* ── Warning: refs uploaded but engine doesn't support them ── */}
+      {hasImageRefs && !engineSupportsRefs && (
+        <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-[11px] text-amber-300/90">
+              This model does not currently support character references.
+              Uploaded references will be ignored.
+            </p>
+            <p className="text-[10px] text-muted-foreground/60 mt-1 flex items-center gap-1">
+              <Sparkles className="h-3 w-3 inline" />
+              For best character consistency, try Seedance 2.0 or Kling O3.
+            </p>
+          </div>
+        </div>
+      )}
+
       <p className="text-[9px] text-muted-foreground/40 mt-1.5">
         References are used when supported by the selected engine. Ignored safely otherwise.
       </p>
