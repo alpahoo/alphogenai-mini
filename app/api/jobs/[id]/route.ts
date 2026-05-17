@@ -594,6 +594,7 @@ function formatJob(job: Record<string, unknown>) {
     engine_used: job.engine_used ?? null,
     estimated_cost_usd: job.estimated_cost_usd ?? null,
     multi_scene_chain: job.multi_scene_chain ?? true,
+    social_exports: job.social_exports ?? null,
     created_at: job.created_at,
     updated_at: job.updated_at,
   };
