@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { generateSocialMetadata } from "../social-metadata";
-import type { SocialMetadata } from "../social-metadata";
 
 // ---------------------------------------------------------------------------
 // These tests exercise the template fallback path, which runs when
