@@ -4,7 +4,16 @@ import { NextResponse } from "next/server";
 
 /**
  * POST /api/jobs/[id]/thumbnail
- * Generate a thumbnail from the video (frame extraction + optional title overlay).
+ * Generate or retrieve a thumbnail for the completed video.
+ *
+ * Resolution order (first hit wins):
+ *   1. Cached thumbnail in social_exports.thumbnail
+ *   2. First scene's last_frame_url (already extracted by the pipeline)
+ *   3. User-provided image_url (I2V first frame)
+ *   4. R2 frame file (frames/{job_id}_scene_00_last.jpg)
+ *   5. Modal webhook (frame extraction via GPU — only if configured)
+ *
+ * V1 fallback: steps 2–4 cover most cases without needing Modal.
  * Body: { title?: string }
  */
 export async function POST(
@@ -27,7 +36,7 @@ export async function POST(
 
     const { data: job } = await supabase
       .from("jobs")
-      .select("id, output_url_final, video_url, status, social_exports")
+      .select("id, output_url_final, video_url, image_url, status, social_exports")
       .eq("id", id)
       .single();
 
@@ -40,19 +49,67 @@ export async function POST(
       return NextResponse.json({ error: "No video URL" }, { status: 400 });
     }
 
-    // Check if thumbnail already exists
+    // 1. Check if thumbnail already cached
     const existing = job.social_exports as Record<string, string> | null;
     if (existing?.thumbnail) {
       return NextResponse.json({ thumbnail_url: existing.thumbnail, cached: true });
     }
 
-    // Trigger Modal function via webhook
-    const modalUrl = process.env.MODAL_WEBHOOK_URL;
-    if (!modalUrl) {
-      return NextResponse.json({ error: "Modal not configured" }, { status: 500 });
+    // ── V1 Fallback: find a thumbnail without Modal ─────────────────────
+    let thumbnailUrl: string | null = null;
+
+    // 2. First scene's last_frame_url (extracted during multi-scene pipeline)
+    if (!thumbnailUrl) {
+      const { data: firstScene } = await supabase
+        .from("job_scenes")
+        .select("last_frame_url")
+        .eq("job_id", id)
+        .eq("scene_index", 0)
+        .single();
+
+      if (firstScene?.last_frame_url) {
+        thumbnailUrl = firstScene.last_frame_url;
+      }
     }
 
-    // For V1: call webhook with action=thumbnail
+    // 3. User-provided image_url (I2V first frame)
+    if (!thumbnailUrl && job.image_url) {
+      thumbnailUrl = job.image_url as string;
+    }
+
+    // 4. R2 frame file (check if it exists via public URL)
+    if (!thumbnailUrl && process.env.R2_PUBLIC_URL) {
+      const r2FrameUrl = `${process.env.R2_PUBLIC_URL.replace(/\/+$/, "")}/frames/${id}_scene_00_last.jpg`;
+      try {
+        const probe = await fetch(r2FrameUrl, { method: "HEAD" });
+        if (probe.ok) {
+          thumbnailUrl = r2FrameUrl;
+        }
+      } catch {
+        // R2 unreachable — skip silently
+      }
+    }
+
+    // If we found a thumbnail via fallback, cache it and return
+    if (thumbnailUrl) {
+      const updatedExports = { ...(existing ?? {}), thumbnail: thumbnailUrl };
+      await supabase
+        .from("jobs")
+        .update({ social_exports: updatedExports })
+        .eq("id", id);
+
+      return NextResponse.json({ thumbnail_url: thumbnailUrl, cached: false });
+    }
+
+    // 5. Modal webhook (GPU frame extraction — only if configured)
+    const modalUrl = process.env.MODAL_WEBHOOK_URL;
+    if (!modalUrl) {
+      return NextResponse.json(
+        { error: "No thumbnail available. Try again after a scene completes." },
+        { status: 404 }
+      );
+    }
+
     const baseUrl = modalUrl.replace(/\/webhook\/?$/, "").replace(/\/+$/, "");
     const resp = await fetch(`${baseUrl}/webhook`, {
       method: "POST",
