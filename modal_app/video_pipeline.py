@@ -1304,6 +1304,27 @@ def webhook():
             raise HTTPException(status_code=500, detail=str(e)[:200])
         return {"success": True, "job_id": req.job_id}
 
+    class SocialExportRequest(BaseModel):
+        job_id: str
+        video_url: str
+
+    @web.post("/export-social")
+    async def trigger_export_social(req: SocialExportRequest, x_webhook_secret: str = Header(None)):
+        """Trigger ffmpeg multi-format export (9:16, 1:1, 16:9).
+
+        Spawns export_social_formats on Modal (base_image, has ffmpeg).
+        Results are written to social_exports column when done.
+        """
+        expected = os.environ.get("MODAL_WEBHOOK_SECRET")
+        if expected and x_webhook_secret != expected:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        try:
+            await export_social_formats.spawn.aio(req.video_url, req.job_id)
+        except Exception as e:
+            print(f"[webhook /export-social] spawn failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e)[:200])
+        return {"success": True, "job_id": req.job_id}
+
     @web.post("/flush-cache")
     async def flush_cache(x_webhook_secret: str = Header(None)):
         """Invalidate in-memory engine registry + costs caches.

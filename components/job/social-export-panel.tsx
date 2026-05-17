@@ -113,8 +113,27 @@ export function SocialExportPanel({ jobId, plan, videoUrl, existingExports, yout
     try {
       const res = await fetch(`/api/jobs/${jobId}/export-social`, { method: "POST" });
       const data = await res.json();
-      if (data.formats) {
+
+      if (data.formats && !data.status) {
+        // Immediate result (fallback or cached)
         setExports(data.formats);
+        setExporting(false);
+        return;
+      }
+
+      // Modal processing — poll GET endpoint for results
+      if (data.status === "processing") {
+        if (data.formats) setExports(data.formats); // show youtube immediately
+        const maxPolls = 36; // 3 min max (36 × 5s)
+        for (let i = 0; i < maxPolls; i++) {
+          await new Promise((r) => setTimeout(r, 5000));
+          const poll = await fetch(`/api/jobs/${jobId}/export-social`);
+          const pollData = await poll.json();
+          if (pollData.ready && pollData.formats) {
+            setExports(pollData.formats);
+            break;
+          }
+        }
       }
     } catch (e) {
       console.error("Export failed:", e);
