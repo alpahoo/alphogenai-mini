@@ -104,6 +104,9 @@ export interface ReferenceItem {
   mime_type?: string;
   filename?: string;
   weight?: number; // 0.0-1.0, default 0.7 — UI not exposed in V1
+  // V1.1 TODO: populated by upload route, used for cumulative size check (50 MB cap).
+  // Not yet persisted — field reserved for forward compat.
+  size_bytes?: number;
 }
 
 export interface ReferencePayload {

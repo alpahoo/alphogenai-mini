@@ -264,6 +264,14 @@ export async function createEvoLinkTask(params: CreateTaskParams): Promise<strin
   let refImageUrls: string[] = [];
   const refImages = params.references?.images;
   if (Array.isArray(refImages) && refImages.length > 0) {
+    // Defense in depth: POST /api/jobs already validates ≤9, but truncate
+    // here too in case refs arrive from fireNextScene or future call sites.
+    if (refImages.length > MAX_REFERENCE_IMAGES) {
+      console.warn(
+        `[evolink] truncating ${refImages.length} image refs to ${MAX_REFERENCE_IMAGES} ` +
+          `for engine=${params.engineKey} (should have been caught by /api/jobs validation)`,
+      );
+    }
     const limited = refImages.slice(0, MAX_REFERENCE_IMAGES);
     // Parallel sign — Promise.all keeps latency at ~one round-trip instead of N×
     const resolved = await Promise.all(limited.map(resolveReferenceUrl));
