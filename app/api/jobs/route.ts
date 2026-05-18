@@ -70,6 +70,7 @@ export async function POST(req: Request) {
       image_url,
       references,
       multi_scene_chain,
+      scenes: clientScenes,
     } = body as {
       prompt: string;
       target_duration_seconds?: unknown;
@@ -77,6 +78,8 @@ export async function POST(req: Request) {
       image_url?: string;
       references?: Record<string, unknown>;
       multi_scene_chain?: boolean;
+      /** Optional pre-edited scenes from the editor (Phase C). Skips server-side storyboard generation. */
+      scenes?: Array<{ prompt: string; engine?: string; duration_sec: number }>;
     };
 
     // Default ON. Only set OFF if explicitly false (the user toggled it off
@@ -216,12 +219,26 @@ export async function POST(req: Request) {
     // Falls back silently to original if EvoLink is unavailable.
     const enhancedPrompt = await enhancePrompt(prompt.trim());
 
-    // Generate storyboard structure (duration math, scene count, engine)
-    const storyboardBase = generateStoryboard(enhancedPrompt, safeDuration, plan);
-
-    // For multi-scene jobs: enrich each scene with distinct LLM-crafted prompts
-    // Single-scene jobs already have the enhanced prompt — no LLM needed
-    const storyboard = await enrichStoryboardWithLLM(storyboardBase, enhancedPrompt);
+    // ── Storyboard: use client-provided scenes (editor) or generate ─────
+    let storyboard;
+    if (clientScenes && Array.isArray(clientScenes) && clientScenes.length > 0) {
+      // Phase C: editor-provided scenes — skip server-side generation
+      // Validate & sanitize: cap to plan scene limit, enforce min/max duration
+      const { MAX_SCENES } = await import("@/lib/storyboard");
+      const maxScenes = MAX_SCENES[plan] ?? 1;
+      const capped = clientScenes.slice(0, maxScenes);
+      storyboard = capped.map((s, i) => ({
+        scene_index: i,
+        prompt: (s.prompt || enhancedPrompt).slice(0, 500),
+        engine: (s.engine || safePreferredEngine || "wan_i2v") as import("@/lib/types").EngineKey,
+        duration_sec: Math.max(3, Math.min(10, s.duration_sec ?? 5)),
+      }));
+    } else {
+      // Default: server-generated storyboard
+      const storyboardBase = generateStoryboard(enhancedPrompt, safeDuration, plan);
+      // For multi-scene jobs: enrich each scene with distinct LLM-crafted prompts
+      storyboard = await enrichStoryboardWithLLM(storyboardBase, enhancedPrompt);
+    }
 
     const targetDuration = storyboard.reduce((s, sc) => s + sc.duration_sec, 0);
 

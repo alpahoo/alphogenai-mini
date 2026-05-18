@@ -8,6 +8,7 @@ import {
   ShoppingBag,
   Share2,
   Scissors,
+  Clapperboard,
   FlaskConical,
   ArrowRight,
   Clock,
@@ -139,7 +140,7 @@ export default function CreateHub() {
         </div>
       </motion.section>
 
-      {/* ── Clip & Edit (COMING SOON) ────────────────────────────── */}
+      {/* ── Clip & Edit ─────────────────────────────────────────── */}
       <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -150,11 +151,25 @@ export default function CreateHub() {
           <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
             Clip & Edit
           </h2>
-          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">
-            Coming soon
-          </span>
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
+          {/* Scene Editor — live */}
+          <Link
+            href="/create/editor"
+            className="group flex items-start gap-3 rounded-2xl border border-border/40 bg-card/60 p-5 transition-all hover:border-primary/40 hover:bg-card/80 hover:shadow-lg"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
+              <Clapperboard className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">Scene Editor</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
+                Build a storyboard, reorder scenes with drag & drop, then generate
+              </p>
+            </div>
+          </Link>
+
+          {/* Edit existing footage — coming soon */}
           <div className="flex items-start gap-3 rounded-2xl border border-border/30 bg-card/40 p-5 opacity-40 cursor-not-allowed">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted/50">
               <Scissors className="h-5 w-5 text-muted-foreground/50" />
