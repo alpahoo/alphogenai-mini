@@ -11,6 +11,7 @@ import {
   Plus,
   Library,
   Shield,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { href: "/create", label: "Create", icon: Plus },
   { href: "/projects", label: "Projects", icon: FolderOpen },
   { href: "/library", label: "Library", icon: Library },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
 ] as const;
 
 interface SidebarProps {

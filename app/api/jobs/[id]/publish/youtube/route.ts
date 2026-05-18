@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
  * POST /api/jobs/[id]/publish/youtube
  * Uploads video to user's connected YouTube channel.
  *
- * Body: { title, description, tags?: string[], privacy?: "public"|"unlisted"|"private" }
+ * Body: { title, description, tags?: string[], privacy?: "public"|"unlisted"|"private", publishAt?: string (ISO 8601) }
  */
 export async function POST(
   req: Request,
@@ -24,11 +24,12 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { title, description, tags, privacy } = body as {
+    const { title, description, tags, privacy, publishAt } = body as {
       title?: string;
       description?: string;
       tags?: string[];
       privacy?: string;
+      publishAt?: string; // ISO 8601 — schedules the video for future publication
     };
 
     if (!title) {
@@ -143,9 +144,14 @@ export async function POST(
     const videoBuffer = await videoRes.arrayBuffer();
 
     // YouTube upload (resumable upload)
-    const privacyStatus = ["public", "unlisted", "private"].includes(privacy ?? "")
-      ? privacy
-      : "unlisted";
+    // Scheduling: when publishAt is set, YouTube requires privacy=private
+    // and the publishAt field in ISO 8601 format.
+    const isScheduled = publishAt && !isNaN(Date.parse(publishAt));
+    const privacyStatus = isScheduled
+      ? "private"
+      : ["public", "unlisted", "private"].includes(privacy ?? "")
+        ? privacy
+        : "unlisted";
 
     const metadata = {
       snippet: {
@@ -157,6 +163,7 @@ export async function POST(
       status: {
         privacyStatus,
         selfDeclaredMadeForKids: false,
+        ...(isScheduled ? { publishAt: new Date(publishAt).toISOString() } : {}),
       },
     };
 
@@ -227,6 +234,7 @@ export async function POST(
       youtube_video_id: videoId,
       youtube_url: youtubeUrl,
       privacy: privacyStatus,
+      ...(isScheduled ? { scheduled: true, publishAt: new Date(publishAt).toISOString() } : {}),
     });
   } catch (error) {
     console.error("[youtube-publish] Error:", error);
