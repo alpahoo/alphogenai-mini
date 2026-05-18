@@ -210,3 +210,10 @@ export const PLAN_MAX_SCENES: Record<JobPlan, number> = {
   pro: 3,
   premium: 10,
 };
+
+/** Daily (24 h rolling window) generation quota per plan. -1 = unlimited. */
+export const PLAN_DAILY_QUOTA: Record<JobPlan, number> = {
+  free: 1,
+  pro: 50,
+  premium: -1, // unlimited
+};

@@ -7,6 +7,7 @@ import {
   PLAN_MAX_DURATION,
   PLAN_MAX_SCENES,
   PLAN_LABELS,
+  PLAN_DAILY_QUOTA,
 } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -129,4 +130,18 @@ describe("PLAN_LABELS", () => {
   it("free = Free", () => expect(PLAN_LABELS.free).toBe("Free"));
   it("pro = Pro", () => expect(PLAN_LABELS.pro).toBe("Pro"));
   it("premium = Premium", () => expect(PLAN_LABELS.premium).toBe("Premium"));
+});
+
+// ---------------------------------------------------------------------------
+// 5. Daily quota constants
+// ---------------------------------------------------------------------------
+
+describe("PLAN_DAILY_QUOTA", () => {
+  it("free = 1", () => expect(PLAN_DAILY_QUOTA.free).toBe(1));
+  it("pro = 50", () => expect(PLAN_DAILY_QUOTA.pro).toBe(50));
+  it("premium = -1 (unlimited)", () => expect(PLAN_DAILY_QUOTA.premium).toBe(-1));
+
+  it("free < pro", () => {
+    expect(PLAN_DAILY_QUOTA.free).toBeLessThan(PLAN_DAILY_QUOTA.pro);
+  });
 });

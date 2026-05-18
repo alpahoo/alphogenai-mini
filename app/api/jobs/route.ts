@@ -16,13 +16,13 @@ import {
 } from "@/lib/bailian-client";
 import { enhancePrompt } from "@/lib/prompt-enhancer";
 import type { JobPlan, ReferencePayload } from "@/lib/types";
+import { PLAN_DAILY_QUOTA } from "@/lib/types";
 import { validateReferences } from "@/lib/validate-references";
 
 // LLM calls (enhancePrompt + enrichStoryboardWithLLM) can add 4-8 s on top of
 // the normal Supabase + EvoLink/Modal round-trips. 60 s is safe on Vercel Pro.
 export const maxDuration = 60;
 
-const FREE_QUOTA_24H = 1; // max free jobs per 24h per user (pre-Stripe)
 const MAX_ACTIVE_JOBS = 1; // max concurrent jobs per user
 
 // All valid engine keys (Modal + EvoLink)
@@ -152,7 +152,9 @@ export async function POST(req: Request) {
         );
       }
 
-      if (plan === "free") {
+      // Daily quota enforcement (applies to all plans except unlimited)
+      const dailyLimit = PLAN_DAILY_QUOTA[plan];
+      if (dailyLimit !== -1) {
         const twentyFourHoursAgo = new Date(
           Date.now() - 24 * 60 * 60 * 1000
         ).toISOString();
@@ -163,12 +165,13 @@ export async function POST(req: Request) {
           .eq("user_id", user.id)
           .gte("created_at", twentyFourHoursAgo);
 
-        if (recentCount && recentCount >= FREE_QUOTA_24H) {
+        if (recentCount && recentCount >= dailyLimit) {
+          const msg =
+            plan === "free"
+              ? "You've reached your free limit. Upgrade to Pro for more generations."
+              : `You've reached your daily limit of ${dailyLimit} generations. Upgrade to Premium for unlimited access.`;
           return NextResponse.json(
-            {
-              error: "You've reached your free limit. Upgrade to Pro to generate longer videos and unlimited scenes.",
-              upgrade: true,
-            },
+            { error: msg, upgrade: true },
             { status: 429 }
           );
         }

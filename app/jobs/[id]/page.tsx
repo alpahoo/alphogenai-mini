@@ -19,6 +19,8 @@ import {
   Layers,
   CheckCircle2,
   XCircle,
+  RotateCcw,
+  CopyPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -128,6 +130,8 @@ export default function JobPage() {
   const [copied, setCopied] = useState(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [retrying, setRetrying] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
 
   // Social connections — declared before any conditional returns (Rules of Hooks)
   const [youtubeConnected, setYoutubeConnected] = useState(false);
@@ -262,6 +266,30 @@ export default function JobPage() {
   const copyLink = (u: string) => { navigator.clipboard.writeText(u); setCopied(true); setTimeout(() => setCopied(false), 2000); };
   const copyPrompt = (t: string) => { navigator.clipboard.writeText(t); setCopiedPrompt(true); setTimeout(() => setCopiedPrompt(false), 2000); };
 
+  const handleRetry = async () => {
+    if (retrying || !params.id) return;
+    setRetrying(true);
+    try {
+      const res = await fetch(`/api/jobs/${params.id}/retry`, { method: "POST" });
+      const data = await res.json();
+      if (data.jobId) router.push(`/jobs/${data.jobId}`);
+      else setError(data.error || "Retry failed");
+    } catch { setError("Retry failed"); }
+    setRetrying(false);
+  };
+
+  const handleDuplicate = async () => {
+    if (duplicating || !params.id) return;
+    setDuplicating(true);
+    try {
+      const res = await fetch(`/api/jobs/${params.id}/duplicate`, { method: "POST" });
+      const data = await res.json();
+      if (data.jobId) router.push(`/jobs/${data.jobId}`);
+      else setError(data.error || "Duplicate failed");
+    } catch { setError("Duplicate failed"); }
+    setDuplicating(false);
+  };
+
   const stageIdx = job?.current_stage ? STAGE_ORDER.indexOf(job.current_stage as JobStage) : 0;
   const stageLabel = job?.current_stage ? (FRIENDLY_STAGES[job.current_stage] ?? "Processing...") : "In queue...";
 
@@ -380,9 +408,17 @@ export default function JobPage() {
                           : job.error_message}
                       </p>
                     )}
-                    <div className="mt-6 flex gap-3">
-                      <Link href="/create" className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:brightness-110">
-                        <Wand2 className="h-4 w-4" /> Try again
+                    <div className="mt-6 flex flex-wrap gap-3">
+                      <button
+                        onClick={handleRetry}
+                        disabled={retrying}
+                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-50"
+                      >
+                        {retrying ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                        {retrying ? "Retrying..." : "Retry"}
+                      </button>
+                      <Link href="/create" className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted">
+                        <Wand2 className="h-4 w-4" /> New prompt
                       </Link>
                       <Link href="/projects" className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted">
                         Back to projects
@@ -422,6 +458,14 @@ export default function JobPage() {
                     </button>
                     <button onClick={() => copyPrompt(job.prompt)} className="flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted">
                       {copiedPrompt ? <><Check className="h-4 w-4 text-green-400" /> Copied</> : <><ClipboardCopy className="h-4 w-4" /> Copy prompt</>}
+                    </button>
+                    <button
+                      onClick={handleDuplicate}
+                      disabled={duplicating}
+                      className="flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
+                    >
+                      {duplicating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CopyPlus className="h-4 w-4" />}
+                      {duplicating ? "Creating..." : "Duplicate"}
                     </button>
                   </div>
                 </>

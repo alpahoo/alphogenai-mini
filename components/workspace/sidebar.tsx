@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { isAdminEmail } from "@/lib/flags";
 import { useRouter } from "next/navigation";
+import { QuotaBar } from "./quota-bar";
 
 const NAV_ITEMS = [
   { href: "/home", label: "Home", icon: Home },
@@ -73,6 +74,11 @@ export function Sidebar({ plan, email }: SidebarProps) {
           );
         })}
       </nav>
+
+      {/* Quota */}
+      <div className="border-t border-border/50">
+        <QuotaBar />
+      </div>
 
       {/* Bottom */}
       <div className="border-t border-border/50 p-3 space-y-2">

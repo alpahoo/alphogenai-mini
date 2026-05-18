@@ -133,6 +133,8 @@ export default function CreateModePage({
 
   // Dynamic engine list (fetched from /api/engines, fallback to hardcoded)
   const [engineOptions, setEngineOptions] = useState<EngineOption[]>(FALLBACK_ENGINES);
+  // Health status per engine: rate 0.0-1.0, -1 = unknown
+  const [engineHealth, setEngineHealth] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetch("/api/engines")
@@ -145,6 +147,16 @@ export default function CreateModePage({
       .catch(() => {
         /* keep fallback — silent fail */
       });
+
+    // Fetch health data (non-blocking, best-effort)
+    fetch("/api/engines/health")
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data: Record<string, { rate: number }>) => {
+        const rates: Record<string, number> = {};
+        for (const [k, v] of Object.entries(data)) rates[k] = v.rate;
+        setEngineHealth(rates);
+      })
+      .catch(() => { /* silent */ });
   }, []);
   const [showTemplates, setShowTemplates] = useState(false);
   // Multi-scene continuity: when ON, scene N+1 starts from the last frame
@@ -539,6 +551,19 @@ export default function CreateModePage({
                               <span className="ml-1 inline-flex rounded-sm bg-emerald-500/15 px-1 py-px text-[8px] font-semibold text-emerald-400 leading-tight align-middle">
                                 Refs
                               </span>
+                            )}
+                            {/* Health badge: green = >90%, yellow = >60%, red = <=60% */}
+                            {!locked && engineHealth[opt.key] !== undefined && engineHealth[opt.key] !== -1 && (
+                              <span
+                                className={`ml-1 inline-block h-1.5 w-1.5 rounded-full align-middle ${
+                                  engineHealth[opt.key] >= 0.9
+                                    ? "bg-green-400"
+                                    : engineHealth[opt.key] >= 0.6
+                                      ? "bg-amber-400"
+                                      : "bg-red-400"
+                                }`}
+                                title={`${Math.round(engineHealth[opt.key] * 100)}% success rate (24h)`}
+                              />
                             )}
                             {locked && <Lock className="inline h-2.5 w-2.5 ml-1 opacity-50" />}
                           </button>
