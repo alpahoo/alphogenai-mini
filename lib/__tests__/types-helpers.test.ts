@@ -50,8 +50,8 @@ describe("getEngineDisplayName", () => {
 describe("ENGINE_DISPLAY_NAMES", () => {
   const requiredEngines = [
     "wan_i2v", "seedance", "evolink", "evolink_fast",
-    "kling_o3", "kling_v3", "wan_26", "wan_27", "happy_horse_10",
-    "hailuo", "hailuo_fast", "sora_2",
+    "kling_o3", "kling_v3", "wan_26", "wan_27", "wan_26_bailian",
+    "happy_horse_10", "hailuo", "hailuo_fast", "sora_2",
   ];
 
   it.each(requiredEngines)("has display name for %s", (key) => {

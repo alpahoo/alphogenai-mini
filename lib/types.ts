@@ -65,6 +65,7 @@ export type EngineKey =
   | "kling_v3"
   | "wan_26"
   | "wan_27"
+  | "wan_26_bailian"
   | "happy_horse_10"
   | "hailuo"
   | "hailuo_fast"
@@ -180,6 +181,7 @@ export const ENGINE_DISPLAY_NAMES: Record<string, string> = {
   kling_v3: "Kling 3.0",
   wan_26: "WAN 2.6",
   wan_27: "WAN 2.7",
+  wan_26_bailian: "WAN 2.6 (Bailian)",
   happy_horse_10: "Happy Horse 1.0",
   hailuo: "Hailuo 2.3",
   hailuo_fast: "Hailuo 2.3 Fast",

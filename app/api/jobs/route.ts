@@ -8,6 +8,12 @@ import {
   engineSupportsFirstFrame,
   EVOLINK_ENGINES,
 } from "@/lib/evolink-client";
+import {
+  isBailianEngine,
+  createBailianTask,
+  maybeRerouteToBailian,
+  BAILIAN_ENGINES,
+} from "@/lib/bailian-client";
 import { enhancePrompt } from "@/lib/prompt-enhancer";
 import type { JobPlan, ReferencePayload } from "@/lib/types";
 import { validateReferences } from "@/lib/validate-references";
@@ -171,10 +177,19 @@ export async function POST(req: Request) {
 
     // --- engine plan gate (server-side) ------------------------------------
     // Verify the requested engine is allowed for the user's plan.
-    // Free users can only use Modal engines (wan_i2v). EvoLink engines
-    // require Pro+; sora_2 requires Premium.
+    // Free users can only use Modal engines (wan_i2v). EvoLink/Bailian
+    // engines require Pro+; sora_2 requires Premium.
     if (safePreferredEngine && isEvoLinkEngine(safePreferredEngine)) {
       const engineConfig = EVOLINK_ENGINES[safePreferredEngine];
+      if (engineConfig && !engineConfig.plans.includes(plan)) {
+        return NextResponse.json(
+          { error: "This model requires a higher plan. Upgrade to Pro or Premium.", upgrade: true },
+          { status: 403 }
+        );
+      }
+    }
+    if (safePreferredEngine && isBailianEngine(safePreferredEngine)) {
+      const engineConfig = BAILIAN_ENGINES[safePreferredEngine];
       if (engineConfig && !engineConfig.plans.includes(plan)) {
         return NextResponse.json(
           { error: "This model requires a higher plan. Upgrade to Pro or Premium.", upgrade: true },
@@ -237,8 +252,61 @@ export async function POST(req: Request) {
     }));
     await supabase.from("job_scenes").insert(sceneRows);
 
-    // ── Route: EvoLink (direct REST) vs Modal (GPU) ──────────────────────
-    const engineKey = safePreferredEngine ?? "wan_i2v";
+    // ── Route: Bailian vs EvoLink (direct REST) vs Modal (GPU) ────────────
+    // Feature flag: transparently reroute a % of EvoLink traffic to Bailian
+    const rawEngineKey = safePreferredEngine ?? "wan_i2v";
+    const engineKey = maybeRerouteToBailian(rawEngineKey);
+
+    if (isBailianEngine(engineKey)) {
+      // ── Bailian path (Alibaba Cloud DashScope) ────────────────────────
+      // Same pattern as EvoLink: fire scene 0, poller advances chain.
+      const scene0Raw = storyboard[0]?.prompt || enhancedPrompt || prompt.trim();
+      const scene0Duration = Math.round(storyboard[0]?.duration_sec ?? safeDuration);
+
+      try {
+        const taskId = await createBailianTask({
+          engineKey,
+          prompt: scene0Raw,
+          duration: scene0Duration,
+          imageUrl: safeImageUrl,
+        });
+        console.log(
+          `[jobs] Bailian scene 0: job=${job.id} engine=${engineKey} ` +
+          `task=${taskId} prompt="${scene0Raw.slice(0, 80)}..."`,
+        );
+
+        await supabase
+          .from("job_scenes")
+          .update({ status: "generating", external_task_id: taskId })
+          .eq("job_id", job.id)
+          .eq("scene_index", 0);
+
+        await supabase
+          .from("jobs")
+          .update({
+            status: "in_progress",
+            current_stage: "generating_scene_1",
+            engine_used: engineKey,
+            external_task_id: taskId,
+            multi_scene_chain: false, // V1: single-scene only for Bailian
+          })
+          .eq("id", job.id);
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.error(`[jobs] Bailian scene 0 create failed:`, errMsg);
+        await supabase
+          .from("jobs")
+          .update({ status: "failed", error_message: `Bailian error: ${errMsg}` })
+          .eq("id", job.id);
+        await supabase
+          .from("job_scenes")
+          .update({ status: "failed", error_message: errMsg.slice(0, 400) })
+          .eq("job_id", job.id)
+          .eq("scene_index", 0);
+      }
+
+      return NextResponse.json({ success: true, jobId: job.id, job });
+    }
 
     if (isEvoLinkEngine(engineKey)) {
       // ── EvoLink path ───────────────────────────────────────────────────

@@ -95,6 +95,7 @@ const FALLBACK_ENGINES: EngineOption[] = [
   { key: "wan_27",         label: "WAN 2.7",           desc: "EvoLink - 720p - latest WAN",        gate: "pro",     supportsRefs: false, supportsI2v: true,  maxDuration: 10, minDuration: null, quality: "720p" },
   { key: "kling_o3",       label: "Kling O3",          desc: "EvoLink - 1080p - up to 15s",        gate: "pro",     supportsRefs: true,  supportsI2v: true,  maxDuration: 15, minDuration: null, quality: "1080p" },
   { key: "kling_v3",       label: "Kling 3.0",         desc: "EvoLink - 1080p - latest Kling",     gate: "pro",     supportsRefs: false, supportsI2v: true,  maxDuration: 15, minDuration: null, quality: "1080p" },
+  { key: "wan_26_bailian", label: "WAN 2.6 (Bailian)", desc: "Bailian Direct · 1080p · up to 15s",  gate: "pro",     supportsRefs: true,  supportsI2v: true,  maxDuration: 15, minDuration: null, quality: "1080p" },
   { key: "happy_horse_10", label: "Happy Horse 1.0",   desc: "EvoLink - 720p - cinematic quality",  gate: "premium", supportsRefs: false, supportsI2v: true,  maxDuration: 15, minDuration: null, quality: "720p" },
   { key: "hailuo",         label: "Hailuo 2.3",        desc: "EvoLink - 1080p - 6-10s",            gate: "pro",     supportsRefs: false, supportsI2v: true,  maxDuration: 10, minDuration: 6,    quality: "1080p" },
   { key: "hailuo_fast",    label: "Hailuo 2.3 Fast",   desc: "EvoLink - 1080p - faster",           gate: "pro",     supportsRefs: false, supportsI2v: true,  maxDuration: 10, minDuration: 6,    quality: "1080p" },

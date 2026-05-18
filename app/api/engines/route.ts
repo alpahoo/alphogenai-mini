@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { EVOLINK_ENGINES } from "@/lib/evolink-client";
+import { BAILIAN_ENGINES } from "@/lib/bailian-client";
 
 /**
  * GET /api/engines
@@ -16,7 +17,10 @@ import { EVOLINK_ENGINES } from "@/lib/evolink-client";
  */
 
 /** Engines that support multi-reference character images (UI badge only). */
-const REF_SUPPORT = new Set(["evolink", "evolink_fast", "kling_o3"]);
+const REF_SUPPORT = new Set([
+  "evolink", "evolink_fast", "kling_o3",
+  "wan_26_bailian", // Bailian wan2.6-r2v-flash
+]);
 
 interface EngineOption {
   key: string;
@@ -65,6 +69,29 @@ export async function GET() {
       minDuration: cfg.minDuration ?? null,
       quality: cfg.quality ?? "720p",
     });
+  }
+
+  // Bailian engines (only visible when DASHSCOPE_API_KEY is configured)
+  if (process.env.DASHSCOPE_API_KEY) {
+    for (const [key, cfg] of Object.entries(BAILIAN_ENGINES)) {
+      const lowestPlan = cfg.plans.includes("pro")
+        ? "pro"
+        : cfg.plans.includes("premium")
+          ? "premium"
+          : null;
+
+      engines.push({
+        key,
+        label: cfg.label,
+        desc: cfg.desc,
+        gate: lowestPlan,
+        supportsRefs: REF_SUPPORT.has(key),
+        supportsI2v: Boolean(cfg.imageModel),
+        maxDuration: cfg.maxDuration,
+        minDuration: cfg.minDuration ?? null,
+        quality: cfg.quality ?? "720p",
+      });
+    }
   }
 
   return NextResponse.json(

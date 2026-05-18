@@ -7,6 +7,7 @@ import {
   createEvoLinkTask,
   engineSupportsFirstFrame,
 } from "@/lib/evolink-client";
+import { isBailianEngine, getBailianTask } from "@/lib/bailian-client";
 import { triggerExtractLastFrame, triggerConcatScenes } from "@/lib/modal-client";
 
 // Give this route enough time to poll EvoLink, fire the next scene, and
@@ -197,9 +198,24 @@ async function advanceEvoLinkState(
   );
 
   if (generating) {
-    let result: Awaited<ReturnType<typeof getEvoLinkTask>>;
+    // Poll the correct provider based on engine_used
+    let result: { status: string; videoUrl?: string; errorMessage?: string };
     try {
-      result = await getEvoLinkTask(generating.external_task_id!);
+      if (isBailianEngine(engineKey)) {
+        const br = await getBailianTask(generating.external_task_id!);
+        result = {
+          status: br.status === "succeeded" ? "completed" : br.status,
+          videoUrl: br.videoUrl,
+          errorMessage: br.errorMessage,
+        };
+      } else {
+        const er = await getEvoLinkTask(generating.external_task_id!);
+        result = {
+          status: er.status,
+          videoUrl: er.videoUrl,
+          errorMessage: er.error,
+        };
+      }
     } catch (e) {
       // Transient error — heartbeat and bail
       console.warn(
@@ -298,7 +314,7 @@ async function advanceEvoLinkState(
         .from("job_scenes")
         .update({
           status: "failed",
-          error_message: (result.error || "EvoLink generation failed").slice(0, 400),
+          error_message: (result.errorMessage || "Generation failed").slice(0, 400),
         })
         .eq("id", generating.id);
 
@@ -307,7 +323,7 @@ async function advanceEvoLinkState(
         .update({
           status: "failed",
           current_stage: "failed",
-          error_message: `Scene ${generating.scene_index + 1} failed: ${result.error || "Unknown error"}`.slice(
+          error_message: `Scene ${generating.scene_index + 1} failed: ${result.errorMessage || "Unknown error"}`.slice(
             0,
             500
           ),
@@ -316,7 +332,7 @@ async function advanceEvoLinkState(
         .eq("status", "in_progress");
 
       console.warn(
-        `[jobs/status] scene ${generating.scene_index + 1} failed: ${result.error}`
+        `[jobs/status] scene ${generating.scene_index + 1} failed: ${result.errorMessage}`
       );
       return;
     }
@@ -544,9 +560,24 @@ async function advanceLegacySingleScene(
   const taskId = job.external_task_id as string | null;
   if (!taskId) return;
 
-  let result: Awaited<ReturnType<typeof getEvoLinkTask>>;
+  const engineUsed = (job.engine_used as string) ?? "";
+  let result: { status: string; videoUrl?: string; errorMessage?: string };
   try {
-    result = await getEvoLinkTask(taskId);
+    if (isBailianEngine(engineUsed)) {
+      const br = await getBailianTask(taskId);
+      result = {
+        status: br.status === "succeeded" ? "completed" : br.status,
+        videoUrl: br.videoUrl,
+        errorMessage: br.errorMessage,
+      };
+    } else {
+      const er = await getEvoLinkTask(taskId);
+      result = {
+        status: er.status,
+        videoUrl: er.videoUrl,
+        errorMessage: er.error,
+      };
+    }
   } catch (e) {
     console.warn(`[jobs/status legacy] poll error:`, e instanceof Error ? e.message : e);
     return;
@@ -569,7 +600,7 @@ async function advanceLegacySingleScene(
       .from("jobs")
       .update({
         status: "failed",
-        error_message: result.error || "EvoLink generation failed",
+        error_message: result.errorMessage || "Generation failed",
       })
       .eq("id", jobId)
       .eq("status", "in_progress");
