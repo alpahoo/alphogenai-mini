@@ -32,7 +32,7 @@ import { SHOW_COST_TRACKING_UI, isAdminEmail } from "@/lib/flags";
 import { useJobRealtime } from "@/lib/use-job-realtime";
 import type { Job, JobStage, JobScene } from "@/lib/types";
 import { STAGE_ORDER, getEngineDisplayName } from "@/lib/types";
-import { SceneTimeline } from "@/components/editor";
+import { SceneTimeline, ScenePanel } from "@/components/editor";
 
 // Reduced from 5s → 15s now that Realtime handles UI freshness.
 // The poll still drives the EvoLink state machine (scene advancement).
@@ -331,6 +331,27 @@ export default function JobPage() {
     [scenes],
   );
 
+  // ── Scene edit callbacks ───────────────────────────────────
+  const handlePromptSaved = useCallback(
+    (index: number, newPrompt: string) => {
+      setScenes((prev) => {
+        const next = [...prev];
+        if (next[index]) next[index] = { ...next[index], prompt: newPrompt };
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleSceneRegenerate = useCallback(() => {
+    // Refresh the job to pick up new status (in_progress)
+    fetchJob();
+  }, [fetchJob]);
+
+  const handleClosePanel = useCallback(() => {
+    setSelectedSceneIndex(-1);
+  }, []);
+
   const stageIdx = job?.current_stage ? STAGE_ORDER.indexOf(job.current_stage as JobStage) : 0;
   const stageLabel = job?.current_stage ? (FRIENDLY_STAGES[job.current_stage] ?? "Processing...") : "In queue...";
 
@@ -534,6 +555,24 @@ export default function JobPage() {
                 />
               )}
 
+              {/* ── Scene edit panel (mobile) ─────────────── */}
+              {scenes.length > 1 &&
+                selectedSceneIndex >= 0 &&
+                selectedSceneIndex < scenes.length &&
+                (isDone || isFailed) && (
+                  <div className="lg:hidden rounded-xl border border-border/40 bg-card/60 p-5">
+                    <ScenePanel
+                      scene={scenes[selectedSceneIndex]}
+                      sceneIndex={selectedSceneIndex}
+                      jobId={params.id}
+                      editable={isDone || isFailed}
+                      onClose={handleClosePanel}
+                      onPromptSaved={handlePromptSaved}
+                      onRegenerate={handleSceneRegenerate}
+                    />
+                  </div>
+                )}
+
               {/* ── Mobile info cards (hidden on desktop) ───── */}
               {job && (
                 <div className="lg:hidden space-y-5">
@@ -547,6 +586,21 @@ export default function JobPage() {
         {/* ═══ RIGHT: Info sidebar (desktop only) ══════════════ */}
         {job && (
           <div className="hidden lg:flex w-72 flex-col border-l border-border/40 bg-muted/20 p-6 gap-5 overflow-y-auto">
+            {/* Scene edit panel — shown when a scene is selected on terminal jobs */}
+            {scenes.length > 1 &&
+              selectedSceneIndex >= 0 &&
+              selectedSceneIndex < scenes.length &&
+              (isDone || isFailed) && (
+                <ScenePanel
+                  scene={scenes[selectedSceneIndex]}
+                  sceneIndex={selectedSceneIndex}
+                  jobId={params.id}
+                  editable={isDone || isFailed}
+                  onClose={handleClosePanel}
+                  onPromptSaved={handlePromptSaved}
+                  onRegenerate={handleSceneRegenerate}
+                />
+              )}
             <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} channelNames={channelNames} />
           </div>
         )}
