@@ -29,6 +29,9 @@ from .generic_api import GenericApiEngine
 from .router import select_engine
 from .seedance import SeedanceEngine
 from .wan import WanEngine
+from .vace import VACEEngine
+from .echomimic import EchoMimicEngine
+from .realesrgan import RealESRGANEngine
 
 logger = logging.getLogger(__name__)
 

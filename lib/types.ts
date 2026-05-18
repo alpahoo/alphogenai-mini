@@ -69,7 +69,10 @@ export type EngineKey =
   | "happy_horse_10"
   | "hailuo"
   | "hailuo_fast"
-  | "sora_2";
+  | "sora_2"
+  | "vace_14b"
+  | "echomimic_v3"
+  | "realesrgan_4x";
 
 export interface StoryboardScene {
   scene_index: number;
@@ -186,6 +189,9 @@ export const ENGINE_DISPLAY_NAMES: Record<string, string> = {
   hailuo: "Hailuo 2.3",
   hailuo_fast: "Hailuo 2.3 Fast",
   sora_2: "Sora 2 Pro",
+  vace_14b: "VACE 14B",
+  echomimic_v3: "EchoMimic V3",
+  realesrgan_4x: "Real-ESRGAN 4x",
 };
 
 export function getEngineDisplayName(engine: string | null | undefined): string {

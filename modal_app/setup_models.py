@@ -165,6 +165,70 @@ def download_all_models():
         )
         print("[4/4] LTX-Video ✓")
 
+    # ------------------------------------------------------------------
+    # 5. Real-ESRGAN 4x Upscaler (~67MB)
+    # ------------------------------------------------------------------
+    esrgan_path = Path(MODEL_DIR) / "realesrgan-x4plus"
+    esrgan_file = esrgan_path / "RealESRGAN_x4plus.pth"
+    if esrgan_file.exists():
+        print("[5/7] Real-ESRGAN 4x — already downloaded, skipping")
+    else:
+        print("[5/7] Downloading Real-ESRGAN 4x (~67MB)...")
+        from huggingface_hub import hf_hub_download
+        esrgan_path.mkdir(parents=True, exist_ok=True)
+        hf_hub_download(
+            repo_id="ai-forever/Real-ESRGAN",
+            filename="RealESRGAN_x4plus.pth",
+            local_dir=str(esrgan_path),
+        )
+        print("[5/7] Real-ESRGAN 4x ✓")
+
+    # ------------------------------------------------------------------
+    # 6. VACE 14B (ali-vilab/VACE-Wan2.1-14B-Diffusers, ~28GB)
+    # ------------------------------------------------------------------
+    vace_path = Path(MODEL_DIR) / "vace-14b"
+    vace_required = [vace_path / "model_index.json"]
+    vace_complete = vace_path.exists() and all(f.exists() for f in vace_required)
+    if vace_complete:
+        print("[6/7] VACE 14B — already downloaded, skipping")
+    else:
+        if vace_path.exists():
+            import shutil
+            print("[6/7] VACE 14B — incomplete, re-downloading...")
+            shutil.rmtree(str(vace_path))
+        else:
+            print("[6/7] Downloading VACE 14B (~28GB)...")
+        from huggingface_hub import snapshot_download
+        snapshot_download(
+            repo_id="ali-vilab/VACE-Wan2.1-14B-Diffusers",
+            local_dir=str(vace_path),
+            local_dir_use_symlinks=False,
+        )
+        print("[6/7] VACE 14B ✓")
+
+    # ------------------------------------------------------------------
+    # 7. EchoMimicV2 (antgroup/echomimic_v2, ~5GB)
+    # ------------------------------------------------------------------
+    echomimic_path = Path(MODEL_DIR) / "echomimic-v2"
+    echomimic_required = [echomimic_path / "pretrained_weights"]
+    echomimic_complete = echomimic_path.exists() and all(f.exists() for f in echomimic_required)
+    if echomimic_complete:
+        print("[7/7] EchoMimicV2 — already downloaded, skipping")
+    else:
+        if echomimic_path.exists():
+            import shutil
+            print("[7/7] EchoMimicV2 — incomplete, re-downloading...")
+            shutil.rmtree(str(echomimic_path))
+        else:
+            print("[7/7] Downloading EchoMimicV2 (~5GB)...")
+        from huggingface_hub import snapshot_download
+        snapshot_download(
+            repo_id="antgroup/echomimic_v2",
+            local_dir=str(echomimic_path),
+            local_dir_use_symlinks=False,
+        )
+        print("[7/7] EchoMimicV2 ✓")
+
     # Commit volume changes
     models_volume.commit()
 
@@ -174,6 +238,9 @@ def download_all_models():
     print("  /models/wan2.2-i2v-a14b/")
     print(f"  /models/svi-lora/{lora_filename}")
     print("  /models/ltx-video/")
+    print("  /models/realesrgan-x4plus/")
+    print("  /models/vace-14b/")
+    print("  /models/echomimic-v2/")
     print("=" * 60)
 
 

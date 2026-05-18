@@ -55,6 +55,36 @@ HARDCODED_ENGINES: dict[str, dict] = {
         "clip_duration": 5.0,
         "priority": 100,
     },
+    # ── Phase 3: Open source models (coming_soon until GPU deploy) ──
+    "vace_14b": {
+        "name": "VACE 14B",
+        "type": "modal_local",
+        "status": "coming_soon",
+        "plans": ["pro", "premium"],
+        "max_duration": 15,
+        "gpu": "A100-80GB",
+        "clip_duration": 5.0,
+        "priority": 85,
+    },
+    "echomimic_v3": {
+        "name": "EchoMimic V3",
+        "type": "modal_local",
+        "status": "coming_soon",
+        "plans": ["pro", "premium"],
+        "max_duration": 30,
+        "gpu": "A100-80GB",
+        "clip_duration": 10.0,
+        "priority": 80,
+    },
+    "realesrgan_4x": {
+        "name": "Real-ESRGAN 4x Upscaler",
+        "type": "modal_local",
+        "status": "coming_soon",
+        "plans": ["pro", "premium"],
+        "max_duration": 60,
+        "gpu": "A10G",
+        "priority": 70,
+    },
 }
 
 # Backward compatibility — ENGINES is used by old code paths

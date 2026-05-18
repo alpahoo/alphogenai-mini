@@ -53,6 +53,7 @@ describe("ENGINE_DISPLAY_NAMES", () => {
     "wan_i2v", "seedance", "evolink", "evolink_fast",
     "kling_o3", "kling_v3", "wan_26", "wan_27", "wan_26_bailian",
     "happy_horse_10", "hailuo", "hailuo_fast", "sora_2",
+    "vace_14b", "echomimic_v3", "realesrgan_4x",
   ];
 
   it.each(requiredEngines)("has display name for %s", (key) => {
