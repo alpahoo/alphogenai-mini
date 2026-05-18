@@ -25,8 +25,13 @@ export const maxDuration = 60;
 
 const MAX_ACTIVE_JOBS = 1; // max concurrent jobs per user
 
-// All valid engine keys (Modal + EvoLink)
-const VALID_ENGINES = ["wan_i2v", "seedance", ...Object.keys(EVOLINK_ENGINES)];
+// All valid engine keys (Modal + EvoLink + Bailian direct)
+const VALID_ENGINES = [
+  "wan_i2v",
+  "seedance",
+  ...Object.keys(EVOLINK_ENGINES),
+  ...Object.keys(BAILIAN_ENGINES),
+];
 
 // Hard cap on multi-scene chaining length (defense in depth — storyboard
 // is already capped per-plan). Even premium can't ask EvoLink for >6 chained

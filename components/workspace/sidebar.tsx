@@ -12,6 +12,7 @@ import {
   Library,
   Shield,
   BarChart3,
+  Gift,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { href: "/projects", label: "Projects", icon: FolderOpen },
   { href: "/library", label: "Library", icon: Library },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/referral", label: "Refer a Friend", icon: Gift },
 ] as const;
 
 interface SidebarProps {
@@ -85,13 +87,27 @@ export function Sidebar({ plan, email }: SidebarProps) {
       {/* Bottom */}
       <div className="border-t border-border/50 p-3 space-y-2">
         {isAdminEmail(email) && (
-          <Link
-            href="/admin"
-            className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10"
-          >
-            <Shield className="h-3.5 w-3.5" />
-            Admin Panel
-          </Link>
+          <div className="space-y-1">
+            <Link
+              href="/admin"
+              className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/10"
+            >
+              <Shield className="h-3.5 w-3.5" />
+              Admin Panel
+            </Link>
+            <Link
+              href="/admin/migration"
+              className={cn(
+                "flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors",
+                pathname.startsWith("/admin/migration")
+                  ? "bg-red-500/10 text-red-400"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <BarChart3 className="h-3.5 w-3.5" />
+              Migration Dashboard
+            </Link>
+          </div>
         )}
         {plan !== "pro" && (
           <Link
