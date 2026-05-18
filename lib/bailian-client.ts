@@ -48,6 +48,15 @@ export const BAILIAN_ENGINES: Record<string, BailianEngineConfig> = {
     desc: "Bailian Direct · 1080p · up to 15s",
     plans: ["pro", "premium"],
   },
+  wan_27_bailian: {
+    model: "wan2.7-t2v",
+    imageModel: "wan2.7-i2v",
+    maxDuration: 10,
+    quality: "1080p",
+    label: "WAN 2.7 (Bailian)",
+    desc: "Bailian Direct · 1080p · latest WAN",
+    plans: ["pro", "premium"],
+  },
 };
 
 /** Returns true if the engine key is a Bailian-routed engine. */
@@ -68,6 +77,7 @@ export function isBailianEngine(engineKey: string): boolean {
  */
 const EVOLINK_TO_BAILIAN_MAP: Record<string, string> = {
   wan_26: "wan_26_bailian",
+  wan_27: "wan_27_bailian",
 };
 
 export function maybeRerouteToBailian(engineKey: string): string {

@@ -70,6 +70,7 @@ export type EngineKey =
   | "hailuo"
   | "hailuo_fast"
   | "sora_2"
+  | "wan_27_bailian"
   | "vace_14b"
   | "echomimic_v3"
   | "realesrgan_4x";
@@ -189,6 +190,7 @@ export const ENGINE_DISPLAY_NAMES: Record<string, string> = {
   hailuo: "Hailuo 2.3",
   hailuo_fast: "Hailuo 2.3 Fast",
   sora_2: "Sora 2 Pro",
+  wan_27_bailian: "WAN 2.7 (Bailian)",
   vace_14b: "VACE 14B",
   echomimic_v3: "EchoMimic V3",
   realesrgan_4x: "Real-ESRGAN 4x",
