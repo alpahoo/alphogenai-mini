@@ -91,6 +91,8 @@ export interface JobScene {
   duration_sec: number;
   status: SceneStatus;
   clip_url: string | null;
+  last_frame_url: string | null;
+  external_task_id: string | null;
   error_message: string | null;
   metadata: Record<string, unknown>;
   created_at: string;

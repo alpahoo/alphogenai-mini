@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -32,6 +32,7 @@ import { SHOW_COST_TRACKING_UI, isAdminEmail } from "@/lib/flags";
 import { useJobRealtime } from "@/lib/use-job-realtime";
 import type { Job, JobStage, JobScene } from "@/lib/types";
 import { STAGE_ORDER, getEngineDisplayName } from "@/lib/types";
+import { SceneTimeline } from "@/components/editor";
 
 // Reduced from 5s → 15s now that Realtime handles UI freshness.
 // The poll still drives the EvoLink state machine (scene advancement).
@@ -69,13 +70,7 @@ function formatDate(iso: string) {
   });
 }
 
-function sceneStatusIcon(status: string) {
-  if (status === "done") return <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />;
-  if (status === "failed") return <XCircle className="h-3.5 w-3.5 text-destructive" />;
-  if (status === "skipped") return <div className="h-3.5 w-3.5 rounded-full bg-muted" />;
-  if (status === "generating") return <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />;
-  return <div className="h-3.5 w-3.5 rounded-full border border-border" />;
-}
+// sceneStatusIcon moved to SceneTimeline component
 
 // ---------------------------------------------------------------------------
 // Human-readable error messages
@@ -134,6 +129,8 @@ export default function JobPage() {
   const [retrying, setRetrying] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
+  const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   // Social connections — declared before any conditional returns (Rules of Hooks)
   const [youtubeConnected, setYoutubeConnected] = useState(false);
@@ -265,6 +262,26 @@ export default function JobPage() {
     return () => clearInterval(t);
   }, [job]);
 
+  // ── Auto-highlight scene as video plays ────────────────────
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !scenes.length || scenes.length <= 1) return;
+    const onTimeUpdate = () => {
+      const t = video.currentTime;
+      let cumulative = 0;
+      for (let i = 0; i < scenes.length; i++) {
+        cumulative += scenes[i]?.duration_sec ?? 5;
+        if (t < cumulative) {
+          setSelectedSceneIndex(i);
+          return;
+        }
+      }
+      setSelectedSceneIndex(scenes.length - 1);
+    };
+    video.addEventListener("timeupdate", onTimeUpdate);
+    return () => video.removeEventListener("timeupdate", onTimeUpdate);
+  }, [scenes]);
+
   const copyLink = (u: string) => { navigator.clipboard.writeText(u); setCopied(true); setTimeout(() => setCopied(false), 2000); };
   const copyPrompt = (t: string) => { navigator.clipboard.writeText(t); setCopiedPrompt(true); setTimeout(() => setCopiedPrompt(false), 2000); };
   const shareVideo = () => {
@@ -297,6 +314,22 @@ export default function JobPage() {
     } catch { setError("Duplicate failed"); }
     setDuplicating(false);
   };
+
+  // ── Seek video to scene start ──────────────────────────────
+  const handleSceneSelect = useCallback(
+    (index: number) => {
+      setSelectedSceneIndex(index);
+      if (!videoRef.current || !scenes.length) return;
+      // Calculate cumulative start time for the selected scene
+      let startTime = 0;
+      for (let i = 0; i < index; i++) {
+        startTime += scenes[i]?.duration_sec ?? 5;
+      }
+      videoRef.current.currentTime = startTime;
+      videoRef.current.play().catch(() => {});
+    },
+    [scenes],
+  );
 
   const stageIdx = job?.current_stage ? STAGE_ORDER.indexOf(job.current_stage as JobStage) : 0;
   const stageLabel = job?.current_stage ? (FRIENDLY_STAGES[job.current_stage] ?? "Processing...") : "In queue...";
@@ -440,7 +473,7 @@ export default function JobPage() {
               {isDone && videoUrl && (
                 <>
                   <div className="rounded-2xl border border-border/50 bg-card/80 overflow-hidden backdrop-blur-sm">
-                    <video controls autoPlay className="w-full" src={videoUrl}>
+                    <video ref={videoRef} controls autoPlay className="w-full" src={videoUrl}>
                       Your browser does not support video playback.
                     </video>
                   </div>
@@ -490,24 +523,15 @@ export default function JobPage() {
                 </div>
               )}
 
-              {/* ── Scenes breakdown ────────────────────────── */}
+              {/* ── Scene Timeline ────────────────────────── */}
               {scenes.length > 1 && (
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Scenes</h3>
-                  <div className="space-y-2">
-                    {scenes.map((scene) => (
-                      <div key={scene.id} className="flex items-center gap-3 rounded-lg border border-border/40 bg-card/50 px-4 py-3">
-                        {sceneStatusIcon(scene.status)}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium">Scene {scene.scene_index + 1}</p>
-                          <p className="text-[11px] text-muted-foreground truncate">{scene.prompt}</p>
-                        </div>
-                        <span className="text-[11px] text-muted-foreground">{scene.duration_sec}s</span>
-                        <span className="text-[11px] text-muted-foreground capitalize">{scene.status}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <SceneTimeline
+                  scenes={scenes}
+                  selectedIndex={selectedSceneIndex}
+                  onSelect={handleSceneSelect}
+                  isDone={isDone}
+                  totalDuration={job?.target_duration_seconds}
+                />
               )}
 
               {/* ── Mobile info cards (hidden on desktop) ───── */}
