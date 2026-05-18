@@ -46,11 +46,11 @@ export default function HomePage() {
           </Link>
 
           <Link
-            href="/pricing"
+            href="/gallery"
             className="inline-flex items-center gap-2 rounded-xl border border-border bg-card/50 px-8 py-3.5 text-sm font-semibold text-foreground backdrop-blur-sm transition-all hover:bg-card"
           >
             <Play className="h-4 w-4" />
-            See Plans
+            Browse Gallery
           </Link>
         </div>
       </motion.div>

@@ -21,6 +21,7 @@ import {
   XCircle,
   RotateCcw,
   CopyPlus,
+  Share2,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -132,6 +133,7 @@ export default function JobPage() {
   const [elapsed, setElapsed] = useState(0);
   const [retrying, setRetrying] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [copiedShare, setCopiedShare] = useState(false);
 
   // Social connections — declared before any conditional returns (Rules of Hooks)
   const [youtubeConnected, setYoutubeConnected] = useState(false);
@@ -265,6 +267,12 @@ export default function JobPage() {
 
   const copyLink = (u: string) => { navigator.clipboard.writeText(u); setCopied(true); setTimeout(() => setCopied(false), 2000); };
   const copyPrompt = (t: string) => { navigator.clipboard.writeText(t); setCopiedPrompt(true); setTimeout(() => setCopiedPrompt(false), 2000); };
+  const shareVideo = () => {
+    const shareUrl = `${window.location.origin}/v/${params.id}`;
+    navigator.clipboard.writeText(shareUrl);
+    setCopiedShare(true);
+    setTimeout(() => setCopiedShare(false), 2000);
+  };
 
   const handleRetry = async () => {
     if (retrying || !params.id) return;
@@ -453,6 +461,9 @@ export default function JobPage() {
                     <a href={videoUrl} download className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:brightness-110">
                       <Download className="h-4 w-4" /> Download
                     </a>
+                    <button onClick={shareVideo} className="flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted">
+                      {copiedShare ? <><Check className="h-4 w-4 text-green-400" /> Link copied</> : <><Share2 className="h-4 w-4" /> Share</>}
+                    </button>
                     <button onClick={() => copyLink(videoUrl)} className="flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted">
                       {copied ? <><Check className="h-4 w-4 text-green-400" /> Copied</> : <><Copy className="h-4 w-4" /> Copy link</>}
                     </button>
