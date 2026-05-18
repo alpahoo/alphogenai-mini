@@ -72,15 +72,34 @@ const EXAMPLE_PROMPTS = [
 ];
 
 // ---------------------------------------------------------------------------
-// UI-only metadata — reference support capability per engine.
-// NOT a routing/runtime source of truth. Purely informational badges.
-// See evolink-client.ts `referenceModel` for the actual runtime logic.
+// Engine option type (from GET /api/engines)
 // ---------------------------------------------------------------------------
-const ENGINE_REF_SUPPORT: Set<string> = new Set([
-  "evolink",      // Seedance 2.0
-  "evolink_fast", // Seedance 2.0 Fast
-  "kling_o3",     // Kling O3
-]);
+interface EngineOption {
+  key: string;
+  label: string;
+  desc: string;
+  gate: "pro" | "premium" | null;
+  supportsRefs: boolean;
+  supportsI2v: boolean;
+  maxDuration: number;
+  minDuration: number | null;
+  quality: string;
+}
+
+/** Hardcoded fallback if /api/engines fails or hasn't loaded yet. */
+const FALLBACK_ENGINES: EngineOption[] = [
+  { key: "wan_i2v",        label: "Wan 2.2 I2V",       desc: "GPU - up to 60s",                    gate: null,      supportsRefs: false, supportsI2v: true,  maxDuration: 60, minDuration: null, quality: "720p" },
+  { key: "evolink",        label: "Seedance 2.0",      desc: "EvoLink - 720p - up to 15s",         gate: "pro",     supportsRefs: true,  supportsI2v: true,  maxDuration: 15, minDuration: null, quality: "720p" },
+  { key: "evolink_fast",   label: "Seedance 2.0 Fast", desc: "EvoLink - 720p - faster",            gate: "pro",     supportsRefs: true,  supportsI2v: true,  maxDuration: 15, minDuration: null, quality: "720p" },
+  { key: "wan_26",         label: "WAN 2.6",           desc: "EvoLink - 720p - no cold start",     gate: "pro",     supportsRefs: false, supportsI2v: true,  maxDuration: 15, minDuration: null, quality: "720p" },
+  { key: "wan_27",         label: "WAN 2.7",           desc: "EvoLink - 720p - latest WAN",        gate: "pro",     supportsRefs: false, supportsI2v: true,  maxDuration: 10, minDuration: null, quality: "720p" },
+  { key: "kling_o3",       label: "Kling O3",          desc: "EvoLink - 1080p - up to 15s",        gate: "pro",     supportsRefs: true,  supportsI2v: true,  maxDuration: 15, minDuration: null, quality: "1080p" },
+  { key: "kling_v3",       label: "Kling 3.0",         desc: "EvoLink - 1080p - latest Kling",     gate: "pro",     supportsRefs: false, supportsI2v: true,  maxDuration: 15, minDuration: null, quality: "1080p" },
+  { key: "happy_horse_10", label: "Happy Horse 1.0",   desc: "EvoLink - 720p - cinematic quality",  gate: "premium", supportsRefs: false, supportsI2v: true,  maxDuration: 15, minDuration: null, quality: "720p" },
+  { key: "hailuo",         label: "Hailuo 2.3",        desc: "EvoLink - 1080p - 6-10s",            gate: "pro",     supportsRefs: false, supportsI2v: true,  maxDuration: 10, minDuration: 6,    quality: "1080p" },
+  { key: "hailuo_fast",    label: "Hailuo 2.3 Fast",   desc: "EvoLink - 1080p - faster",           gate: "pro",     supportsRefs: false, supportsI2v: true,  maxDuration: 10, minDuration: 6,    quality: "1080p" },
+  { key: "sora_2",         label: "Sora 2 Pro",        desc: "EvoLink - 1080p - up to 12s",        gate: "premium", supportsRefs: false, supportsI2v: false, maxDuration: 12, minDuration: null, quality: "1080p" },
+];
 
 // ---------------------------------------------------------------------------
 // Component
@@ -110,6 +129,22 @@ export default function CreateModePage({
   const [error, setError] = useState<string | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Dynamic engine list (fetched from /api/engines, fallback to hardcoded)
+  const [engineOptions, setEngineOptions] = useState<EngineOption[]>(FALLBACK_ENGINES);
+
+  useEffect(() => {
+    fetch("/api/engines")
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data) => {
+        if (Array.isArray(data.engines) && data.engines.length > 0) {
+          setEngineOptions(data.engines);
+        }
+      })
+      .catch(() => {
+        /* keep fallback — silent fail */
+      });
+  }, []);
   const [showTemplates, setShowTemplates] = useState(false);
   // Multi-scene continuity: when ON, scene N+1 starts from the last frame
   // of scene N so characters & composition stay consistent across cuts.
@@ -357,7 +392,7 @@ export default function CreateModePage({
               references={references}
               onChange={setReferences}
               locked={plan === "free"}
-              engineSupportsRefs={selectedEngine === "auto" || ENGINE_REF_SUPPORT.has(selectedEngine)}
+              engineSupportsRefs={selectedEngine === "auto" || engineOptions.some((e) => e.key === selectedEngine && e.supportsRefs)}
             />
 
             {/* ── Duration ───────────────────────────────────────── */}
@@ -451,20 +486,22 @@ export default function CreateModePage({
                   <div>
                     <p className="text-xs font-medium text-muted-foreground mb-2">Model</p>
                     <div className="flex gap-2 flex-wrap">
-                      {(
-                        [
-                          { key: "auto" as const,         label: "Auto",              desc: "Best for your plan",                gate: null },
-                          { key: "wan_i2v" as const,      label: "Wan 2.2 I2V",       desc: "GPU • up to 60s",                  gate: null },
-                          { key: "evolink" as const,      label: "Seedance 2.0",      desc: "EvoLink • 720p • up to 15s",       gate: "pro" },
-                          { key: "evolink_fast" as const, label: "Seedance 2.0 Fast", desc: "EvoLink • 720p • faster",          gate: "pro" },
-                          { key: "wan_26" as const,       label: "WAN 2.6",           desc: "EvoLink • 720p • no cold start",   gate: "pro" },
-                          { key: "kling_o3" as const,     label: "Kling O3",          desc: "EvoLink • 1080p • up to 15s",      gate: "pro" },
-                          { key: "kling_v3" as const,     label: "Kling 3.0",         desc: "EvoLink • 1080p • latest Kling",   gate: "pro" },
-                          { key: "hailuo" as const,       label: "Hailuo 2.3",        desc: "EvoLink • 1080p • 6-10s",          gate: "pro" },
-                          { key: "hailuo_fast" as const,  label: "Hailuo 2.3 Fast",   desc: "EvoLink • 1080p • faster",         gate: "pro" },
-                          { key: "sora_2" as const,       label: "Sora 2 Pro",        desc: "EvoLink • 1080p • up to 12s",      gate: "premium" },
-                        ] as const
-                      ).map((opt) => {
+                      {/* Auto option (always first) */}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedEngine("auto")}
+                        className={`relative rounded-md border px-3 py-1.5 text-[11px] font-medium transition-all ${
+                          selectedEngine === "auto"
+                            ? "border-primary/50 bg-primary/10 text-primary"
+                            : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground cursor-pointer"
+                        }`}
+                        title="Best model for your plan"
+                      >
+                        <Cpu className="inline h-3 w-3 mr-1" />
+                        Auto
+                      </button>
+                      {/* Dynamic engine list from /api/engines (with fallback) */}
+                      {engineOptions.map((opt) => {
                         const locked =
                           (opt.gate === "premium" && plan !== "premium") ||
                           (opt.gate === "pro" && plan === "free");
@@ -474,7 +511,7 @@ export default function CreateModePage({
                             key={opt.key}
                             type="button"
                             disabled={locked}
-                            onClick={() => setSelectedEngine(opt.key)}
+                            onClick={() => setSelectedEngine(opt.key as EngineKey)}
                             className={`relative rounded-md border px-3 py-1.5 text-[11px] font-medium transition-all ${
                               active
                                 ? "border-primary/50 bg-primary/10 text-primary"
@@ -485,16 +522,19 @@ export default function CreateModePage({
                             title={
                               locked
                                 ? `${opt.gate === "premium" ? "Premium" : "Pro"} only`
-                                : opt.key !== "auto" && !ENGINE_REF_SUPPORT.has(opt.key)
-                                ? `${opt.desc} · Character references not supported`
-                                : ENGINE_REF_SUPPORT.has(opt.key)
+                                : opt.supportsRefs
                                 ? `${opt.desc} · Supports character references`
-                                : opt.desc
+                                : `${opt.desc} · Character references not supported`
                             }
                           >
                             <Cpu className="inline h-3 w-3 mr-1" />
                             {opt.label}
-                            {!locked && ENGINE_REF_SUPPORT.has(opt.key) && (
+                            {opt.quality === "1080p" && !locked && (
+                              <span className="ml-1 inline-flex rounded-sm bg-blue-500/15 px-1 py-px text-[8px] font-semibold text-blue-400 leading-tight align-middle">
+                                HD
+                              </span>
+                            )}
+                            {!locked && opt.supportsRefs && (
                               <span className="ml-1 inline-flex rounded-sm bg-emerald-500/15 px-1 py-px text-[8px] font-semibold text-emerald-400 leading-tight align-middle">
                                 Refs
                               </span>

@@ -144,6 +144,24 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
     desc: "EvoLink • 720p • no cold start",
     plans: ["pro", "premium"],
   },
+  // ── Happy Horse ────────────────────────────────────────────────────────────
+  happy_horse_10: {
+    model: "happyhorse-1.0-text-to-video",
+    imageModel: "happyhorse-1.0-image-to-video",
+    maxDuration: 15,
+    label: "Happy Horse 1.0",
+    desc: "EvoLink • 720p • cinematic quality",
+    plans: ["premium"],
+  },
+  // ── WAN 2.7 ───────────────────────────────────────────────────────────────
+  wan_27: {
+    model: "wan2.7-text-to-video",
+    imageModel: "wan2.7-image-to-video",
+    maxDuration: 10,
+    label: "WAN 2.7",
+    desc: "EvoLink • 720p • latest WAN",
+    plans: ["pro", "premium"],
+  },
   // ── Hailuo (MiniMax) ──────────────────────────────────────────────────────
   hailuo: {
     model: "MiniMax-Hailuo-2.3",
