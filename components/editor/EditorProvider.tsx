@@ -4,6 +4,8 @@ import {
   createContext,
   useContext,
   useReducer,
+  useCallback,
+  useMemo,
   type ReactNode,
   type Dispatch,
 } from "react";
@@ -47,6 +49,13 @@ export interface EditorState {
   error: string | null;
 }
 
+/** Wrapper that includes undo history */
+interface EditorStateWithHistory {
+  present: EditorState;
+  past: EditorState[];
+  future: EditorState[];
+}
+
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
@@ -64,6 +73,8 @@ export type EditorAction =
   | { type: "REMOVE_SCENE"; index: number }
   | { type: "DUPLICATE_SCENE"; index: number }
   | { type: "REORDER_SCENES"; fromIndex: number; toIndex: number }
+  | { type: "UNDO" }
+  | { type: "REDO" }
   | { type: "RESET" };
 
 // ---------------------------------------------------------------------------
@@ -93,7 +104,19 @@ const initialState: EditorState = {
   error: null,
 };
 
-function editorReducer(state: EditorState, action: EditorAction): EditorState {
+const MAX_UNDO = 30;
+
+/** Actions that should be recorded in undo history (scene mutations) */
+const UNDOABLE_ACTIONS = new Set([
+  "UPDATE_SCENE",
+  "ADD_SCENE",
+  "REMOVE_SCENE",
+  "DUPLICATE_SCENE",
+  "REORDER_SCENES",
+  "LOAD_STORYBOARD",
+]);
+
+function coreReducer(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
     case "SET_BASE_PROMPT":
       return { ...state, basePrompt: action.prompt };
@@ -164,7 +187,7 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
     }
 
     case "REMOVE_SCENE": {
-      if (state.scenes.length <= 1) return state; // Can't remove last scene
+      if (state.scenes.length <= 1) return state;
       const scenes = reindex(state.scenes.filter((_, i) => i !== action.index));
       const newSelected = Math.min(state.selectedIndex, scenes.length - 1);
       return { ...state, scenes, selectedIndex: newSelected, isDirty: true };
@@ -208,10 +231,58 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
     case "RESET":
       return { ...initialState };
 
+    // UNDO/REDO handled at history level
     default:
       return state;
   }
 }
+
+function historyReducer(
+  histState: EditorStateWithHistory,
+  action: EditorAction,
+): EditorStateWithHistory {
+  if (action.type === "UNDO") {
+    if (histState.past.length === 0) return histState;
+    const prev = histState.past[histState.past.length - 1];
+    return {
+      past: histState.past.slice(0, -1),
+      present: prev,
+      future: [histState.present, ...histState.future].slice(0, MAX_UNDO),
+    };
+  }
+
+  if (action.type === "REDO") {
+    if (histState.future.length === 0) return histState;
+    const next = histState.future[0];
+    return {
+      past: [...histState.past, histState.present].slice(-MAX_UNDO),
+      present: next,
+      future: histState.future.slice(1),
+    };
+  }
+
+  const newPresent = coreReducer(histState.present, action);
+
+  // If state didn't change, skip
+  if (newPresent === histState.present) return histState;
+
+  // Only push to undo stack for undoable actions
+  if (UNDOABLE_ACTIONS.has(action.type)) {
+    return {
+      past: [...histState.past, histState.present].slice(-MAX_UNDO),
+      present: newPresent,
+      future: [], // new action clears redo
+    };
+  }
+
+  return { ...histState, present: newPresent };
+}
+
+const initialHistoryState: EditorStateWithHistory = {
+  present: initialState,
+  past: [],
+  future: [],
+};
 
 // ---------------------------------------------------------------------------
 // Context
@@ -222,17 +293,36 @@ interface EditorContextValue {
   dispatch: Dispatch<EditorAction>;
   /** Total duration of all scenes */
   totalDuration: number;
+  /** Whether undo is available */
+  canUndo: boolean;
+  /** Whether redo is available */
+  canRedo: boolean;
+  /** Undo last undoable action */
+  undo: () => void;
+  /** Redo last undone action */
+  redo: () => void;
 }
 
 const EditorContext = createContext<EditorContextValue | null>(null);
 
 export function EditorProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(editorReducer, initialState);
+  const [histState, dispatch] = useReducer(historyReducer, initialHistoryState);
 
-  const totalDuration = state.scenes.reduce((s, sc) => s + sc.duration_sec, 0);
+  const state = histState.present;
+  const totalDuration = useMemo(
+    () => state.scenes.reduce((s, sc) => s + sc.duration_sec, 0),
+    [state.scenes],
+  );
+
+  const canUndo = histState.past.length > 0;
+  const canRedo = histState.future.length > 0;
+  const undo = useCallback(() => dispatch({ type: "UNDO" }), []);
+  const redo = useCallback(() => dispatch({ type: "REDO" }), []);
 
   return (
-    <EditorContext.Provider value={{ state, dispatch, totalDuration }}>
+    <EditorContext.Provider
+      value={{ state, dispatch, totalDuration, canUndo, canRedo, undo, redo }}
+    >
       {children}
     </EditorContext.Provider>
   );
