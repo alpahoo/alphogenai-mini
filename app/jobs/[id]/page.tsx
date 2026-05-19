@@ -497,7 +497,12 @@ export default function JobPage() {
                     </div>
                     <h2 className="text-lg font-semibold mb-1">{stageLabel}</h2>
                     <p className="text-sm text-muted-foreground max-w-md">
-                      Your video is being generated. This usually takes 5–8 minutes per scene.
+                      Your video is being generated.{" "}
+                      {sceneCount <= 1
+                        ? "This usually takes 3–5 minutes."
+                        : sceneCount <= 5
+                          ? `Generating ${sceneCount} scenes — estimated ${sceneCount * 4}–${sceneCount * 6} minutes.`
+                          : `Generating ${sceneCount} scenes — this may take ${Math.round(sceneCount * 4 / 60 * 10) / 10}–${Math.round(sceneCount * 6 / 60 * 10) / 10} hours. You can close this page and check back later.`}
                     </p>
                     <div className="mt-6 w-full max-w-sm">
                       <div className="flex gap-1">
@@ -632,6 +637,7 @@ export default function JobPage() {
                       onClose={handleClosePanel}
                       onPromptSaved={handlePromptSaved}
                       onRegenerate={handleSceneRegenerate}
+                      jobEngine={job?.engine_used}
                     />
                   </div>
                 )}
@@ -726,7 +732,7 @@ function InfoCards({
             </div>
           )}
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">{isActive ? "Elapsed" : "Duration"}</span>
+            <span className="text-muted-foreground">{isActive ? "Elapsed" : "Generation time"}</span>
             <span className="font-medium tabular-nums">{formatTime(elapsed)}</span>
           </div>
         </div>
@@ -737,7 +743,7 @@ function InfoCards({
         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">Details</h3>
         <div className="space-y-2.5 text-xs">
           <div className="flex justify-between"><span className="text-muted-foreground">Model</span><span className="font-medium">{getEngineDisplayName(job.engine_used)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Duration</span><span className="font-medium">{job.target_duration_seconds}s</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Video duration</span><span className="font-medium">{job.target_duration_seconds}s</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Scenes</span><span className="font-medium">{sceneCount}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Plan</span><span className="font-medium capitalize">{job.plan}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Created</span><span className="font-medium text-[10px]">{formatDate(job.created_at)}</span></div>

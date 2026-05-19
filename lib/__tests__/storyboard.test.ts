@@ -28,7 +28,7 @@ describe("isValidPlan", () => {
 describe("MAX_SCENES", () => {
   it("free = 1", () => expect(MAX_SCENES.free).toBe(1));
   it("pro = 3", () => expect(MAX_SCENES.pro).toBe(3));
-  it("premium = 5", () => expect(MAX_SCENES.premium).toBe(5));
+  it("premium = 24", () => expect(MAX_SCENES.premium).toBe(24));
 });
 
 // ---------------------------------------------------------------------------
@@ -105,9 +105,9 @@ describe("generateStoryboard — pro plan", () => {
 // ---------------------------------------------------------------------------
 
 describe("generateStoryboard — premium plan", () => {
-  it("never exceeds 5 scenes (MAX_SCENES.premium)", () => {
-    const sb = generateStoryboard("long film", 60, "premium");
-    expect(sb.length).toBeLessThanOrEqual(5);
+  it("never exceeds 24 scenes (MAX_SCENES.premium)", () => {
+    const sb = generateStoryboard("long film", 120, "premium");
+    expect(sb.length).toBeLessThanOrEqual(24);
   });
 
   it("generates more scenes than pro for same duration", () => {

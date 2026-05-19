@@ -27,6 +27,8 @@ interface ScenePanelProps {
   onPromptSaved?: (index: number, newPrompt: string) => void;
   /** Called after regeneration is triggered */
   onRegenerate?: (index: number) => void;
+  /** Actual engine used at job level (overrides storyboard default) */
+  jobEngine?: string | null;
 }
 
 function statusBadge(status: string) {
@@ -68,6 +70,7 @@ export function ScenePanel({
   onClose,
   onPromptSaved,
   onRegenerate,
+  jobEngine,
 }: ScenePanelProps) {
   const [prompt, setPrompt] = useState(scene.prompt);
   const [saving, setSaving] = useState(false);
@@ -223,7 +226,7 @@ export function ScenePanel({
             <span className="text-muted-foreground flex items-center gap-1">
               <Cpu className="h-3 w-3" /> Engine
             </span>
-            <span className="font-medium">{getEngineDisplayName(scene.engine)}</span>
+            <span className="font-medium">{getEngineDisplayName(jobEngine ?? scene.engine)}</span>
           </div>
         </div>
 

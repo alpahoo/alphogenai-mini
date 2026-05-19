@@ -140,6 +140,7 @@ export default function CreateModePage({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingElapsed, setLoadingElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -248,6 +249,13 @@ export default function CreateModePage({
     fetchPlan();
   }, []);
 
+  // Loading elapsed timer — visual feedback while waiting for job creation + redirect
+  useEffect(() => {
+    if (!loading) { setLoadingElapsed(0); return; }
+    const t = setInterval(() => setLoadingElapsed((p) => p + 1), 1000);
+    return () => clearInterval(t);
+  }, [loading]);
+
   const planMaxDuration = PLAN_MAX_DURATION[plan] ?? 5;
   const durationOptions = DURATION_OPTIONS.map((opt) => {
     const dur = parseInt(opt.value, 10);
@@ -315,8 +323,75 @@ export default function CreateModePage({
   const planMaxScenes = PLAN_MAX_SCENES[plan] ?? 1;
   const sceneCount = plan === "free" ? 1 : Math.min(Math.ceil(dur / 5), planMaxScenes);
 
+  // Loading overlay steps — shows progress while waiting for job creation + redirect
+  const loadingSteps = [
+    { label: "Validating prompt…", threshold: 0 },
+    { label: "Building storyboard…", threshold: 3 },
+    { label: `Splitting into ${sceneCount} scene${sceneCount > 1 ? "s" : ""}…`, threshold: 6 },
+    { label: "Starting generation pipeline…", threshold: 10 },
+    { label: "Redirecting to your project…", threshold: 15 },
+  ];
+  const currentLoadingStep = loadingSteps.reduce((acc, step) =>
+    loadingElapsed >= step.threshold ? step : acc
+  , loadingSteps[0]);
+  // Smooth progress: 0-90% over ~30s, never reaches 100% until redirect
+  const loadingProgress = Math.min(90, (loadingElapsed / 30) * 90);
+
   return (
-    <div className="flex h-full">
+    <div className="flex h-full relative">
+      {/* ── Full-page loading overlay ─────────────────────────────── */}
+      {loading && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+        >
+          <div className="flex flex-col items-center gap-6 max-w-sm w-full px-8">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+            <div className="text-center">
+              <h2 className="text-lg font-semibold mb-1">Creating your video</h2>
+              <p className="text-sm text-muted-foreground">{currentLoadingStep.label}</p>
+            </div>
+            {/* Progress bar */}
+            <div className="w-full">
+              <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                <motion.div
+                  className="h-full rounded-full bg-primary"
+                  initial={{ width: "0%" }}
+                  animate={{ width: `${loadingProgress}%` }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                />
+              </div>
+              <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
+                <span>{Math.round(loadingProgress)}%</span>
+                <span className="tabular-nums">{loadingElapsed}s</span>
+              </div>
+            </div>
+            {/* Steps indicator */}
+            <div className="w-full space-y-1.5">
+              {loadingSteps.map((step, i) => {
+                const done = loadingElapsed >= (loadingSteps[i + 1]?.threshold ?? Infinity);
+                const active = step === currentLoadingStep;
+                return (
+                  <div key={i} className={`flex items-center gap-2 text-xs transition-colors ${done ? "text-green-500" : active ? "text-foreground font-medium" : "text-muted-foreground/40"}`}>
+                    {done ? (
+                      <svg className="h-3.5 w-3.5 text-green-500" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                    ) : active ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                    ) : (
+                      <div className="h-3.5 w-3.5 rounded-full border border-border/40" />
+                    )}
+                    {step.label}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* ══════════════════════════════════════════════════════════ */}
       {/* LEFT PANEL — Form                                        */}
       {/* ══════════════════════════════════════════════════════════ */}
