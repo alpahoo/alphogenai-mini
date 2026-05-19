@@ -234,6 +234,7 @@ export async function getBailianTask(taskId: string): Promise<BailianTaskResult>
     headers: {
       Authorization: `Bearer ${apiKey}`,
     },
+    signal: AbortSignal.timeout(15_000), // 15s max — prevent Vercel 504s
   });
 
   const data = (await res.json()) as BailianTaskResponse;

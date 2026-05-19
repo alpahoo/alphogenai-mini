@@ -412,6 +412,7 @@ export async function getEvoLinkTask(taskId: string): Promise<EvoLinkTaskResult>
     headers: { Authorization: `Bearer ${apiKey.trim()}` },
     // No cache — always fresh
     cache: "no-store",
+    signal: AbortSignal.timeout(15_000), // 15s max — prevent Vercel 504s
   });
 
   if (!res.ok) {

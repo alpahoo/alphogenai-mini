@@ -198,6 +198,30 @@ async function advanceEvoLinkState(
   );
 
   if (generating) {
+    // ── Stale scene guard: if a scene has been "generating" for over 15
+    // minutes, the upstream task is almost certainly dead. Mark it failed
+    // so the user isn't stuck forever.
+    const sceneAge = Date.now() - new Date(generating.updated_at).getTime();
+    if (sceneAge > 15 * 60_000) {
+      console.warn(
+        `[jobs/status] scene ${generating.scene_index} stale (${Math.round(sceneAge / 60_000)}min) — marking failed`
+      );
+      await supabase
+        .from("job_scenes")
+        .update({ status: "failed", error_message: "Generation timed out (>15min)" })
+        .eq("id", generating.id);
+      await supabase
+        .from("jobs")
+        .update({
+          status: "failed",
+          current_stage: "failed",
+          error_message: `Scene ${generating.scene_index + 1} timed out after 15 minutes. Please retry.`,
+        })
+        .eq("id", jobId)
+        .eq("status", "in_progress");
+      return;
+    }
+
     // Poll the correct provider based on engine_used
     let result: { status: string; videoUrl?: string; errorMessage?: string };
     try {
