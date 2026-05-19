@@ -14,6 +14,7 @@ import {
   BarChart3,
   Gift,
   Clapperboard,
+  CalendarClock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -51,6 +52,12 @@ const MANAGE_NAV = [
     label: "My Projects",
     icon: FolderOpen,
     description: "History",
+  },
+  {
+    href: "/schedule",
+    label: "Schedule",
+    icon: CalendarClock,
+    description: "Planned posts",
   },
   {
     href: "/library",

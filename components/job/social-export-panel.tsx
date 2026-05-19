@@ -20,6 +20,8 @@ import {
   RefreshCw,
   AlertCircle,
   ExternalLink,
+  CalendarClock,
+  Lock,
 } from "lucide-react";
 import Link from "next/link";
 import type { SocialMetadata } from "@/lib/social-metadata";
@@ -105,6 +107,13 @@ export function SocialExportPanel({
   const [showThumbnail, setShowThumbnail] = useState(false);
   const [showMetadata, setShowMetadata] = useState(true);
   const [showPublish, setShowPublish] = useState(true);
+
+  // Schedule state
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [schedulePlatforms, setSchedulePlatforms] = useState<string[]>([]);
+  const [scheduling, setScheduling] = useState(false);
+  const [scheduleResult, setScheduleResult] = useState<{ success?: boolean; error?: string; message?: string } | null>(null);
 
   // Local connection state
   const [ytConnected, setYtConnected] = useState(youtubeConnected ?? false);
@@ -312,6 +321,49 @@ export function SocialExportPanel({
       setLoadingMeta(false);
     }
   }, [jobId, loadingMeta]);
+
+  const handleSchedule = async () => {
+    if (!scheduleDate || schedulePlatforms.length === 0) return;
+    if (!metadata?.title) return;
+    setScheduling(true);
+    setScheduleResult(null);
+    try {
+      const res = await fetch("/api/scheduled-posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_id: jobId,
+          platforms: schedulePlatforms,
+          scheduled_at: new Date(scheduleDate).toISOString(),
+          title: metadata.title,
+          description: metadata.description_youtube,
+          hashtags: metadata.hashtags,
+          caption_tiktok: ttTitle || metadata.description_tiktok,
+          caption_instagram: igCaption || metadata.description_instagram,
+          privacy_youtube: ytPrivacy,
+          privacy_tiktok: ttPrivacy,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setScheduleResult({ success: true, message: `Scheduled for ${new Date(scheduleDate).toLocaleString()}` });
+        setScheduleDate("");
+        setSchedulePlatforms([]);
+      } else {
+        setScheduleResult({ error: data.error || "Failed to schedule" });
+      }
+    } catch {
+      setScheduleResult({ error: "Failed to schedule post" });
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  const toggleSchedulePlatform = (p: string) => {
+    setSchedulePlatforms((prev) =>
+      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]
+    );
+  };
 
   const copyToClipboard = async (text: string, key: string) => {
     await navigator.clipboard.writeText(text);
@@ -697,6 +749,116 @@ export function SocialExportPanel({
               <span className="text-[9px] text-muted-foreground/40">{igCaption.length}/2200</span>
             </div>
           )}
+        </div>
+      </CollapsibleSection>
+
+      {/* ── Section: Schedule ─────────────────────────────── */}
+      <CollapsibleSection
+        title="Schedule"
+        open={showSchedule}
+        onToggle={() => setShowSchedule((p) => !p)}
+        trailing={
+          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+            <CalendarClock className="h-3 w-3" /> Plan ahead
+          </span>
+        }
+      >
+        <div className="space-y-3">
+          {/* Schedule result */}
+          {scheduleResult && (
+            <div className={`rounded-md px-3 py-2 text-xs ${
+              scheduleResult.success
+                ? "bg-green-500/10 border border-green-500/30 text-green-400"
+                : "bg-destructive/10 border border-destructive/30 text-destructive"
+            }`}>
+              {scheduleResult.success ? (
+                <span className="flex items-center gap-1.5">
+                  <Check className="h-3 w-3" /> {scheduleResult.message}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <AlertCircle className="h-3 w-3" /> {scheduleResult.error}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Platform checkboxes */}
+          <div>
+            <label className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-1.5 block">
+              Publish to
+            </label>
+            <div className="flex gap-2">
+              {FORMATS.map((fmt) => {
+                const isConnected =
+                  (fmt.key === "youtube" && ytConnected) ||
+                  (fmt.key === "tiktok" && ttConnected) ||
+                  (fmt.key === "instagram" && igConnected);
+                const isSelected = schedulePlatforms.includes(fmt.key);
+                return (
+                  <button
+                    key={fmt.key}
+                    onClick={() => isConnected && toggleSchedulePlatform(fmt.key)}
+                    disabled={!isConnected}
+                    className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[10px] font-medium transition-all ${
+                      isSelected
+                        ? `${fmt.bg} ${fmt.color} border-current`
+                        : isConnected
+                          ? "border-border/30 text-muted-foreground hover:border-border"
+                          : "border-border/20 text-muted-foreground/30 cursor-not-allowed"
+                    }`}
+                  >
+                    <fmt.icon className="h-3 w-3" />
+                    {fmt.label.split(" ")[0]}
+                    {!isConnected && <Lock className="h-2.5 w-2.5" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* DateTime picker */}
+          <div>
+            <label className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-1.5 block">
+              Schedule for
+            </label>
+            <input
+              type="datetime-local"
+              value={scheduleDate}
+              onChange={(e) => setScheduleDate(e.target.value)}
+              min={new Date(Date.now() + 3 * 60_000).toISOString().slice(0, 16)}
+              className="w-full rounded-lg border border-border/30 bg-background/40 px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary/50"
+            />
+          </div>
+
+          {/* Schedule button */}
+          <button
+            onClick={handleSchedule}
+            disabled={scheduling || !scheduleDate || schedulePlatforms.length === 0 || !metadata}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-xs font-semibold text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          >
+            {scheduling ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <CalendarClock className="h-3.5 w-3.5" />
+            )}
+            {scheduling ? "Scheduling..." : "Schedule Post"}
+          </button>
+
+          {!metadata && (
+            <p className="text-[10px] text-muted-foreground/50 text-center">
+              Generate AI Copy first to enable scheduling
+            </p>
+          )}
+
+          {/* Link to schedule page */}
+          <Link
+            href="/schedule"
+            className="flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <CalendarClock className="h-3 w-3" />
+            View all scheduled posts
+          </Link>
         </div>
       </CollapsibleSection>
     </div>
