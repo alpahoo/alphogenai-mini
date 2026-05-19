@@ -75,6 +75,7 @@ const DURATION_OPTIONS = [
   { value: "15", label: "15s" },
   { value: "30", label: "30s" },
   { value: "60", label: "60s" },
+  { value: "120", label: "120s" },
 ];
 
 const EXAMPLE_PROMPTS = [
@@ -365,15 +366,20 @@ export default function CreateModePage({
                   Templates
                 </button>
               </label>
-              <textarea
-                id="prompt"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder={config.placeholder}
-                className="h-36 w-full resize-none rounded-xl border border-border bg-card p-4 text-base text-foreground shadow-sm placeholder:text-muted-foreground/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                disabled={loading}
-                maxLength={500}
-              />
+              <div className="relative">
+                <textarea
+                  id="prompt"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder={config.placeholder}
+                  className="h-36 w-full resize-none rounded-xl border border-border bg-card p-4 pb-8 text-base text-foreground shadow-sm placeholder:text-muted-foreground/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                  disabled={loading}
+                  maxLength={2000}
+                />
+                <span className={`absolute bottom-2.5 right-3 text-xs tabular-nums ${prompt.length > 1800 ? "text-amber-500 font-medium" : "text-muted-foreground/40"}`}>
+                  {prompt.length}/2000
+                </span>
+              </div>
               <div className="mt-2.5 flex flex-wrap gap-2">
                 {EXAMPLE_PROMPTS.map((ex) => (
                   <button

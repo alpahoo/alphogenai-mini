@@ -42,6 +42,9 @@ export interface SiteConfig {
   /* CTA / Buttons */
   cta_style: "solid" | "gradient";
   button_radius: string;
+
+  /* Features */
+  referral_enabled: boolean;
 }
 
 const DEFAULT_CONFIG: SiteConfig = {
@@ -65,6 +68,7 @@ const DEFAULT_CONFIG: SiteConfig = {
   sidebar_width: "16rem",
   cta_style: "solid",
   button_radius: "0.75rem",
+  referral_enabled: false,
 };
 
 // ── GET (public — no admin check needed) ─────────────────────

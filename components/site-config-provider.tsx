@@ -23,6 +23,7 @@ interface SiteConfigData {
   sidebar_width: string;
   cta_style: "solid" | "gradient";
   button_radius: string;
+  referral_enabled: boolean;
 }
 
 const SiteConfigContext = createContext<SiteConfigData | null>(null);
