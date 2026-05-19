@@ -53,7 +53,7 @@ export function SegmentedControl({
             title={option.hint}
           >
             {option.label}
-            {option.locked && <Lock className="h-3 w-3" />}
+            {option.locked && <Lock className="h-3.5 w-3.5" />}
           </button>
         );
       })}

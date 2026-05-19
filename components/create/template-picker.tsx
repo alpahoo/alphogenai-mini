@@ -126,12 +126,12 @@ export function TemplatePicker({ open, onClose, onSelect }: TemplatePickerProps)
                           {t.title}
                         </h3>
                         {t.duration && (
-                          <span className="ml-auto text-[10px] text-muted-foreground">
+                          <span className="ml-auto text-xs text-muted-foreground">
                             {t.duration}s
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-muted-foreground line-clamp-3">
+                      <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">
                         {t.prompt}
                       </p>
                     </button>

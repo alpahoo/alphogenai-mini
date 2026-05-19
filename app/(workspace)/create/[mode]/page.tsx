@@ -20,6 +20,9 @@ import {
   Film,
   Crown,
   Link2,
+  ShoppingBag,
+  Share2,
+  ImagePlus,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -29,32 +32,41 @@ import { TemplatePicker } from "@/components/create/template-picker";
 import { ReferenceUpload, buildReferencePayload } from "@/components/create/reference-upload";
 import type { PromptTemplate } from "@/lib/prompt-templates";
 import type { JobPlan, EngineKey, ReferenceItem } from "@/lib/types";
-import { ENGINE_DISPLAY_NAMES } from "@/lib/types";
+import { ENGINE_DISPLAY_NAMES, PLAN_MAX_DURATION, PLAN_MAX_SCENES } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Mode config
 // ---------------------------------------------------------------------------
 const MODE_CONFIG: Record<
   string,
-  { title: string; subtitle: string; placeholder: string }
+  { title: string; subtitle: string; placeholder: string; icon: typeof Film; iconBg: string; accentColor: string }
 > = {
   story: {
     title: "Story Video",
     subtitle: "Describe a narrative scene. AI will bring it to life.",
     placeholder:
       "A lone astronaut discovers a glowing artifact on the surface of Mars at sunset...",
+    icon: Film,
+    iconBg: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+    accentColor: "blue",
   },
   product: {
     title: "Product Video",
     subtitle: "Describe your product or concept for a short showcase.",
     placeholder:
       "A sleek wireless headphone floating in mid-air with soft studio lighting and particle effects...",
+    icon: ShoppingBag,
+    iconBg: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    accentColor: "emerald",
   },
   social: {
     title: "Social Clip",
     subtitle: "Create a punchy clip optimized for social platforms.",
     placeholder:
       "Satisfying top-down shot of colorful smoothie being poured into a glass with fresh fruits around it...",
+    icon: Share2,
+    iconBg: "bg-pink-500/10 text-pink-600 dark:text-pink-400",
+    accentColor: "pink",
   },
 };
 
@@ -235,9 +247,18 @@ export default function CreateModePage({
     fetchPlan();
   }, []);
 
+  const planMaxDuration = PLAN_MAX_DURATION[plan] ?? 5;
   const durationOptions = DURATION_OPTIONS.map((opt) => {
-    const locked = plan === "free" && opt.value !== "5";
-    return { ...opt, disabled: locked, locked, hint: locked ? "Upgrade to Pro" : undefined };
+    const dur = parseInt(opt.value, 10);
+    const locked = dur > planMaxDuration;
+    const hint = locked
+      ? plan === "free"
+        ? "Upgrade to Pro"
+        : plan === "pro"
+          ? "Upgrade to Premium"
+          : undefined
+      : undefined;
+    return { ...opt, disabled: locked, locked, hint };
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -288,9 +309,10 @@ export default function CreateModePage({
     }
   };
 
-  // Scene count estimate
-  const dur = parseInt(duration, 10);
-  const sceneCount = plan === "free" ? 1 : Math.min(Math.ceil(dur / 5), 3);
+  // Scene count estimate — matches backend logic in lib/storyboard.ts
+  const dur = Math.min(parseInt(duration, 10), planMaxDuration);
+  const planMaxScenes = PLAN_MAX_SCENES[plan] ?? 1;
+  const sceneCount = plan === "free" ? 1 : Math.min(Math.ceil(dur / 5), planMaxScenes);
 
   return (
     <div className="flex h-full">
@@ -300,7 +322,7 @@ export default function CreateModePage({
       <div className="flex-1 overflow-y-auto px-8 py-8">
         <Link
           href="/create"
-          className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to workflows
@@ -311,25 +333,35 @@ export default function CreateModePage({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <h1 className="text-2xl font-bold tracking-tight">{config.title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {config.subtitle}
-          </p>
+          <div className="flex items-center gap-3 mb-1">
+            <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${config.iconBg}`}>
+              <config.icon className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">{config.title}</h1>
+              <p className="mt-0.5 text-base text-muted-foreground">
+                {config.subtitle}
+              </p>
+            </div>
+          </div>
 
-          <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+          <form onSubmit={handleSubmit} className="mt-8 space-y-6">
             {/* ── Prompt ─────────────────────────────────────────── */}
             <div>
               <label
                 htmlFor="prompt"
-                className="mb-1.5 flex items-center justify-between text-xs font-medium text-muted-foreground"
+                className="mb-2 flex items-center justify-between text-sm font-semibold text-foreground"
               >
-                <span>Describe your video</span>
+                <span className="flex items-center gap-2">
+                  <Wand2 className="h-4 w-4 text-primary" />
+                  Describe your video
+                </span>
                 <button
                   type="button"
                   onClick={() => setShowTemplates(true)}
-                  className="flex items-center gap-1 rounded-md border border-border/40 bg-muted/20 px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                  className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted/30 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
                 >
-                  <Sparkles className="h-3 w-3" />
+                  <Sparkles className="h-3.5 w-3.5" />
                   Templates
                 </button>
               </label>
@@ -338,20 +370,20 @@ export default function CreateModePage({
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder={config.placeholder}
-                className="h-28 w-full resize-none rounded-xl border border-border bg-background/50 p-4 text-sm text-foreground placeholder:text-muted-foreground/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                className="h-36 w-full resize-none rounded-xl border border-border bg-card p-4 text-base text-foreground shadow-sm placeholder:text-muted-foreground/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                 disabled={loading}
                 maxLength={500}
               />
-              <div className="mt-2 flex flex-wrap gap-1.5">
+              <div className="mt-2.5 flex flex-wrap gap-2">
                 {EXAMPLE_PROMPTS.map((ex) => (
                   <button
                     key={ex}
                     type="button"
                     onClick={() => setPrompt(ex)}
                     disabled={loading}
-                    className="rounded-md border border-border/40 bg-muted/30 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-40"
+                    className="rounded-lg border border-border/50 bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground disabled:opacity-40"
                   >
-                    {ex.length > 35 ? ex.slice(0, 35) + "..." : ex}
+                    {ex.length > 40 ? ex.slice(0, 40) + "..." : ex}
                   </button>
                 ))}
               </div>
@@ -359,25 +391,26 @@ export default function CreateModePage({
 
             {/* ── Reference Image (I2V) ──────────────────────────── */}
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">
-                Reference image <span className="text-muted-foreground/50">(optional)</span>
+              <p className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                <ImagePlus className="h-4 w-4 text-violet-500" />
+                Reference image <span className="text-muted-foreground/50 font-normal text-xs">(optional)</span>
               </p>
               {imagePreview ? (
                 <div className="relative inline-block">
                   <img
                     src={imagePreview}
                     alt="Reference"
-                    className="h-24 w-auto rounded-lg border border-border/40 object-cover"
+                    className="h-28 w-auto rounded-xl border border-border/40 object-cover shadow-sm"
                   />
                   {uploading && (
-                    <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/50">
+                    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/50">
                       <Loader2 className="h-5 w-5 animate-spin text-white" />
                     </div>
                   )}
                   <button
                     type="button"
                     onClick={clearImage}
-                    className="absolute -top-2 -right-2 rounded-full bg-destructive p-0.5 text-destructive-foreground hover:brightness-110"
+                    className="absolute -top-2 -right-2 rounded-full bg-destructive p-1 text-destructive-foreground hover:brightness-110"
                   >
                     <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -385,15 +418,15 @@ export default function CreateModePage({
                   </button>
                 </div>
               ) : (
-                <label className="flex h-20 w-full cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-border/40 bg-muted/10 text-xs text-muted-foreground transition-colors hover:border-border hover:bg-muted/20">
+                <label className="flex h-24 w-full cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-border/50 bg-card/50 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5">
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
                     onChange={handleImageUpload}
                     className="hidden"
                   />
-                  <span className="flex items-center gap-2">
-                    <Film className="h-4 w-4" />
+                  <span className="flex items-center gap-2.5">
+                    <ImagePlus className="h-5 w-5 text-muted-foreground/50" />
                     Drop an image or click to upload
                   </span>
                 </label>
@@ -410,18 +443,18 @@ export default function CreateModePage({
 
             {/* ── Duration ───────────────────────────────────────── */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs font-medium">Duration</span>
+              <div className="flex items-center justify-between mb-2.5">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-amber-500" />
+                  <span className="text-sm font-semibold text-foreground">Duration</span>
                 </div>
-                {plan === "free" && (
+                {plan !== "premium" && (
                   <Link
                     href="/pricing"
-                    className="flex items-center gap-1 text-[11px] font-medium text-primary/80 transition-colors hover:text-primary"
+                    className="flex items-center gap-1.5 text-xs font-medium text-primary/80 transition-colors hover:text-primary"
                   >
-                    <Lock className="h-3 w-3" />
-                    Unlock longer videos
+                    <Lock className="h-3.5 w-3.5" />
+                    {plan === "free" ? "Unlock longer videos" : "Get up to 120s"}
                   </Link>
                 )}
               </div>
@@ -433,23 +466,31 @@ export default function CreateModePage({
                   className="w-full"
                 />
               )}
+              {plan !== "free" && (
+                <p className="text-xs text-muted-foreground/60 mt-2">
+                  Your {plan} plan supports up to {planMaxDuration}s ({Math.min(Math.ceil(planMaxDuration / 5), planMaxScenes)} scenes of 5s each).
+                </p>
+              )}
             </div>
 
             {/* ── Advanced ───────────────────────────────────────── */}
-            <div className="rounded-xl border border-border/40 overflow-hidden">
+            <div className="rounded-xl border border-border/50 overflow-hidden">
               <button
                 type="button"
                 onClick={() => setShowAdvanced((v) => !v)}
-                className="flex w-full items-center justify-between px-4 py-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                className="flex w-full items-center justify-between px-5 py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-muted/30"
               >
-                Advanced settings
+                <span className="flex items-center gap-2">
+                  <Cpu className="h-4 w-4 text-muted-foreground/60" />
+                  Advanced settings
+                </span>
                 <ChevronDown
-                  className={`h-3.5 w-3.5 transition-transform duration-200 ${showAdvanced ? "rotate-180" : ""}`}
+                  className={`h-4 w-4 transition-transform duration-200 ${showAdvanced ? "rotate-180" : ""}`}
                 />
               </button>
 
               {showAdvanced && (
-                <div className="border-t border-border/40 px-4 py-4 space-y-5">
+                <div className="border-t border-border/40 px-5 py-5 space-y-5">
                   <ComingSoonSection label="Format">
                     <div className="flex gap-2">
                       {[
@@ -459,9 +500,9 @@ export default function CreateModePage({
                       ].map((f) => (
                         <div
                           key={f.label}
-                          className="flex items-center gap-1 rounded-md border border-border/40 bg-muted/20 px-2.5 py-1 text-[11px]"
+                          className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-muted/20 px-3 py-1.5 text-xs"
                         >
-                          <f.icon className="h-3 w-3" />
+                          <f.icon className="h-4 w-4" />
                           {f.label}
                         </div>
                       ))}
@@ -473,9 +514,9 @@ export default function CreateModePage({
                       {["None", "Auto"].map((v) => (
                         <div
                           key={v}
-                          className="flex items-center gap-1 rounded-md border border-border/40 bg-muted/20 px-2.5 py-1 text-[11px]"
+                          className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-muted/20 px-3 py-1.5 text-xs"
                         >
-                          <Type className="h-3 w-3" />
+                          <Type className="h-4 w-4" />
                           {v}
                         </div>
                       ))}
@@ -487,9 +528,9 @@ export default function CreateModePage({
                       {["None", "Auto"].map((v) => (
                         <div
                           key={v}
-                          className="flex items-center gap-1 rounded-md border border-border/40 bg-muted/20 px-2.5 py-1 text-[11px]"
+                          className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-muted/20 px-3 py-1.5 text-xs"
                         >
-                          <Music className="h-3 w-3" />
+                          <Music className="h-4 w-4" />
                           {v}
                         </div>
                       ))}
@@ -497,7 +538,10 @@ export default function CreateModePage({
                   </ComingSoonSection>
 
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-2">Model</p>
+                    <p className="text-sm font-semibold text-foreground mb-2.5 flex items-center gap-2">
+                      <Cpu className="h-4 w-4 text-indigo-500" />
+                      Model
+                    </p>
                     <div className="flex gap-2 flex-wrap">
                       {/* Auto option (always first) */}
                       <button
@@ -571,8 +615,8 @@ export default function CreateModePage({
                       })}
                     </div>
                     {plan === "free" && (
-                      <p className="text-[10px] text-muted-foreground/50 mt-1.5">
-                        Advanced models require <Link href="/pricing" className="text-primary hover:underline">Pro or Premium</Link>
+                      <p className="text-xs text-muted-foreground/60 mt-2">
+                        Advanced models require <Link href="/pricing" className="text-primary font-medium hover:underline">Pro or Premium</Link>
                       </p>
                     )}
                   </div>
@@ -584,13 +628,14 @@ export default function CreateModePage({
                   {/* visually consistent across cuts.                            */}
                   {plan !== "free" && (
                     <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-2">
+                      <p className="text-sm font-semibold text-foreground mb-2.5 flex items-center gap-2">
+                        <Link2 className="h-4 w-4 text-teal-500" />
                         Multi-scene continuity
                       </p>
                       <button
                         type="button"
                         onClick={() => setMultiSceneChain((v) => !v)}
-                        className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-[11px] font-medium transition-all ${
+                        className={`flex w-full items-center justify-between rounded-lg border px-4 py-2.5 text-xs font-medium transition-all ${
                           multiSceneChain
                             ? "border-primary/50 bg-primary/10 text-primary"
                             : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground"
@@ -602,7 +647,7 @@ export default function CreateModePage({
                         }
                       >
                         <span className="flex items-center gap-2">
-                          <Link2 className="h-3 w-3" />
+                          <Link2 className="h-4 w-4" />
                           Chain scenes from last frame
                         </span>
                         <span
@@ -617,7 +662,7 @@ export default function CreateModePage({
                           />
                         </span>
                       </button>
-                      <p className="text-[10px] text-muted-foreground/50 mt-1.5">
+                      <p className="text-xs text-muted-foreground/60 mt-2">
                         Recommended for story videos. Disable for stylistically
                         diverse cuts or when using Sora 2 (no I2V).
                       </p>
@@ -629,14 +674,14 @@ export default function CreateModePage({
 
             {/* ── Error / Upgrade ────────────────────────────────── */}
             {error && (
-              <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+              <div className="rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
                 {error}
                 {showUpgrade && (
                   <Link
                     href="/pricing"
-                    className="mt-2 flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-all hover:brightness-110"
+                    className="mt-3 flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110"
                   >
-                    <Sparkles className="h-3.5 w-3.5" />
+                    <Sparkles className="h-4 w-4" />
                     Upgrade to Pro
                   </Link>
                 )}
@@ -647,16 +692,16 @@ export default function CreateModePage({
             <button
               type="submit"
               disabled={loading || !prompt.trim()}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-primary py-4 text-base font-bold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:brightness-110 hover:shadow-lg hover:shadow-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-5 w-5 animate-spin" />
                   Creating video...
                 </>
               ) : (
                 <>
-                  <Wand2 className="h-4 w-4" />
+                  <Wand2 className="h-5 w-5" />
                   Generate Video
                 </>
               )}
@@ -677,38 +722,50 @@ export default function CreateModePage({
         >
           {/* Preview placeholder */}
           <div className="flex-1 flex flex-col items-center justify-center">
-            <div className="w-full aspect-video rounded-xl border border-dashed border-border/50 bg-card/50 flex flex-col items-center justify-center gap-2">
-              <Film className="h-8 w-8 text-muted-foreground/20" />
-              <p className="text-xs text-muted-foreground/40">
+            <div className="w-full aspect-video rounded-xl border border-dashed border-border/50 bg-card/50 flex flex-col items-center justify-center gap-3">
+              <Film className="h-10 w-10 text-muted-foreground/20" />
+              <p className="text-sm text-muted-foreground/40">
                 Your video will appear here
               </p>
             </div>
           </div>
 
           {/* Info card */}
-          <div className="mt-6 rounded-xl border border-border/40 bg-card/60 p-4 space-y-3">
+          <div className="mt-6 rounded-xl border border-border/40 bg-card p-5 space-y-4 shadow-sm">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Generation details
             </h3>
 
-            <div className="space-y-2 text-xs text-muted-foreground">
-              <div className="flex justify-between">
-                <span>Duration</span>
-                <span className="font-medium text-foreground">{duration}s</span>
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-amber-500" />
+                  Duration
+                </span>
+                <span className="font-semibold text-foreground">{duration}s</span>
               </div>
-              <div className="flex justify-between">
-                <span>Scenes</span>
-                <span className="font-medium text-foreground">
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-2">
+                  <Film className="h-4 w-4 text-blue-500" />
+                  Scenes
+                </span>
+                <span className="font-semibold text-foreground">
                   {sceneCount}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span>Model</span>
-                <span className="font-medium text-foreground">{selectedEngine === "auto" ? "Auto" : ENGINE_DISPLAY_NAMES[selectedEngine] ?? selectedEngine}</span>
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-2">
+                  <Cpu className="h-4 w-4 text-indigo-500" />
+                  Model
+                </span>
+                <span className="font-semibold text-foreground">{selectedEngine === "auto" ? "Auto" : ENGINE_DISPLAY_NAMES[selectedEngine] ?? selectedEngine}</span>
               </div>
-              <div className="flex justify-between">
-                <span>Plan</span>
-                <span className="font-medium text-foreground capitalize">
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-2">
+                  <Crown className="h-4 w-4 text-purple-500" />
+                  Plan
+                </span>
+                <span className="font-semibold text-foreground capitalize">
                   {plan}
                 </span>
               </div>
@@ -717,9 +774,9 @@ export default function CreateModePage({
             {plan === "free" && (
               <Link
                 href="/pricing"
-                className="mt-2 flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-500 px-3 py-2 text-[11px] font-semibold text-white transition-all hover:brightness-110"
+                className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:brightness-110"
               >
-                <Crown className="h-3 w-3" />
+                <Crown className="h-4 w-4" />
                 Upgrade for longer videos
               </Link>
             )}

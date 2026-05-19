@@ -19,11 +19,11 @@ export function ComingSoonSection({
 }: ComingSoonSectionProps) {
   return (
     <div className={cn("relative", className)}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium text-muted-foreground/60">
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="text-sm font-semibold text-muted-foreground/60">
           {label}
         </span>
-        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+        <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
           Coming soon
         </span>
       </div>

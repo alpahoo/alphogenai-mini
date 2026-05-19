@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ThemeProvider } from "next-themes";
 import { SiteShell } from "@/components/site-shell";
+import { SiteConfigProvider } from "@/components/site-config-provider";
 import "./globals.css";
 
 const SITE_URL =
@@ -70,7 +71,9 @@ export default function RootLayout({
           enableSystem={true}
           disableTransitionOnChange
         >
-          <SiteShell>{children}</SiteShell>
+          <SiteConfigProvider>
+            <SiteShell>{children}</SiteShell>
+          </SiteConfigProvider>
         </ThemeProvider>
       </body>
     </html>
