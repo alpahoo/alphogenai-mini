@@ -70,6 +70,10 @@ export function SocialExportPanel({
   const [copied, setCopied] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
 
+  // YouTube publish options
+  const [ytPrivacy, setYtPrivacy] = useState<"unlisted" | "public" | "private">("unlisted");
+  const [ytSchedule, setYtSchedule] = useState("");
+
   // Collapsible sections
   const [showFormats, setShowFormats] = useState(true);
   const [showThumbnail, setShowThumbnail] = useState(false);
@@ -117,7 +121,8 @@ export function SocialExportPanel({
 
   const publishToYouTube = async () => {
     if (!metadata) return;
-    if (!confirm(`Publish to YouTube as "${metadata.title}"?`)) return;
+    const scheduleInfo = ytSchedule ? ` (scheduled: ${new Date(ytSchedule).toLocaleString()})` : "";
+    if (!confirm(`Publish to YouTube as "${metadata.title}" [${ytPrivacy}]${scheduleInfo}?`)) return;
     setPublishing(true);
     setPublishResult(null);
     try {
@@ -128,12 +133,16 @@ export function SocialExportPanel({
           title: metadata.title,
           description: metadata.description_youtube,
           tags: metadata.hashtags.map((h: string) => h.replace("#", "")),
-          privacy: "unlisted",
+          privacy: ytPrivacy,
+          ...(ytSchedule ? { publishAt: new Date(ytSchedule).toISOString() } : {}),
         }),
       });
       const data = await res.json();
       if (data.success) {
-        setPublishResult({ url: data.youtube_url });
+        setPublishResult({
+          url: data.youtube_url,
+          ...(data.scheduled ? {} : {}),
+        });
       } else {
         setPublishResult({ error: data.error });
       }
@@ -443,6 +452,42 @@ export function SocialExportPanel({
             label="YouTube"
             color="red"
           />
+
+          {/* YouTube options (only when connected + has metadata) */}
+          {ytConnected && metadata && (
+            <div className="ml-1 flex flex-wrap items-center gap-2 rounded-lg border border-border/20 bg-background/20 px-3 py-2">
+              <label className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                Privacy
+              </label>
+              <select
+                value={ytPrivacy}
+                onChange={(e) => setYtPrivacy(e.target.value as "unlisted" | "public" | "private")}
+                className="rounded border border-border/30 bg-background/40 px-2 py-0.5 text-[10px] text-foreground focus:outline-none focus:border-primary/50"
+              >
+                <option value="unlisted">Unlisted</option>
+                <option value="public">Public</option>
+                <option value="private">Private</option>
+              </select>
+              <label className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60 ml-2">
+                Schedule
+              </label>
+              <input
+                type="datetime-local"
+                value={ytSchedule}
+                onChange={(e) => setYtSchedule(e.target.value)}
+                min={new Date().toISOString().slice(0, 16)}
+                className="rounded border border-border/30 bg-background/40 px-2 py-0.5 text-[10px] text-foreground focus:outline-none focus:border-primary/50"
+              />
+              {ytSchedule && (
+                <button
+                  onClick={() => setYtSchedule("")}
+                  className="text-[9px] text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
 
           {/* TikTok */}
           <PlatformRow

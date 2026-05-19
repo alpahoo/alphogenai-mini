@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Download,
@@ -137,6 +137,39 @@ export default function JobPage() {
   const [tiktokConnected, setTiktokConnected] = useState(false);
   const [instagramConnected, setInstagramConnected] = useState(false);
   const [channelNames, setChannelNames] = useState<Record<string, string>>({});
+  const [socialToast, setSocialToast] = useState<string | null>(null);
+
+  // ── Detect OAuth callback redirect (youtube_connected=true etc) ────────
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const ytOk = searchParams.get("youtube_connected");
+    const ytErr = searchParams.get("youtube_error");
+    const ttOk = searchParams.get("tiktok_connected");
+    const igOk = searchParams.get("instagram_connected");
+
+    if (ytOk === "true") {
+      setSocialToast("YouTube connected successfully!");
+      setYoutubeConnected(true);
+    } else if (ytErr) {
+      setSocialToast(`YouTube connection failed: ${ytErr}`);
+    }
+    if (ttOk === "true") {
+      setSocialToast("TikTok connected successfully!");
+      setTiktokConnected(true);
+    }
+    if (igOk === "true") {
+      setSocialToast("Instagram connected successfully!");
+      setInstagramConnected(true);
+    }
+
+    // Auto-dismiss toast
+    if (ytOk || ytErr || ttOk || igOk) {
+      const t = setTimeout(() => setSocialToast(null), 5000);
+      // Clean URL params without navigation
+      window.history.replaceState({}, "", window.location.pathname);
+      return () => clearTimeout(t);
+    }
+  }, [searchParams]);
 
   // ── Check social connections (must be before conditional returns) ────────
   useEffect(() => {
@@ -394,6 +427,22 @@ export default function JobPage() {
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar plan={plan} email={email} />
+
+      {/* Social connection toast */}
+      {socialToast && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          className={`fixed top-4 left-1/2 z-50 -translate-x-1/2 rounded-lg border px-4 py-2.5 text-xs font-medium shadow-lg ${
+            socialToast.includes("failed") || socialToast.includes("error")
+              ? "border-red-500/30 bg-red-500/10 text-red-400"
+              : "border-green-500/30 bg-green-500/10 text-green-400"
+          }`}
+        >
+          {socialToast}
+        </motion.div>
+      )}
 
       <main className="flex-1 flex overflow-hidden">
         {/* ═══ LEFT: Main content ═══════════════════════════════ */}
