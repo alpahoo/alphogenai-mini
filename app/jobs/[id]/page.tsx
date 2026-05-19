@@ -576,7 +576,7 @@ export default function JobPage() {
               {/* ── Mobile info cards (hidden on desktop) ───── */}
               {job && (
                 <div className="lg:hidden space-y-5">
-                  <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} channelNames={channelNames} />
+                  <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} channelNames={channelNames} scenes={scenes} />
                 </div>
               )}
             </motion.div>
@@ -601,7 +601,7 @@ export default function JobPage() {
                   onRegenerate={handleSceneRegenerate}
                 />
               )}
-            <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} channelNames={channelNames} />
+            <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} channelNames={channelNames} scenes={scenes} />
           </div>
         )}
       </main>
@@ -625,6 +625,7 @@ function InfoCards({
   tiktokConnected = false,
   instagramConnected = false,
   channelNames = {},
+  scenes = [],
 }: {
   job: Job;
   isActive: boolean;
@@ -638,6 +639,7 @@ function InfoCards({
   tiktokConnected?: boolean;
   instagramConnected?: boolean;
   channelNames?: Record<string, string>;
+  scenes?: JobScene[];
 }) {
   return (
     <>
@@ -702,6 +704,7 @@ function InfoCards({
           tiktokConnected={tiktokConnected}
           instagramConnected={instagramConnected}
           channelNames={channelNames}
+          scenes={scenes}
         />
       )}
 
