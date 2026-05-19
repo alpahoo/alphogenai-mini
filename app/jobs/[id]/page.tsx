@@ -145,7 +145,9 @@ export default function JobPage() {
     const ytOk = searchParams.get("youtube_connected");
     const ytErr = searchParams.get("youtube_error");
     const ttOk = searchParams.get("tiktok_connected");
+    const ttErr = searchParams.get("tiktok_error");
     const igOk = searchParams.get("instagram_connected");
+    const igErr = searchParams.get("instagram_error");
 
     if (ytOk === "true") {
       setSocialToast("YouTube connected successfully!");
@@ -156,14 +158,18 @@ export default function JobPage() {
     if (ttOk === "true") {
       setSocialToast("TikTok connected successfully!");
       setTiktokConnected(true);
+    } else if (ttErr) {
+      setSocialToast(`TikTok connection failed: ${ttErr}`);
     }
     if (igOk === "true") {
       setSocialToast("Instagram connected successfully!");
       setInstagramConnected(true);
+    } else if (igErr) {
+      setSocialToast(`Instagram connection failed: ${igErr}`);
     }
 
     // Auto-dismiss toast
-    if (ytOk || ytErr || ttOk || igOk) {
+    if (ytOk || ytErr || ttOk || ttErr || igOk || igErr) {
       const t = setTimeout(() => setSocialToast(null), 5000);
       // Clean URL params without navigation
       window.history.replaceState({}, "", window.location.pathname);

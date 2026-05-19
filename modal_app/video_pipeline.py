@@ -65,7 +65,7 @@ SVI_LORA_PATH   = "/models/svi-lora/SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_12
 # ---------------------------------------------------------------------------
 NUM_FRAMES      = 81    # ~5s at 16 fps
 FPS             = 16
-NUM_STEPS       = 25    # higher quality (was 15 — fast but lower detail)
+NUM_STEPS       = 20    # balanced quality/speed (was 25 — too slow on cold starts)
 GUIDANCE_SCALE  = 3.5
 IMG_HEIGHT      = 720
 IMG_WIDTH       = 1280  # 720p (was 832×480)
@@ -215,7 +215,7 @@ def update_scene(job_id: str, scene_index: int, **fields):
 @app.function(
     image=base_image,
     gpu=GPU,
-    timeout=1200,  # 20 min max
+    timeout=1800,  # 30 min max (cold start + 14B model load + inference)
     retries=0,
     volumes={"/models": models_volume},
     secrets=[secrets],
@@ -345,9 +345,9 @@ def generate_clip(prompt: str, job_id: str, image_url: Optional[str] = None) -> 
 @app.function(
     image=base_image,
     secrets=[secrets],
-    # Timeout rationale: each scene ≈ 8 min (3 min cold start + 5 min gen).
-    # 5 scenes × 8 min = 40 min max.  Set to 50 min (3000s) for safety margin.
-    timeout=3000,
+    # Timeout rationale: each scene ≈ 12 min (cold start + gen).
+    # 10 scenes × 12 min = 120 min.  Set to 150 min (9000s) for safety margin.
+    timeout=9000,
     retries=0,
 )
 def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferred_engine: Optional[str] = None, image_url: Optional[str] = None) -> list:
@@ -956,9 +956,9 @@ def add_watermark(video_bytes: bytes) -> bytes:
 @app.function(
     image=base_image,
     secrets=[secrets],
-    # Timeout rationale: must outlive generate_multi_scene (3000s) + assemble (600s)
-    # + upload overhead.  Set to 3900s (~65 min).
-    timeout=3900,
+    # Timeout rationale: must outlive generate_multi_scene (9000s) + assemble (600s)
+    # + upload overhead.  Set to 10200s (~170 min).
+    timeout=10200,
     retries=0,
 )
 def generate_video_complete(

@@ -34,4 +34,6 @@ class WanEngine(BaseEngine):
     ) -> bytes:
         if self._generate_fn is None:
             raise RuntimeError("WanEngine: generate_fn not set. Call set_generate_fn() first.")
-        return self._generate_fn(prompt, job_id)
+        # Forward image_url so generate_clip skips SDXL-Turbo when user provides one
+        image_url = kwargs.get("image_url")
+        return self._generate_fn(prompt, job_id, image_url=image_url)

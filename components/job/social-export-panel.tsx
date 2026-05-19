@@ -18,6 +18,8 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
+  AlertCircle,
+  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 import type { SocialMetadata } from "@/lib/social-metadata";
@@ -37,11 +39,28 @@ interface SocialExportPanelProps {
   scenes?: JobScene[];
 }
 
+/** Per-platform publish result */
+interface PlatformPublishResult {
+  platform: "youtube" | "tiktok" | "instagram";
+  url?: string;
+  message?: string;
+  error?: string;
+  via?: "direct" | "inbox";
+}
+
+type TikTokPrivacy = "PUBLIC_TO_EVERYONE" | "MUTUAL_FOLLOW_FRIENDS" | "SELF_ONLY";
+
 const FORMATS = [
   { key: "tiktok", label: "TikTok / Reels", ratio: "9:16", icon: Smartphone, color: "text-pink-400", bg: "bg-pink-500/10" },
   { key: "instagram", label: "Instagram", ratio: "1:1", icon: Square, color: "text-purple-400", bg: "bg-purple-500/10" },
   { key: "youtube", label: "YouTube", ratio: "16:9", icon: Monitor, color: "text-red-400", bg: "bg-red-500/10" },
 ] as const;
+
+const TIKTOK_PRIVACY_OPTIONS: { value: TikTokPrivacy; label: string }[] = [
+  { value: "PUBLIC_TO_EVERYONE", label: "Public" },
+  { value: "MUTUAL_FOLLOW_FRIENDS", label: "Friends" },
+  { value: "SELF_ONLY", label: "Only me" },
+];
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -65,14 +84,21 @@ export function SocialExportPanel({
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(
     existingExports?.thumbnail ?? null,
   );
-  const [publishing, setPublishing] = useState(false);
-  const [publishResult, setPublishResult] = useState<{ url?: string; error?: string } | null>(null);
+  const [publishingPlatform, setPublishingPlatform] = useState<string | null>(null);
+  const [publishResults, setPublishResults] = useState<PlatformPublishResult[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
 
   // YouTube publish options
   const [ytPrivacy, setYtPrivacy] = useState<"unlisted" | "public" | "private">("unlisted");
   const [ytSchedule, setYtSchedule] = useState("");
+
+  // TikTok publish options
+  const [ttPrivacy, setTtPrivacy] = useState<TikTokPrivacy>("PUBLIC_TO_EVERYONE");
+  const [ttTitle, setTtTitle] = useState("");
+
+  // Instagram publish options
+  const [igCaption, setIgCaption] = useState("");
 
   // Collapsible sections
   const [showFormats, setShowFormats] = useState(true);
@@ -97,6 +123,27 @@ export function SocialExportPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Sync editable fields when metadata loads/changes
+  useEffect(() => {
+    if (!metadata) return;
+    if (!ttTitle) setTtTitle(metadata.description_tiktok || metadata.title);
+    if (!igCaption) setIgCaption(metadata.description_instagram || metadata.title);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metadata]);
+
+  // Helpers
+  const addPublishResult = (result: PlatformPublishResult) => {
+    setPublishResults((prev) => [
+      // Remove any previous result for this platform
+      ...prev.filter((r) => r.platform !== result.platform),
+      result,
+    ]);
+  };
+
+  const clearPublishResult = (platform: string) => {
+    setPublishResults((prev) => prev.filter((r) => r.platform !== platform));
+  };
+
   const handleDisconnect = async (platform: "youtube" | "tiktok" | "instagram") => {
     if (!confirm(`Disconnect ${platform}?`)) return;
     setDisconnecting(platform);
@@ -110,7 +157,7 @@ export function SocialExportPanel({
         if (platform === "youtube") setYtConnected(false);
         if (platform === "tiktok") setTtConnected(false);
         if (platform === "instagram") setIgConnected(false);
-        setPublishResult(null);
+        clearPublishResult(platform);
       }
     } catch (e) {
       console.error("Disconnect failed:", e);
@@ -119,12 +166,13 @@ export function SocialExportPanel({
     }
   };
 
+  // ── YouTube publish ─────────────────────────────────────────────────
   const publishToYouTube = async () => {
     if (!metadata) return;
     const scheduleInfo = ytSchedule ? ` (scheduled: ${new Date(ytSchedule).toLocaleString()})` : "";
     if (!confirm(`Publish to YouTube as "${metadata.title}" [${ytPrivacy}]${scheduleInfo}?`)) return;
-    setPublishing(true);
-    setPublishResult(null);
+    setPublishingPlatform("youtube");
+    clearPublishResult("youtube");
     try {
       const res = await fetch(`/api/jobs/${jobId}/publish/youtube`, {
         method: "POST",
@@ -139,17 +187,83 @@ export function SocialExportPanel({
       });
       const data = await res.json();
       if (data.success) {
-        setPublishResult({
+        addPublishResult({
+          platform: "youtube",
           url: data.youtube_url,
-          ...(data.scheduled ? {} : {}),
+          message: data.scheduled
+            ? `Scheduled for ${new Date(ytSchedule).toLocaleString()}`
+            : "Published to YouTube!",
         });
       } else {
-        setPublishResult({ error: data.error });
+        addPublishResult({ platform: "youtube", error: data.error });
       }
     } catch (e) {
-      setPublishResult({ error: e instanceof Error ? e.message : "Failed" });
+      addPublishResult({ platform: "youtube", error: e instanceof Error ? e.message : "Failed" });
     } finally {
-      setPublishing(false);
+      setPublishingPlatform(null);
+    }
+  };
+
+  // ── TikTok publish ──────────────────────────────────────────────────
+  const publishToTikTok = async () => {
+    const title = ttTitle || metadata?.description_tiktok || "";
+    if (!title.trim()) return;
+    if (!confirm(`Post to TikTok: "${title.slice(0, 60)}${title.length > 60 ? "..." : ""}"?`)) return;
+    setPublishingPlatform("tiktok");
+    clearPublishResult("tiktok");
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/publish/tiktok`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title,
+          privacy: ttPrivacy,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        addPublishResult({
+          platform: "tiktok",
+          via: data.via,
+          message: data.message || (data.via === "inbox"
+            ? "Sent to TikTok inbox. Open TikTok Studio to finalize."
+            : "Posted to TikTok!"),
+        });
+      } else {
+        addPublishResult({ platform: "tiktok", error: data.error });
+      }
+    } catch {
+      addPublishResult({ platform: "tiktok", error: "TikTok publish failed" });
+    } finally {
+      setPublishingPlatform(null);
+    }
+  };
+
+  // ── Instagram publish ───────────────────────────────────────────────
+  const publishToInstagram = async () => {
+    const caption = igCaption || metadata?.description_instagram || "";
+    if (!confirm(`Post to Instagram as Reel?`)) return;
+    setPublishingPlatform("instagram");
+    clearPublishResult("instagram");
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/publish/instagram`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caption }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        addPublishResult({
+          platform: "instagram",
+          message: data.message || "Published to Instagram as Reel!",
+        });
+      } else {
+        addPublishResult({ platform: "instagram", error: data.error });
+      }
+    } catch {
+      addPublishResult({ platform: "instagram", error: "Instagram publish failed" });
+    } finally {
+      setPublishingPlatform(null);
     }
   };
 
@@ -402,48 +516,59 @@ export function SocialExportPanel({
         }
       >
         <div className="space-y-2">
-          {/* Publish result */}
+          {/* Per-platform publish results */}
           <AnimatePresence>
-            {publishResult?.url && publishResult.url.startsWith("http") && (
-              <motion.a
+            {publishResults.map((r) => (
+              <motion.div
+                key={r.platform}
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                href={publishResult.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block rounded-md bg-green-500/10 border border-green-500/30 px-3 py-2 text-xs text-green-400 text-center hover:brightness-110"
               >
-                Published! View on YouTube →
-              </motion.a>
-            )}
-            {publishResult?.url && !publishResult.url.startsWith("http") && (
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="rounded-md bg-green-500/10 border border-green-500/30 px-3 py-2 text-xs text-green-400 text-center"
-              >
-                Posted successfully
-              </motion.p>
-            )}
-            {publishResult?.error && (
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-xs text-destructive"
-              >
-                {publishResult.error}
-              </motion.p>
-            )}
+                {r.error ? (
+                  <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2">
+                    <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-[10px] font-semibold text-destructive capitalize">{r.platform}</span>
+                      <p className="text-xs text-destructive">{r.error}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2 rounded-md bg-green-500/10 border border-green-500/30 px-3 py-2">
+                    <Check className="h-3.5 w-3.5 text-green-400 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[10px] font-semibold text-green-400 capitalize">{r.platform}</span>
+                      <p className="text-xs text-green-400">{r.message}</p>
+                      {r.via === "inbox" && (
+                        <p className="text-[10px] text-amber-400/80 mt-0.5 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          Open TikTok Studio to add final touches and publish
+                        </p>
+                      )}
+                    </div>
+                    {r.url?.startsWith("http") && (
+                      <a
+                        href={r.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-green-400 hover:brightness-125 shrink-0"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            ))}
           </AnimatePresence>
 
-          {/* YouTube */}
+          {/* ── YouTube ──────────────────────────────────────── */}
           <PlatformRow
             platform="youtube"
             connected={ytConnected}
             channelName={channelNames.youtube}
             hasMetadata={!!metadata}
-            publishing={publishing}
+            publishing={publishingPlatform === "youtube"}
             disconnecting={disconnecting}
             jobId={jobId}
             onPublish={publishToYouTube}
@@ -453,7 +578,7 @@ export function SocialExportPanel({
             color="red"
           />
 
-          {/* YouTube options (only when connected + has metadata) */}
+          {/* YouTube options */}
           {ytConnected && metadata && (
             <div className="ml-1 flex flex-wrap items-center gap-2 rounded-lg border border-border/20 bg-background/20 px-3 py-2">
               <label className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
@@ -489,63 +614,89 @@ export function SocialExportPanel({
             </div>
           )}
 
-          {/* TikTok */}
+          {/* ── TikTok ──────────────────────────────────────── */}
           <PlatformRow
             platform="tiktok"
             connected={ttConnected}
             channelName={channelNames.tiktok}
-            hasMetadata={!!metadata}
-            publishing={publishing}
+            hasMetadata={!!metadata || !!ttTitle.trim()}
+            publishing={publishingPlatform === "tiktok"}
             disconnecting={disconnecting}
             jobId={jobId}
-            onPublish={async () => {
-              if (!metadata || !confirm(`Post to TikTok: "${metadata.title}"?`)) return;
-              setPublishing(true);
-              try {
-                const res = await fetch(`/api/jobs/${jobId}/publish/tiktok`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ title: metadata.description_tiktok }),
-                });
-                const data = await res.json();
-                setPublishResult(data.success ? { url: "tiktok://posted" } : { error: data.error });
-              } catch { setPublishResult({ error: "TikTok publish failed" }); }
-              setPublishing(false);
-            }}
+            onPublish={publishToTikTok}
             onDisconnect={handleDisconnect}
             icon={Smartphone}
             label="TikTok"
             color="white"
           />
 
-          {/* Instagram */}
+          {/* TikTok options */}
+          {ttConnected && (metadata || ttTitle.trim()) && (
+            <div className="ml-1 space-y-2 rounded-lg border border-border/20 bg-background/20 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                  Privacy
+                </label>
+                <select
+                  value={ttPrivacy}
+                  onChange={(e) => setTtPrivacy(e.target.value as TikTokPrivacy)}
+                  className="rounded border border-border/30 bg-background/40 px-2 py-0.5 text-[10px] text-foreground focus:outline-none focus:border-primary/50"
+                >
+                  {TIKTOK_PRIVACY_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                  Title / Description
+                </label>
+                <textarea
+                  value={ttTitle}
+                  onChange={(e) => setTtTitle(e.target.value)}
+                  maxLength={150}
+                  rows={2}
+                  placeholder="Add title, hashtags..."
+                  className="mt-1 w-full rounded border border-border/30 bg-background/40 px-2 py-1 text-[11px] text-foreground placeholder-muted-foreground/40 focus:outline-none focus:border-primary/50 resize-none"
+                />
+                <span className="text-[9px] text-muted-foreground/40">{ttTitle.length}/150</span>
+              </div>
+            </div>
+          )}
+
+          {/* ── Instagram ───────────────────────────────────── */}
           <PlatformRow
             platform="instagram"
             connected={igConnected}
             channelName={channelNames.instagram}
-            hasMetadata={!!metadata}
-            publishing={publishing}
+            hasMetadata={!!metadata || !!igCaption.trim()}
+            publishing={publishingPlatform === "instagram"}
             disconnecting={disconnecting}
             jobId={jobId}
-            onPublish={async () => {
-              if (!metadata || !confirm(`Post to Instagram: "${metadata.title}"?`)) return;
-              setPublishing(true);
-              try {
-                const res = await fetch(`/api/jobs/${jobId}/publish/instagram`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ caption: metadata.description_instagram }),
-                });
-                const data = await res.json();
-                setPublishResult(data.success ? { url: "instagram://posted" } : { error: data.error });
-              } catch { setPublishResult({ error: "Instagram publish failed" }); }
-              setPublishing(false);
-            }}
+            onPublish={publishToInstagram}
             onDisconnect={handleDisconnect}
             icon={Square}
             label="Instagram"
             color="purple"
           />
+
+          {/* Instagram options */}
+          {igConnected && (metadata || igCaption.trim()) && (
+            <div className="ml-1 space-y-1 rounded-lg border border-border/20 bg-background/20 px-3 py-2">
+              <label className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                Caption
+              </label>
+              <textarea
+                value={igCaption}
+                onChange={(e) => setIgCaption(e.target.value)}
+                maxLength={2200}
+                rows={3}
+                placeholder="Write a caption for your Reel..."
+                className="mt-1 w-full rounded border border-border/30 bg-background/40 px-2 py-1 text-[11px] text-foreground placeholder-muted-foreground/40 focus:outline-none focus:border-primary/50 resize-none"
+              />
+              <span className="text-[9px] text-muted-foreground/40">{igCaption.length}/2200</span>
+            </div>
+          )}
         </div>
       </CollapsibleSection>
     </div>
@@ -632,16 +783,16 @@ function PlatformRow({
   color: string;
 }) {
   const colorClasses = {
-    red: { border: "border-red-500/30", bg: "bg-red-500/5", text: "text-red-400", btn: "bg-red-600" },
-    white: { border: "border-white/20", bg: "bg-white/5", text: "text-white/70", btn: "bg-black border border-white/20" },
-    purple: { border: "border-purple-500/30", bg: "bg-purple-500/5", text: "text-purple-400", btn: "bg-gradient-to-r from-purple-600 to-pink-500" },
-  }[color] ?? { border: "border-border/30", bg: "bg-muted/5", text: "text-muted-foreground", btn: "bg-primary" };
+    red: { border: "border-red-500/30", bg: "bg-red-500/5", text: "text-red-400", btn: "bg-red-600", dot: "bg-red-400" },
+    white: { border: "border-white/20", bg: "bg-white/5", text: "text-white/70", btn: "bg-black border border-white/20", dot: "bg-white/70" },
+    purple: { border: "border-purple-500/30", bg: "bg-purple-500/5", text: "text-purple-400", btn: "bg-gradient-to-r from-purple-600 to-pink-500", dot: "bg-purple-400" },
+  }[color] ?? { border: "border-border/30", bg: "bg-muted/5", text: "text-muted-foreground", btn: "bg-primary", dot: "bg-primary" };
 
   if (!connected) {
     return (
       <a
         href={`/api/auth/${platform}/connect?return_to=/jobs/${jobId}`}
-        className={`flex w-full items-center justify-center gap-2 rounded-lg border ${colorClasses.border} ${colorClasses.bg} px-4 py-2 text-xs font-medium ${colorClasses.text} hover:brightness-125 transition-all`}
+        className={`flex w-full items-center justify-center gap-2 rounded-lg border ${colorClasses.border} ${colorClasses.bg} px-4 py-2.5 text-xs font-medium ${colorClasses.text} hover:brightness-125 transition-all`}
       >
         <Icon className="h-3.5 w-3.5" /> Connect {label}
       </a>
@@ -661,7 +812,10 @@ function PlatformRow({
         </button>
       ) : (
         <div className={`flex flex-1 items-center gap-2 rounded-lg border ${colorClasses.border} ${colorClasses.bg} px-3 py-2 text-xs ${colorClasses.text}`}>
-          <Icon className="h-3.5 w-3.5" /> {channelName || `${label} connected`}
+          <span className={`h-1.5 w-1.5 rounded-full ${colorClasses.dot} animate-pulse`} />
+          <Icon className="h-3.5 w-3.5" />
+          <span className="truncate">{channelName || `${label} connected`}</span>
+          <span className="text-[9px] text-muted-foreground/50 ml-auto">Generate AI copy first</span>
         </div>
       )}
       <button
