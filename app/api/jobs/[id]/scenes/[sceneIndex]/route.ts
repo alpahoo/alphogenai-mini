@@ -156,7 +156,7 @@ export async function POST(req: Request, { params }: RouteParams) {
     .replace(/\[SCENE\s*\d+[^\]]*\]/gi, "")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 500);
+    .slice(0, 1000);
   const duration = Math.round(Number(scene.duration_sec) || 5);
 
   // Get first_frame_url from previous scene (for chaining continuity)

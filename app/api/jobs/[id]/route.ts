@@ -27,7 +27,7 @@ function cleanEvoLinkPrompt(raw: string): string {
     .replace(/\[SCENE\s*\d+[^\]]*\]/gi, "")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 500);
+    .slice(0, 1000);
 }
 
 interface SceneRow {

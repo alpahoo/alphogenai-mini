@@ -51,7 +51,7 @@ function cleanEvoLinkPrompt(raw: string): string {
     .replace(/\[SCENE\s*\d+[^\]]*\]/gi, "")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 500);
+    .slice(0, 1000);
 }
 
 export async function POST(req: Request) {
@@ -111,9 +111,9 @@ export async function POST(req: Request) {
       );
     }
 
-    if (prompt.trim().length > 500) {
+    if (prompt.trim().length > 2000) {
       return NextResponse.json(
-        { error: "Prompt too long (max 500 characters)" },
+        { error: "Prompt too long (max 2000 characters)" },
         { status: 400 }
       );
     }
@@ -229,7 +229,7 @@ export async function POST(req: Request) {
       const capped = clientScenes.slice(0, maxScenes);
       storyboard = capped.map((s, i) => ({
         scene_index: i,
-        prompt: (s.prompt || enhancedPrompt).slice(0, 500),
+        prompt: (s.prompt || enhancedPrompt).slice(0, 2000),
         engine: (s.engine || safePreferredEngine || "wan_i2v") as import("@/lib/types").EngineKey,
         duration_sec: Math.max(3, Math.min(10, s.duration_sec ?? 5)),
       }));
