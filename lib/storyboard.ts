@@ -24,11 +24,11 @@ const MIN_CLIP_DURATION = 3.0;
 const MAX_CLIP_DURATION = 10.0;
 const DEFAULT_ENGINE: EngineKey = "wan_i2v";
 
-/** MVP hard caps — controls GPU cost regardless of plan duration math. */
+/** Hard caps — controls GPU cost regardless of plan duration math. */
 export const MAX_SCENES: Record<JobPlan, number> = {
   free: 1,
   pro: 3,
-  premium: 5,
+  premium: 24,
 };
 
 const VALID_PLANS: ReadonlySet<string> = new Set<string>(["free", "pro", "premium"]);

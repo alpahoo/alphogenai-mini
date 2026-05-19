@@ -9,11 +9,7 @@ export type JobPlan = "free" | "pro" | "premium";
 export type JobStage =
   | "queued"
   | "spawning_pipeline"
-  | "generating_scene_1"
-  | "generating_scene_2"
-  | "generating_scene_3"
-  | "generating_scene_4"
-  | "generating_scene_5"
+  | `generating_scene_${number}`
   | "encoding"
   | "uploading"
   | "generating_audio"
@@ -218,7 +214,7 @@ export const PLAN_MAX_DURATION: Record<JobPlan, number> = {
 export const PLAN_MAX_SCENES: Record<JobPlan, number> = {
   free: 1,
   pro: 3,
-  premium: 10,
+  premium: 24,
 };
 
 /** Daily (24 h rolling window) generation quota per plan. -1 = unlimited. */

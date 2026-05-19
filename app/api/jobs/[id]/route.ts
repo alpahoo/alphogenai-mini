@@ -19,7 +19,7 @@ export const maxDuration = 30;
 const EXTRACT_RETRY_MS = 90_000; // 90 seconds
 
 // Mirror the POST route cap. Defense in depth.
-const MAX_CHAIN_LENGTH = 6;
+const MAX_CHAIN_LENGTH = 25;
 
 /** Strip "[SCENE N - LABEL]" markers — same logic as POST. */
 function cleanEvoLinkPrompt(raw: string): string {

@@ -36,7 +36,7 @@ const VALID_ENGINES = [
 // Hard cap on multi-scene chaining length (defense in depth — storyboard
 // is already capped per-plan). Even premium can't ask EvoLink for >6 chained
 // scenes — beyond that, generation cost & wait time become unreasonable.
-const MAX_CHAIN_LENGTH = 6;
+const MAX_CHAIN_LENGTH = 25;
 
 // V1 Étape C — Reference validation imported from lib/validate-references.ts
 // (pure function, extracted for testability)
