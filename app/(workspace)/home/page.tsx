@@ -9,78 +9,75 @@ import {
   Share2,
   Scissors,
   FlaskConical,
+  Clapperboard,
   ArrowRight,
   Clock,
   CheckCircle2,
   XCircle,
   Loader2,
+  Lock,
+  Sparkles,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 // ---------------------------------------------------------------------------
-// Workflow families
+// Workflow families — with color coding
 // ---------------------------------------------------------------------------
-const WORKFLOWS = {
-  production: {
-    title: "AI Media Production",
-    description: "Generate videos from text using AI models.",
+const WORKFLOW_ITEMS = [
+  {
+    label: "Story Video",
+    description: "Cinematic narrative scene from text",
+    icon: Film,
+    href: "/create/story",
+    iconBg: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
     active: true,
-    items: [
-      {
-        label: "Story Video",
-        description: "Cinematic narrative scene",
-        icon: Film,
-        href: "/create/story",
-      },
-      {
-        label: "Product Video",
-        description: "Short product showcase",
-        icon: ShoppingBag,
-        href: "/create/product",
-      },
-      {
-        label: "Social Clip",
-        description: "Punchy shareable clip",
-        icon: Share2,
-        href: "/create/social",
-      },
-    ],
   },
-  editing: {
-    title: "Clip & Edit",
-    description: "Trim, remix, and repurpose existing footage.",
-    active: false,
-    items: [
-      {
-        label: "Trim & tighten",
-        description: "Coming soon",
-        icon: Scissors,
-        href: "#",
-      },
-    ],
+  {
+    label: "Product Video",
+    description: "Eye-catching product showcase",
+    icon: ShoppingBag,
+    href: "/create/product",
+    iconBg: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    active: true,
   },
-  playground: {
-    title: "AI Playground",
-    description: "Experiment with the latest generative AI models.",
-    active: false,
-    items: [
-      {
-        label: "Model explorer",
-        description: "Coming soon",
-        icon: FlaskConical,
-        href: "#",
-      },
-    ],
+  {
+    label: "Social Clip",
+    description: "Punchy clip for TikTok & Reels",
+    icon: Share2,
+    href: "/create/social",
+    iconBg: "bg-pink-500/10 text-pink-600 dark:text-pink-400",
+    active: true,
   },
-};
+  {
+    label: "Scene Editor",
+    description: "Multi-scene storyboard with drag & drop",
+    icon: Clapperboard,
+    href: "/create/editor",
+    iconBg: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+    active: true,
+  },
+];
+
+const COMING_SOON_ITEMS = [
+  {
+    label: "Edit Your Video",
+    description: "Trim & remix existing footage",
+    icon: Scissors,
+  },
+  {
+    label: "AI Playground",
+    description: "Experiment with latest models",
+    icon: FlaskConical,
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Status helpers
 // ---------------------------------------------------------------------------
 function statusIcon(status: string) {
-  if (status === "done") return <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />;
-  if (status === "failed") return <XCircle className="h-3.5 w-3.5 text-destructive" />;
-  return <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />;
+  if (status === "done") return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+  if (status === "failed") return <XCircle className="h-4 w-4 text-destructive" />;
+  return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
 }
 
 function statusLabel(status: string) {
@@ -152,98 +149,103 @@ export default function WorkspaceHome() {
         <h1 className="text-3xl font-bold tracking-tight">
           What do you want to create?
         </h1>
-        <p className="mt-1 text-muted-foreground">
-          Choose a workflow or start from scratch.
+        <p className="mt-2 text-base text-muted-foreground">
+          Choose a template to start, or open the Scene Editor for full control.
         </p>
       </motion.div>
 
-      {/* Workflow families */}
-      <div className="space-y-8 mb-12">
-        {Object.entries(WORKFLOWS).map(([key, family], fi) => (
-          <motion.div
-            key={key}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, delay: 0.05 + fi * 0.08 }}
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                {family.title}
-              </h2>
-              {!family.active && (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-                  Coming soon
-                </span>
-              )}
-            </div>
+      {/* ── Active workflows ─────────────────────────────────────── */}
+      <motion.section
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, delay: 0.05 }}
+        className="mb-10"
+      >
+        <div className="flex items-center gap-2 mb-4">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Create with AI
+          </h2>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {WORKFLOW_ITEMS.map((item, i) => (
+            <motion.div
+              key={item.label}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.08 + i * 0.05 }}
+            >
+              <Link
+                href={item.href}
+                className="group flex flex-col rounded-2xl border border-border bg-card p-5 transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1"
+              >
+                <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${item.iconBg} mb-3 transition-transform group-hover:scale-110`}>
+                  <item.icon className="h-5 w-5" />
+                </div>
+                <h3 className="text-[15px] font-semibold mb-0.5">{item.label}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {item.description}
+                </p>
+              </Link>
+            </motion.div>
+          ))}
+        </div>
+      </motion.section>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              {family.items.map((item) => {
-                const disabled = !family.active;
-                // Split disabled (div, no href) vs active (Link, with href) so
-                // TypeScript can narrow Link's required `href` prop.
-                const baseClass =
-                  "group flex items-start gap-3 rounded-xl border border-border/50 bg-card/80 p-4 backdrop-blur-sm transition-all duration-150";
-                const inner = (
-                  <>
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <item.icon className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">{item.label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {item.description}
-                      </p>
-                    </div>
-                  </>
-                );
-                if (disabled) {
-                  return (
-                    <div
-                      key={item.label}
-                      className={`${baseClass} cursor-not-allowed opacity-40`}
-                    >
-                      {inner}
-                    </div>
-                  );
-                }
-                return (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    className={`${baseClass} hover:border-primary/50 hover:bg-card`}
-                  >
-                    {inner}
-                  </Link>
-                );
-              })}
+      {/* ── Coming soon ──────────────────────────────────────────── */}
+      <motion.section
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, delay: 0.2 }}
+        className="mb-10"
+      >
+        <div className="flex items-center gap-2 mb-4">
+          <Lock className="h-3.5 w-3.5 text-muted-foreground/40" />
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground/50">
+            Coming Soon
+          </h2>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {COMING_SOON_ITEMS.map((item) => (
+            <div
+              key={item.label}
+              className="flex flex-col rounded-2xl border border-border/50 bg-muted/20 p-5 opacity-50 cursor-not-allowed"
+            >
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted/60 text-muted-foreground/40 mb-3">
+                <item.icon className="h-5 w-5" />
+              </div>
+              <h3 className="text-[15px] font-semibold text-muted-foreground/50 mb-0.5">{item.label}</h3>
+              <p className="text-sm text-muted-foreground/40 leading-relaxed">
+                {item.description}
+              </p>
             </div>
-          </motion.div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </motion.section>
 
       {/* Quick start */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, delay: 0.3 }}
+        className="mb-12"
       >
         <Link
           href="/create/story"
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-base font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:brightness-110 hover:shadow-lg hover:shadow-primary/30"
         >
+          <Sparkles className="h-5 w-5" />
           Start from scratch
           <ArrowRight className="h-4 w-4" />
         </Link>
       </motion.div>
 
-      {/* Recent projects */}
+      {/* ── Recent projects ──────────────────────────────────────── */}
       {!loadingRecents && recents.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, delay: 0.4 }}
-          className="mt-12"
         >
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -251,9 +253,9 @@ export default function WorkspaceHome() {
             </h2>
             <Link
               href="/projects"
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              className="text-sm text-primary font-medium hover:underline transition-colors"
             >
-              View all
+              View all →
             </Link>
           </div>
 
@@ -262,18 +264,18 @@ export default function WorkspaceHome() {
               <Link
                 key={job.id}
                 href={`/jobs/${job.id}`}
-                className="flex items-center gap-3 rounded-lg border border-border/50 bg-card/50 px-4 py-3 transition-colors hover:bg-card"
+                className="flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-3.5 transition-all hover:border-primary/30 hover:shadow-sm"
               >
                 {statusIcon(job.status)}
-                <span className="flex-1 truncate text-sm">
+                <span className="flex-1 truncate text-sm font-medium">
                   {job.prompt}
                 </span>
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Clock className="h-3 w-3" />
-                  {timeAgo(job.created_at)}
-                </span>
-                <span className="text-xs text-muted-foreground">
+                <span className="hidden sm:inline text-sm text-muted-foreground">
                   {statusLabel(job.status)}
+                </span>
+                <span className="flex items-center gap-1.5 text-sm text-muted-foreground/60">
+                  <Clock className="h-3.5 w-3.5" />
+                  {timeAgo(job.created_at)}
                 </span>
               </Link>
             ))}

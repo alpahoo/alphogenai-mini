@@ -45,18 +45,18 @@ export function QuotaBar() {
   const isAtLimit = !isUnlimited && quota.used >= quota.limit;
 
   return (
-    <div className="px-3 py-2 space-y-1.5">
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
-          <Zap className="h-3 w-3" />
+    <div className="px-4 py-3 space-y-2">
+      <div className="flex items-center justify-between text-sm">
+        <span className="flex items-center gap-2 font-medium text-muted-foreground">
+          <Zap className="h-4 w-4" />
           Daily usage
         </span>
         <span
           className={
             isAtLimit
-              ? "font-semibold text-red-400"
+              ? "font-semibold text-red-500"
               : isNearLimit
-                ? "font-semibold text-amber-400"
+                ? "font-semibold text-amber-500"
                 : "text-muted-foreground"
           }
         >
@@ -64,7 +64,7 @@ export function QuotaBar() {
             <>{quota.used} used</>
           ) : (
             <>
-              {quota.used}/{quota.limit}
+              {quota.used} / {quota.limit}
             </>
           )}
         </span>
@@ -72,7 +72,7 @@ export function QuotaBar() {
 
       {/* Progress bar — hidden for unlimited plans */}
       {!isUnlimited && (
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/50">
+        <div className="h-2 w-full overflow-hidden rounded-full bg-muted/50">
           <div
             className={`h-full rounded-full transition-all duration-500 ${
               isAtLimit
@@ -87,11 +87,11 @@ export function QuotaBar() {
       )}
 
       {isUnlimited && (
-        <p className="text-[10px] text-muted-foreground/60">Unlimited generations</p>
+        <p className="text-xs text-muted-foreground/60">Unlimited generations</p>
       )}
 
       {isAtLimit && (
-        <p className="text-[10px] text-red-400/80">
+        <p className="text-xs text-red-500/80">
           Limit reached — resets in 24h
         </p>
       )}

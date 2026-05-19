@@ -41,23 +41,23 @@ const STATUS_TABS: { key: StatusFilter; label: string }[] = [
 function statusBadge(status: string) {
   if (status === "done") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-400">
-        <CheckCircle2 className="h-3 w-3" />
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 py-1 text-xs font-medium text-green-600 dark:text-green-400">
+        <CheckCircle2 className="h-3.5 w-3.5" />
         Complete
       </span>
     );
   }
   if (status === "failed") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-medium text-destructive">
-        <XCircle className="h-3 w-3" />
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-medium text-destructive">
+        <XCircle className="h-3.5 w-3.5" />
         Failed
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-      <Loader2 className="h-3 w-3 animate-spin" />
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+      <Loader2 className="h-3.5 w-3.5 animate-spin" />
       In progress
     </span>
   );
@@ -180,13 +180,13 @@ export default function ProjectsPage() {
       >
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Projects</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-2 text-base text-muted-foreground">
             Your generated videos and creations.
           </p>
         </div>
         <Link
           href="/create"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:brightness-110"
         >
           <Plus className="h-4 w-4" />
           New project
@@ -196,14 +196,14 @@ export default function ProjectsPage() {
       {/* ── Filters bar ───────────────────────────────────── */}
       <div className="mb-5 flex flex-col sm:flex-row gap-3">
         {/* Status tabs */}
-        <div className="flex gap-1 rounded-lg border border-border/40 bg-muted/20 p-0.5">
+        <div className="flex gap-1 rounded-xl border border-border bg-muted/30 p-1">
           {STATUS_TABS.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setStatusFilter(tab.key)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${
                 statusFilter === tab.key
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -213,14 +213,14 @@ export default function ProjectsPage() {
         </div>
 
         {/* Search */}
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
           <input
             type="text"
             placeholder="Search prompts..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-lg border border-border/40 bg-muted/20 py-1.5 pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-primary/40 focus:outline-none focus:ring-1 focus:ring-primary/20"
+            className="w-full rounded-xl border border-border bg-card py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground/40 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
         </div>
       </div>
@@ -267,10 +267,10 @@ export default function ProjectsPage() {
                 >
                   <Link
                     href={`/jobs/${project.id}`}
-                    className="flex items-center gap-4 rounded-xl border border-border/50 bg-card/80 px-5 py-4 pr-14 backdrop-blur-sm transition-all duration-150 hover:border-primary/30 hover:bg-card"
+                    className="flex items-center gap-4 rounded-xl border border-border bg-card px-5 py-4 pr-14 transition-all duration-150 hover:border-primary/30 hover:shadow-sm"
                   >
                     {/* Thumbnail */}
-                    <div className="flex h-12 w-20 shrink-0 items-center justify-center rounded-lg bg-muted/50 overflow-hidden">
+                    <div className="flex h-14 w-24 shrink-0 items-center justify-center rounded-lg bg-muted/40 overflow-hidden">
                       {project.output_url_final ? (
                         <video
                           src={project.output_url_final}
@@ -279,7 +279,7 @@ export default function ProjectsPage() {
                           muted
                         />
                       ) : (
-                        <Film className="h-5 w-5 text-muted-foreground/30" />
+                        <Film className="h-6 w-6 text-muted-foreground/30" />
                       )}
                     </div>
 
@@ -288,15 +288,15 @@ export default function ProjectsPage() {
                       <p className="truncate text-sm font-medium">
                         {project.prompt}
                       </p>
-                      <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
+                      <div className="mt-1.5 flex items-center gap-3 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5" />
                           {formatDate(project.created_at)}
                         </span>
                         {project.target_duration_seconds && (
                           <span>{project.target_duration_seconds}s</span>
                         )}
-                        <span className="uppercase text-[10px]">
+                        <span className="uppercase text-xs font-medium text-muted-foreground/60">
                           {project.plan}
                         </span>
                       </div>
