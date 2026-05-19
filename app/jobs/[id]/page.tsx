@@ -31,7 +31,7 @@ import { SocialExportPanel } from "@/components/job/social-export-panel";
 import { SHOW_COST_TRACKING_UI, isAdminEmail } from "@/lib/flags";
 import { useJobRealtime } from "@/lib/use-job-realtime";
 import type { Job, JobStage, JobScene } from "@/lib/types";
-import { STAGE_ORDER, getEngineDisplayName } from "@/lib/types";
+import { buildStageOrder, getEngineDisplayName } from "@/lib/types";
 import { SceneTimeline, ScenePanel } from "@/components/editor";
 
 // Reduced from 5s → 15s now that Realtime handles UI freshness.
@@ -44,16 +44,22 @@ const POLL_INTERVAL = 15_000;
 const FRIENDLY_STAGES: Record<string, string> = {
   queued: "In queue...",
   spawning_pipeline: "Preparing your pipeline...",
-  generating_scene_1: "Generating scene 1...",
-  generating_scene_2: "Generating scene 2...",
-  generating_scene_3: "Generating scene 3...",
-  generating_scene_4: "Generating scene 4...",
-  generating_scene_5: "Generating scene 5...",
   encoding: "Encoding final video...",
   uploading: "Uploading result...",
+  generating_audio: "Generating audio...",
+  muxing_audio: "Mixing audio...",
   completed: "Complete",
   failed: "Failed",
 };
+
+/** Resolve stage label — supports dynamic `generating_scene_N` patterns. */
+function getStageFriendlyLabel(stage: string | null): string {
+  if (!stage) return "Processing...";
+  if (FRIENDLY_STAGES[stage]) return FRIENDLY_STAGES[stage];
+  const match = stage.match(/^generating_scene_(\d+)$/);
+  if (match) return `Generating scene ${match[1]}...`;
+  return stage;
+}
 
 function formatTime(s: number) {
   const m = Math.floor(s / 60);
@@ -391,8 +397,7 @@ export default function JobPage() {
     setSelectedSceneIndex(-1);
   }, []);
 
-  const stageIdx = job?.current_stage ? STAGE_ORDER.indexOf(job.current_stage as JobStage) : 0;
-  const stageLabel = job?.current_stage ? (FRIENDLY_STAGES[job.current_stage] ?? "Processing...") : "In queue...";
+  // stageOrder/stageIdx/stageLabel moved below sceneCount
 
   // ── Render ──────────────────────────────────────────────────
   if (!shellReady) {
@@ -429,6 +434,9 @@ export default function JobPage() {
   const isFailed = job?.status === "failed";
   const videoUrl = job ? (job.output_url_final || job.video_url) : null;
   const sceneCount = scenes.length || (job?.storyboard ? job.storyboard.length : 1);
+  const stageOrder = buildStageOrder(sceneCount);
+  const stageIdx = job?.current_stage ? stageOrder.indexOf(job.current_stage) : 0;
+  const stageLabel = job?.current_stage ? getStageFriendlyLabel(job.current_stage) : "In queue...";
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -493,12 +501,12 @@ export default function JobPage() {
                     </p>
                     <div className="mt-6 w-full max-w-sm">
                       <div className="flex gap-1">
-                        {STAGE_ORDER.map((_, i) => (
+                        {stageOrder.map((_, i) => (
                           <div key={i} className={`h-1 flex-1 rounded-full transition-colors duration-500 ${i <= stageIdx ? "bg-primary" : "bg-muted"}`} />
                         ))}
                       </div>
                       <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
-                        <span>Step {Math.max(stageIdx + 1, 1)}/{STAGE_ORDER.length}</span>
+                        <span>Step {Math.max(stageIdx + 1, 1)}/{stageOrder.length}</span>
                         <span className="tabular-nums">{formatTime(elapsed)}</span>
                       </div>
                     </div>

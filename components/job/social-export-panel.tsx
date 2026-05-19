@@ -104,7 +104,7 @@ export function SocialExportPanel({
   const [showFormats, setShowFormats] = useState(true);
   const [showThumbnail, setShowThumbnail] = useState(false);
   const [showMetadata, setShowMetadata] = useState(true);
-  const [showPublish, setShowPublish] = useState(false);
+  const [showPublish, setShowPublish] = useState(true);
 
   // Local connection state
   const [ytConnected, setYtConnected] = useState(youtubeConnected ?? false);

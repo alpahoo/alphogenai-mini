@@ -3,7 +3,8 @@ import {
   getEngineDisplayName,
   ENGINE_DISPLAY_NAMES,
   STAGE_LABELS,
-  STAGE_ORDER,
+  getStageLabel,
+  buildStageOrder,
   PLAN_MAX_DURATION,
   PLAN_MAX_SCENES,
   PLAN_LABELS,
@@ -63,18 +64,11 @@ describe("ENGINE_DISPLAY_NAMES", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. STAGE_LABELS and STAGE_ORDER
+// 3. STAGE_LABELS, getStageLabel, buildStageOrder
 // ---------------------------------------------------------------------------
 
 describe("STAGE_LABELS", () => {
-  it("has a label for every stage in STAGE_ORDER", () => {
-    for (const stage of STAGE_ORDER) {
-      expect(STAGE_LABELS[stage]).toBeTruthy();
-      expect(typeof STAGE_LABELS[stage]).toBe("string");
-    }
-  });
-
-  it("has a label for 'failed' (not in STAGE_ORDER)", () => {
+  it("has a label for 'failed'", () => {
     expect(STAGE_LABELS.failed).toBe("Failed");
   });
 
@@ -87,22 +81,57 @@ describe("STAGE_LABELS", () => {
   });
 });
 
-describe("STAGE_ORDER", () => {
+describe("getStageLabel", () => {
+  it("resolves static stages", () => {
+    expect(getStageLabel("queued")).toBe("In queue");
+    expect(getStageLabel("encoding")).toBe("Encoding video");
+    expect(getStageLabel("completed")).toBe("Complete");
+  });
+
+  it("resolves dynamic generating_scene_N stages", () => {
+    expect(getStageLabel("generating_scene_1")).toBe("Generating scene 1");
+    expect(getStageLabel("generating_scene_12")).toBe("Generating scene 12");
+    expect(getStageLabel("generating_scene_24")).toBe("Generating scene 24");
+  });
+
+  it("returns 'Processing' for null/undefined", () => {
+    expect(getStageLabel(null)).toBe("Processing");
+    expect(getStageLabel(undefined)).toBe("Processing");
+  });
+
+  it("returns raw string for unknown stages", () => {
+    expect(getStageLabel("some_unknown_stage")).toBe("some_unknown_stage");
+  });
+});
+
+describe("buildStageOrder", () => {
   it("starts with queued", () => {
-    expect(STAGE_ORDER[0]).toBe("queued");
+    const order = buildStageOrder(1);
+    expect(order[0]).toBe("queued");
   });
 
   it("ends with completed", () => {
-    expect(STAGE_ORDER[STAGE_ORDER.length - 1]).toBe("completed");
+    const order = buildStageOrder(3);
+    expect(order[order.length - 1]).toBe("completed");
+  });
+
+  it("includes correct number of generating_scene stages", () => {
+    const order = buildStageOrder(5);
+    const sceneStages = order.filter((s) => s.startsWith("generating_scene_"));
+    expect(sceneStages).toHaveLength(5);
+    expect(sceneStages[0]).toBe("generating_scene_1");
+    expect(sceneStages[4]).toBe("generating_scene_5");
   });
 
   it("has no duplicates", () => {
-    const unique = new Set(STAGE_ORDER);
-    expect(unique.size).toBe(STAGE_ORDER.length);
+    const order = buildStageOrder(10);
+    const unique = new Set(order);
+    expect(unique.size).toBe(order.length);
   });
 
-  it("does not include failed (separate terminal state)", () => {
-    expect(STAGE_ORDER).not.toContain("failed");
+  it("does not include failed", () => {
+    const order = buildStageOrder(3);
+    expect(order).not.toContain("failed");
   });
 });
 
@@ -124,7 +153,7 @@ describe("PLAN_MAX_DURATION", () => {
 describe("PLAN_MAX_SCENES", () => {
   it("free = 1", () => expect(PLAN_MAX_SCENES.free).toBe(1));
   it("pro = 3", () => expect(PLAN_MAX_SCENES.pro).toBe(3));
-  it("premium = 10", () => expect(PLAN_MAX_SCENES.premium).toBe(10));
+  it("premium = 24", () => expect(PLAN_MAX_SCENES.premium).toBe(24));
 });
 
 describe("PLAN_LABELS", () => {

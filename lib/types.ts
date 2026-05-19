@@ -143,14 +143,10 @@ export interface ErrorResponse {
   error: string;
 }
 
-export const STAGE_LABELS: Record<JobStage, string> = {
+/** Static stage labels. For `generating_scene_N`, use `getStageLabel()`. */
+export const STAGE_LABELS: Record<string, string> = {
   queued: "In queue",
   spawning_pipeline: "Starting pipeline",
-  generating_scene_1: "Generating scene 1",
-  generating_scene_2: "Generating scene 2",
-  generating_scene_3: "Generating scene 3",
-  generating_scene_4: "Generating scene 4",
-  generating_scene_5: "Generating scene 5",
   encoding: "Encoding video",
   uploading: "Uploading",
   generating_audio: "Generating audio",
@@ -159,20 +155,43 @@ export const STAGE_LABELS: Record<JobStage, string> = {
   failed: "Failed",
 };
 
-export const STAGE_ORDER: JobStage[] = [
+/** Resolve label for any JobStage, including dynamic `generating_scene_N`. */
+export function getStageLabel(stage: string | null | undefined): string {
+  if (!stage) return "Processing";
+  if (STAGE_LABELS[stage]) return STAGE_LABELS[stage];
+  const match = stage.match(/^generating_scene_(\d+)$/);
+  if (match) return `Generating scene ${match[1]}`;
+  return stage;
+}
+
+/**
+ * Fixed stage order for progress bar. Dynamic `generating_scene_N` stages
+ * are resolved at runtime based on total scene count.
+ */
+export const STAGE_ORDER_FIXED: JobStage[] = [
   "queued",
   "spawning_pipeline",
-  "generating_scene_1",
-  "generating_scene_2",
-  "generating_scene_3",
-  "generating_scene_4",
-  "generating_scene_5",
   "encoding",
   "uploading",
   "generating_audio",
   "muxing_audio",
   "completed",
 ];
+
+/** Build full stage order including N generating_scene stages. */
+export function buildStageOrder(sceneCount: number): string[] {
+  const scenes = Array.from({ length: sceneCount }, (_, i) => `generating_scene_${i + 1}`);
+  return [
+    "queued",
+    "spawning_pipeline",
+    ...scenes,
+    "encoding",
+    "uploading",
+    "generating_audio",
+    "muxing_audio",
+    "completed",
+  ];
+}
 
 export const ENGINE_DISPLAY_NAMES: Record<string, string> = {
   wan_i2v: "Wan 2.2 I2V",
