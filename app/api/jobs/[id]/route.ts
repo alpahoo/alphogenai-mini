@@ -483,6 +483,42 @@ async function advanceEvoLinkState(
     return;
   }
 
+  // ── Step 4: partial failure — no generating, no pending, some failed ──
+  // This catches the case where the watchdog (or a scene error) marked some
+  // scenes as failed while others completed. Without this exit path the
+  // poller would heartbeat forever.
+  const hasFailed = effectiveScenes.some((s) => s.status === "failed");
+  const noneInFlight = !effectiveScenes.some(
+    (s) => s.status === "generating" || s.status === "pending"
+  );
+
+  if (hasFailed && noneInFlight) {
+    const doneCount = effectiveScenes.filter((s) => s.status === "done").length;
+    const failedCount = effectiveScenes.filter((s) => s.status === "failed").length;
+    const failedIndices = effectiveScenes
+      .filter((s) => s.status === "failed")
+      .map((s) => s.scene_index + 1)
+      .join(", ");
+
+    console.warn(
+      `[jobs/status] partial failure: ${doneCount} done, ${failedCount} failed (scenes: ${failedIndices}) — marking job failed`
+    );
+
+    await supabase
+      .from("jobs")
+      .update({
+        status: "failed",
+        current_stage: "failed",
+        error_message:
+          `${doneCount}/${effectiveScenes.length} scenes completed. ` +
+          `Scene(s) ${failedIndices} failed. Please retry.`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", jobId)
+      .eq("status", "in_progress");
+    return;
+  }
+
   // Default: nothing to do, heartbeat
   await heartbeat(supabase, jobId);
 }
@@ -581,16 +617,25 @@ async function fireNextScene(
     .eq("id", jobId);
 }
 
-/** Lightweight heartbeat so the watchdog doesn't kill an in-flight job. */
+/** Lightweight heartbeat so the watchdog doesn't kill an in-flight job.
+ *  Also bumps pending scenes' updated_at so they don't appear stale. */
 async function heartbeat(
   supabase: ReturnType<typeof createServiceClient>,
   jobId: string
 ): Promise<void> {
+  const now = new Date().toISOString();
   await supabase
     .from("jobs")
-    .update({ updated_at: new Date().toISOString() })
+    .update({ updated_at: now })
     .eq("id", jobId)
     .in("status", ["pending", "in_progress"]);
+
+  // Keep pending scenes fresh — defense in depth against any future watchdog
+  await supabase
+    .from("job_scenes")
+    .update({ updated_at: now })
+    .eq("job_id", jobId)
+    .eq("status", "pending");
 }
 
 function parseTriggeredAt(scene: SceneRow): number | null {
