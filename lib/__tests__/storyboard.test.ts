@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   generateStoryboard,
+  parseUserScenes,
   isValidPlan,
   MAX_SCENES,
 } from "../storyboard";
@@ -77,7 +78,7 @@ describe("generateStoryboard — pro plan", () => {
     expect(sb.length).toBeLessThanOrEqual(3);
   });
 
-  it("multi-scene prompts have scene markers", () => {
+  it("unstructured multi-scene prompts have scene markers", () => {
     const sb = generateStoryboard("epic battle", 15, "pro");
     if (sb.length > 1) {
       expect(sb[0].prompt).toContain("[Scene 1/");
@@ -148,7 +149,109 @@ describe("generateStoryboard — duration clamping", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 7. generateStoryboard — edge cases
+// 7. parseUserScenes — structured prompt detection
+// ---------------------------------------------------------------------------
+
+describe("parseUserScenes", () => {
+  it("returns null for unstructured prompts", () => {
+    expect(parseUserScenes("a cat jumping over a fence")).toBeNull();
+  });
+
+  it("returns null for single scene marker", () => {
+    expect(parseUserScenes("[SCENE 1] A cat jumping")).toBeNull();
+  });
+
+  it("parses two scenes", () => {
+    const result = parseUserScenes(
+      "[SCENE 1] A cat jumping\n[SCENE 2] A dog running"
+    );
+    expect(result).toHaveLength(2);
+    expect(result![0].prompt).toBe("A cat jumping");
+    expect(result![1].prompt).toBe("A dog running");
+  });
+
+  it("parses scenes with labels", () => {
+    const result = parseUserScenes(
+      "[SCENE 1 - INTRO] Dark warehouse\n[SCENE 2 - ACTION] Car chase"
+    );
+    expect(result).toHaveLength(2);
+    expect(result![0].label).toBe("SCENE 1 - INTRO");
+    expect(result![0].prompt).toBe("Dark warehouse");
+    expect(result![1].label).toBe("SCENE 2 - ACTION");
+    expect(result![1].prompt).toBe("Car chase");
+  });
+
+  it("handles multi-line scene prompts", () => {
+    const result = parseUserScenes(
+      "[SCENE 1] A dark room, tense atmosphere\ncinematic lighting, close-up\n\n[SCENE 2] Car speeding through city"
+    );
+    expect(result).toHaveLength(2);
+    expect(result![0].prompt).toContain("tense atmosphere");
+    expect(result![0].prompt).toContain("cinematic lighting");
+  });
+
+  it("is case-insensitive", () => {
+    const result = parseUserScenes(
+      "[scene 1] First\n[Scene 2] Second\n[SCENE 3] Third"
+    );
+    expect(result).toHaveLength(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. generateStoryboard — structured scene prompts
+// ---------------------------------------------------------------------------
+
+describe("generateStoryboard — structured scenes", () => {
+  const structuredPrompt = [
+    "[SCENE 1 - PREPARATION] Inside a dark warehouse, thieves preparing equipment",
+    "[SCENE 2 - THE PLAN] Close-up of nervous faces, tactical discussion",
+    "[SCENE 3 - ARRIVAL] Black van stopping near a building at night",
+    "[SCENE 4 - INFILTRATION] Two figures entering through a service entrance",
+  ].join("\n\n");
+
+  it("splits structured prompt into individual scenes (premium)", () => {
+    const sb = generateStoryboard(structuredPrompt, 60, "premium");
+    expect(sb).toHaveLength(4);
+    expect(sb[0].prompt).toContain("warehouse");
+    expect(sb[0].prompt).not.toContain("[SCENE");
+    expect(sb[1].prompt).toContain("nervous faces");
+    expect(sb[2].prompt).toContain("van stopping");
+    expect(sb[3].prompt).toContain("service entrance");
+  });
+
+  it("each scene has a distinct prompt", () => {
+    const sb = generateStoryboard(structuredPrompt, 60, "premium");
+    const prompts = sb.map((s) => s.prompt);
+    const unique = new Set(prompts);
+    expect(unique.size).toBe(sb.length);
+  });
+
+  it("caps scenes to plan limit (pro = 3)", () => {
+    const sb = generateStoryboard(structuredPrompt, 15, "pro");
+    expect(sb.length).toBeLessThanOrEqual(3);
+  });
+
+  it("distributes duration evenly across user scenes", () => {
+    const sb = generateStoryboard(structuredPrompt, 20, "premium");
+    expect(sb).toHaveLength(4);
+    expect(sb[0].duration_sec).toBe(5); // 20s / 4 scenes = 5s each
+  });
+
+  it("free plan ignores structured scenes (always 1 scene)", () => {
+    const sb = generateStoryboard(structuredPrompt, 5, "free");
+    expect(sb).toHaveLength(1);
+  });
+
+  it("unstructured prompt still uses duration-based splitting", () => {
+    const sb = generateStoryboard("epic battle scene", 15, "pro");
+    expect(sb.length).toBeGreaterThan(1);
+    expect(sb[0].prompt).toContain("[Scene 1/");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. generateStoryboard — edge cases
 // ---------------------------------------------------------------------------
 
 describe("generateStoryboard — edge cases", () => {

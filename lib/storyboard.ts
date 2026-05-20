@@ -1,12 +1,13 @@
 /**
  * Storyboard generator — splits a prompt into N cinematic scenes.
  *
- * Two steps:
- *  1. generateStoryboard() — deterministic structure (duration, scene count, engine)
- *  2. enrichStoryboardWithLLM() — replaces template prompts with distinct
- *     cinematographer-crafted scene descriptions via EvoLink LLM (DeepSeek)
+ * Three paths:
+ *  A. User provides structured [SCENE N] markers → parseUserScenes() extracts
+ *     individual prompts, one per scene. Scene count = user scene count.
+ *  B. Unstructured prompt → generateStoryboard() creates N template entries,
+ *     then enrichStoryboardWithLLM() replaces them with distinct prompts.
+ *  C. Single-scene job → enhanced prompt used directly, no splitting needed.
  *
- * Single-scene jobs skip LLM (enhanced prompt already handles it).
  * Falls back silently to template prompts if LLM unavailable.
  */
 import { type JobPlan, type EngineKey, PLAN_MAX_DURATION } from "./types";
@@ -38,9 +39,50 @@ export function isValidPlan(value: unknown): value is JobPlan {
   return typeof value === "string" && VALID_PLANS.has(value);
 }
 
+// ---------------------------------------------------------------------------
+// Structured prompt parser — detects [SCENE N] markers
+// ---------------------------------------------------------------------------
+
+/**
+ * Regex to detect scene markers in user prompts.
+ * Matches: [SCENE 1], [SCENE 2 - LABEL], [SCENE 03], [Scene 1/12], etc.
+ */
+const SCENE_MARKER_RE = /\[SCENE\s*\d+[^\]]*\]/gi;
+
+interface ParsedScene {
+  label: string;   // e.g. "SCENE 1 - PREPARATION"
+  prompt: string;  // the text content for this scene
+}
+
+/**
+ * Parse a user prompt that contains [SCENE N] markers into individual scenes.
+ * Returns null if the prompt doesn't contain structured scene markers (< 2 found).
+ */
+export function parseUserScenes(prompt: string): ParsedScene[] | null {
+  const markers = [...prompt.matchAll(SCENE_MARKER_RE)];
+  if (markers.length < 2) return null;
+
+  const scenes: ParsedScene[] = [];
+
+  for (let i = 0; i < markers.length; i++) {
+    const marker = markers[i];
+    const label = marker[0].replace(/^\[|\]$/g, "").trim();
+    const startIdx = marker.index! + marker[0].length;
+    const endIdx = i < markers.length - 1 ? markers[i + 1].index! : prompt.length;
+    const text = prompt.slice(startIdx, endIdx).trim();
+
+    if (text.length > 0) {
+      scenes.push({ label, prompt: text });
+    }
+  }
+
+  return scenes.length >= 2 ? scenes : null;
+}
+
 /**
  * Generate a storyboard (array of scene entries) from a user prompt.
  *
+ * - If the prompt contains [SCENE N] markers, each scene gets its own prompt
  * - Single scene for free plan (5s max)
  * - Multiple scenes for pro/premium, each `clipDuration` seconds
  * - Hard-capped to MAX_SCENES[plan] regardless of duration math
@@ -58,8 +100,30 @@ export function generateStoryboard(
   // Clamp clip duration
   const clipDur = Math.max(MIN_CLIP_DURATION, Math.min(clipDuration, MAX_CLIP_DURATION));
 
-  // Calculate number of scenes, then hard-cap to plan limit
   const maxScenes = MAX_SCENES[plan] ?? 1;
+
+  // ── Path A: user-provided structured scenes ───────────────────────────
+  const userScenes = plan !== "free" ? parseUserScenes(prompt) : null;
+
+  if (userScenes) {
+    // User wrote N distinct scenes — use their scene count (capped to plan)
+    const capped = userScenes.slice(0, maxScenes);
+    const numScenes = capped.length;
+    // Distribute total duration evenly across user scenes
+    const perScene = Math.round((td / numScenes) * 10) / 10;
+    const sceneDur = Math.max(MIN_CLIP_DURATION, Math.min(perScene, MAX_CLIP_DURATION));
+
+    console.log(`[storyboard] Parsed ${userScenes.length} user scenes (capped to ${numScenes})`);
+
+    return capped.map((s, i) => ({
+      scene_index: i,
+      prompt: s.prompt.slice(0, 1000),
+      engine: DEFAULT_ENGINE,
+      duration_sec: sceneDur,
+    }));
+  }
+
+  // ── Path B/C: unstructured prompt — duration-based scene count ─────────
   let numScenes = Math.min(
     Math.max(1, Math.ceil(td / clipDur)),
     maxScenes
@@ -128,7 +192,8 @@ Rules:
 
 /**
  * Enrich a storyboard's scene prompts using EvoLink LLM.
- * Only applies to multi-scene storyboards (≥ 2 scenes).
+ * Only applies to multi-scene storyboards (≥ 2 scenes) with unstructured prompts.
+ * Skips enrichment if scenes already have distinct prompts (user-parsed scenes).
  * Falls back silently to template prompts on any error.
  */
 export async function enrichStoryboardWithLLM(
@@ -137,6 +202,15 @@ export async function enrichStoryboardWithLLM(
 ): Promise<StoryboardEntry[]> {
   // Single scene: enhanced prompt is already good, no need for LLM
   if (entries.length <= 1) return entries;
+
+  // If scenes already have distinct prompts (user-parsed structured scenes),
+  // skip LLM — the user wrote specific prompts for each scene
+  const firstPrompt = entries[0]?.prompt ?? "";
+  const allSame = entries.every((e) => e.prompt === firstPrompt);
+  if (!allSame) {
+    console.log(`[storyboard-llm] Skipping LLM — ${entries.length} scenes already have distinct prompts`);
+    return entries;
+  }
 
   // Skip if no API key configured
   if (!process.env.EVOLINK_API_KEY) return entries;

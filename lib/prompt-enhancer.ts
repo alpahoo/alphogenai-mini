@@ -44,6 +44,11 @@ export async function enhancePrompt(userPrompt: string): Promise<string> {
     return userPrompt;
   }
 
+  // Skip enhancement for structured multi-scene prompts — preserve scene markers
+  if (/\[SCENE\s*\d+/i.test(userPrompt)) {
+    return userPrompt;
+  }
+
   // Skip if no API key configured
   if (!process.env.EVOLINK_API_KEY) {
     return userPrompt;
