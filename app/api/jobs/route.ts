@@ -71,6 +71,9 @@ export async function POST(req: Request) {
       references,
       multi_scene_chain,
       scenes: clientScenes,
+      audio_mode,
+      audio_prompt,
+      voiceover_text,
     } = body as {
       prompt: string;
       target_duration_seconds?: unknown;
@@ -80,6 +83,12 @@ export async function POST(req: Request) {
       multi_scene_chain?: boolean;
       /** Optional pre-edited scenes from the editor (Phase C). Skips server-side storyboard generation. */
       scenes?: Array<{ prompt: string; engine?: string; duration_sec: number }>;
+      /** Audio generation mode: "none" | "auto" | "custom" */
+      audio_mode?: string;
+      /** Custom audio description (when audio_mode = "custom") */
+      audio_prompt?: string;
+      /** Voice-over narration text (TTS) */
+      voiceover_text?: string;
     };
 
     // Default ON. Only set OFF if explicitly false (the user toggled it off
@@ -257,6 +266,16 @@ export async function POST(req: Request) {
         ...(safeImageUrl ? { image_url: safeImageUrl } : {}),
         ...(safeReferences ? { references_payload: safeReferences } : {}),
         ...(user?.id ? { user_id: user.id } : {}),
+        // Audio settings
+        ...(audio_mode && ["none", "auto", "custom"].includes(audio_mode)
+          ? { audio_mode }
+          : { audio_mode: "auto" }),
+        ...(audio_prompt && typeof audio_prompt === "string"
+          ? { audio_prompt: audio_prompt.slice(0, 500) }
+          : {}),
+        ...(voiceover_text && typeof voiceover_text === "string"
+          ? { voiceover_text: voiceover_text.slice(0, 2000) }
+          : {}),
       })
       .select()
       .single();

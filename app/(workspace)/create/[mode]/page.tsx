@@ -16,6 +16,8 @@ import {
   Square,
   Type,
   Music,
+  Mic,
+  Volume2,
   Cpu,
   Film,
   Crown,
@@ -144,6 +146,12 @@ export default function CreateModePage({
   const [error, setError] = useState<string | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Audio options
+  const [audioMode, setAudioMode] = useState<"none" | "auto" | "custom">("auto");
+  const [audioPrompt, setAudioPrompt] = useState("");
+  const [voiceoverEnabled, setVoiceoverEnabled] = useState(false);
+  const [voiceoverText, setVoiceoverText] = useState("");
 
   // Dynamic engine list (fetched from /api/engines, fallback to hardcoded)
   const [engineOptions, setEngineOptions] = useState<EngineOption[]>(FALLBACK_ENGINES);
@@ -291,6 +299,9 @@ export default function CreateModePage({
           ...(uploadedImageUrl && { image_url: uploadedImageUrl }),
           ...(Object.keys(references).length > 0 && { references: buildReferencePayload(references) }),
           ...(selectedEngine !== "auto" && { preferred_engine: selectedEngine }),
+          audio_mode: audioMode,
+          ...(audioMode === "custom" && audioPrompt.trim() && { audio_prompt: audioPrompt.trim() }),
+          ...(voiceoverEnabled && voiceoverText.trim() && { voiceover_text: voiceoverText.trim() }),
           // Only send when explicitly disabled — backend defaults to ON
           ...(multiSceneChain === false && { multi_scene_chain: false }),
         }),
@@ -604,19 +615,85 @@ export default function CreateModePage({
                     </div>
                   </ComingSoonSection>
 
-                  <ComingSoonSection label="Background music">
-                    <div className="flex gap-2">
-                      {["None", "Auto"].map((v) => (
-                        <div
-                          key={v}
-                          className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-muted/20 px-3 py-1.5 text-xs"
+                  {/* Background music / audio */}
+                  <div>
+                    <p className="text-sm font-semibold text-foreground mb-2.5 flex items-center gap-2">
+                      <Volume2 className="h-4 w-4 text-emerald-500" />
+                      Background Audio
+                    </p>
+                    <div className="flex gap-2 mb-2">
+                      {(
+                        [
+                          { value: "none" as const, label: "None", desc: "No background audio" },
+                          { value: "auto" as const, label: "Auto", desc: "AI-generated ambience matching your video" },
+                          { value: "custom" as const, label: "Custom", desc: "Describe the audio you want" },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setAudioMode(opt.value)}
+                          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
+                            audioMode === opt.value
+                              ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400"
+                              : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground cursor-pointer"
+                          }`}
+                          title={opt.desc}
                         >
-                          <Music className="h-4 w-4" />
-                          {v}
-                        </div>
+                          <Music className="h-3.5 w-3.5" />
+                          {opt.label}
+                        </button>
                       ))}
                     </div>
-                  </ComingSoonSection>
+                    {audioMode === "custom" && (
+                      <input
+                        type="text"
+                        value={audioPrompt}
+                        onChange={(e) => setAudioPrompt(e.target.value)}
+                        placeholder="e.g. calm piano music, epic orchestral, nature sounds..."
+                        maxLength={200}
+                        className="w-full rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 mt-1"
+                      />
+                    )}
+                  </div>
+
+                  {/* Voice-over */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2.5">
+                      <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Mic className="h-4 w-4 text-sky-500" />
+                        Voice-over
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setVoiceoverEnabled(!voiceoverEnabled)}
+                        className={`relative h-5 w-9 rounded-full transition-colors ${
+                          voiceoverEnabled ? "bg-sky-500" : "bg-muted-foreground/30"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                            voiceoverEnabled ? "translate-x-4" : ""
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    {voiceoverEnabled && (
+                      <textarea
+                        value={voiceoverText}
+                        onChange={(e) => setVoiceoverText(e.target.value)}
+                        placeholder="Enter the narration text for your video... (AI will generate the voice)"
+                        rows={3}
+                        maxLength={2000}
+                        className="w-full rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30 resize-none"
+                      />
+                    )}
+                    {!voiceoverEnabled && (
+                      <p className="text-[11px] text-muted-foreground/50">
+                        Add AI-generated narration to your video. Requires Pro plan.
+                      </p>
+                    )}
+                  </div>
 
                   <div>
                     <p className="text-sm font-semibold text-foreground mb-2.5 flex items-center gap-2">

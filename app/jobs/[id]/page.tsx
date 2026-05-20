@@ -22,6 +22,7 @@ import {
   RotateCcw,
   CopyPlus,
   Share2,
+  Volume2,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -746,6 +747,10 @@ function InfoCards({
           <div className="flex justify-between"><span className="text-muted-foreground">Video duration</span><span className="font-medium">{job.target_duration_seconds}s</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Scenes</span><span className="font-medium">{sceneCount}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Plan</span><span className="font-medium capitalize">{job.plan}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Audio</span><span className="font-medium capitalize">{job.audio_mode || "auto"}</span></div>
+          {job.voiceover_text && (
+            <div className="flex justify-between"><span className="text-muted-foreground">Voice-over</span><span className="font-medium text-sky-400">Enabled</span></div>
+          )}
           <div className="flex justify-between"><span className="text-muted-foreground">Created</span><span className="font-medium text-[10px]">{formatDate(job.created_at)}</span></div>
         </div>
         {/* Admin-only cost tracking */}
@@ -753,6 +758,27 @@ function InfoCards({
           <JobCostBadge engine={job.engine_used} cost={job.estimated_cost_usd} />
         )}
       </div>
+
+      {/* Audio player (when separate audio track exists) */}
+      {isDone && job.audio_url && (
+        <div className="rounded-xl border border-border/40 bg-card/60 p-4">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+            <Volume2 className="h-3 w-3" />
+            Audio Track
+          </h3>
+          <audio controls className="w-full h-8" src={job.audio_url}>
+            Your browser does not support audio playback.
+          </audio>
+          {job.voiceover_url && (
+            <div className="mt-2">
+              <p className="text-[10px] text-muted-foreground mb-1">Voice-over</p>
+              <audio controls className="w-full h-8" src={job.voiceover_url}>
+                Your browser does not support audio playback.
+              </audio>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Upgrade */}
       {job.plan === "free" && (

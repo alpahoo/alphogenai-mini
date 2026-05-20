@@ -25,6 +25,10 @@ export interface Job {
   current_stage: JobStage | null;
   video_url: string | null;
   audio_url: string | null;
+  audio_mode: string | null;
+  audio_prompt: string | null;
+  voiceover_text: string | null;
+  voiceover_url: string | null;
   output_url_final: string | null;
   error_message: string | null;
   storyboard: StoryboardScene[] | null;
