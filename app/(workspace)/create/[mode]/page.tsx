@@ -29,7 +29,6 @@ import {
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { SegmentedControl } from "@/components/create/segmented-control";
-import { ComingSoonSection } from "@/components/create/coming-soon-section";
 import { TemplatePicker } from "@/components/create/template-picker";
 import { ReferenceUpload, buildReferencePayload } from "@/components/create/reference-upload";
 import type { PromptTemplate } from "@/lib/prompt-templates";
@@ -146,6 +145,10 @@ export default function CreateModePage({
   const [error, setError] = useState<string | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Format & captions
+  const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16" | "1:1">("16:9");
+  const [captionMode, setCaptionMode] = useState<"none" | "auto">("none");
 
   // Audio options
   const [audioMode, setAudioMode] = useState<"none" | "auto" | "custom">("auto");
@@ -302,6 +305,8 @@ export default function CreateModePage({
           audio_mode: audioMode,
           ...(audioMode === "custom" && audioPrompt.trim() && { audio_prompt: audioPrompt.trim() }),
           ...(voiceoverEnabled && voiceoverText.trim() && { voiceover_text: voiceoverText.trim() }),
+          aspect_ratio: aspectRatio,
+          caption_mode: captionMode,
           // Only send when explicitly disabled — backend defaults to ON
           ...(multiSceneChain === false && { multi_scene_chain: false }),
         }),
@@ -583,37 +588,78 @@ export default function CreateModePage({
 
               {showAdvanced && (
                 <div className="border-t border-border/40 px-5 py-5 space-y-5">
-                  <ComingSoonSection label="Format">
+                  {/* Format (aspect ratio) */}
+                  <div>
+                    <p className="text-sm font-semibold text-foreground mb-2.5 flex items-center gap-2">
+                      <Monitor className="h-4 w-4 text-blue-500" />
+                      Format
+                    </p>
                     <div className="flex gap-2">
-                      {[
-                        { icon: Monitor, label: "Landscape" },
-                        { icon: Smartphone, label: "Portrait" },
-                        { icon: Square, label: "Square" },
-                      ].map((f) => (
-                        <div
-                          key={f.label}
-                          className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-muted/20 px-3 py-1.5 text-xs"
+                      {(
+                        [
+                          { value: "16:9" as const, icon: Monitor, label: "Landscape", desc: "16:9 — YouTube, desktop" },
+                          { value: "9:16" as const, icon: Smartphone, label: "Portrait", desc: "9:16 — TikTok, Reels, Shorts" },
+                          { value: "1:1" as const, icon: Square, label: "Square", desc: "1:1 — Instagram, feed" },
+                        ] as const
+                      ).map((f) => (
+                        <button
+                          key={f.value}
+                          type="button"
+                          onClick={() => setAspectRatio(f.value)}
+                          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
+                            aspectRatio === f.value
+                              ? "border-blue-500/50 bg-blue-500/10 text-blue-400"
+                              : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground cursor-pointer"
+                          }`}
+                          title={f.desc}
                         >
                           <f.icon className="h-4 w-4" />
                           {f.label}
-                        </div>
+                        </button>
                       ))}
                     </div>
-                  </ComingSoonSection>
+                    <p className="text-[11px] text-muted-foreground/50 mt-1.5">
+                      {aspectRatio === "16:9" && "Best for YouTube and desktop viewing."}
+                      {aspectRatio === "9:16" && "Optimized for TikTok, Instagram Reels and YouTube Shorts."}
+                      {aspectRatio === "1:1" && "Ideal for Instagram feed posts and social media ads."}
+                    </p>
+                  </div>
 
-                  <ComingSoonSection label="Captions">
+                  {/* Captions */}
+                  <div>
+                    <p className="text-sm font-semibold text-foreground mb-2.5 flex items-center gap-2">
+                      <Type className="h-4 w-4 text-orange-500" />
+                      Captions
+                    </p>
                     <div className="flex gap-2">
-                      {["None", "Auto"].map((v) => (
-                        <div
-                          key={v}
-                          className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-muted/20 px-3 py-1.5 text-xs"
+                      {(
+                        [
+                          { value: "none" as const, label: "None", desc: "No captions" },
+                          { value: "auto" as const, label: "Auto", desc: "AI-generated subtitles from audio or prompt" },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setCaptionMode(opt.value)}
+                          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
+                            captionMode === opt.value
+                              ? "border-orange-500/50 bg-orange-500/10 text-orange-400"
+                              : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground cursor-pointer"
+                          }`}
+                          title={opt.desc}
                         >
-                          <Type className="h-4 w-4" />
-                          {v}
-                        </div>
+                          <Type className="h-3.5 w-3.5" />
+                          {opt.label}
+                        </button>
                       ))}
                     </div>
-                  </ComingSoonSection>
+                    {captionMode === "auto" && (
+                      <p className="text-[11px] text-muted-foreground/50 mt-1.5">
+                        Subtitles will be burned into the video based on your voiceover or prompt text.
+                      </p>
+                    )}
+                  </div>
 
                   {/* Background music / audio */}
                   <div>
@@ -904,7 +950,16 @@ export default function CreateModePage({
               </div>
               <div className="flex justify-between items-center">
                 <span className="flex items-center gap-2">
-                  <Film className="h-4 w-4 text-blue-500" />
+                  <Monitor className="h-4 w-4 text-blue-500" />
+                  Format
+                </span>
+                <span className="font-semibold text-foreground">
+                  {aspectRatio === "16:9" ? "Landscape" : aspectRatio === "9:16" ? "Portrait" : "Square"} ({aspectRatio})
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-2">
+                  <Film className="h-4 w-4 text-violet-500" />
                   Scenes
                 </span>
                 <span className="font-semibold text-foreground">

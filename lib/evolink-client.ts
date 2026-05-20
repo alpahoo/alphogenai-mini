@@ -219,6 +219,8 @@ export interface CreateTaskParams {
   prompt: string;
   duration: number;
   imageUrl?: string;
+  /** Video aspect ratio: "16:9" | "9:16" | "1:1" */
+  aspectRatio?: string;
   /**
    * V1 Multi-Reference: structured reference payload (images only — videos
    * and audio are out of scope for V1 since the private bucket is image-only).
@@ -325,7 +327,7 @@ export async function createEvoLinkTask(params: CreateTaskParams): Promise<strin
     prompt: params.prompt,
     duration: clampedDuration,
     quality: config.quality ?? "720p",
-    aspect_ratio: "16:9",
+    aspect_ratio: params.aspectRatio ?? "16:9",
     generate_audio: true,
     model_params: { web_search: false },
   };

@@ -29,6 +29,9 @@ export interface Job {
   audio_prompt: string | null;
   voiceover_text: string | null;
   voiceover_url: string | null;
+  aspect_ratio: string | null;
+  caption_mode: string | null;
+  caption_style: string | null;
   output_url_final: string | null;
   error_message: string | null;
   storyboard: StoryboardScene[] | null;

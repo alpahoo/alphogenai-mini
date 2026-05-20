@@ -479,6 +479,7 @@ async function fireNextScene(
       prompt,
       duration,
       imageUrl: firstFrameUrl,
+      aspectRatio: (job.aspect_ratio as string) ?? "16:9",
       references: jobReferences,
     });
   } catch (e) {

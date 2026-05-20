@@ -126,7 +126,7 @@ export async function POST(req: Request, { params }: RouteParams) {
   // Verify ownership + get job details
   const { data: job } = await supabase
     .from("jobs")
-    .select("id, user_id, status, engine_used, references_payload, multi_scene_chain")
+    .select("id, user_id, status, engine_used, references_payload, multi_scene_chain, aspect_ratio")
     .eq("id", id)
     .single();
 
@@ -190,6 +190,7 @@ export async function POST(req: Request, { params }: RouteParams) {
         prompt,
         duration,
         imageUrl: firstFrameUrl,
+        aspectRatio: (job.aspect_ratio as string) ?? "16:9",
         references: job.references_payload as Parameters<typeof createEvoLinkTask>[0]["references"],
       });
     } else {

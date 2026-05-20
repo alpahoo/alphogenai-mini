@@ -74,6 +74,9 @@ export async function POST(req: Request) {
       audio_mode,
       audio_prompt,
       voiceover_text,
+      aspect_ratio,
+      caption_mode,
+      caption_style,
     } = body as {
       prompt: string;
       target_duration_seconds?: unknown;
@@ -89,6 +92,12 @@ export async function POST(req: Request) {
       audio_prompt?: string;
       /** Voice-over narration text (TTS) */
       voiceover_text?: string;
+      /** Video aspect ratio: "16:9" | "9:16" | "1:1" */
+      aspect_ratio?: string;
+      /** Caption mode: "none" | "auto" */
+      caption_mode?: string;
+      /** Caption style when caption_mode = "custom" */
+      caption_style?: string;
     };
 
     // Default ON. Only set OFF if explicitly false (the user toggled it off
@@ -276,6 +285,16 @@ export async function POST(req: Request) {
         ...(voiceover_text && typeof voiceover_text === "string"
           ? { voiceover_text: voiceover_text.slice(0, 2000) }
           : {}),
+        // Format & captions
+        ...(aspect_ratio && ["16:9", "9:16", "1:1"].includes(aspect_ratio)
+          ? { aspect_ratio }
+          : { aspect_ratio: "16:9" }),
+        ...(caption_mode && ["none", "auto", "custom"].includes(caption_mode)
+          ? { caption_mode }
+          : { caption_mode: "none" }),
+        ...(caption_style && typeof caption_style === "string"
+          ? { caption_style: caption_style.slice(0, 100) }
+          : {}),
       })
       .select()
       .single();
@@ -386,11 +405,18 @@ export async function POST(req: Request) {
       const scene0Duration = Math.round(storyboard[0]?.duration_sec ?? safeDuration);
 
       try {
+        // Resolve safe aspect ratio for EvoLink
+        const safeAspectRatio =
+          aspect_ratio && ["16:9", "9:16", "1:1"].includes(aspect_ratio)
+            ? aspect_ratio
+            : "16:9";
+
         const taskId = await createEvoLinkTask({
           engineKey,
           prompt: scene0Prompt,
           duration: scene0Duration,
           imageUrl: scene0FirstFrame,
+          aspectRatio: safeAspectRatio,
           // V1 Multi-Reference: forward image refs to EvoLink. The same
           // payload is also persisted on `jobs.references_payload`, so the
           // GET poller (`fireNextScene`) can re-use it for scenes 1..N —

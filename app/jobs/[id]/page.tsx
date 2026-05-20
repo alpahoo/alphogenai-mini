@@ -746,6 +746,8 @@ function InfoCards({
           <div className="flex justify-between"><span className="text-muted-foreground">Model</span><span className="font-medium">{getEngineDisplayName(job.engine_used)}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Video duration</span><span className="font-medium">{job.target_duration_seconds}s</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Scenes</span><span className="font-medium">{sceneCount}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Format</span><span className="font-medium">{job.aspect_ratio || "16:9"}</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Captions</span><span className="font-medium capitalize">{job.caption_mode || "none"}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Plan</span><span className="font-medium capitalize">{job.plan}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Audio</span><span className="font-medium capitalize">{job.audio_mode || "auto"}</span></div>
           {job.voiceover_text && (
