@@ -134,6 +134,7 @@ export default function JobPage() {
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [retrying, setRetrying] = useState(false);
+  const [retryingScenes, setRetryingScenes] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
   const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
@@ -384,6 +385,26 @@ export default function JobPage() {
     setDuplicating(false);
   };
 
+  const handleRetryScenes = async () => {
+    if (retryingScenes || !params.id) return;
+    setRetryingScenes(true);
+    try {
+      const res = await fetch(`/api/jobs/${params.id}/retry-scenes`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        // Reset local state — the poller will pick up the new status
+        setJob((prev) => prev ? { ...prev, status: "in_progress", error_message: null } as Job : prev);
+        setScenes((prev) => prev.map((s) =>
+          s.status === "failed" ? { ...s, status: "pending", error_message: null } : s
+        ));
+        fetchJob();
+      } else {
+        setError(data.error || "Retry failed");
+      }
+    } catch { setError("Retry failed"); }
+    setRetryingScenes(false);
+  };
+
   // ── Seek video to scene start ──────────────────────────────
   const handleSceneSelect = useCallback(
     (index: number) => {
@@ -458,6 +479,9 @@ export default function JobPage() {
   const isFailed = job?.status === "failed";
   const videoUrl = job ? (job.output_url_final || job.video_url) : null;
   const sceneCount = scenes.length || (job?.storyboard ? job.storyboard.length : 1);
+  const failedScenes = scenes.filter((s) => s.status === "failed");
+  const doneScenes = scenes.filter((s) => s.status === "done");
+  const hasRetryableScenes = failedScenes.length > 0 && doneScenes.length > 0;
   const stageOrder = buildStageOrder(sceneCount);
   const stageIdx = job?.current_stage ? stageOrder.indexOf(job.current_stage) : 0;
   const stageLabel = job?.current_stage ? getStageFriendlyLabel(job.current_stage) : "In queue...";
@@ -528,6 +552,12 @@ export default function JobPage() {
                           ? `Generating ${sceneCount} scenes — estimated ${sceneCount * 4}–${sceneCount * 6} minutes.`
                           : `Generating ${sceneCount} scenes — this may take ${Math.round(sceneCount * 4 / 60 * 10) / 10}–${Math.round(sceneCount * 6 / 60 * 10) / 10} hours. You can close this page and check back later.`}
                     </p>
+                    {/* Scene progress: X/Y done */}
+                    {scenes.length > 1 && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {doneScenes.length}/{scenes.length} scenes completed
+                      </p>
+                    )}
                     <div className="mt-6 w-full max-w-sm">
                       <div className="flex gap-1">
                         {stageOrder.map((_, i) => (
@@ -543,6 +573,35 @@ export default function JobPage() {
                 </div>
               )}
 
+              {/* ── SCENE FAILURE ALERT (during generation) ───── */}
+              {isActive && failedScenes.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-5 py-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-400">
+                        {failedScenes.length} scene{failedScenes.length > 1 ? "s" : ""} failed
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Scene{failedScenes.length > 1 ? "s" : ""}{" "}
+                        {failedScenes.map((s) => s.scene_index + 1).join(", ")}{" "}
+                        encountered an error. The remaining scenes will continue generating.
+                        Once the job finishes, you&apos;ll be able to retry only the failed scenes.
+                      </p>
+                      {failedScenes[0]?.error_message && (
+                        <p className="mt-1.5 text-[11px] font-mono text-amber-400/60">
+                          {failedScenes[0].error_message.slice(0, 120)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
               {/* ── FAILED ──────────────────────────────────── */}
               {isFailed && (
                 <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-8">
@@ -554,8 +613,29 @@ export default function JobPage() {
                     <p className="text-sm text-muted-foreground max-w-md">
                       {friendlyError(job?.error_message)}
                     </p>
+                    {/* Partial success notice + retry failed scenes */}
+                    {hasRetryableScenes && (
+                      <div className="mt-3 w-full max-w-md rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+                        <p className="text-sm font-medium text-amber-400 mb-1">
+                          {doneScenes.length}/{scenes.length} scenes completed successfully
+                        </p>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          Scene{failedScenes.length > 1 ? "s" : ""}{" "}
+                          {failedScenes.map((s) => s.scene_index + 1).join(", ")} failed.
+                          You can retry just the failed scenes — completed scenes are preserved.
+                        </p>
+                        <button
+                          onClick={handleRetryScenes}
+                          disabled={retryingScenes}
+                          className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-black hover:bg-amber-400 disabled:opacity-50"
+                        >
+                          {retryingScenes ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                          {retryingScenes ? "Retrying..." : `Retry ${failedScenes.length} failed scene${failedScenes.length > 1 ? "s" : ""}`}
+                        </button>
+                      </div>
+                    )}
                     {/* Raw error detail — useful for debugging */}
-                    {job?.error_message && (
+                    {job?.error_message && !hasRetryableScenes && (
                       <p className="mt-2 max-w-md rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 font-mono text-[11px] text-destructive/70 text-left break-all">
                         {job.error_message.length > 200
                           ? job.error_message.slice(0, 200) + "…"
@@ -569,7 +649,7 @@ export default function JobPage() {
                         className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-50"
                       >
                         {retrying ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-                        {retrying ? "Retrying..." : "Retry"}
+                        {retrying ? "Retrying..." : hasRetryableScenes ? "Restart entire job" : "Retry"}
                       </button>
                       <Link href="/create" className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted">
                         <Wand2 className="h-4 w-4" /> New prompt
