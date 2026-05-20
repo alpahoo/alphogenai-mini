@@ -9,6 +9,8 @@ import {
 } from "@/lib/evolink-client";
 import { isBailianEngine, getBailianTask } from "@/lib/bailian-client";
 import { triggerExtractLastFrame, triggerConcatScenes } from "@/lib/modal-client";
+import { generateVoiceover, isTTSAvailable } from "@/lib/tts";
+import { uploadBufferToR2 } from "@/lib/r2";
 
 // Give this route enough time to poll EvoLink, fire the next scene, and
 // trigger Modal helpers. No large file work happens here — only HTTP.
@@ -127,6 +129,49 @@ export async function GET(
             advErr instanceof Error ? advErr.message : advErr
           );
         }
+      }
+    }
+
+    // ── Voice-over generation (post-video, one-shot) ────────────────────
+    // After video is finalized, generate TTS if requested. Runs exactly
+    // once: guarded by `!job.voiceover_url`. Fast (2-5s API call).
+    const hasVideo = !!(job.video_url || job.output_url_final);
+    const needsVoiceover =
+      hasVideo &&
+      job.voiceover_text &&
+      typeof job.voiceover_text === "string" &&
+      job.voiceover_text.length > 2 &&
+      !job.voiceover_url;
+
+    if (needsVoiceover && isTTSAvailable()) {
+      try {
+        console.log(`[jobs/audio] Generating voice-over for job=${id}`);
+        const ttsResult = await generateVoiceover({
+          text: job.voiceover_text as string,
+          format: "mp3",
+        });
+        const audioKey = `audio/voiceover/${id}.mp3`;
+        const voiceoverUrl = await uploadBufferToR2(
+          Buffer.from(ttsResult.audio),
+          audioKey,
+          "audio/mpeg"
+        );
+        await supabase
+          .from("jobs")
+          .update({
+            voiceover_url: voiceoverUrl,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", id);
+        console.log(
+          `[jobs/audio] Voice-over ready: ${voiceoverUrl.slice(0, 60)}... ` +
+          `(${ttsResult.provider}, ~${ttsResult.duration_estimate}s)`
+        );
+      } catch (e) {
+        console.warn(
+          `[jobs/audio] TTS generation failed (non-fatal):`,
+          e instanceof Error ? e.message : e
+        );
       }
     }
 
@@ -643,6 +688,8 @@ function formatJob(job: Record<string, unknown>) {
     current_stage: job.current_stage,
     video_url: job.video_url,
     audio_url: job.audio_url,
+    voiceover_url: job.voiceover_url ?? null,
+    audio_mode: job.audio_mode ?? null,
     output_url_final: job.output_url_final,
     error_message: job.error_message,
     storyboard: job.storyboard ?? null,
@@ -651,6 +698,8 @@ function formatJob(job: Record<string, unknown>) {
     estimated_cost_usd: job.estimated_cost_usd ?? null,
     multi_scene_chain: job.multi_scene_chain ?? true,
     social_exports: job.social_exports ?? null,
+    aspect_ratio: job.aspect_ratio ?? null,
+    caption_mode: job.caption_mode ?? null,
     created_at: job.created_at,
     updated_at: job.updated_at,
   };

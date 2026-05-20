@@ -137,7 +137,9 @@ export default function JobPage() {
   const [duplicating, setDuplicating] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
   const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
+  const [voiceoverEnabled, setVoiceoverEnabled] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const voiceoverRef = useRef<HTMLAudioElement>(null);
 
   // Social connections — declared before any conditional returns (Rules of Hooks)
   const [youtubeConnected, setYoutubeConnected] = useState(false);
@@ -327,6 +329,27 @@ export default function JobPage() {
     video.addEventListener("timeupdate", onTimeUpdate);
     return () => video.removeEventListener("timeupdate", onTimeUpdate);
   }, [scenes]);
+
+  // ── Sync voice-over audio with video playback ─────────────
+  useEffect(() => {
+    const video = videoRef.current;
+    const audio = voiceoverRef.current;
+    if (!video || !audio) return;
+
+    const syncPlay = () => { if (voiceoverEnabled) audio.play().catch(() => {}); };
+    const syncPause = () => { audio.pause(); };
+    const syncSeek = () => { audio.currentTime = video.currentTime; };
+
+    video.addEventListener("play", syncPlay);
+    video.addEventListener("pause", syncPause);
+    video.addEventListener("seeked", syncSeek);
+
+    return () => {
+      video.removeEventListener("play", syncPlay);
+      video.removeEventListener("pause", syncPause);
+      video.removeEventListener("seeked", syncSeek);
+    };
+  }, [voiceoverEnabled, job?.voiceover_url]);
 
   const copyLink = (u: string) => { navigator.clipboard.writeText(u); setCopied(true); setTimeout(() => setCopied(false), 2000); };
   const copyPrompt = (t: string) => { navigator.clipboard.writeText(t); setCopiedPrompt(true); setTimeout(() => setCopiedPrompt(false), 2000); };
@@ -562,10 +585,38 @@ export default function JobPage() {
               {/* ── DONE ────────────────────────────────────── */}
               {isDone && videoUrl && (
                 <>
-                  <div className="rounded-2xl border border-border/50 bg-card/80 overflow-hidden backdrop-blur-sm">
+                  <div className="rounded-2xl border border-border/50 bg-card/80 overflow-hidden backdrop-blur-sm relative">
                     <video ref={videoRef} controls autoPlay className="w-full" src={videoUrl}>
                       Your browser does not support video playback.
                     </video>
+                    {/* Hidden audio element for voice-over sync */}
+                    {job.voiceover_url && (
+                      <audio ref={voiceoverRef} src={job.voiceover_url} preload="auto" />
+                    )}
+                    {/* Voice-over toggle */}
+                    {job.voiceover_url && (
+                      <button
+                        onClick={() => {
+                          setVoiceoverEnabled((v) => {
+                            const next = !v;
+                            if (!next && voiceoverRef.current) voiceoverRef.current.pause();
+                            if (next && voiceoverRef.current && videoRef.current && !videoRef.current.paused) {
+                              voiceoverRef.current.currentTime = videoRef.current.currentTime;
+                              voiceoverRef.current.play().catch(() => {});
+                            }
+                            return next;
+                          });
+                        }}
+                        className={`absolute top-3 right-3 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium backdrop-blur-sm transition-colors ${
+                          voiceoverEnabled
+                            ? "bg-primary/90 text-primary-foreground"
+                            : "bg-black/50 text-white/70 hover:text-white"
+                        }`}
+                      >
+                        <Volume2 className="h-3.5 w-3.5" />
+                        {voiceoverEnabled ? "Voice-over ON" : "Voice-over OFF"}
+                      </button>
+                    )}
                   </div>
 
                   <div>
@@ -751,7 +802,12 @@ function InfoCards({
           <div className="flex justify-between"><span className="text-muted-foreground">Plan</span><span className="font-medium capitalize">{job.plan}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Audio</span><span className="font-medium capitalize">{job.audio_mode || "auto"}</span></div>
           {job.voiceover_text && (
-            <div className="flex justify-between"><span className="text-muted-foreground">Voice-over</span><span className="font-medium text-sky-400">Enabled</span></div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Voice-over</span>
+              <span className={`font-medium ${job.voiceover_url ? "text-green-500" : "text-amber-400"}`}>
+                {job.voiceover_url ? "Ready" : "Generating..."}
+              </span>
+            </div>
           )}
           <div className="flex justify-between"><span className="text-muted-foreground">Created</span><span className="font-medium text-[10px]">{formatDate(job.created_at)}</span></div>
         </div>
