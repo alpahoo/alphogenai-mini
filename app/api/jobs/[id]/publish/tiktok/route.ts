@@ -17,10 +17,20 @@ export async function POST(
   try {
     const { id } = await params;
 
+    // Auth — cookie-based or cron worker (X-Cron-Secret + X-Schedule-User-Id)
+    let userId: string;
     const supabaseAuth = await createClient();
     const { data: { user } } = await supabaseAuth.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Auth required" }, { status: 401 });
+    if (user) {
+      userId = user.id;
+    } else {
+      const cronSecret = req.headers.get("X-Cron-Secret");
+      const scheduleUserId = req.headers.get("X-Schedule-User-Id");
+      if (cronSecret && cronSecret === process.env.CRON_SECRET && scheduleUserId) {
+        userId = scheduleUserId;
+      } else {
+        return NextResponse.json({ error: "Auth required" }, { status: 401 });
+      }
     }
 
     const body = await req.json();
@@ -32,7 +42,7 @@ export async function POST(
     const { data: conn } = await supabase
       .from("social_connections")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("platform", "tiktok")
       .single();
 
@@ -109,7 +119,7 @@ export async function POST(
     const chunkSize = videoSize <= PREFERRED_CHUNK ? videoSize : PREFERRED_CHUNK;
     const totalChunks = Math.ceil(videoSize / chunkSize);
 
-    console.log(`[tiktok-publish] FILE_UPLOAD: size=${videoSize} chunks=${totalChunks} user=${user.id}`);
+    console.log(`[tiktok-publish] FILE_UPLOAD: size=${videoSize} chunks=${totalChunks} user=${userId}`);
 
     // ── Query creator info for Direct Post ─────────────────────
     let creatorInfo: Record<string, unknown> = {};

@@ -30,7 +30,7 @@ import { JobCostBadge } from "@/components/job/JobCostBadge";
 import { SocialExportPanel } from "@/components/job/social-export-panel";
 import { SHOW_COST_TRACKING_UI, isAdminEmail } from "@/lib/flags";
 import { useJobRealtime } from "@/lib/use-job-realtime";
-import type { Job, JobStage, JobScene } from "@/lib/types";
+import type { Job, JobScene } from "@/lib/types";
 import { buildStageOrder, getEngineDisplayName } from "@/lib/types";
 import { SceneTimeline, ScenePanel } from "@/components/editor";
 

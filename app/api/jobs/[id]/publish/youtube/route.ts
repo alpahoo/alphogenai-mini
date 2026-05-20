@@ -16,11 +16,20 @@ export async function POST(
   try {
     const { id } = await params;
 
-    // Auth
+    // Auth — cookie-based or cron worker (X-Cron-Secret + X-Schedule-User-Id)
+    let userId: string;
     const supabaseAuth = await createClient();
     const { data: { user } } = await supabaseAuth.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    if (user) {
+      userId = user.id;
+    } else {
+      const cronSecret = req.headers.get("X-Cron-Secret");
+      const scheduleUserId = req.headers.get("X-Schedule-User-Id");
+      if (cronSecret && cronSecret === process.env.CRON_SECRET && scheduleUserId) {
+        userId = scheduleUserId;
+      } else {
+        return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+      }
     }
 
     const body = await req.json();
@@ -42,7 +51,7 @@ export async function POST(
     const { data: connection } = await supabase
       .from("social_connections")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("platform", "youtube")
       .single();
 
@@ -227,7 +236,7 @@ export async function POST(
     const videoId = uploadResult.id;
     const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-    console.log(`[youtube-publish] Published: ${youtubeUrl} (user=${user.id}, job=${id})`);
+    console.log(`[youtube-publish] Published: ${youtubeUrl} (user=${userId}, job=${id})`);
 
     return NextResponse.json({
       success: true,

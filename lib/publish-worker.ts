@@ -42,12 +42,6 @@ interface PublishOutcome {
   error_message: string | null;
 }
 
-// Base URL for internal API calls
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL
-  || process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "http://localhost:3000";
-
 function getBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
@@ -70,7 +64,6 @@ export async function publishScheduledPost(
 
   const results: Record<string, PlatformResult> = {};
   let successCount = 0;
-  let failCount = 0;
 
   for (const platform of post.platforms) {
     try {
@@ -78,13 +71,10 @@ export async function publishScheduledPost(
       results[platform] = result;
       if (result.success) {
         successCount++;
-      } else {
-        failCount++;
       }
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : "Unknown error";
       results[platform] = { success: false, error: errorMsg };
-      failCount++;
     }
   }
 
