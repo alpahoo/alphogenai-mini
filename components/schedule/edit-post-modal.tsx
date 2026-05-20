@@ -1,7 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, CalendarClock, Save, RotateCcw } from "lucide-react";
+import {
+  Loader2,
+  CalendarClock,
+  Save,
+  RotateCcw,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  Clock,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -14,12 +23,17 @@ import {
 import type { ScheduledPost, SchedulePlatform } from "@/lib/scheduled-posts";
 
 // ---------------------------------------------------------------------------
-// Platform config
+// Platform config — Postiz-inspired colored avatars
 // ---------------------------------------------------------------------------
-const PLATFORMS: { value: SchedulePlatform; label: string; color: string }[] = [
-  { value: "youtube", label: "YouTube", color: "bg-red-500/10 text-red-400 border-red-500/30" },
-  { value: "tiktok", label: "TikTok", color: "bg-white/5 text-white/70 border-white/20" },
-  { value: "instagram", label: "Instagram", color: "bg-purple-500/10 text-purple-400 border-purple-500/30" },
+const PLATFORMS: {
+  value: SchedulePlatform;
+  label: string;
+  accent: string;
+  icon: string;
+}[] = [
+  { value: "youtube", label: "YouTube", accent: "#ef4444", icon: "YT" },
+  { value: "tiktok", label: "TikTok", accent: "#22d3ee", icon: "TK" },
+  { value: "instagram", label: "Instagram", accent: "#d946ef", icon: "IG" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -32,10 +46,15 @@ interface EditPostModalProps {
   onSaved: () => void;
 }
 
-export function EditPostModal({ post, open, onOpenChange, onSaved }: EditPostModalProps) {
+export function EditPostModal({
+  post,
+  open,
+  onOpenChange,
+  onSaved,
+}: EditPostModalProps) {
   const [saving, setSaving] = useState(false);
 
-  // Form state — initialized when post changes
+  // Form state
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
@@ -49,7 +68,6 @@ export function EditPostModal({ post, open, onOpenChange, onSaved }: EditPostMod
     setLastPostId(post.id);
     setTitle(post.title || "");
     setDescription(post.description || "");
-    // Convert ISO to datetime-local format
     const dt = new Date(post.scheduled_at);
     const local = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000)
       .toISOString()
@@ -112,6 +130,9 @@ export function EditPostModal({ post, open, onOpenChange, onSaved }: EditPostMod
 
   if (!post) return null;
 
+  // Status info for read-only posts
+  const isReadOnly = !canEdit;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -121,6 +142,11 @@ export function EditPostModal({ post, open, onOpenChange, onSaved }: EditPostMod
               <>
                 <RotateCcw className="h-4 w-4 text-amber-400" />
                 Reschedule Post
+              </>
+            ) : isReadOnly ? (
+              <>
+                <CheckCircle2 className="h-4 w-4 text-green-400" />
+                Post Details
               </>
             ) : (
               <>
@@ -132,89 +158,133 @@ export function EditPostModal({ post, open, onOpenChange, onSaved }: EditPostMod
           <DialogDescription>
             {isReschedule
               ? "Pick a new date/time to retry this post."
-              : "Update the details of your scheduled post."}
+              : isReadOnly
+                ? `This post was ${post.status}.`
+                : "Update the details of your scheduled post."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* Status bar for non-editable posts */}
+          {isReadOnly && (
+            <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5">
+              {post.status === "published" && (
+                <CheckCircle2 className="h-4 w-4 text-green-400" />
+              )}
+              {post.status === "cancelled" && (
+                <XCircle className="h-4 w-4 text-muted-foreground" />
+              )}
+              {post.status === "publishing" && (
+                <Loader2 className="h-4 w-4 text-amber-400 animate-spin" />
+              )}
+              <div>
+                <p className="text-sm font-medium">{post.title || "Untitled"}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {new Date(post.scheduled_at).toLocaleString()} ·{" "}
+                  {post.platforms.map((p) => PLATFORMS.find((x) => x.value === p)?.label).join(", ")}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Title */}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">
-              Title
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Video title..."
-              maxLength={200}
-              className="w-full rounded-xl border border-border/40 bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
-            />
-          </div>
+          {canEdit && (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                Title
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Video title..."
+                maxLength={200}
+                className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
+              />
+            </div>
+          )}
 
           {/* Description */}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Video description..."
-              rows={2}
-              className="w-full rounded-xl border border-border/40 bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 resize-none"
-            />
-          </div>
+          {canEdit && (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                Description
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Video description..."
+                rows={3}
+                className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all resize-none"
+              />
+            </div>
+          )}
 
           {/* Date/Time */}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">
-              Date & Time
-            </label>
-            <input
-              type="datetime-local"
-              value={scheduledAt}
-              onChange={(e) => setScheduledAt(e.target.value)}
-              className="w-full rounded-xl border border-border/40 bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
-            />
-          </div>
-
-          {/* Platforms */}
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-              Platforms
-            </label>
-            <div className="flex gap-2">
-              {PLATFORMS.map((p) => {
-                const active = platforms.includes(p.value);
-                return (
-                  <button
-                    key={p.value}
-                    type="button"
-                    onClick={() => togglePlatform(p.value)}
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
-                      active
-                        ? p.color
-                        : "border-border/30 text-muted-foreground/50 hover:border-border/60"
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                );
-              })}
+          {canEdit && (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                Date & Time
+              </label>
+              <input
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+                className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
+              />
             </div>
-          </div>
+          )}
+
+          {/* Platforms — Postiz-style avatar circles */}
+          {canEdit && (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-2 block">
+                Platforms
+              </label>
+              <div className="flex gap-3">
+                {PLATFORMS.map((p) => {
+                  const active = platforms.includes(p.value);
+                  return (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => togglePlatform(p.value)}
+                      className={`flex items-center gap-2 rounded-xl border px-3 py-2 transition-all duration-200 ${
+                        active
+                          ? "border-white/20 bg-white/5 opacity-100"
+                          : "border-border/30 bg-transparent opacity-40 hover:opacity-70"
+                      }`}
+                    >
+                      <span
+                        className="inline-flex items-center justify-center rounded-full text-white font-bold shrink-0"
+                        style={{
+                          width: 28,
+                          height: 28,
+                          fontSize: 11,
+                          backgroundColor: p.accent,
+                        }}
+                      >
+                        {p.icon}
+                      </span>
+                      <span className="text-xs font-medium">{p.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Privacy — YouTube */}
-          {platforms.includes("youtube") && (
+          {canEdit && platforms.includes("youtube") && (
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
                 YouTube Privacy
               </label>
               <select
                 value={privacyYoutube}
                 onChange={(e) => setPrivacyYoutube(e.target.value)}
-                className="w-full rounded-xl border border-border/40 bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
+                className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
               >
                 <option value="public">Public</option>
                 <option value="unlisted">Unlisted</option>
@@ -224,15 +294,15 @@ export function EditPostModal({ post, open, onOpenChange, onSaved }: EditPostMod
           )}
 
           {/* Privacy — TikTok */}
-          {platforms.includes("tiktok") && (
+          {canEdit && platforms.includes("tiktok") && (
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
                 TikTok Privacy
               </label>
               <select
                 value={privacyTiktok}
                 onChange={(e) => setPrivacyTiktok(e.target.value)}
-                className="w-full rounded-xl border border-border/40 bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50"
+                className="w-full rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
               >
                 <option value="PUBLIC_TO_EVERYONE">Public</option>
                 <option value="MUTUAL_FOLLOW_FRIENDS">Friends</option>
@@ -241,39 +311,91 @@ export function EditPostModal({ post, open, onOpenChange, onSaved }: EditPostMod
             </div>
           )}
 
-          {/* Error message for failed posts */}
+          {/* Error for failed posts */}
           {isReschedule && post.error_message && (
-            <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
-              <p className="text-[11px] font-medium text-red-400 mb-0.5">Previous error:</p>
-              <p className="text-[11px] text-red-400/80">{post.error_message}</p>
+            <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <AlertCircle className="h-3.5 w-3.5 text-red-400" />
+                <p className="text-[11px] font-semibold text-red-400">
+                  Previous error
+                </p>
+              </div>
+              <p className="text-[11px] text-red-400/70 leading-relaxed">
+                {post.error_message}
+              </p>
+            </div>
+          )}
+
+          {/* Publish results for read-only view */}
+          {isReadOnly && post.publish_results && Object.keys(post.publish_results).length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Results</p>
+              {Object.entries(post.publish_results).map(([platform, result]) => {
+                const meta = PLATFORMS.find((p) => p.value === platform);
+                return (
+                  <div
+                    key={platform}
+                    className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${
+                      result.success
+                        ? "border-green-500/20 bg-green-500/5"
+                        : "border-red-500/20 bg-red-500/5"
+                    }`}
+                  >
+                    <span
+                      className="inline-flex items-center justify-center rounded-full text-white font-bold shrink-0"
+                      style={{
+                        width: 24,
+                        height: 24,
+                        fontSize: 9,
+                        backgroundColor: meta?.accent || "#6366f1",
+                      }}
+                    >
+                      {meta?.icon || "?"}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium">{meta?.label || platform}</p>
+                      {result.error && (
+                        <p className="text-[10px] text-red-400 truncate">{result.error}</p>
+                      )}
+                    </div>
+                    {result.success ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-400 shrink-0" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
 
-        <DialogFooter>
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="rounded-xl border border-border/40 px-4 py-2 text-sm text-muted-foreground hover:bg-muted/40 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || !canEdit}
-            className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-2"
-          >
-            {saving ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : isReschedule ? (
-              <RotateCcw className="h-3.5 w-3.5" />
-            ) : (
-              <Save className="h-3.5 w-3.5" />
-            )}
-            {isReschedule ? "Reschedule" : "Save Changes"}
-          </button>
-        </DialogFooter>
+        {canEdit && (
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="rounded-xl border border-border/40 px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted/40 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !canEdit}
+              className="rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-2"
+            >
+              {saving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : isReschedule ? (
+                <RotateCcw className="h-3.5 w-3.5" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
+              {isReschedule ? "Reschedule" : "Save Changes"}
+            </button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );
