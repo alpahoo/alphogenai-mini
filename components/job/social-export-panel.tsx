@@ -24,6 +24,7 @@ import {
   Lock,
 } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 import type { SocialMetadata } from "@/lib/social-metadata";
 import type { JobScene } from "@/lib/types";
 import { ThumbnailPicker } from "./thumbnail-picker";
@@ -347,13 +348,18 @@ export function SocialExportPanel({
       const data = await res.json();
       if (data.success) {
         setScheduleResult({ success: true, message: `Scheduled for ${new Date(scheduleDate).toLocaleString()}` });
+        toast.success("Post scheduled!", {
+          description: `${schedulePlatforms.join(", ")} — ${new Date(scheduleDate).toLocaleString()}`,
+        });
         setScheduleDate("");
         setSchedulePlatforms([]);
       } else {
         setScheduleResult({ error: data.error || "Failed to schedule" });
+        toast.error(data.error || "Failed to schedule");
       }
     } catch {
       setScheduleResult({ error: "Failed to schedule post" });
+      toast.error("Failed to schedule post");
     } finally {
       setScheduling(false);
     }

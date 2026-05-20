@@ -67,7 +67,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Scheduled post not found" }, { status: 404 });
     }
 
-    if (existing.status !== "scheduled") {
+    if (existing.status !== "scheduled" && existing.status !== "failed") {
       return NextResponse.json(
         { error: `Cannot edit a post with status "${existing.status}"` },
         { status: 400 }
@@ -76,6 +76,14 @@ export async function PATCH(
 
     const body = await req.json();
     const updates: Record<string, unknown> = {};
+
+    // Allow rescheduling failed posts — reset status + retry count
+    if (existing.status === "failed") {
+      updates.status = "scheduled";
+      updates.retry_count = 0;
+      updates.error_message = null;
+      updates.publish_results = {};
+    }
 
     // Allow updating these fields
     if (body.scheduled_at !== undefined) {

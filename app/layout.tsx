@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ThemeProvider } from "next-themes";
+import { Toaster } from "sonner";
 import { SiteShell } from "@/components/site-shell";
 import { SiteConfigProvider } from "@/components/site-config-provider";
 import "./globals.css";
@@ -73,6 +74,14 @@ export default function RootLayout({
         >
           <SiteConfigProvider>
             <SiteShell>{children}</SiteShell>
+            <Toaster
+              position="bottom-right"
+              theme="dark"
+              richColors
+              toastOptions={{
+                className: "rounded-xl border border-border/40",
+              }}
+            />
           </SiteConfigProvider>
         </ThemeProvider>
       </body>
