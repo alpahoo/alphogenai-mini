@@ -92,6 +92,8 @@ export interface EvoLinkEngineConfig {
   desc: string;
   /** Plans allowed (mirrors backend plan gate) */
   plans: Array<"free" | "pro" | "premium">;
+  /** Estimated EvoLink credits consumed per scene (for admin pre-flight check) */
+  creditsPerScene?: number;
 }
 
 export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
@@ -104,6 +106,7 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
     label: "Seedance 2.0",
     desc: "EvoLink • 720p • up to 15s",
     plans: ["pro", "premium"],
+    creditsPerScene: 100,
   },
   evolink_fast: {
     model: "seedance-2.0-fast-text-to-video",
@@ -113,6 +116,7 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
     label: "Seedance 2.0 Fast",
     desc: "EvoLink • 720p • faster & cheaper",
     plans: ["pro", "premium"],
+    creditsPerScene: 60,
   },
   // ── Kling ─────────────────────────────────────────────────────────────────
   kling_o3: {
@@ -123,6 +127,7 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
     label: "Kling O3",
     desc: "EvoLink • 1080p • up to 15s",
     plans: ["pro", "premium"],
+    creditsPerScene: 120,
   },
   kling_v3: {
     model: "kling-v3-text-to-video",
@@ -131,6 +136,7 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
     label: "Kling 3.0",
     desc: "EvoLink • 1080p • latest Kling",
     plans: ["pro", "premium"],
+    creditsPerScene: 120,
   },
   // ── WAN 2.6 (via EvoLink — no GPU cold start) ─────────────────────────────
   // NOTE: wan2.6-reference-video requires VIDEO input — cannot be used with
@@ -143,6 +149,7 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
     label: "WAN 2.6",
     desc: "EvoLink • 720p • no cold start",
     plans: ["pro", "premium"],
+    creditsPerScene: 80,
   },
   // ── Happy Horse ────────────────────────────────────────────────────────────
   happy_horse_10: {
@@ -152,6 +159,7 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
     label: "Happy Horse 1.0",
     desc: "EvoLink • 720p • cinematic quality",
     plans: ["premium"],
+    creditsPerScene: 150,
   },
   // ── WAN 2.7 ───────────────────────────────────────────────────────────────
   wan_27: {
@@ -161,6 +169,7 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
     label: "WAN 2.7",
     desc: "EvoLink • 720p • latest WAN",
     plans: ["pro", "premium"],
+    creditsPerScene: 80,
   },
   // ── Hailuo (MiniMax) ──────────────────────────────────────────────────────
   hailuo: {
@@ -172,6 +181,7 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
     label: "Hailuo 2.3",
     desc: "EvoLink • 1080p • 6-10s",
     plans: ["pro", "premium"],
+    creditsPerScene: 100,
   },
   hailuo_fast: {
     model: "MiniMax-Hailuo-2.3-Fast",
@@ -182,6 +192,7 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
     label: "Hailuo 2.3 Fast",
     desc: "EvoLink • 1080p • faster",
     plans: ["pro", "premium"],
+    creditsPerScene: 60,
   },
   // ── Sora 2 ────────────────────────────────────────────────────────────────
   sora_2: {
@@ -191,6 +202,7 @@ export const EVOLINK_ENGINES: Record<string, EvoLinkEngineConfig> = {
     label: "Sora 2 Pro",
     desc: "EvoLink • 1080p • up to 12s",
     plans: ["premium"],
+    creditsPerScene: 200,
   },
 };
 

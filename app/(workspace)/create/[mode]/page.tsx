@@ -164,9 +164,10 @@ export default function CreateModePage({
   const [engineOptions, setEngineOptions] = useState<EngineOption[]>(FALLBACK_ENGINES);
   // Health status per engine: rate 0.0-1.0, -1 = unknown
   const [engineHealth, setEngineHealth] = useState<Record<string, number>>({});
-  // Admin: email + provider credit balance
+  // Admin: email + provider credit balance + per-engine costs
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [adminCredits, setAdminCredits] = useState<{ remaining: number; status: string } | null>(null);
+  const [engineCosts, setEngineCosts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetch("/api/engines")
@@ -203,6 +204,9 @@ export default function CreateModePage({
               const ev = data.providers?.evolink;
               if (ev && typeof ev.remaining === "number") {
                 setAdminCredits({ remaining: ev.remaining, status: ev.status });
+              }
+              if (data.engineCosts) {
+                setEngineCosts(data.engineCosts);
               }
             })
             .catch(() => {});
@@ -919,43 +923,65 @@ export default function CreateModePage({
               </div>
             )}
 
-            {/* ── Admin: Credit balance warning ──────────────────── */}
-            {isAdminEmail(userEmail) && adminCredits && adminCredits.status !== "ok" && (
-              <div className={`rounded-xl border px-4 py-3 flex items-start gap-3 ${
-                adminCredits.status === "critical"
-                  ? "border-red-500/40 bg-red-500/10"
-                  : "border-amber-500/40 bg-amber-500/10"
-              }`}>
-                <AlertTriangle className={`h-5 w-5 shrink-0 mt-0.5 ${
-                  adminCredits.status === "critical" ? "text-red-400" : "text-amber-400"
-                }`} />
-                <div className="flex-1">
-                  <p className={`text-sm font-medium ${
-                    adminCredits.status === "critical" ? "text-red-400" : "text-amber-400"
-                  }`}>
-                    <Wallet className="h-3.5 w-3.5 inline mr-1" />
-                    {adminCredits.status === "critical"
-                      ? `EvoLink credits critically low: ${adminCredits.remaining.toFixed(1)} remaining`
-                      : `EvoLink credits running low: ${adminCredits.remaining.toFixed(1)} remaining`
-                    }
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {adminCredits.status === "critical"
-                      ? "Generation will likely fail. Top up before launching."
-                      : "Consider topping up soon to avoid interrupted jobs."
-                    }
-                  </p>
-                  <a
-                    href="https://evolink.ai/dashboard/billing"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-2"
-                  >
-                    <ExternalLink className="h-3 w-3" /> Top up on EvoLink
-                  </a>
+            {/* ── Admin: Credit sufficiency check ─────────────────── */}
+            {isAdminEmail(userEmail) && adminCredits && (() => {
+              // Estimate cost for this job
+              const engineKey = selectedEngine === "auto" ? "evolink_fast" : selectedEngine;
+              const costPerScene = engineCosts[engineKey] ?? 100;
+              const estimatedCost = sceneCount * costPerScene;
+              const canAfford = adminCredits.remaining >= estimatedCost;
+              const isLow = !canAfford || adminCredits.status !== "ok";
+
+              if (!isLow) return null;
+
+              return (
+                <div className={`rounded-xl border px-4 py-3 flex items-start gap-3 ${
+                  !canAfford
+                    ? "border-red-500/40 bg-red-500/10"
+                    : "border-amber-500/40 bg-amber-500/10"
+                }`}>
+                  <AlertTriangle className={`h-5 w-5 shrink-0 mt-0.5 ${
+                    !canAfford ? "text-red-400" : "text-amber-400"
+                  }`} />
+                  <div className="flex-1">
+                    {!canAfford ? (
+                      <>
+                        <p className="text-sm font-medium text-red-400">
+                          <Wallet className="h-3.5 w-3.5 inline mr-1" />
+                          Not enough credits for this project
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Estimated cost: <span className="font-semibold text-red-400">~{estimatedCost} credits</span> ({sceneCount} scene{sceneCount > 1 ? "s" : ""} × {costPerScene}/scene)
+                          <br />
+                          Available: <span className="font-semibold text-red-400">{adminCredits.remaining.toFixed(1)} credits</span>
+                          <br />
+                          Missing: ~{Math.ceil(estimatedCost - adminCredits.remaining)} credits. Top up before launching.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium text-amber-400">
+                          <Wallet className="h-3.5 w-3.5 inline mr-1" />
+                          Credits running low: {adminCredits.remaining.toFixed(1)} remaining
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Estimated cost for this job: ~{estimatedCost} credits ({sceneCount} scene{sceneCount > 1 ? "s" : ""}).
+                          Consider topping up soon.
+                        </p>
+                      </>
+                    )}
+                    <a
+                      href="https://evolink.ai/dashboard/billing"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-2"
+                    >
+                      <ExternalLink className="h-3 w-3" /> Top up on EvoLink
+                    </a>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* ── Generate CTA ───────────────────────────────────── */}
             <button

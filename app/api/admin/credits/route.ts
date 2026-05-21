@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { isAdminEmail } from "@/lib/flags";
-import { getEvoLinkCredits } from "@/lib/evolink-client";
+import { getEvoLinkCredits, EVOLINK_ENGINES } from "@/lib/evolink-client";
 
 /**
  * GET /api/admin/credits — Check remaining credits on all providers.
@@ -45,5 +45,11 @@ export async function GET() {
     };
   }
 
-  return NextResponse.json({ providers });
+  // Build per-engine credits cost map for client-side estimation
+  const engineCosts: Record<string, number> = {};
+  for (const [key, cfg] of Object.entries(EVOLINK_ENGINES)) {
+    engineCosts[key] = cfg.creditsPerScene ?? 100;
+  }
+
+  return NextResponse.json({ providers, engineCosts });
 }
