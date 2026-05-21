@@ -43,16 +43,16 @@ const POLL_INTERVAL = 15_000;
 
 /** Provider dashboard URLs for topping up credits */
 const PROVIDER_TOP_UP: Record<string, { url: string; label: string }> = {
-  evolink: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
-  evolink_fast: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
-  kling_o3: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
-  kling_v3: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
-  wan_26: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
-  wan_27: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
-  happy_horse_10: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
-  hailuo: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
-  hailuo_fast: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
-  sora_2: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
+  evolink: { url: "https://evolink.ai/fr/dashboard/credits", label: "EvoLink" },
+  evolink_fast: { url: "https://evolink.ai/fr/dashboard/credits", label: "EvoLink" },
+  kling_o3: { url: "https://evolink.ai/fr/dashboard/credits", label: "EvoLink" },
+  kling_v3: { url: "https://evolink.ai/fr/dashboard/credits", label: "EvoLink" },
+  wan_26: { url: "https://evolink.ai/fr/dashboard/credits", label: "EvoLink" },
+  wan_27: { url: "https://evolink.ai/fr/dashboard/credits", label: "EvoLink" },
+  happy_horse_10: { url: "https://evolink.ai/fr/dashboard/credits", label: "EvoLink" },
+  hailuo: { url: "https://evolink.ai/fr/dashboard/credits", label: "EvoLink" },
+  hailuo_fast: { url: "https://evolink.ai/fr/dashboard/credits", label: "EvoLink" },
+  sora_2: { url: "https://evolink.ai/fr/dashboard/credits", label: "EvoLink" },
   bailian_wan: { url: "https://bailian.console.alibabacloud.com/", label: "Alibaba Bailian" },
   bailian_wan_fast: { url: "https://bailian.console.alibabacloud.com/", label: "Alibaba Bailian" },
 };
@@ -987,7 +987,7 @@ function InfoCards({
               </p>
             )}
             <a
-              href="https://evolink.ai/dashboard/billing"
+              href="https://evolink.ai/fr/dashboard/credits"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-[11px] text-primary hover:underline"

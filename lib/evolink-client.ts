@@ -258,7 +258,7 @@ export async function getEvoLinkCredits(): Promise<EvoLinkCredits> {
 /** Dashboard URLs for provider billing/top-up pages */
 export const PROVIDER_DASHBOARD_URLS: Record<string, { topUp: string; label: string }> = {
   evolink: {
-    topUp: "https://evolink.ai/dashboard/billing",
+    topUp: "https://evolink.ai/fr/dashboard/credits",
     label: "EvoLink",
   },
   bailian: {

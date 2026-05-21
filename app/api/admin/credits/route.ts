@@ -19,16 +19,18 @@ export async function GET() {
 
   const providers: Record<string, unknown> = {};
 
-  // EvoLink
+  // EvoLink — use userRemaining (actual account balance), NOT tokenRemaining
+  // (which is the API key-level cap and can be misleadingly high like 100K)
   try {
     const credits = await getEvoLinkCredits();
+    const balance = credits.userRemaining;
     providers.evolink = {
-      remaining: credits.tokenRemaining,
-      used: credits.tokenUsed,
+      remaining: balance,
+      used: credits.userUsed,
       unlimited: credits.tokenUnlimited,
-      userRemaining: credits.userRemaining,
-      userUsed: credits.userUsed,
-      status: credits.tokenRemaining < 10 ? "critical" : credits.tokenRemaining < 50 ? "low" : "ok",
+      tokenRemaining: credits.tokenRemaining,
+      tokenUsed: credits.tokenUsed,
+      status: balance < 100 ? "critical" : balance < 500 ? "low" : "ok",
     };
   } catch (e) {
     providers.evolink = {

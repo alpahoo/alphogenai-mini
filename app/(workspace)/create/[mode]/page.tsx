@@ -971,7 +971,7 @@ export default function CreateModePage({
                       </>
                     )}
                     <a
-                      href="https://evolink.ai/dashboard/billing"
+                      href="https://evolink.ai/fr/dashboard/credits"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-2"
