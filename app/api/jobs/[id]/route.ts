@@ -415,6 +415,33 @@ async function advanceEvoLinkState(
   const nextPending = effectiveScenes.find((s) => s.status === "pending");
   if (nextPending) {
     const prev = effectiveScenes[nextPending.scene_index - 1];
+
+    // ── Cascade failure: if the predecessor failed, all subsequent pending
+    // scenes can never fire. Mark them all as failed so Step 4 triggers.
+    if (prev && prev.status === "failed") {
+      const pendingIds = effectiveScenes
+        .filter((s) => s.status === "pending")
+        .map((s) => s.id);
+
+      console.warn(
+        `[jobs/status] cascading failure: scene ${prev.scene_index} failed → ` +
+        `cancelling ${pendingIds.length} pending scenes`
+      );
+
+      await supabase
+        .from("job_scenes")
+        .update({
+          status: "failed",
+          error_message: "Cancelled: predecessor scene failed",
+          updated_at: new Date().toISOString(),
+        })
+        .in("id", pendingIds);
+
+      // Fall through to Step 4 (partial failure exit) on next poll
+      await heartbeat(supabase, jobId);
+      return;
+    }
+
     if (!prev || prev.status !== "done") {
       // Previous scene isn't done yet — nothing to do right now
       await heartbeat(supabase, jobId);
