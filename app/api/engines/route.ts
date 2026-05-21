@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { EVOLINK_ENGINES } from "@/lib/evolink-client";
 import { BAILIAN_ENGINES } from "@/lib/bailian-client";
+import { createServiceClient } from "@/lib/supabase/service";
 
 /**
  * GET /api/engines
@@ -37,42 +38,65 @@ interface EngineOption {
 export async function GET() {
   const engines: EngineOption[] = [];
 
+  // Read admin provider toggle from DB (best-effort, default enabled)
+  let providerFlags: Record<string, { enabled: boolean }> = {};
+  try {
+    const svc = createServiceClient();
+    const { data } = await svc
+      .from("app_settings")
+      .select("value")
+      .eq("key", "providers")
+      .single();
+    if (data?.value) {
+      providerFlags = data.value as Record<string, { enabled: boolean }>;
+    }
+  } catch {
+    // DB read failed — default to all enabled
+  }
+
+  const isProviderEnabled = (name: string) =>
+    providerFlags[name]?.enabled !== false; // default true if not set
+
   // Legacy Modal engine (free tier default)
-  engines.push({
-    key: "wan_i2v",
-    label: "Wan 2.2 I2V",
-    desc: "GPU - up to 60s",
-    gate: null,
-    supportsRefs: false,
-    supportsI2v: true,
-    maxDuration: 60,
-    minDuration: null,
-    quality: "720p",
-  });
-
-  // EvoLink engines from registry
-  for (const [key, cfg] of Object.entries(EVOLINK_ENGINES)) {
-    const lowestPlan = cfg.plans.includes("pro")
-      ? "pro"
-      : cfg.plans.includes("premium")
-        ? "premium"
-        : null;
-
+  if (isProviderEnabled("modal")) {
     engines.push({
-      key,
-      label: cfg.label,
-      desc: cfg.desc,
-      gate: lowestPlan,
-      supportsRefs: REF_SUPPORT.has(key),
-      supportsI2v: Boolean(cfg.imageModel),
-      maxDuration: cfg.maxDuration,
-      minDuration: cfg.minDuration ?? null,
-      quality: cfg.quality ?? "720p",
+      key: "wan_i2v",
+      label: "Wan 2.2 I2V",
+      desc: "GPU - up to 60s",
+      gate: null,
+      supportsRefs: false,
+      supportsI2v: true,
+      maxDuration: 60,
+      minDuration: null,
+      quality: "720p",
     });
   }
 
-  // Bailian engines (only visible when DASHSCOPE_API_KEY is configured)
-  if (process.env.DASHSCOPE_API_KEY) {
+  // EvoLink engines from registry
+  if (isProviderEnabled("evolink")) {
+    for (const [key, cfg] of Object.entries(EVOLINK_ENGINES)) {
+      const lowestPlan = cfg.plans.includes("pro")
+        ? "pro"
+        : cfg.plans.includes("premium")
+          ? "premium"
+          : null;
+
+      engines.push({
+        key,
+        label: cfg.label,
+        desc: cfg.desc,
+        gate: lowestPlan,
+        supportsRefs: REF_SUPPORT.has(key),
+        supportsI2v: Boolean(cfg.imageModel),
+        maxDuration: cfg.maxDuration,
+        minDuration: cfg.minDuration ?? null,
+        quality: cfg.quality ?? "720p",
+      });
+    }
+  }
+
+  // Bailian engines (requires DASHSCOPE_API_KEY + admin toggle enabled)
+  if (process.env.DASHSCOPE_API_KEY && isProviderEnabled("bailian")) {
     for (const [key, cfg] of Object.entries(BAILIAN_ENGINES)) {
       const lowestPlan = cfg.plans.includes("pro")
         ? "pro"

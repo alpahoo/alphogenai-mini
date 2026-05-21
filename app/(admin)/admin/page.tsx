@@ -9,6 +9,7 @@ import {
   TrendingUp,
   XCircle,
   CheckCircle2,
+  Power,
 } from "lucide-react";
 import {
   BarChart,
@@ -62,9 +63,17 @@ const ENGINE_COLORS: Record<string, string> = {
   unknown: "#71717a",
 };
 
+const PROVIDER_INFO: Record<string, { label: string; desc: string; color: string }> = {
+  evolink: { label: "EvoLink", desc: "Seedance, Kling, WAN, Hailuo, Sora", color: "text-blue-400" },
+  bailian: { label: "Bailian (Alibaba)", desc: "WAN 2.6 / 2.7 via DashScope", color: "text-orange-400" },
+  modal: { label: "Modal (GPU)", desc: "Wan 2.2 I2V self-hosted", color: "text-violet-400" },
+};
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [providers, setProviders] = useState<Record<string, { enabled: boolean }>>({});
+  const [togglingProvider, setTogglingProvider] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/stats")
@@ -72,7 +81,32 @@ export default function AdminDashboard() {
       .then(setStats)
       .catch(console.error)
       .finally(() => setLoading(false));
+
+    // Fetch provider toggles
+    fetch("/api/admin/providers")
+      .then((r) => r.json())
+      .then((d) => setProviders(d.providers ?? {}))
+      .catch(console.error);
   }, []);
+
+  const toggleProvider = async (provider: string) => {
+    const current = providers[provider]?.enabled !== false;
+    const newState = !current;
+    setTogglingProvider(provider);
+    try {
+      const res = await fetch("/api/admin/providers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, enabled: newState }),
+      });
+      const data = await res.json();
+      if (data.providers) setProviders(data.providers);
+    } catch (e) {
+      console.error("Toggle failed:", e);
+    } finally {
+      setTogglingProvider(null);
+    }
+  };
 
   if (loading || !stats) {
     return (
@@ -143,6 +177,48 @@ export default function AdminDashboard() {
           color={stats.successRate >= 80 ? "text-green-400" : "text-red-400"}
           description={`${stats.doneJobs} done · ${stats.failedJobs} failed`}
         />
+      </div>
+
+      {/* Provider toggles */}
+      <div className="rounded-xl border border-border/40 bg-card/60 overflow-hidden">
+        <div className="border-b border-border/40 p-5">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Provider Controls
+          </h3>
+        </div>
+        <div className="grid gap-0 divide-y divide-border/20">
+          {Object.entries(PROVIDER_INFO).map(([key, info]) => {
+            const enabled = providers[key]?.enabled !== false;
+            const isToggling = togglingProvider === key;
+            return (
+              <div key={key} className="flex items-center justify-between px-5 py-4">
+                <div className="flex items-center gap-3">
+                  <div className={`h-2 w-2 rounded-full ${enabled ? "bg-green-400" : "bg-zinc-600"}`} />
+                  <div>
+                    <p className={`text-sm font-medium ${info.color}`}>{info.label}</p>
+                    <p className="text-xs text-muted-foreground/60">{info.desc}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => toggleProvider(key)}
+                  disabled={isToggling}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    enabled
+                      ? "border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                      : "border-zinc-600/30 bg-zinc-800/50 text-zinc-400 hover:bg-zinc-700/50"
+                  } disabled:opacity-50`}
+                >
+                  {isToggling ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Power className="h-3 w-3" />
+                  )}
+                  {enabled ? "Enabled" : "Disabled"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Cost trends (30d) */}
