@@ -1,21 +1,20 @@
 /**
  * GET /api/cron/evolink-poll
  *
- * Vercel Cron — runs every 2 minutes.
- * Polls all active EvoLink jobs server-side, independent of the frontend.
+ * Vercel Cron — runs every minute.
+ * Server-side poller for ALL active jobs (EvoLink + Bailian).
  *
- * Why needed: our EvoLink status detection in GET /api/jobs/[id] is
- * frontend-driven (poll every 5 s). If the user closes the tab, nobody
- * checks the task and the watchdog kills the job after 30 min.
- * This cron is the server-side safety net.
+ * Instead of reimplementing the state machine, it simply calls
+ * GET /api/jobs/[id] for each active job — the existing handler
+ * advances scenes, cascades failures, triggers concat, etc.
+ *
+ * This ensures jobs progress even when the user closes the browser tab.
  *
  * Auth: Vercel calls this with Authorization: Bearer $CRON_SECRET.
- * We validate that header so random visitors can't trigger it.
  */
 
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
-import { isEvoLinkEngine, getEvoLinkTask } from "@/lib/evolink-client";
 
 export const maxDuration = 60;
 
@@ -29,95 +28,73 @@ export async function GET(req: Request) {
 
   const supabase = createServiceClient();
 
-  // Fetch all active EvoLink jobs (have external_task_id + still in_progress)
+  // Find all active jobs
   const { data: jobs, error } = await supabase
     .from("jobs")
-    .select("id, external_task_id, engine_used, status")
+    .select("id, engine_used, current_stage, updated_at")
     .in("status", ["pending", "in_progress"])
-    .not("external_task_id", "is", null);
+    .order("created_at", { ascending: true });
 
   if (error) {
-    console.error("[cron/evolink-poll] DB fetch error:", error.message);
+    console.error("[cron/poll] DB fetch error:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const activeJobs = (jobs ?? []).filter(
-    (j) => j.external_task_id && isEvoLinkEngine(j.engine_used ?? "")
-  );
+  const activeJobs = jobs ?? [];
 
   if (activeJobs.length === 0) {
-    return NextResponse.json({ polled: 0, message: "No active EvoLink jobs" });
+    return NextResponse.json({ polled: 0, message: "No active jobs" });
   }
 
-  console.log(`[cron/evolink-poll] Polling ${activeJobs.length} active EvoLink job(s)`);
+  console.log(
+    `[cron/poll] Found ${activeJobs.length} active job(s): ` +
+    activeJobs.map((j) => `${j.id.slice(0, 8)}(${j.engine_used})`).join(", ")
+  );
 
-  let completed = 0;
-  let failed = 0;
-  let processing = 0;
+  // Determine base URL for self-calls
+  const baseUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
 
-  // Poll each job — sequential to avoid hammering EvoLink
+  if (!baseUrl) {
+    console.error("[cron/poll] No base URL configured (NEXT_PUBLIC_SITE_URL or VERCEL_URL)");
+    return NextResponse.json({ error: "No base URL" }, { status: 500 });
+  }
+
+  let advanced = 0;
+  let errors = 0;
+
+  // Call GET /api/jobs/[id] for each — sequential to stay within maxDuration
   for (const job of activeJobs) {
     try {
-      const result = await getEvoLinkTask(job.external_task_id!);
+      const res = await fetch(`${baseUrl}/api/jobs/${job.id}`, {
+        method: "GET",
+        headers: { "Cache-Control": "no-cache" },
+        signal: AbortSignal.timeout(25_000), // 25s per job max
+      });
 
-      if (result.status === "completed" && result.videoUrl) {
-        // Atomic update: only update if still in_progress (race-safe)
-        const { error: upErr } = await supabase
-          .from("jobs")
-          .update({
-            status: "done",
-            current_stage: "completed",
-            video_url: result.videoUrl,
-            output_url_final: result.videoUrl,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", job.id)
-          .eq("status", "in_progress");
-
-        if (!upErr) {
-          console.log(`[cron/evolink-poll] Completed: job=${job.id}`);
-          completed++;
-        }
-
-      } else if (result.status === "failed") {
-        await supabase
-          .from("jobs")
-          .update({
-            status: "failed",
-            error_message: result.error || "EvoLink generation failed",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", job.id)
-          .eq("status", "in_progress");
-
-        console.log(`[cron/evolink-poll] Failed: job=${job.id} error=${result.error}`);
-        failed++;
-
+      if (res.ok) {
+        advanced++;
       } else {
-        // Still processing — heartbeat: touch updated_at to keep watchdog at bay
-        await supabase
-          .from("jobs")
-          .update({ updated_at: new Date().toISOString() })
-          .eq("id", job.id)
-          .in("status", ["pending", "in_progress"]);
-
-        processing++;
+        console.warn(`[cron/poll] job=${job.id.slice(0, 8)} responded ${res.status}`);
+        errors++;
       }
-    } catch (pollErr) {
+    } catch (e) {
       console.warn(
-        `[cron/evolink-poll] Poll error for job=${job.id}:`,
-        pollErr instanceof Error ? pollErr.message : pollErr
+        `[cron/poll] job=${job.id.slice(0, 8)} fetch error:`,
+        e instanceof Error ? e.message : e
       );
-      // Non-fatal: continue to next job
+      errors++;
     }
   }
 
-  console.log(`[cron/evolink-poll] Done: ${completed} completed, ${failed} failed, ${processing} still processing`);
+  console.log(
+    `[cron/poll] Done: ${advanced} advanced, ${errors} errors out of ${activeJobs.length}`
+  );
 
   return NextResponse.json({
     polled: activeJobs.length,
-    completed,
-    failed,
-    processing,
+    advanced,
+    errors,
   });
 }
