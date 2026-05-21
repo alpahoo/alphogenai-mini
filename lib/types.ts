@@ -12,6 +12,7 @@ export type JobStage =
   | `generating_scene_${number}`
   | "encoding"
   | "uploading"
+  | "generating_music"
   | "generating_audio"
   | "muxing_audio"
   | "completed"
@@ -156,6 +157,7 @@ export const STAGE_LABELS: Record<string, string> = {
   spawning_pipeline: "Starting pipeline",
   encoding: "Encoding video",
   uploading: "Uploading",
+  generating_music: "Generating background music",
   generating_audio: "Generating audio",
   muxing_audio: "Mixing audio",
   completed: "Complete",
@@ -180,6 +182,7 @@ export const STAGE_ORDER_FIXED: JobStage[] = [
   "spawning_pipeline",
   "encoding",
   "uploading",
+  "generating_music",
   "generating_audio",
   "muxing_audio",
   "completed",
@@ -194,6 +197,7 @@ export function buildStageOrder(sceneCount: number): string[] {
     ...scenes,
     "encoding",
     "uploading",
+    "generating_music",
     "generating_audio",
     "muxing_audio",
     "completed",

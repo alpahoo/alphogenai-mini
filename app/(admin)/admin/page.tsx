@@ -67,6 +67,7 @@ const PROVIDER_INFO: Record<string, { label: string; desc: string; color: string
   evolink: { label: "EvoLink", desc: "Seedance, Kling, WAN, Hailuo, Sora", color: "text-blue-400" },
   bailian: { label: "Bailian (Alibaba)", desc: "WAN 2.6 / 2.7 via DashScope", color: "text-orange-400" },
   modal: { label: "Modal (GPU)", desc: "Wan 2.2 I2V self-hosted", color: "text-violet-400" },
+  musicgen: { label: "MusicGen (Audio)", desc: "Background music via Meta MusicGen", color: "text-emerald-400" },
 };
 
 export default function AdminDashboard() {

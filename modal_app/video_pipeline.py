@@ -587,15 +587,57 @@ def extract_last_frame(job_id: str, scene_index: int, video_url: str) -> str:
     return frame_url
 
 
+def _probe_video_duration(video_bytes: bytes) -> float:
+    """Get video duration in seconds using ffprobe."""
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
+        f.write(video_bytes)
+        f.flush()
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", f.name],
+            capture_output=True, text=True,
+        )
+        import os
+        os.unlink(f.name)
+    return float(probe.stdout.strip())
+
+
+def _is_musicgen_enabled() -> bool:
+    """Check if MusicGen provider is enabled via admin toggle."""
+    try:
+        sb = get_supabase_client()
+        result = sb.table("app_settings").select("value").eq("key", "providers").single().execute()
+        if result.data and result.data.get("value"):
+            providers = result.data["value"]
+            return providers.get("musicgen", {}).get("enabled", True)
+    except Exception:
+        pass
+    return True  # default enabled if DB read fails
+
+
+def _derive_music_prompt(job_prompt: str, audio_prompt: str | None, audio_mode: str) -> str:
+    """Build MusicGen prompt from job context."""
+    if audio_mode == "custom" and audio_prompt:
+        return audio_prompt[:500]
+    # Auto mode: derive from video prompt
+    base = job_prompt[:200].strip()
+    return f"calm instrumental background music for a video about: {base}"
+
+
 @app.function(image=base_image, secrets=[secrets], timeout=900, retries=0)
 def concat_and_finalize(job_id: str) -> str:
     """
     Concatenate every done scene of `job_id` (ordered by scene_index) into a
-    single MP4, upload to R2, mark the job as done.
+    single MP4, optionally generate background music with MusicGen, upload
+    to R2, and mark the job as done.
 
     Reads clip_urls directly from Supabase job_scenes — no client payload
-    trusted.  If only one scene is done we short-circuit and just mark the
-    job done with that clip_url.
+    trusted.  If only one scene is done we short-circuit (but still add
+    music if requested).
     """
     import traceback
 
@@ -615,26 +657,77 @@ def concat_and_finalize(job_id: str) -> str:
 
         log(job_id, f"concat_and_finalize: {len(clip_urls)} clip(s)")
 
+        # Read job metadata for plan + audio settings
+        job_row = sb.table("jobs") \
+            .select("plan, prompt, audio_mode, audio_prompt") \
+            .eq("id", job_id).single().execute()
+        job_data = job_row.data or {}
+        plan = job_data.get("plan", "free")
+        audio_mode = job_data.get("audio_mode", "auto")
+        audio_prompt = job_data.get("audio_prompt")
+        job_prompt = job_data.get("prompt", "")
+
         if len(clip_urls) == 1:
-            # Single scene path: nothing to concat
-            only = clip_urls[0]
-            update_job(job_id, status="done", current_stage="completed",
-                       video_url=only, output_url_final=only)
-            return only
+            # Single scene: download bytes for potential music mux
+            import httpx
+            with httpx.Client(timeout=120) as client:
+                resp = client.get(clip_urls[0])
+                resp.raise_for_status()
+            final_bytes = resp.content
+            log(job_id, f"single scene downloaded: {len(final_bytes)/1e6:.1f}MB")
+        else:
+            update_job(job_id, current_stage="encoding")
+            final_bytes = assemble_scenes.remote(job_id, clip_urls)
 
-        # Read plan for watermark decision
-        job_row = sb.table("jobs").select("plan").eq("id", job_id).single().execute()
-        plan = (job_row.data or {}).get("plan", "free")
-
-        update_job(job_id, current_stage="encoding")
-        final_bytes = assemble_scenes.remote(job_id, clip_urls)
-
+        # Watermark for free plan
         if plan == "free":
             try:
                 final_bytes = add_watermark.remote(final_bytes)
             except Exception as e:
                 log(job_id, f"watermark skipped: {e}")
 
+        # ── Background music generation ──────────────────────────────────
+        music_url = None
+        if audio_mode != "none" and _is_musicgen_enabled():
+            try:
+                update_job(job_id, current_stage="generating_music")
+
+                # Probe video duration
+                video_duration = _probe_video_duration(final_bytes)
+                duration_int = max(2, int(video_duration))
+                log(job_id, f"video duration: {video_duration:.1f}s → generating {duration_int}s music")
+
+                # Build music prompt
+                music_prompt = _derive_music_prompt(job_prompt, audio_prompt, audio_mode)
+                log(job_id, f"music prompt: {music_prompt[:80]}")
+
+                # Generate music via MusicGen on A10G
+                music_bytes = generate_music.remote(music_prompt, duration_int)
+                log(job_id, f"music generated: {len(music_bytes)/1024:.1f}KB")
+
+                # Upload music to R2
+                music_url = upload_to_r2(music_bytes, job_id, suffix="_music", content_type="audio/mpeg", extension="mp3")
+                log(job_id, f"music uploaded → {music_url}")
+
+                # Update audio_url on job
+                from datetime import datetime, timezone
+                sb.table("jobs").update({
+                    "audio_url": music_url,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }).eq("id", job_id).execute()
+
+                # Mux music into video at 30% volume
+                update_job(job_id, current_stage="encoding")
+                final_bytes = mux_audio.remote(final_bytes, music_bytes, music_volume=0.3)
+                log(job_id, f"music muxed into video: {len(final_bytes)/1e6:.1f}MB")
+
+            except Exception as e:
+                log(job_id, f"music generation skipped (non-blocking): {e}")
+                # Continue without music — video is still valid
+        else:
+            log(job_id, f"music skipped: audio_mode={audio_mode}, musicgen_enabled={_is_musicgen_enabled()}")
+
+        # ── Upload final video ───────────────────────────────────────────
         update_job(job_id, current_stage="uploading")
         final_url = upload_to_r2(final_bytes, job_id, suffix="_final")
         log(job_id, f"concat_and_finalize uploaded → {final_url}")
@@ -721,9 +814,144 @@ def generate_audio(prompt: str, duration_seconds: int = 5) -> bytes:
     return mp3_bytes
 
 
+# ---------------------------------------------------------------------------
+# Music generation (MusicGen on A10G — background music for videos)
+# ---------------------------------------------------------------------------
+musicgen_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("ffmpeg")
+    .pip_install(
+        "torch==2.2.0",
+        "torchaudio==2.2.0",
+        "transformers>=4.38.0",
+        "scipy",
+        "accelerate",
+    )
+)
+
+
+@app.function(image=musicgen_image, gpu="A10G", secrets=[secrets], timeout=600, retries=0)
+def generate_music(prompt: str, duration_seconds: int = 30) -> bytes:
+    """Generate background music using Meta MusicGen-small. Returns MP3 bytes.
+
+    For durations > 30s, generates multiple 30s segments with 5s overlapping
+    crossfade, then trims to exact target duration with a 2s fade-out.
+    """
+    import torch
+    import torchaudio
+    import subprocess
+    import tempfile
+    import math
+    from pathlib import Path
+    from transformers import MusicgenForConditionalGeneration, AutoProcessor
+
+    duration = max(2, min(300, duration_seconds))  # cap at 5 min
+    SEGMENT_MAX = 30
+    CROSSFADE = 5  # seconds of overlap between segments
+    SAMPLE_RATE = 32000  # MusicGen native sample rate
+
+    print(f"[musicgen] generating {duration}s music for: {prompt[:80]}")
+
+    # Load model
+    processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
+    model = MusicgenForConditionalGeneration.from_pretrained(
+        "facebook/musicgen-small",
+        torch_dtype=torch.float16,
+    ).to("cuda")
+    print("[musicgen] model loaded")
+
+    def generate_segment(seg_duration: int) -> torch.Tensor:
+        """Generate a single segment of music."""
+        inputs = processor(
+            text=[prompt],
+            padding=True,
+            return_tensors="pt",
+        ).to("cuda")
+        # MusicGen generates ~50 tokens/second at 32kHz
+        max_tokens = int(seg_duration * 50) + 10
+        with torch.no_grad():
+            audio_values = model.generate(
+                **inputs,
+                max_new_tokens=max_tokens,
+                do_sample=True,
+                guidance_scale=3.0,
+            )
+        # Shape: (batch, channels, samples) → squeeze to (samples,)
+        return audio_values[0, 0].cpu().float()
+
+    if duration <= SEGMENT_MAX:
+        # Single segment — generate at exact duration
+        full_audio = generate_segment(duration)
+        print(f"[musicgen] single segment: {len(full_audio)} samples")
+    else:
+        # Multiple segments with crossfade
+        step = SEGMENT_MAX - CROSSFADE  # 25s of new content per segment
+        num_segments = math.ceil((duration - CROSSFADE) / step)
+        num_segments = max(2, num_segments)
+        print(f"[musicgen] generating {num_segments} segments for {duration}s")
+
+        segments = []
+        for i in range(num_segments):
+            seg_dur = SEGMENT_MAX
+            print(f"[musicgen] segment {i+1}/{num_segments} ({seg_dur}s)...")
+            seg = generate_segment(seg_dur)
+            segments.append(seg)
+
+        # Crossfade-stitch segments
+        crossfade_samples = CROSSFADE * SAMPLE_RATE
+        full_audio = segments[0]
+        for i in range(1, len(segments)):
+            prev = full_audio
+            curr = segments[i]
+            # Fade out end of previous, fade in start of current
+            overlap_len = min(crossfade_samples, len(prev), len(curr))
+            fade_out = torch.linspace(1.0, 0.0, overlap_len)
+            fade_in = torch.linspace(0.0, 1.0, overlap_len)
+            # Mix the overlapping region
+            mixed = prev[-overlap_len:] * fade_out + curr[:overlap_len] * fade_in
+            full_audio = torch.cat([prev[:-overlap_len], mixed, curr[overlap_len:]])
+            print(f"[musicgen] stitched segment {i+1}, total: {len(full_audio)/SAMPLE_RATE:.1f}s")
+
+    # Trim to exact duration + 2s fade-out
+    target_samples = duration * SAMPLE_RATE
+    if len(full_audio) > target_samples:
+        full_audio = full_audio[:target_samples]
+    # Apply 2s fade-out at end
+    fadeout_samples = min(2 * SAMPLE_RATE, len(full_audio) // 2)
+    fade = torch.linspace(1.0, 0.0, fadeout_samples)
+    full_audio[-fadeout_samples:] *= fade
+
+    print(f"[musicgen] final audio: {len(full_audio)/SAMPLE_RATE:.1f}s, {len(full_audio)} samples")
+
+    # Encode to MP3
+    with tempfile.TemporaryDirectory() as tmpdir:
+        wav_path = Path(tmpdir) / "music.wav"
+        mp3_path = Path(tmpdir) / "music.mp3"
+
+        audio_tensor = full_audio.unsqueeze(0)  # (1, samples)
+        torchaudio.save(str(wav_path), audio_tensor, SAMPLE_RATE)
+
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", str(wav_path),
+             "-codec:a", "libmp3lame", "-b:a", "192k", str(mp3_path)],
+            capture_output=True, check=True,
+        )
+        mp3_bytes = mp3_path.read_bytes()
+
+    print(f"[musicgen] encoded MP3: {len(mp3_bytes) / 1024:.1f} KB")
+    return mp3_bytes
+
+
 @app.function(image=base_image, secrets=[secrets], timeout=120, retries=0)
-def mux_audio(video_bytes: bytes, audio_bytes: bytes) -> bytes:
-    """Combine video + audio into a single MP4 using ffmpeg."""
+def mux_audio(video_bytes: bytes, audio_bytes: bytes, music_volume: float = 1.0) -> bytes:
+    """Combine video + audio into a single MP4 using ffmpeg.
+
+    Args:
+        video_bytes: Raw MP4 video bytes.
+        audio_bytes: Raw MP3/WAV audio bytes.
+        music_volume: Volume level for the audio track (0.0–1.0).
+                      1.0 = full volume, 0.3 = background music level.
+    """
     import subprocess
     import tempfile
     from pathlib import Path
@@ -736,23 +964,43 @@ def mux_audio(video_bytes: bytes, audio_bytes: bytes) -> bytes:
         video_path.write_bytes(video_bytes)
         audio_path.write_bytes(audio_bytes)
 
-        result = subprocess.run(
-            [
-                "ffmpeg", "-y",
-                "-i", str(video_path),
-                "-i", str(audio_path),
-                "-c:v", "copy",
-                "-c:a", "aac", "-b:a", "192k",
-                "-shortest",
-                str(output_path),
-            ],
-            capture_output=True, text=True,
-        )
+        if music_volume < 1.0:
+            # Apply volume attenuation for background music
+            result = subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-i", str(video_path),
+                    "-i", str(audio_path),
+                    "-filter_complex",
+                    f"[1:a]volume={music_volume}[a]",
+                    "-map", "0:v",
+                    "-map", "[a]",
+                    "-c:v", "copy",
+                    "-c:a", "aac", "-b:a", "192k",
+                    "-shortest",
+                    str(output_path),
+                ],
+                capture_output=True, text=True,
+            )
+        else:
+            result = subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-i", str(video_path),
+                    "-i", str(audio_path),
+                    "-c:v", "copy",
+                    "-c:a", "aac", "-b:a", "192k",
+                    "-shortest",
+                    str(output_path),
+                ],
+                capture_output=True, text=True,
+            )
+
         if result.returncode != 0:
             raise RuntimeError(f"ffmpeg mux failed: {result.stderr[-300:]}")
 
         muxed = output_path.read_bytes()
-        print(f"[mux_audio] {len(video_bytes)/1e6:.1f}MB video + {len(audio_bytes)/1e3:.0f}KB audio → {len(muxed)/1e6:.1f}MB")
+        print(f"[mux_audio] {len(video_bytes)/1e6:.1f}MB video + {len(audio_bytes)/1e3:.0f}KB audio (vol={music_volume}) → {len(muxed)/1e6:.1f}MB")
         return muxed
 
 
