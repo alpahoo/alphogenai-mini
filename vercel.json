@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/evolink-poll",
-      "schedule": "* * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
