@@ -23,6 +23,8 @@ import {
   CopyPlus,
   Share2,
   Volume2,
+  ExternalLink,
+  Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -38,6 +40,28 @@ import { SceneTimeline, ScenePanel } from "@/components/editor";
 // Reduced from 5s → 15s now that Realtime handles UI freshness.
 // The poll still drives the EvoLink state machine (scene advancement).
 const POLL_INTERVAL = 15_000;
+
+/** Provider dashboard URLs for topping up credits */
+const PROVIDER_TOP_UP: Record<string, { url: string; label: string }> = {
+  evolink: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
+  evolink_fast: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
+  kling_o3: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
+  kling_v3: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
+  wan_26: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
+  wan_27: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
+  happy_horse_10: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
+  hailuo: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
+  hailuo_fast: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
+  sora_2: { url: "https://evolink.ai/dashboard/billing", label: "EvoLink" },
+  bailian_wan: { url: "https://bailian.console.alibabacloud.com/", label: "Alibaba Bailian" },
+  bailian_wan_fast: { url: "https://bailian.console.alibabacloud.com/", label: "Alibaba Bailian" },
+};
+
+function isInsufficientCreditsError(msg: string | null | undefined): boolean {
+  if (!msg) return false;
+  const lower = msg.toLowerCase();
+  return lower.includes("insufficient_quota") || lower.includes("insufficient credits") || lower.includes("insufficient balance");
+}
 
 // ---------------------------------------------------------------------------
 // Stage labels — premium, user-friendly
@@ -142,6 +166,9 @@ export default function JobPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const voiceoverRef = useRef<HTMLAudioElement>(null);
 
+  // Admin credit balance
+  const [adminCredits, setAdminCredits] = useState<{ remaining: number; status: string } | null>(null);
+
   // Social connections — declared before any conditional returns (Rules of Hooks)
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [tiktokConnected, setTiktokConnected] = useState(false);
@@ -203,6 +230,20 @@ export default function JobPage() {
         }
         setChannelNames(names);
       });
+  }, [email]);
+
+  // ── Fetch admin credit balance ──────────────────────────────
+  useEffect(() => {
+    if (!email || !isAdminEmail(email)) return;
+    fetch("/api/admin/credits")
+      .then((r) => r.json())
+      .then((data) => {
+        const ev = data.providers?.evolink;
+        if (ev && typeof ev.remaining === "number") {
+          setAdminCredits({ remaining: ev.remaining, status: ev.status });
+        }
+      })
+      .catch(() => {}); // Non-fatal
   }, [email]);
 
   // ── Realtime subscription (instant UI updates) ─────────────
@@ -643,6 +684,19 @@ export default function JobPage() {
                       </p>
                     )}
                     <div className="mt-6 flex flex-wrap gap-3">
+                      {/* Top up credits button — shown on insufficient credits errors */}
+                      {isAdmin && isInsufficientCreditsError(job?.error_message) && job?.engine_used && PROVIDER_TOP_UP[job.engine_used] && (
+                        <a
+                          href={PROVIDER_TOP_UP[job.engine_used].url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500"
+                        >
+                          <Wallet className="h-4 w-4" />
+                          Top up {PROVIDER_TOP_UP[job.engine_used].label}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
                       <button
                         onClick={handleRetry}
                         disabled={retrying}
@@ -777,7 +831,7 @@ export default function JobPage() {
               {/* ── Mobile info cards (hidden on desktop) ───── */}
               {job && (
                 <div className="lg:hidden space-y-5">
-                  <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} channelNames={channelNames} scenes={scenes} />
+                  <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} adminCredits={adminCredits} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} channelNames={channelNames} scenes={scenes} />
                 </div>
               )}
             </motion.div>
@@ -802,7 +856,7 @@ export default function JobPage() {
                   onRegenerate={handleSceneRegenerate}
                 />
               )}
-            <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} channelNames={channelNames} scenes={scenes} />
+            <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} adminCredits={adminCredits} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} channelNames={channelNames} scenes={scenes} />
           </div>
         )}
       </main>
@@ -822,6 +876,7 @@ function InfoCards({
   elapsed,
   sceneCount,
   isAdmin = false,
+  adminCredits = null,
   youtubeConnected = false,
   tiktokConnected = false,
   instagramConnected = false,
@@ -836,6 +891,7 @@ function InfoCards({
   elapsed: number;
   sceneCount: number;
   isAdmin?: boolean;
+  adminCredits?: { remaining: number; status: string } | null;
   youtubeConnected?: boolean;
   tiktokConnected?: boolean;
   instagramConnected?: boolean;
@@ -896,6 +952,51 @@ function InfoCards({
           <JobCostBadge engine={job.engine_used} cost={job.estimated_cost_usd} />
         )}
       </div>
+
+      {/* Admin-only: Provider credit balance */}
+      {isAdmin && adminCredits && (
+        <div className={`rounded-xl border p-4 ${
+          adminCredits.status === "critical"
+            ? "border-red-500/40 bg-red-500/5"
+            : adminCredits.status === "low"
+              ? "border-amber-500/40 bg-amber-500/5"
+              : "border-border/40 bg-card/60"
+        }`}>
+          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+            <Wallet className="h-3 w-3" />
+            Provider Credits
+          </h3>
+          <div className="space-y-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">EvoLink balance</span>
+              <span className={`font-semibold tabular-nums ${
+                adminCredits.status === "critical"
+                  ? "text-red-400"
+                  : adminCredits.status === "low"
+                    ? "text-amber-400"
+                    : "text-green-400"
+              }`}>
+                {adminCredits.remaining.toFixed(1)} credits
+              </span>
+            </div>
+            {adminCredits.status !== "ok" && (
+              <p className={`text-[11px] ${adminCredits.status === "critical" ? "text-red-400" : "text-amber-400"}`}>
+                {adminCredits.status === "critical"
+                  ? "Credits critically low! Top up now."
+                  : "Credits running low."}
+              </p>
+            )}
+            <a
+              href="https://evolink.ai/dashboard/billing"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-[11px] text-primary hover:underline"
+            >
+              <ExternalLink className="h-3 w-3" /> Top up on EvoLink
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* Audio player (when separate audio track exists) */}
       {isDone && job.audio_url && (

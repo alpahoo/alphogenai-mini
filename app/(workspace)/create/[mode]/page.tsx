@@ -25,12 +25,16 @@ import {
   ShoppingBag,
   Share2,
   ImagePlus,
+  AlertTriangle,
+  ExternalLink,
+  Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { SegmentedControl } from "@/components/create/segmented-control";
 import { TemplatePicker } from "@/components/create/template-picker";
 import { ReferenceUpload, buildReferencePayload } from "@/components/create/reference-upload";
+import { isAdminEmail } from "@/lib/flags";
 import type { PromptTemplate } from "@/lib/prompt-templates";
 import type { JobPlan, EngineKey, ReferenceItem } from "@/lib/types";
 import { ENGINE_DISPLAY_NAMES, PLAN_MAX_DURATION, PLAN_MAX_SCENES } from "@/lib/types";
@@ -160,6 +164,9 @@ export default function CreateModePage({
   const [engineOptions, setEngineOptions] = useState<EngineOption[]>(FALLBACK_ENGINES);
   // Health status per engine: rate 0.0-1.0, -1 = unknown
   const [engineHealth, setEngineHealth] = useState<Record<string, number>>({});
+  // Admin: email + provider credit balance
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [adminCredits, setAdminCredits] = useState<{ remaining: number; status: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/engines")
@@ -182,6 +189,26 @@ export default function CreateModePage({
         setEngineHealth(rates);
       })
       .catch(() => { /* silent */ });
+
+    // Get user email for admin check
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.email) {
+        setUserEmail(user.email);
+        // Admin: fetch credit balance
+        if (isAdminEmail(user.email)) {
+          fetch("/api/admin/credits")
+            .then((r) => r.json())
+            .then((data) => {
+              const ev = data.providers?.evolink;
+              if (ev && typeof ev.remaining === "number") {
+                setAdminCredits({ remaining: ev.remaining, status: ev.status });
+              }
+            })
+            .catch(() => {});
+        }
+      }
+    });
   }, []);
   const [showTemplates, setShowTemplates] = useState(false);
   // Multi-scene continuity: when ON, scene N+1 starts from the last frame
@@ -889,6 +916,44 @@ export default function CreateModePage({
                     Upgrade to Pro
                   </Link>
                 )}
+              </div>
+            )}
+
+            {/* ── Admin: Credit balance warning ──────────────────── */}
+            {isAdminEmail(userEmail) && adminCredits && adminCredits.status !== "ok" && (
+              <div className={`rounded-xl border px-4 py-3 flex items-start gap-3 ${
+                adminCredits.status === "critical"
+                  ? "border-red-500/40 bg-red-500/10"
+                  : "border-amber-500/40 bg-amber-500/10"
+              }`}>
+                <AlertTriangle className={`h-5 w-5 shrink-0 mt-0.5 ${
+                  adminCredits.status === "critical" ? "text-red-400" : "text-amber-400"
+                }`} />
+                <div className="flex-1">
+                  <p className={`text-sm font-medium ${
+                    adminCredits.status === "critical" ? "text-red-400" : "text-amber-400"
+                  }`}>
+                    <Wallet className="h-3.5 w-3.5 inline mr-1" />
+                    {adminCredits.status === "critical"
+                      ? `EvoLink credits critically low: ${adminCredits.remaining.toFixed(1)} remaining`
+                      : `EvoLink credits running low: ${adminCredits.remaining.toFixed(1)} remaining`
+                    }
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {adminCredits.status === "critical"
+                      ? "Generation will likely fail. Top up before launching."
+                      : "Consider topping up soon to avoid interrupted jobs."
+                    }
+                  </p>
+                  <a
+                    href="https://evolink.ai/dashboard/billing"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-2"
+                  >
+                    <ExternalLink className="h-3 w-3" /> Top up on EvoLink
+                  </a>
+                </div>
               </div>
             )}
 

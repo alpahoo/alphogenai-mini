@@ -199,6 +199,62 @@ export function isEvoLinkEngine(engineKey: string): boolean {
   return engineKey in EVOLINK_ENGINES;
 }
 
+// ---------------------------------------------------------------------------
+// Credits / balance check
+// ---------------------------------------------------------------------------
+
+export interface EvoLinkCredits {
+  tokenRemaining: number;
+  tokenUsed: number;
+  tokenUnlimited: boolean;
+  userRemaining: number;
+  userUsed: number;
+}
+
+/**
+ * Fetch the current credit balance from EvoLink.
+ * Used for admin pre-flight checks before launching jobs.
+ */
+export async function getEvoLinkCredits(): Promise<EvoLinkCredits> {
+  const apiKey = process.env.EVOLINK_API_KEY;
+  if (!apiKey) throw new Error("EVOLINK_API_KEY not configured");
+
+  const res = await fetch(`${EVOLINK_API}/credits`, {
+    headers: { Authorization: `Bearer ${apiKey.trim()}` },
+    cache: "no-store",
+    signal: AbortSignal.timeout(8000),
+  });
+
+  if (!res.ok) {
+    throw new Error(`EvoLink credits check failed (${res.status})`);
+  }
+
+  const json = await res.json();
+  const data = json.data ?? {};
+  const token = data.token ?? {};
+  const user = data.user ?? {};
+
+  return {
+    tokenRemaining: Number(token.remaining_credits ?? 0),
+    tokenUsed: Number(token.used_credits ?? 0),
+    tokenUnlimited: Boolean(token.unlimited_credits),
+    userRemaining: Number(user.remaining_credits ?? 0),
+    userUsed: Number(user.used_credits ?? 0),
+  };
+}
+
+/** Dashboard URLs for provider billing/top-up pages */
+export const PROVIDER_DASHBOARD_URLS: Record<string, { topUp: string; label: string }> = {
+  evolink: {
+    topUp: "https://evolink.ai/dashboard/billing",
+    label: "EvoLink",
+  },
+  bailian: {
+    topUp: "https://bailian.console.alibabacloud.com/",
+    label: "Alibaba Bailian",
+  },
+};
+
 /**
  * Returns true if the given EvoLink engine supports image-to-video.
  * Used by the multi-scene chaining path: engines without an `imageModel`
