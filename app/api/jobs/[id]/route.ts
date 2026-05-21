@@ -7,7 +7,7 @@ import {
   createEvoLinkTask,
   engineSupportsFirstFrame,
 } from "@/lib/evolink-client";
-import { isBailianEngine, getBailianTask } from "@/lib/bailian-client";
+import { isBailianEngine, getBailianTask, createBailianTask } from "@/lib/bailian-client";
 import { triggerExtractLastFrame, triggerConcatScenes } from "@/lib/modal-client";
 import { generateVoiceover, isTTSAvailable } from "@/lib/tts";
 import { uploadBufferToR2 } from "@/lib/r2";
@@ -583,14 +583,23 @@ async function fireNextScene(
 
   let taskId: string;
   try {
-    taskId = await createEvoLinkTask({
-      engineKey,
-      prompt,
-      duration,
-      imageUrl: firstFrameUrl,
-      aspectRatio: (job.aspect_ratio as string) ?? "16:9",
-      references: jobReferences,
-    });
+    if (isBailianEngine(engineKey)) {
+      taskId = await createBailianTask({
+        engineKey,
+        prompt,
+        duration,
+        imageUrl: firstFrameUrl,
+      });
+    } else {
+      taskId = await createEvoLinkTask({
+        engineKey,
+        prompt,
+        duration,
+        imageUrl: firstFrameUrl,
+        aspectRatio: (job.aspect_ratio as string) ?? "16:9",
+        references: jobReferences,
+      });
+    }
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e);
     console.error(`[jobs/status] scene ${sceneNum} create failed:`, errMsg);
