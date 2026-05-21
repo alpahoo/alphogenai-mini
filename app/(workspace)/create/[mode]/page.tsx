@@ -924,9 +924,40 @@ export default function CreateModePage({
             )}
 
             {/* ── Admin: Credit sufficiency check ─────────────────── */}
-            {isAdminEmail(userEmail) && adminCredits && (() => {
-              // Estimate cost for this job
+            {isAdminEmail(userEmail) && (() => {
+              // Determine provider for the selected engine
               const engineKey = selectedEngine === "auto" ? "evolink_fast" : selectedEngine;
+              const isBailianEngine = engineKey.includes("bailian");
+
+              // Bailian: no balance API — show a note to check Alibaba console
+              if (isBailianEngine) {
+                return (
+                  <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 px-4 py-3 flex items-start gap-3">
+                    <Wallet className="h-5 w-5 shrink-0 mt-0.5 text-blue-400" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-blue-400">
+                        Bailian credits (Alibaba Cloud)
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        No automatic balance check available for Bailian.
+                        Verify your credits on the Alibaba Cloud console before launching.
+                      </p>
+                      <a
+                        href="https://bailian.console.alibabacloud.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-2"
+                      >
+                        <ExternalLink className="h-3 w-3" /> Open Alibaba Cloud Console
+                      </a>
+                    </div>
+                  </div>
+                );
+              }
+
+              // EvoLink: check credit balance
+              if (!adminCredits) return null;
+
               const costPerScene = engineCosts[engineKey] ?? 100;
               const estimatedCost = sceneCount * costPerScene;
               const canAfford = adminCredits.remaining >= estimatedCost;
@@ -962,7 +993,7 @@ export default function CreateModePage({
                       <>
                         <p className="text-sm font-medium text-amber-400">
                           <Wallet className="h-3.5 w-3.5 inline mr-1" />
-                          Credits running low: {adminCredits.remaining.toFixed(1)} remaining
+                          EvoLink credits running low: {adminCredits.remaining.toFixed(1)} remaining
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
                           Estimated cost for this job: ~{estimatedCost} credits ({sceneCount} scene{sceneCount > 1 ? "s" : ""}).

@@ -53,8 +53,8 @@ const PROVIDER_TOP_UP: Record<string, { url: string; label: string }> = {
   hailuo: { url: "https://evolink.ai/fr/dashboard/credits", label: "EvoLink" },
   hailuo_fast: { url: "https://evolink.ai/fr/dashboard/credits", label: "EvoLink" },
   sora_2: { url: "https://evolink.ai/fr/dashboard/credits", label: "EvoLink" },
-  bailian_wan: { url: "https://bailian.console.alibabacloud.com/", label: "Alibaba Bailian" },
-  bailian_wan_fast: { url: "https://bailian.console.alibabacloud.com/", label: "Alibaba Bailian" },
+  wan_26_bailian: { url: "https://bailian.console.alibabacloud.com/", label: "Alibaba Bailian" },
+  wan_27_bailian: { url: "https://bailian.console.alibabacloud.com/", label: "Alibaba Bailian" },
 };
 
 function isInsufficientCreditsError(msg: string | null | undefined): boolean {
@@ -986,14 +986,22 @@ function InfoCards({
                   : "Credits running low."}
               </p>
             )}
-            <a
-              href="https://evolink.ai/fr/dashboard/credits"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-[11px] text-primary hover:underline"
-            >
-              <ExternalLink className="h-3 w-3" /> Top up on EvoLink
-            </a>
+            {(() => {
+              const engineKey = job?.engine_used ?? "";
+              const providerInfo = PROVIDER_TOP_UP[engineKey];
+              const topUpUrl = providerInfo?.url ?? "https://evolink.ai/fr/dashboard/credits";
+              const topUpLabel = providerInfo?.label ?? "EvoLink";
+              return (
+                <a
+                  href={topUpUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-[11px] text-primary hover:underline"
+                >
+                  <ExternalLink className="h-3 w-3" /> Top up on {topUpLabel}
+                </a>
+              );
+            })()}
           </div>
         </div>
       )}
