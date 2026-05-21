@@ -88,10 +88,11 @@ export async function GET(
     }
 
     const isEvoLink = isEvoLinkEngine(job.engine_used ?? "");
+    const isBailian = isBailianEngine(job.engine_used ?? "");
 
-    // ── EvoLink state machine ──────────────────────────────────────────
-    // Only runs when the job is still in flight and uses an EvoLink engine.
-    if (isEvoLink && job.status === "in_progress") {
+    // ── Provider state machine ────────────────────────────────────────
+    // Runs for both EvoLink and Bailian engines while the job is in flight.
+    if ((isEvoLink || isBailian) && job.status === "in_progress") {
       const stage = (job.current_stage as string | null) ?? "";
 
       if (stage === "encoding" || stage === "uploading") {
