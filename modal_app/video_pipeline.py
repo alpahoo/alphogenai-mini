@@ -620,12 +620,46 @@ def _is_musicgen_enabled() -> bool:
 
 
 def _derive_music_prompt(job_prompt: str, audio_prompt: str | None, audio_mode: str) -> str:
-    """Build MusicGen prompt from job context."""
+    """Build ACE-Step caption from job context.
+
+    ACE-Step works best with tag-style descriptions: genre, mood,
+    instrumentation keywords rather than natural language sentences.
+    """
     if audio_mode == "custom" and audio_prompt:
         return audio_prompt[:500]
-    # Auto mode: derive from video prompt
-    base = job_prompt[:200].strip()
-    return f"calm instrumental background music for a video about: {base}"
+
+    # Auto mode: build tag-style caption from video prompt keywords
+    prompt_lower = job_prompt.lower()
+
+    # Detect mood from video prompt
+    mood_map = {
+        "epic": "epic, powerful, grandiose",
+        "dramatic": "dramatic, intense, cinematic",
+        "action": "energetic, fast tempo, intense, driving",
+        "calm": "calm, peaceful, serene, gentle",
+        "nature": "ambient, atmospheric, nature, peaceful",
+        "sad": "melancholic, emotional, slow, reflective",
+        "happy": "uplifting, bright, cheerful, warm",
+        "horror": "dark, suspenseful, eerie, tension",
+        "romantic": "romantic, warm, soft, emotional",
+        "sci-fi": "electronic, futuristic, synth, atmospheric",
+        "technology": "modern, electronic, minimal, clean",
+        "corporate": "corporate, professional, upbeat, motivational",
+        "travel": "adventurous, inspiring, world music, uplifting",
+        "food": "light, acoustic, warm, pleasant",
+    }
+
+    detected_tags = []
+    for keyword, tags in mood_map.items():
+        if keyword in prompt_lower:
+            detected_tags.append(tags)
+
+    if detected_tags:
+        tag_str = ", ".join(detected_tags[:3])
+    else:
+        tag_str = "cinematic, ambient, atmospheric, gentle"
+
+    return f"instrumental, background music, {tag_str}, no vocals"
 
 
 @app.function(image=base_image, secrets=[secrets], timeout=900, retries=0)
@@ -815,130 +849,117 @@ def generate_audio(prompt: str, duration_seconds: int = 5) -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# Music generation (MusicGen on A10G — background music for videos)
+# Music generation (ACE-Step 1.5 on A10G — background music for videos)
 # ---------------------------------------------------------------------------
-musicgen_image = (
+acestep_image = (
     modal.Image.debian_slim(python_version="3.11")
-    .apt_install("ffmpeg")
-    .pip_install(
-        "torch==2.2.0",
-        "torchaudio==2.2.0",
-        "transformers>=4.38.0",
-        "scipy",
-        "accelerate",
+    .apt_install("git", "ffmpeg", "build-essential")
+    .run_commands(
+        "git clone --branch v0.1.6 --depth 1 https://github.com/ace-step/ACE-Step-1.5.git /opt/ace-step",
+        "pip install /opt/ace-step",
     )
 )
 
+acestep_volume = modal.Volume.from_name("acestep-models", create_if_missing=True)
 
-@app.function(image=musicgen_image, gpu="A10G", secrets=[secrets], timeout=600, retries=0)
+
+@app.function(
+    image=acestep_image,
+    gpu="A10G",
+    secrets=[secrets],
+    timeout=600,
+    retries=0,
+    volumes={"/opt/ace-step/checkpoints": acestep_volume},
+)
 def generate_music(prompt: str, duration_seconds: int = 30) -> bytes:
-    """Generate background music using Meta MusicGen-small. Returns MP3 bytes.
+    """Generate background music using ACE-Step 1.5 (2B Turbo). Returns MP3 bytes.
 
-    For durations > 30s, generates multiple 30s segments with 5s overlapping
-    crossfade, then trims to exact target duration with a 2s fade-out.
+    Uses tag-style captions for genre/mood/instrumentation control.
+    Generates full tracks up to 600s in a single pass — no stitching needed.
+    Output: 48kHz MP3 at 192kbps.
     """
-    import torch
-    import torchaudio
     import subprocess
     import tempfile
-    import math
     from pathlib import Path
-    from transformers import MusicgenForConditionalGeneration, AutoProcessor
 
-    duration = max(2, min(300, duration_seconds))  # cap at 5 min
-    SEGMENT_MAX = 30
-    CROSSFADE = 5  # seconds of overlap between segments
-    SAMPLE_RATE = 32000  # MusicGen native sample rate
+    duration = max(10, min(600, duration_seconds))  # ACE-Step: 10-600s
+    print(f"[ace-step] generating {duration}s music for: {prompt[:80]}")
 
-    print(f"[musicgen] generating {duration}s music for: {prompt[:80]}")
+    # Initialize DiT handler (2B Turbo — 8 inference steps, fast)
+    from acestep.handler import AceStepHandler
+    dit_handler = AceStepHandler()
+    init_status, enable_generate = dit_handler.initialize_service(
+        project_root="/opt/ace-step",
+        config_path="acestep-v15-turbo",
+        device="cuda",
+    )
+    print(f"[ace-step] DiT initialized: {init_status}")
 
-    # Load model
-    processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
-    model = MusicgenForConditionalGeneration.from_pretrained(
-        "facebook/musicgen-small",
-        torch_dtype=torch.float16,
-    ).to("cuda")
-    print("[musicgen] model loaded")
+    # Initialize LM handler (1.7B — good quality, fits comfortably on A10G)
+    from acestep.llm_inference import LLMHandler
+    llm_handler = LLMHandler()
+    lm_status, lm_success = llm_handler.initialize(
+        checkpoint_dir="/opt/ace-step/checkpoints",
+        lm_model_path="acestep-5Hz-lm-1.7B",
+        backend="vllm",
+        device="cuda",
+    )
+    print(f"[ace-step] LM initialized: {lm_status}, success={lm_success}")
 
-    def generate_segment(seg_duration: int) -> torch.Tensor:
-        """Generate a single segment of music."""
-        inputs = processor(
-            text=[prompt],
-            padding=True,
-            return_tensors="pt",
-        ).to("cuda")
-        # MusicGen generates ~50 tokens/second at 32kHz
-        max_tokens = int(seg_duration * 50) + 10
-        with torch.no_grad():
-            audio_values = model.generate(
-                **inputs,
-                max_new_tokens=max_tokens,
-                do_sample=True,
-                guidance_scale=3.0,
-            )
-        # Shape: (batch, channels, samples) → squeeze to (samples,)
-        return audio_values[0, 0].cpu().float()
+    # Generate instrumental track
+    from acestep.inference import GenerationParams, GenerationConfig, generate_music as ace_generate
 
-    if duration <= SEGMENT_MAX:
-        # Single segment — generate at exact duration
-        full_audio = generate_segment(duration)
-        print(f"[musicgen] single segment: {len(full_audio)} samples")
-    else:
-        # Multiple segments with crossfade
-        step = SEGMENT_MAX - CROSSFADE  # 25s of new content per segment
-        num_segments = math.ceil((duration - CROSSFADE) / step)
-        num_segments = max(2, num_segments)
-        print(f"[musicgen] generating {num_segments} segments for {duration}s")
+    params = GenerationParams(
+        caption=prompt[:512],
+        lyrics="[Instrumental]",
+        instrumental=True,
+        duration=float(duration),
+        inference_steps=8,        # turbo: 8 steps
+        guidance_scale=7.0,
+        thinking=True,            # LM chain-of-thought for better tags
+        seed=-1,                  # random seed
+    )
 
-        segments = []
-        for i in range(num_segments):
-            seg_dur = SEGMENT_MAX
-            print(f"[musicgen] segment {i+1}/{num_segments} ({seg_dur}s)...")
-            seg = generate_segment(seg_dur)
-            segments.append(seg)
+    config = GenerationConfig(
+        batch_size=1,
+        audio_format="wav",
+        seeds=[-1],
+        use_random_seed=True,
+    )
 
-        # Crossfade-stitch segments
-        crossfade_samples = CROSSFADE * SAMPLE_RATE
-        full_audio = segments[0]
-        for i in range(1, len(segments)):
-            prev = full_audio
-            curr = segments[i]
-            # Fade out end of previous, fade in start of current
-            overlap_len = min(crossfade_samples, len(prev), len(curr))
-            fade_out = torch.linspace(1.0, 0.0, overlap_len)
-            fade_in = torch.linspace(0.0, 1.0, overlap_len)
-            # Mix the overlapping region
-            mixed = prev[-overlap_len:] * fade_out + curr[:overlap_len] * fade_in
-            full_audio = torch.cat([prev[:-overlap_len], mixed, curr[overlap_len:]])
-            print(f"[musicgen] stitched segment {i+1}, total: {len(full_audio)/SAMPLE_RATE:.1f}s")
+    result = ace_generate(
+        dit_handler=dit_handler,
+        llm_handler=llm_handler,
+        params=params,
+        config=config,
+        save_dir="/tmp/ace-output",
+    )
 
-    # Trim to exact duration + 2s fade-out
-    target_samples = duration * SAMPLE_RATE
-    if len(full_audio) > target_samples:
-        full_audio = full_audio[:target_samples]
-    # Apply 2s fade-out at end
-    fadeout_samples = min(2 * SAMPLE_RATE, len(full_audio) // 2)
-    fade = torch.linspace(1.0, 0.0, fadeout_samples)
-    full_audio[-fadeout_samples:] *= fade
+    if not result.success:
+        raise RuntimeError(f"ACE-Step generation failed: {result.error}")
 
-    print(f"[musicgen] final audio: {len(full_audio)/SAMPLE_RATE:.1f}s, {len(full_audio)} samples")
+    # Read the generated WAV and convert to MP3
+    audio_info = result.audios[0]
+    wav_path = Path(audio_info["path"])
+    print(f"[ace-step] generated: {wav_path} (sr={audio_info['sample_rate']})")
 
-    # Encode to MP3
     with tempfile.TemporaryDirectory() as tmpdir:
-        wav_path = Path(tmpdir) / "music.wav"
         mp3_path = Path(tmpdir) / "music.mp3"
 
-        audio_tensor = full_audio.unsqueeze(0)  # (1, samples)
-        torchaudio.save(str(wav_path), audio_tensor, SAMPLE_RATE)
-
+        # Apply 2s fade-out at end, then encode to MP3
+        fade_start = max(0, duration - 2)
         subprocess.run(
             ["ffmpeg", "-y", "-i", str(wav_path),
+             "-af", f"afade=t=out:st={fade_start}:d=2",
              "-codec:a", "libmp3lame", "-b:a", "192k", str(mp3_path)],
             capture_output=True, check=True,
         )
         mp3_bytes = mp3_path.read_bytes()
 
-    print(f"[musicgen] encoded MP3: {len(mp3_bytes) / 1024:.1f} KB")
+    # Clean up WAV
+    wav_path.unlink(missing_ok=True)
+
+    print(f"[ace-step] encoded MP3: {len(mp3_bytes) / 1024:.1f} KB ({duration}s)")
     return mp3_bytes
 
 
