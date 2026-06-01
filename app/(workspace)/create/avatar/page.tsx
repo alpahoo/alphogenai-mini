@@ -321,14 +321,15 @@ export default function CreateAvatarPage() {
   const estimatedCost = ((estimatedDuration / 60) * 3).toFixed(2);
 
   // Cinematic estimate: dialogue auto-split into ~33-word shots (~13s each).
-  // Silent shot = 1 shot at the chosen duration. Cost ~$0.10/s (1080p).
+  // Silent shot = 1 shot at the chosen duration. Measured cost ≈ $0.12 per
+  // ~15s shot (Seedance 2 launch pricing, ~$0.008/s).
   const cinematicShots = scriptText.trim()
     ? Math.max(1, Math.ceil(wordCount / 33))
     : 1;
   const cinematicSeconds = scriptText.trim()
     ? cinematicShots * 13
     : cinematicDuration;
-  const cinematicCost = (cinematicSeconds * 0.1).toFixed(2);
+  const cinematicCost = (cinematicShots * 0.12).toFixed(2);
 
   // Filtered voices for search
   const filteredVoices = voices.filter(
