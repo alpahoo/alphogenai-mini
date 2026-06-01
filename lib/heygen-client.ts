@@ -184,15 +184,17 @@ export interface HeyGenVoice {
 
 /**
  * List all voices available on the account (stock + cloned).
+ * Uses /v2/voices (the correct endpoint — /v3/voices does not exist for listing).
  */
 export async function listVoices(): Promise<HeyGenVoice[]> {
-  const res = await fetch(`${HEYGEN_API_V3}/voices`, {
+  const res = await fetch(`${HEYGEN_API_V2}/voices`, {
     headers: headers(),
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(15_000),
   });
 
   if (!res.ok) {
-    throw new Error(`HeyGen listVoices failed (${res.status})`);
+    const err = await res.text().catch(() => res.statusText);
+    throw new Error(`HeyGen listVoices failed (${res.status}): ${err.slice(0, 200)}`);
   }
 
   const data = await res.json();

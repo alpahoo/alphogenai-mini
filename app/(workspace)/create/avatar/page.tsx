@@ -63,6 +63,7 @@ export default function CreateAvatarPage() {
 
   // Step 2: Voice
   const [voices, setVoices] = useState<HeyGenVoice[]>([]);
+  const [voicesLoading, setVoicesLoading] = useState(true);
   const [voiceId, setVoiceId] = useState("");
   const [voiceSearchQuery, setVoiceSearchQuery] = useState("");
   const [cloningVoice, setCloningVoice] = useState(false);
@@ -105,7 +106,8 @@ export default function CreateAvatarPage() {
         if (Array.isArray(data.voices)) setVoices(data.voices);
         if (Array.isArray(data.avatars)) setExistingAvatars(data.avatars);
       })
-      .catch(() => { /* silent */ });
+      .catch(() => { /* silent */ })
+      .finally(() => setVoicesLoading(false));
   }, []);
 
   // ── Upload avatar photo ────────────────────────────────────────────────
@@ -520,7 +522,11 @@ export default function CreateAvatarPage() {
               <div className="grid gap-1.5 max-h-48 overflow-y-auto">
                 {stockVoices.length === 0 ? (
                   <p className="text-sm text-muted-foreground/50 py-4 text-center">
-                    {voices.length === 0 ? "Loading voices..." : "No voices match your search"}
+                    {voicesLoading
+                      ? "Loading voices..."
+                      : voices.length === 0
+                        ? "No voices available"
+                        : "No voices match your search"}
                   </p>
                 ) : (
                   stockVoices.slice(0, 20).map((v) => (
