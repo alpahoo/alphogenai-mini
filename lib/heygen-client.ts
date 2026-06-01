@@ -180,6 +180,8 @@ export interface HeyGenVoice {
   language: string;
   gender: string;
   isCloned: boolean;
+  /** URL to a short audio sample for preview playback */
+  previewUrl: string | null;
 }
 
 /**
@@ -205,6 +207,11 @@ export async function listVoices(): Promise<HeyGenVoice[]> {
     language: String(v.language ?? "en"),
     gender: String(v.gender ?? ""),
     isCloned: Boolean(v.is_cloned ?? v.type === "cloned"),
+    previewUrl:
+      (v.preview_audio as string) ??
+      (v.preview_url as string) ??
+      (v.sample_url as string) ??
+      null,
   }));
 }
 

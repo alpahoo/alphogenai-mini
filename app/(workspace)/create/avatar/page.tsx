@@ -20,7 +20,10 @@ import {
   Volume2,
   ImagePlus,
   AlertTriangle,
+  Play,
+  Pause,
 } from "lucide-react";
+import { useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { JobPlan } from "@/lib/types";
 
@@ -33,6 +36,7 @@ interface HeyGenVoice {
   language: string;
   gender: string;
   isCloned: boolean;
+  previewUrl: string | null;
 }
 
 interface HeyGenAvatar {
@@ -68,6 +72,31 @@ export default function CreateAvatarPage() {
   const [voiceSearchQuery, setVoiceSearchQuery] = useState("");
   const [cloningVoice, setCloningVoice] = useState(false);
   const [clonedVoiceId, setClonedVoiceId] = useState<string | null>(null);
+  // Voice preview playback
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Play/pause a voice preview sample
+  const togglePreview = (voice: HeyGenVoice) => {
+    if (!voice.previewUrl) return;
+    // Stop current playback
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    // If clicking the same voice that's playing → just stop
+    if (playingVoiceId === voice.voiceId) {
+      setPlayingVoiceId(null);
+      return;
+    }
+    // Play the new one
+    const audio = new Audio(voice.previewUrl);
+    audioRef.current = audio;
+    setPlayingVoiceId(voice.voiceId);
+    audio.onended = () => setPlayingVoiceId(null);
+    audio.onerror = () => setPlayingVoiceId(null);
+    audio.play().catch(() => setPlayingVoiceId(null));
+  };
 
   // Step 3: Script & options
   const [scriptText, setScriptText] = useState("");
@@ -108,6 +137,14 @@ export default function CreateAvatarPage() {
       })
       .catch(() => { /* silent */ })
       .finally(() => setVoicesLoading(false));
+
+    // Stop any preview audio when leaving the page
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
   }, []);
 
   // ── Upload avatar photo ────────────────────────────────────────────────
@@ -496,20 +533,38 @@ export default function CreateAvatarPage() {
                   </p>
                   <div className="grid gap-1.5 max-h-32 overflow-y-auto">
                     {clonedVoices.map((v) => (
-                      <button
+                      <div
                         key={v.voiceId}
-                        type="button"
-                        onClick={() => setVoiceId(v.voiceId)}
-                        className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-all ${
+                        className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all ${
                           voiceId === v.voiceId
                             ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-400"
                             : "border-border/30 hover:border-border hover:bg-muted/30"
                         }`}
                       >
-                        <Mic className="h-3.5 w-3.5 shrink-0" />
-                        <span className="font-medium truncate">{v.name}</span>
-                        <span className="ml-auto text-xs text-muted-foreground">{v.language}</span>
-                      </button>
+                        {v.previewUrl && (
+                          <button
+                            type="button"
+                            onClick={() => togglePreview(v)}
+                            className="shrink-0 rounded-full p-1 hover:bg-cyan-500/20 transition-colors"
+                            title="Preview voice"
+                          >
+                            {playingVoiceId === v.voiceId ? (
+                              <Pause className="h-3.5 w-3.5 text-cyan-400" />
+                            ) : (
+                              <Play className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setVoiceId(v.voiceId)}
+                          className="flex flex-1 items-center gap-3 text-left min-w-0"
+                        >
+                          <Mic className="h-3.5 w-3.5 shrink-0" />
+                          <span className="font-medium truncate">{v.name}</span>
+                          <span className="ml-auto text-xs text-muted-foreground">{v.language}</span>
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -529,23 +584,42 @@ export default function CreateAvatarPage() {
                         : "No voices match your search"}
                   </p>
                 ) : (
-                  stockVoices.slice(0, 20).map((v) => (
-                    <button
+                  stockVoices.slice(0, 30).map((v) => (
+                    <div
                       key={v.voiceId}
-                      type="button"
-                      onClick={() => setVoiceId(v.voiceId)}
-                      className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-all ${
+                      className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-all ${
                         voiceId === v.voiceId
                           ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-400"
                           : "border-border/30 hover:border-border hover:bg-muted/30"
                       }`}
                     >
-                      <Volume2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
-                      <span className="font-medium truncate">{v.name}</span>
-                      <span className="ml-auto text-xs text-muted-foreground">
-                        {v.language} {v.gender ? `· ${v.gender}` : ""}
-                      </span>
-                    </button>
+                      {v.previewUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => togglePreview(v)}
+                          className="shrink-0 rounded-full p-1 hover:bg-cyan-500/20 transition-colors"
+                          title="Preview voice"
+                        >
+                          {playingVoiceId === v.voiceId ? (
+                            <Pause className="h-3.5 w-3.5 text-cyan-400" />
+                          ) : (
+                            <Play className="h-3.5 w-3.5 text-muted-foreground/70" />
+                          )}
+                        </button>
+                      ) : (
+                        <Volume2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setVoiceId(v.voiceId)}
+                        className="flex flex-1 items-center gap-3 text-left min-w-0"
+                      >
+                        <span className="font-medium truncate">{v.name}</span>
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {v.language} {v.gender ? `· ${v.gender}` : ""}
+                        </span>
+                      </button>
+                    </div>
                   ))
                 )}
               </div>

@@ -107,6 +107,9 @@ export async function GET() {
       language: ((r.metadata as Record<string, string>)?.language as string) ?? "",
       gender: ((r.metadata as Record<string, string>)?.gender as string) ?? "",
       isCloned: true,
+      previewUrl:
+        (((r.metadata as Record<string, string>)?.preview_url as string) ??
+          null) as string | null,
     }));
 
   // Stock voices from HeyGen (shared, read-only — non-blocking)
@@ -121,6 +124,7 @@ export async function GET() {
         language: v.language,
         gender: v.gender,
         isCloned: false,
+        previewUrl: v.previewUrl,
       }));
   } catch (e) {
     console.warn("[heygen] listVoices failed:", e instanceof Error ? e.message : e);
