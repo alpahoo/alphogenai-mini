@@ -16,7 +16,6 @@ import {
   Crown,
   Monitor,
   Smartphone,
-  Hand,
   Volume2,
   ImagePlus,
   AlertTriangle,
@@ -105,7 +104,6 @@ export default function CreateAvatarPage() {
 
   // Step 3: Script & options
   const [scriptText, setScriptText] = useState("");
-  const [motionPrompt, setMotionPrompt] = useState("");
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16">("16:9");
 
   // Cinematic mode fields
@@ -280,7 +278,6 @@ export default function CreateAvatarPage() {
               preferred_engine: "heygen_avatar_iv",
               avatar_id: avatarId,
               voice_id: voiceId,
-              motion_prompt: motionPrompt.trim() || undefined,
               aspect_ratio: aspectRatio,
               audio_mode: "none",
               target_duration_seconds: 60,
@@ -837,27 +834,6 @@ export default function CreateAvatarPage() {
                 </div>
               </div>
 
-              {/* Motion prompt — presenter only (cinematic uses scene prompt) */}
-              {mode === "presenter" && (
-                <div>
-                  <p className="text-sm font-medium mb-2 flex items-center gap-2">
-                    <Hand className="h-4 w-4 text-purple-500" />
-                    Motion prompt
-                    <span className="text-xs text-muted-foreground/50 font-normal">(optional)</span>
-                  </p>
-                  <input
-                    type="text"
-                    value={motionPrompt}
-                    onChange={(e) => setMotionPrompt(e.target.value)}
-                    placeholder="e.g. confident posture, open hand gestures, warm smile..."
-                    maxLength={300}
-                    className="w-full rounded-lg border border-border/40 bg-muted/20 px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-purple-500/30"
-                  />
-                  <p className="text-xs text-muted-foreground/50 mt-1.5">
-                    Control gestures and body language in natural language.
-                  </p>
-                </div>
-              )}
             </div>
 
             {/* ── Error ────────────────────────────────────────────── */}

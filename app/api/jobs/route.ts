@@ -89,7 +89,6 @@ export async function POST(req: Request) {
       // HeyGen Avatar params
       avatar_id,
       voice_id,
-      motion_prompt,
       scene_prompt,
       script_text,
     } = body as {
@@ -117,8 +116,6 @@ export async function POST(req: Request) {
       avatar_id?: string;
       /** HeyGen voice ID (cloned or stock) */
       voice_id?: string;
-      /** HeyGen Avatar IV motion prompt for gestures/posture */
-      motion_prompt?: string;
       /** HeyGen Avatar Shots scene prompt (director's brief — cinematic mode) */
       scene_prompt?: string;
       /** HeyGen Avatar Shots dialogue script (for lip-sync — cinematic mode) */
