@@ -16,7 +16,9 @@ import {
 } from "@/lib/bailian-client";
 import {
   isHeyGenEngine,
+  isHeyGenShotsEngine,
   createAvatarVideo,
+  createAvatarShotsVideo,
 } from "@/lib/heygen-client";
 import { enhancePrompt } from "@/lib/prompt-enhancer";
 import type { JobPlan, ReferencePayload } from "@/lib/types";
@@ -34,6 +36,7 @@ const VALID_ENGINES = [
   "wan_i2v",
   "seedance",
   "heygen_avatar_iv",
+  "heygen_avatar_shots",
   ...Object.keys(EVOLINK_ENGINES),
   ...Object.keys(BAILIAN_ENGINES),
 ];
@@ -86,6 +89,8 @@ export async function POST(req: Request) {
       avatar_id,
       voice_id,
       motion_prompt,
+      scene_prompt,
+      script_text,
     } = body as {
       prompt: string;
       target_duration_seconds?: unknown;
@@ -113,6 +118,10 @@ export async function POST(req: Request) {
       voice_id?: string;
       /** HeyGen Avatar IV motion prompt for gestures/posture */
       motion_prompt?: string;
+      /** HeyGen Avatar Shots scene prompt (director's brief — cinematic mode) */
+      scene_prompt?: string;
+      /** HeyGen Avatar Shots dialogue script (for lip-sync — cinematic mode) */
+      script_text?: string;
     };
 
     // Default ON. Only set OFF if explicitly false (the user toggled it off
@@ -241,18 +250,26 @@ export async function POST(req: Request) {
         );
       }
     }
-    // HeyGen Avatar IV — Premium only
+    // HeyGen Avatar engines — Premium only
     if (safePreferredEngine && isHeyGenEngine(safePreferredEngine)) {
       if (plan !== "premium") {
         return NextResponse.json(
-          { error: "Avatar IV requires a Premium plan. Upgrade to access.", upgrade: true },
+          { error: "Avatar generation requires a Premium plan. Upgrade to access.", upgrade: true },
           { status: 403 }
         );
       }
-      // avatar_id and voice_id are required for HeyGen
-      if (!avatar_id || !voice_id) {
+      // An avatar is always required
+      if (!avatar_id) {
         return NextResponse.json(
-          { error: "Avatar ID and Voice ID are required for Avatar IV." },
+          { error: "An avatar is required." },
+          { status: 400 }
+        );
+      }
+      // Avatar IV (presenter) requires a voice; Avatar Shots (cinematic)
+      // only requires a voice when a script is provided for lip-sync.
+      if (!isHeyGenShotsEngine(safePreferredEngine) && !voice_id) {
+        return NextResponse.json(
+          { error: "A voice is required for Avatar IV." },
           { status: 400 }
         );
       }
@@ -351,21 +368,40 @@ export async function POST(req: Request) {
     const rawEngineKey = safePreferredEngine ?? "wan_i2v";
     const engineKey = maybeRerouteToBailian(rawEngineKey);
 
-    // ── HeyGen Avatar IV path ──────────────────────────────────────────
-    if (isHeyGenEngine(engineKey) && avatar_id && voice_id) {
+    // ── HeyGen Avatar path (IV presenter OR Shots cinematic) ────────────
+    if (isHeyGenEngine(engineKey) && avatar_id) {
       try {
-        const task = await createAvatarVideo({
-          avatarId: avatar_id,
-          scriptText: prompt.trim(),
-          voiceId: voice_id,
-          dimensions: aspect_ratio === "9:16" ? "1080x1920" : "1920x1080",
-          motionPrompt: motion_prompt,
-        });
-
-        console.log(
-          `[jobs] HeyGen avatar video: job=${job.id} task=${task.taskId} ` +
-          `avatar=${avatar_id} voice=${voice_id}`
-        );
+        let task;
+        if (isHeyGenShotsEngine(engineKey)) {
+          // ── Cinematic: Avatar Shots (Seedance 2 + lip-sync) ──────────
+          // scene_prompt = director's brief; script_text = dialogue (lip-sync)
+          task = await createAvatarShotsVideo({
+            avatarId: avatar_id,
+            scenePrompt: (scene_prompt || prompt).trim(),
+            scriptText: script_text?.trim() || undefined,
+            voiceId: voice_id || undefined,
+            durationSeconds: safeDuration,
+            resolution: "1080p",
+            aspectRatio: aspect_ratio === "9:16" ? "9:16" : "16:9",
+          });
+          console.log(
+            `[jobs] HeyGen avatar-shots: job=${job.id} task=${task.taskId} ` +
+            `avatar=${avatar_id} lipsync=${Boolean(script_text && voice_id)}`
+          );
+        } else {
+          // ── Presenter: Avatar IV (talking head) ──────────────────────
+          task = await createAvatarVideo({
+            avatarId: avatar_id,
+            scriptText: prompt.trim(),
+            voiceId: voice_id!,
+            dimensions: aspect_ratio === "9:16" ? "1080x1920" : "1920x1080",
+            motionPrompt: motion_prompt,
+          });
+          console.log(
+            `[jobs] HeyGen avatar-iv: job=${job.id} task=${task.taskId} ` +
+            `avatar=${avatar_id} voice=${voice_id}`
+          );
+        }
 
         // Single scene for avatar — mark as generating
         await supabase

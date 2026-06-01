@@ -297,6 +297,110 @@ export async function createAvatarVideo(
 }
 
 // ---------------------------------------------------------------------------
+// Avatar Shots (Seedance 2 — cinematic + lip-sync)
+// ---------------------------------------------------------------------------
+
+export interface CreateAvatarShotsParams {
+  /** Photo avatar ID */
+  avatarId: string;
+  /** Director's brief — scene, camera movement, action, setting */
+  scenePrompt: string;
+  /** Dialogue the avatar speaks (enables frame-accurate lip-sync) */
+  scriptText?: string;
+  /** Voice ID (required when scriptText is set for lip-sync) */
+  voiceId?: string;
+  /** Duration in seconds — HeyGen supports 5, 10, or 15 */
+  durationSeconds?: number;
+  /** Resolution: "720p" | "1080p" */
+  resolution?: string;
+  /** Aspect ratio: "16:9" | "9:16" */
+  aspectRatio?: string;
+}
+
+/**
+ * Generate an Avatar Shots video (Seedance 2.0 + HeyGen lip-sync).
+ * Cinematic shot driven by a scene prompt. When scriptText + voiceId are
+ * provided, the avatar speaks with frame-accurate lip-sync while performing
+ * the cinematic action.
+ *
+ * Cost: 4 credits/sec (720p) or 10 credits/sec (1080p).
+ *
+ * NOTE: The CreateVideoFromAvatarShots schema (POST /v3/videos, added
+ * June 2026) is not fully documented publicly. This implementation uses
+ * the documented field shape and is verified/adjusted against the live API.
+ */
+export async function createAvatarShotsVideo(
+  params: CreateAvatarShotsParams
+): Promise<AvatarVideoTask> {
+  // Snap duration to HeyGen's allowed values (5, 10, 15)
+  const allowed = [5, 10, 15];
+  const requested = params.durationSeconds ?? 10;
+  const duration = allowed.reduce((prev, cur) =>
+    Math.abs(cur - requested) < Math.abs(prev - requested) ? cur : prev
+  );
+
+  const dimensions =
+    params.aspectRatio === "9:16"
+      ? { width: 1080, height: 1920 }
+      : { width: 1920, height: 1080 };
+
+  const body: Record<string, unknown> = {
+    type: "avatar_shots",
+    avatar_id: params.avatarId,
+    engine: { type: "seedance_2" },
+    // Director's brief — cinematic action, camera, setting
+    prompt: params.scenePrompt,
+    duration,
+    resolution: params.resolution ?? "1080p",
+    dimension: dimensions,
+  };
+
+  // Script mode → lip-sync. Omit for voice-over/cinematic-only mode.
+  if (params.scriptText && params.voiceId) {
+    body.input = {
+      type: "script",
+      script: {
+        text: params.scriptText,
+        voice_id: params.voiceId,
+      },
+    };
+  }
+
+  console.log(
+    `[heygen] avatar-shots request: avatar=${params.avatarId} ` +
+      `duration=${duration}s lipsync=${Boolean(params.scriptText && params.voiceId)} ` +
+      `body=${JSON.stringify(body).slice(0, 400)}`
+  );
+
+  const res = await fetch(`${HEYGEN_API_V3}/videos`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText);
+    throw new Error(`HeyGen createAvatarShots failed (${res.status}): ${err}`);
+  }
+
+  const data = await res.json();
+  const taskId =
+    data.data?.video_id ?? data.data?.id ?? data.video_id ?? data.id;
+
+  if (!taskId) {
+    throw new Error(
+      `HeyGen avatar-shots returned no task ID: ${JSON.stringify(data).slice(0, 300)}`
+    );
+  }
+
+  console.log(`[heygen] avatar-shots task created: ${taskId}`);
+  return {
+    taskId: String(taskId),
+    status: data.data?.status ?? "pending",
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Task polling
 // ---------------------------------------------------------------------------
 
@@ -371,13 +475,18 @@ export async function getHeyGenTask(taskId: string): Promise<HeyGenTaskResult> {
 // Engine helper
 // ---------------------------------------------------------------------------
 
-/** Returns true if the engine key is a HeyGen avatar engine. */
+/** Returns true if the engine key is any HeyGen avatar engine. */
 export function isHeyGenEngine(engineKey: string): boolean {
-  return engineKey === "heygen_avatar_iv";
+  return engineKey === "heygen_avatar_iv" || engineKey === "heygen_avatar_shots";
+}
+
+/** Returns true if the engine is the cinematic Avatar Shots (Seedance 2) variant. */
+export function isHeyGenShotsEngine(engineKey: string): boolean {
+  return engineKey === "heygen_avatar_shots";
 }
 
 /**
- * HeyGen engine configuration — exposed for /api/engines and admin.
+ * HeyGen Avatar IV engine config — exposed for /api/engines and admin.
  */
 export const HEYGEN_ENGINE = {
   key: "heygen_avatar_iv",
@@ -390,4 +499,20 @@ export const HEYGEN_ENGINE = {
   minDuration: 5,
   quality: "1080p",
   costPerMinute: 3.0, // $3/min at 1080p
+};
+
+/**
+ * HeyGen Avatar Shots (Seedance 2) engine config — cinematic + lip-sync.
+ */
+export const HEYGEN_SHOTS_ENGINE = {
+  key: "heygen_avatar_shots",
+  label: "Avatar Shots (Seedance 2)",
+  desc: "Cinematic avatar • lip-sync • 1080p",
+  gate: "premium" as const,
+  supportsRefs: false,
+  supportsI2v: false,
+  maxDuration: 15, // Seedance shots: 5/10/15s
+  minDuration: 5,
+  quality: "1080p",
+  costPerMinute: 6.0, // ~$0.10/s at 1080p
 };

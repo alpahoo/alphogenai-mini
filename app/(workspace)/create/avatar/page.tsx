@@ -22,6 +22,8 @@ import {
   AlertTriangle,
   Play,
   Pause,
+  Clapperboard,
+  Clock,
 } from "lucide-react";
 import { useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -98,10 +100,17 @@ export default function CreateAvatarPage() {
     audio.play().catch(() => setPlayingVoiceId(null));
   };
 
+  // Mode: presenter (Avatar IV talking head) vs cinematic (Avatar Shots / Seedance 2)
+  const [mode, setMode] = useState<"presenter" | "cinematic">("presenter");
+
   // Step 3: Script & options
   const [scriptText, setScriptText] = useState("");
   const [motionPrompt, setMotionPrompt] = useState("");
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16">("16:9");
+
+  // Cinematic mode fields
+  const [scenePrompt, setScenePrompt] = useState("");
+  const [cinematicDuration, setCinematicDuration] = useState<5 | 10 | 15>(10);
 
   // Submit
   const [loading, setLoading] = useState(false);
@@ -237,27 +246,61 @@ export default function CreateAvatarPage() {
   // ── Submit ─────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!avatarId || !voiceId || !scriptText.trim()) {
-      setError("Please complete all steps: upload photo, select voice, and write your script.");
+
+    // Validation depends on mode
+    if (!avatarId) {
+      setError("Please select or upload an avatar.");
       return;
+    }
+    if (mode === "presenter") {
+      if (!voiceId || !scriptText.trim()) {
+        setError("Please select a voice and write your script.");
+        return;
+      }
+    } else {
+      // cinematic
+      if (!scenePrompt.trim()) {
+        setError("Please describe your cinematic shot.");
+        return;
+      }
+      // If a script is provided for lip-sync, a voice is required
+      if (scriptText.trim() && !voiceId) {
+        setError("Select a voice for lip-sync, or clear the dialogue for a silent shot.");
+        return;
+      }
     }
     setError(null);
     setLoading(true);
 
     try {
+      const requestBody =
+        mode === "presenter"
+          ? {
+              prompt: scriptText.trim(),
+              preferred_engine: "heygen_avatar_iv",
+              avatar_id: avatarId,
+              voice_id: voiceId,
+              motion_prompt: motionPrompt.trim() || undefined,
+              aspect_ratio: aspectRatio,
+              audio_mode: "none",
+              target_duration_seconds: 60,
+            }
+          : {
+              prompt: scenePrompt.trim(),
+              preferred_engine: "heygen_avatar_shots",
+              avatar_id: avatarId,
+              voice_id: voiceId || undefined,
+              scene_prompt: scenePrompt.trim(),
+              script_text: scriptText.trim() || undefined,
+              aspect_ratio: aspectRatio,
+              audio_mode: "none",
+              target_duration_seconds: cinematicDuration,
+            };
+
       const res = await fetch("/api/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: scriptText.trim(),
-          preferred_engine: "heygen_avatar_iv",
-          avatar_id: avatarId,
-          voice_id: voiceId,
-          motion_prompt: motionPrompt.trim() || undefined,
-          aspect_ratio: aspectRatio,
-          audio_mode: "none", // Avatar handles its own audio
-          target_duration_seconds: 60, // HeyGen determines from script
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const contentType = res.headers.get("content-type") || "";
@@ -350,7 +393,41 @@ export default function CreateAvatarPage() {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-8 space-y-8">
+          {/* ── Mode toggle: Presenter vs Cinematic ─────────────────── */}
+          <div className="mt-6 inline-flex rounded-xl border border-border/50 bg-muted/20 p-1">
+            <button
+              type="button"
+              onClick={() => setMode("presenter")}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                mode === "presenter"
+                  ? "bg-cyan-500/15 text-cyan-400 shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <User className="h-4 w-4" />
+              <div className="text-left">
+                <div className="font-semibold">Presenter</div>
+                <div className="text-[10px] opacity-70">Avatar IV · talking head</div>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("cinematic")}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                mode === "cinematic"
+                  ? "bg-cyan-500/15 text-cyan-400 shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Clapperboard className="h-4 w-4" />
+              <div className="text-left">
+                <div className="font-semibold">Cinematic</div>
+                <div className="text-[10px] opacity-70">Seedance 2 · lip-sync</div>
+              </div>
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="mt-6 space-y-8">
             {/* ── STEP 1: Avatar Photo ─────────────────────────────── */}
             <div className="rounded-xl border border-border/50 p-6">
               <div className="flex items-center gap-3 mb-4">
@@ -625,19 +702,83 @@ export default function CreateAvatarPage() {
               </div>
             </div>
 
-            {/* ── STEP 3: Script ───────────────────────────────────── */}
+            {/* ── STEP 3: Cinematic scene description (cinematic mode) ── */}
+            {mode === "cinematic" && (
+              <div className="rounded-xl border border-border/50 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${scenePrompt.trim().length > 10 ? "bg-green-500/20 text-green-400" : "bg-primary/10 text-primary"}`}>
+                    {scenePrompt.trim().length > 10 ? <CheckCircle2 className="h-4 w-4" /> : "3"}
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold flex items-center gap-2">
+                      <Clapperboard className="h-4 w-4 text-cyan-500" />
+                      Describe your shot
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Direct the scene: action, camera movement, setting, mood.
+                    </p>
+                  </div>
+                </div>
+
+                <textarea
+                  value={scenePrompt}
+                  onChange={(e) => setScenePrompt(e.target.value)}
+                  placeholder="She walks up to the stage and confidently presents the opening remarks, camera slowly pushing in, warm studio lighting..."
+                  rows={4}
+                  maxLength={2000}
+                  className="w-full rounded-xl border border-border bg-card p-4 text-base text-foreground shadow-sm placeholder:text-muted-foreground/40 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all resize-none"
+                  disabled={loading}
+                />
+
+                {/* Duration selector for cinematic */}
+                <div className="mt-4">
+                  <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-amber-500" />
+                    Duration
+                  </p>
+                  <div className="flex gap-2">
+                    {([5, 10, 15] as const).map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setCinematicDuration(d)}
+                        className={`rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
+                          cinematicDuration === d
+                            ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-400"
+                            : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground"
+                        }`}
+                      >
+                        {d}s
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── STEP: Script ─────────────────────────────────────── */}
+            {/* Presenter: required script. Cinematic: optional dialogue for lip-sync. */}
             <div className="rounded-xl border border-border/50 p-6">
               <div className="flex items-center gap-3 mb-4">
-                <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${scriptText.trim().length > 10 ? "bg-green-500/20 text-green-400" : "bg-primary/10 text-primary"}`}>
-                  {scriptText.trim().length > 10 ? <CheckCircle2 className="h-4 w-4" /> : "3"}
+                <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
+                  mode === "cinematic"
+                    ? "bg-primary/10 text-primary"
+                    : scriptText.trim().length > 10 ? "bg-green-500/20 text-green-400" : "bg-primary/10 text-primary"
+                }`}>
+                  {mode === "presenter" && scriptText.trim().length > 10 ? <CheckCircle2 className="h-4 w-4" /> : mode === "cinematic" ? "4" : "3"}
                 </div>
                 <div>
                   <h2 className="text-base font-semibold flex items-center gap-2">
                     <FileText className="h-4 w-4 text-cyan-500" />
-                    Write your script
+                    {mode === "cinematic" ? "Dialogue" : "Write your script"}
+                    {mode === "cinematic" && (
+                      <span className="text-xs text-muted-foreground/50 font-normal">(optional — for lip-sync)</span>
+                    )}
                   </h2>
                   <p className="text-xs text-muted-foreground">
-                    The text your avatar will speak. ~150 words per minute.
+                    {mode === "cinematic"
+                      ? "What the avatar says, lip-synced. Leave empty for a silent cinematic shot."
+                      : "The text your avatar will speak. ~150 words per minute."}
                   </p>
                 </div>
               </div>
@@ -645,14 +786,18 @@ export default function CreateAvatarPage() {
               <textarea
                 value={scriptText}
                 onChange={(e) => setScriptText(e.target.value)}
-                placeholder="Hello, I'm excited to introduce myself for this role. I have 5 years of experience in..."
-                rows={6}
+                placeholder={
+                  mode === "cinematic"
+                    ? "Success is about clarity, speed, and execution."
+                    : "Hello, I'm excited to introduce myself for this role. I have 5 years of experience in..."
+                }
+                rows={mode === "cinematic" ? 3 : 6}
                 maxLength={5000}
                 className="w-full rounded-xl border border-border bg-card p-4 text-base text-foreground shadow-sm placeholder:text-muted-foreground/40 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all resize-none"
                 disabled={loading}
               />
               <div className="mt-2 flex justify-between text-xs text-muted-foreground/50">
-                <span>{wordCount} words · ~{estimatedDuration}s</span>
+                <span>{wordCount} words{mode === "presenter" ? ` · ~${estimatedDuration}s` : ""}</span>
                 <span>{scriptText.length}/5000</span>
               </div>
             </div>
@@ -692,25 +837,27 @@ export default function CreateAvatarPage() {
                 </div>
               </div>
 
-              {/* Motion prompt */}
-              <div>
-                <p className="text-sm font-medium mb-2 flex items-center gap-2">
-                  <Hand className="h-4 w-4 text-purple-500" />
-                  Motion prompt
-                  <span className="text-xs text-muted-foreground/50 font-normal">(optional)</span>
-                </p>
-                <input
-                  type="text"
-                  value={motionPrompt}
-                  onChange={(e) => setMotionPrompt(e.target.value)}
-                  placeholder="e.g. confident posture, open hand gestures, warm smile..."
-                  maxLength={300}
-                  className="w-full rounded-lg border border-border/40 bg-muted/20 px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-purple-500/30"
-                />
-                <p className="text-xs text-muted-foreground/50 mt-1.5">
-                  Control gestures and body language in natural language.
-                </p>
-              </div>
+              {/* Motion prompt — presenter only (cinematic uses scene prompt) */}
+              {mode === "presenter" && (
+                <div>
+                  <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                    <Hand className="h-4 w-4 text-purple-500" />
+                    Motion prompt
+                    <span className="text-xs text-muted-foreground/50 font-normal">(optional)</span>
+                  </p>
+                  <input
+                    type="text"
+                    value={motionPrompt}
+                    onChange={(e) => setMotionPrompt(e.target.value)}
+                    placeholder="e.g. confident posture, open hand gestures, warm smile..."
+                    maxLength={300}
+                    className="w-full rounded-lg border border-border/40 bg-muted/20 px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-purple-500/30"
+                  />
+                  <p className="text-xs text-muted-foreground/50 mt-1.5">
+                    Control gestures and body language in natural language.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* ── Error ────────────────────────────────────────────── */}
@@ -724,7 +871,13 @@ export default function CreateAvatarPage() {
             {/* ── Generate CTA ─────────────────────────────────────── */}
             <button
               type="submit"
-              disabled={loading || !avatarId || !voiceId || !scriptText.trim()}
+              disabled={
+                loading ||
+                !avatarId ||
+                (mode === "presenter"
+                  ? !voiceId || !scriptText.trim()
+                  : !scenePrompt.trim())
+              }
               className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 py-4 text-base font-bold text-white shadow-md shadow-cyan-500/20 transition-all hover:brightness-110 hover:shadow-lg hover:shadow-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? (
@@ -788,39 +941,62 @@ export default function CreateAvatarPage() {
             <div className="space-y-2.5 text-sm text-muted-foreground">
               <div className="flex justify-between items-center">
                 <span className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-cyan-500" />
-                  Words
+                  <Clapperboard className="h-4 w-4 text-cyan-500" />
+                  Mode
                 </span>
-                <span className="font-semibold text-foreground">{wordCount}</span>
+                <span className="font-semibold text-foreground">
+                  {mode === "presenter" ? "Presenter" : "Cinematic"}
+                </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="flex items-center gap-2">
-                  <Mic className="h-4 w-4 text-cyan-500" />
+                  <Clock className="h-4 w-4 text-cyan-500" />
                   Duration
                 </span>
-                <span className="font-semibold text-foreground">~{estimatedDuration}s</span>
+                <span className="font-semibold text-foreground">
+                  ~{mode === "presenter" ? estimatedDuration : cinematicDuration}s
+                </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="flex items-center gap-2">
                   <Crown className="h-4 w-4 text-purple-500" />
                   Est. cost
                 </span>
-                <span className="font-semibold text-foreground">~${estimatedCost}</span>
+                <span className="font-semibold text-foreground">
+                  ~${mode === "presenter"
+                    ? estimatedCost
+                    : ((cinematicDuration * 0.1)).toFixed(2)}
+                </span>
               </div>
 
               <div className="pt-2 border-t border-border/30">
                 <div className="flex items-start gap-2">
-                  <div className={`mt-0.5 h-2 w-2 rounded-full ${avatarReady ? "bg-green-400" : "bg-zinc-600"}`} />
-                  <span className="text-xs">{avatarReady ? "Photo avatar ready" : "Upload photo"}</span>
+                  <div className={`mt-0.5 h-2 w-2 rounded-full ${avatarId ? "bg-green-400" : "bg-zinc-600"}`} />
+                  <span className="text-xs">{avatarId ? "Avatar ready" : "Choose an avatar"}</span>
                 </div>
-                <div className="flex items-start gap-2 mt-1.5">
-                  <div className={`mt-0.5 h-2 w-2 rounded-full ${voiceId ? "bg-green-400" : "bg-zinc-600"}`} />
-                  <span className="text-xs">{voiceId ? "Voice selected" : "Select a voice"}</span>
-                </div>
-                <div className="flex items-start gap-2 mt-1.5">
-                  <div className={`mt-0.5 h-2 w-2 rounded-full ${scriptText.trim().length > 10 ? "bg-green-400" : "bg-zinc-600"}`} />
-                  <span className="text-xs">{scriptText.trim().length > 10 ? "Script ready" : "Write your script"}</span>
-                </div>
+                {mode === "presenter" ? (
+                  <>
+                    <div className="flex items-start gap-2 mt-1.5">
+                      <div className={`mt-0.5 h-2 w-2 rounded-full ${voiceId ? "bg-green-400" : "bg-zinc-600"}`} />
+                      <span className="text-xs">{voiceId ? "Voice selected" : "Select a voice"}</span>
+                    </div>
+                    <div className="flex items-start gap-2 mt-1.5">
+                      <div className={`mt-0.5 h-2 w-2 rounded-full ${scriptText.trim().length > 10 ? "bg-green-400" : "bg-zinc-600"}`} />
+                      <span className="text-xs">{scriptText.trim().length > 10 ? "Script ready" : "Write your script"}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-start gap-2 mt-1.5">
+                      <div className={`mt-0.5 h-2 w-2 rounded-full ${scenePrompt.trim().length > 10 ? "bg-green-400" : "bg-zinc-600"}`} />
+                      <span className="text-xs">{scenePrompt.trim().length > 10 ? "Shot described" : "Describe your shot"}</span>
+                    </div>
+                    <div className="flex items-start gap-2 mt-1.5">
+                      <div className={`mt-0.5 h-2 w-2 rounded-full ${scriptText.trim() ? "bg-green-400" : "bg-zinc-600/50"}`} />
+                      <span className="text-xs">{scriptText.trim() ? "Lip-sync dialogue set" : "Dialogue (optional)"}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>

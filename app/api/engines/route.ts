@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { EVOLINK_ENGINES } from "@/lib/evolink-client";
 import { BAILIAN_ENGINES } from "@/lib/bailian-client";
-import { HEYGEN_ENGINE } from "@/lib/heygen-client";
+import { HEYGEN_ENGINE, HEYGEN_SHOTS_ENGINE } from "@/lib/heygen-client";
 import { createServiceClient } from "@/lib/supabase/service";
 
 /**
@@ -119,19 +119,21 @@ export async function GET() {
     }
   }
 
-  // HeyGen Avatar IV (requires HEYGEN_API_KEY + admin toggle enabled)
+  // HeyGen Avatar engines (requires HEYGEN_API_KEY + admin toggle enabled)
   if (process.env.HEYGEN_API_KEY && isProviderEnabled("heygen")) {
-    engines.push({
-      key: HEYGEN_ENGINE.key,
-      label: HEYGEN_ENGINE.label,
-      desc: HEYGEN_ENGINE.desc,
-      gate: HEYGEN_ENGINE.gate,
-      supportsRefs: HEYGEN_ENGINE.supportsRefs,
-      supportsI2v: HEYGEN_ENGINE.supportsI2v,
-      maxDuration: HEYGEN_ENGINE.maxDuration,
-      minDuration: HEYGEN_ENGINE.minDuration,
-      quality: HEYGEN_ENGINE.quality,
-    });
+    for (const cfg of [HEYGEN_ENGINE, HEYGEN_SHOTS_ENGINE]) {
+      engines.push({
+        key: cfg.key,
+        label: cfg.label,
+        desc: cfg.desc,
+        gate: cfg.gate,
+        supportsRefs: cfg.supportsRefs,
+        supportsI2v: cfg.supportsI2v,
+        maxDuration: cfg.maxDuration,
+        minDuration: cfg.minDuration,
+        quality: cfg.quality,
+      });
+    }
   }
 
   return NextResponse.json(
