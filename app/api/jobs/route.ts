@@ -14,6 +14,10 @@ import {
   maybeRerouteToBailian,
   BAILIAN_ENGINES,
 } from "@/lib/bailian-client";
+import {
+  isHeyGenEngine,
+  createAvatarVideo,
+} from "@/lib/heygen-client";
 import { enhancePrompt } from "@/lib/prompt-enhancer";
 import type { JobPlan, ReferencePayload } from "@/lib/types";
 import { PLAN_DAILY_QUOTA } from "@/lib/types";
@@ -25,10 +29,11 @@ export const maxDuration = 60;
 
 const MAX_ACTIVE_JOBS = 1; // max concurrent jobs per user
 
-// All valid engine keys (Modal + EvoLink + Bailian direct)
+// All valid engine keys (Modal + EvoLink + Bailian + HeyGen)
 const VALID_ENGINES = [
   "wan_i2v",
   "seedance",
+  "heygen_avatar_iv",
   ...Object.keys(EVOLINK_ENGINES),
   ...Object.keys(BAILIAN_ENGINES),
 ];
@@ -77,6 +82,10 @@ export async function POST(req: Request) {
       aspect_ratio,
       caption_mode,
       caption_style,
+      // HeyGen Avatar params
+      avatar_id,
+      voice_id,
+      motion_prompt,
     } = body as {
       prompt: string;
       target_duration_seconds?: unknown;
@@ -98,6 +107,12 @@ export async function POST(req: Request) {
       caption_mode?: string;
       /** Caption style when caption_mode = "custom" */
       caption_style?: string;
+      /** HeyGen Photo Avatar ID */
+      avatar_id?: string;
+      /** HeyGen voice ID (cloned or stock) */
+      voice_id?: string;
+      /** HeyGen Avatar IV motion prompt for gestures/posture */
+      motion_prompt?: string;
     };
 
     // Default ON. Only set OFF if explicitly false (the user toggled it off
@@ -226,6 +241,22 @@ export async function POST(req: Request) {
         );
       }
     }
+    // HeyGen Avatar IV — Premium only
+    if (safePreferredEngine && isHeyGenEngine(safePreferredEngine)) {
+      if (plan !== "premium") {
+        return NextResponse.json(
+          { error: "Avatar IV requires a Premium plan. Upgrade to access.", upgrade: true },
+          { status: 403 }
+        );
+      }
+      // avatar_id and voice_id are required for HeyGen
+      if (!avatar_id || !voice_id) {
+        return NextResponse.json(
+          { error: "Avatar ID and Voice ID are required for Avatar IV." },
+          { status: 400 }
+        );
+      }
+    }
 
     const rawDuration = Number(target_duration_seconds);
     const safeDuration =
@@ -315,10 +346,60 @@ export async function POST(req: Request) {
     }));
     await supabase.from("job_scenes").insert(sceneRows);
 
-    // ── Route: Bailian vs EvoLink (direct REST) vs Modal (GPU) ────────────
+    // ── Route: HeyGen vs Bailian vs EvoLink vs Modal (GPU) ────────────────
     // Feature flag: transparently reroute a % of EvoLink traffic to Bailian
     const rawEngineKey = safePreferredEngine ?? "wan_i2v";
     const engineKey = maybeRerouteToBailian(rawEngineKey);
+
+    // ── HeyGen Avatar IV path ──────────────────────────────────────────
+    if (isHeyGenEngine(engineKey) && avatar_id && voice_id) {
+      try {
+        const task = await createAvatarVideo({
+          avatarId: avatar_id,
+          scriptText: prompt.trim(),
+          voiceId: voice_id,
+          dimensions: aspect_ratio === "9:16" ? "1080x1920" : "1920x1080",
+          motionPrompt: motion_prompt,
+        });
+
+        console.log(
+          `[jobs] HeyGen avatar video: job=${job.id} task=${task.taskId} ` +
+          `avatar=${avatar_id} voice=${voice_id}`
+        );
+
+        // Single scene for avatar — mark as generating
+        await supabase
+          .from("job_scenes")
+          .update({ status: "generating", external_task_id: task.taskId })
+          .eq("job_id", job.id)
+          .eq("scene_index", 0);
+
+        await supabase
+          .from("jobs")
+          .update({
+            status: "in_progress",
+            current_stage: "generating_scene_1",
+            engine_used: engineKey,
+            external_task_id: task.taskId,
+            multi_scene_chain: false, // Avatar = always single scene
+          })
+          .eq("id", job.id);
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.error(`[jobs] HeyGen avatar create failed:`, errMsg);
+        await supabase
+          .from("jobs")
+          .update({ status: "failed", error_message: `HeyGen error: ${errMsg}` })
+          .eq("id", job.id);
+        await supabase
+          .from("job_scenes")
+          .update({ status: "failed", error_message: errMsg.slice(0, 400) })
+          .eq("job_id", job.id)
+          .eq("scene_index", 0);
+      }
+
+      return NextResponse.json({ success: true, jobId: job.id, job });
+    }
 
     if (isBailianEngine(engineKey)) {
       // ── Bailian path (Alibaba Cloud DashScope) ────────────────────────

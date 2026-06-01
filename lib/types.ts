@@ -77,7 +77,8 @@ export type EngineKey =
   | "wan_27_bailian"
   | "vace_14b"
   | "echomimic_v3"
-  | "realesrgan_4x";
+  | "realesrgan_4x"
+  | "heygen_avatar_iv";
 
 export interface StoryboardScene {
   scene_index: number;
@@ -222,6 +223,7 @@ export const ENGINE_DISPLAY_NAMES: Record<string, string> = {
   vace_14b: "VACE 14B",
   echomimic_v3: "EchoMimic V3",
   realesrgan_4x: "Real-ESRGAN 4x",
+  heygen_avatar_iv: "Avatar IV (HeyGen)",
 };
 
 export function getEngineDisplayName(engine: string | null | undefined): string {

@@ -60,6 +60,7 @@ interface Stats {
 const ENGINE_COLORS: Record<string, string> = {
   wan_i2v: "#6366f1",
   seedance: "#8b5cf6",
+  heygen_avatar_iv: "#06b6d4",
   unknown: "#71717a",
 };
 
@@ -67,7 +68,8 @@ const PROVIDER_INFO: Record<string, { label: string; desc: string; color: string
   evolink: { label: "EvoLink", desc: "Seedance, Kling, WAN, Hailuo, Sora", color: "text-blue-400" },
   bailian: { label: "Bailian (Alibaba)", desc: "WAN 2.6 / 2.7 via DashScope", color: "text-orange-400" },
   modal: { label: "Modal (GPU)", desc: "Wan 2.2 I2V self-hosted", color: "text-violet-400" },
-  musicgen: { label: "MusicGen (Audio)", desc: "Background music via Meta MusicGen", color: "text-emerald-400" },
+  heygen: { label: "HeyGen", desc: "Avatar IV talking head, full body", color: "text-cyan-400" },
+  musicgen: { label: "MusicGen (Audio)", desc: "Background music via ACE-Step 1.5", color: "text-emerald-400" },
 };
 
 export default function AdminDashboard() {

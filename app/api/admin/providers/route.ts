@@ -32,6 +32,7 @@ export async function GET() {
       bailian: { enabled: false },
       evolink: { enabled: true },
       modal: { enabled: true },
+      heygen: { enabled: true },
       musicgen: { enabled: true },
     },
   });

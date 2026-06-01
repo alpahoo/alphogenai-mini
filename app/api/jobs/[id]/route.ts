@@ -8,6 +8,7 @@ import {
   engineSupportsFirstFrame,
 } from "@/lib/evolink-client";
 import { isBailianEngine, getBailianTask, createBailianTask } from "@/lib/bailian-client";
+import { isHeyGenEngine, getHeyGenTask } from "@/lib/heygen-client";
 import { triggerExtractLastFrame, triggerConcatScenes } from "@/lib/modal-client";
 import { generateVoiceover, isTTSAvailable } from "@/lib/tts";
 import { uploadBufferToR2 } from "@/lib/r2";
@@ -89,10 +90,11 @@ export async function GET(
 
     const isEvoLink = isEvoLinkEngine(job.engine_used ?? "");
     const isBailian = isBailianEngine(job.engine_used ?? "");
+    const isHeyGen = isHeyGenEngine(job.engine_used ?? "");
 
     // ── Provider state machine ────────────────────────────────────────
-    // Runs for both EvoLink and Bailian engines while the job is in flight.
-    if ((isEvoLink || isBailian) && job.status === "in_progress") {
+    // Runs for EvoLink, Bailian, and HeyGen engines while the job is in flight.
+    if ((isEvoLink || isBailian || isHeyGen) && job.status === "in_progress") {
       const stage = (job.current_stage as string | null) ?? "";
 
       if (stage === "encoding" || stage === "uploading") {
@@ -271,7 +273,14 @@ async function advanceEvoLinkState(
     // Poll the correct provider based on engine_used
     let result: { status: string; videoUrl?: string; errorMessage?: string };
     try {
-      if (isBailianEngine(engineKey)) {
+      if (isHeyGenEngine(engineKey)) {
+        const hr = await getHeyGenTask(generating.external_task_id!);
+        result = {
+          status: hr.status,
+          videoUrl: hr.videoUrl,
+          errorMessage: hr.error,
+        };
+      } else if (isBailianEngine(engineKey)) {
         const br = await getBailianTask(generating.external_task_id!);
         result = {
           status: br.status === "succeeded" ? "completed" : br.status,

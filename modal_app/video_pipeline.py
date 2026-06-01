@@ -856,7 +856,12 @@ acestep_image = (
     .apt_install("git", "ffmpeg", "build-essential")
     .run_commands(
         "git clone --branch v0.1.6 --depth 1 https://github.com/ace-step/ACE-Step-1.5.git /opt/ace-step",
-        "pip install /opt/ace-step",
+        # ACE-Step pins torch/torchaudio 2.10.0+cu128 — install from PyTorch index
+        "pip install torch==2.10.0+cu128 torchaudio==2.10.0+cu128 --index-url https://download.pytorch.org/whl/cu128",
+        # nano-vllm is bundled in third_parts/
+        "pip install /opt/ace-step/acestep/third_parts/nano-vllm",
+        # Install ACE-Step — use PyTorch index for any remaining +cu128 deps
+        "pip install /opt/ace-step --extra-index-url https://download.pytorch.org/whl/cu128",
     )
 )
 
