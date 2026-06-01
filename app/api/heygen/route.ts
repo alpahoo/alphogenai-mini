@@ -1,17 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import {
   createPhotoAvatar,
   cloneVoice,
-  listVoices,
-  listAvatars,
+  listVoices as listHeyGenVoices,
 } from "@/lib/heygen-client";
 
 /**
- * GET /api/heygen — List available avatars AND voices.
- * POST /api/heygen — Create a photo avatar or clone a voice.
+ * GET /api/heygen — List user's avatars & voices (from DB) + stock voices from HeyGen.
+ * POST /api/heygen — Create a photo avatar or clone a voice (persisted per-user in DB).
  *
- * Auth required.
+ * Auth required. Each user only sees their own avatars and cloned voices.
+ * Resources are stored in `user_avatars` table scoped by user_id.
  */
 
 export async function GET() {
@@ -24,25 +25,57 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Fetch avatars and voices in parallel
-  const [avatarsResult, voicesResult] = await Promise.allSettled([
-    listAvatars(),
-    listVoices(),
+  const svc = createServiceClient();
+
+  // Fetch user's own avatars & voices from DB + stock voices from HeyGen (parallel)
+  const [dbResult, stockVoicesResult] = await Promise.allSettled([
+    svc
+      .from("user_avatars")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
+    listHeyGenVoices(),
   ]);
 
-  const avatars =
-    avatarsResult.status === "fulfilled" ? avatarsResult.value : [];
-  const voices =
-    voicesResult.status === "fulfilled" ? voicesResult.value : [];
+  // Parse DB results into avatars and voices
+  const dbRows =
+    dbResult.status === "fulfilled" ? (dbResult.value.data ?? []) : [];
+  const userAvatars = dbRows
+    .filter((r: Record<string, unknown>) => r.type === "avatar")
+    .map((r: Record<string, unknown>) => ({
+      avatarId: String(r.external_id),
+      name: String(r.name ?? ""),
+      previewUrl: (r.preview_url as string) ?? null,
+      gender: ((r.metadata as Record<string, unknown>)?.gender as string) ?? "",
+      isOwn: true,
+    }));
+  const userVoices = dbRows
+    .filter((r: Record<string, unknown>) => r.type === "voice")
+    .map((r: Record<string, unknown>) => ({
+      voiceId: String(r.external_id),
+      name: String(r.name ?? ""),
+      language: ((r.metadata as Record<string, unknown>)?.language as string) ?? "",
+      gender: ((r.metadata as Record<string, unknown>)?.gender as string) ?? "",
+      isCloned: true,
+    }));
 
-  if (avatarsResult.status === "rejected") {
-    console.error("[heygen] listAvatars failed:", avatarsResult.reason);
+  // Stock voices from HeyGen (shared, read-only)
+  const stockVoices =
+    stockVoicesResult.status === "fulfilled"
+      ? stockVoicesResult.value.filter((v) => !v.isCloned)
+      : [];
+
+  if (dbResult.status === "rejected") {
+    console.error("[heygen] DB query failed:", dbResult.reason);
   }
-  if (voicesResult.status === "rejected") {
-    console.error("[heygen] listVoices failed:", voicesResult.reason);
+  if (stockVoicesResult.status === "rejected") {
+    console.error("[heygen] listVoices failed:", stockVoicesResult.reason);
   }
 
-  return NextResponse.json({ avatars, voices });
+  return NextResponse.json({
+    avatars: userAvatars,
+    voices: [...userVoices, ...stockVoices],
+  });
 }
 
 export async function POST(req: Request) {
@@ -55,6 +88,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const svc = createServiceClient();
   const body = await req.json();
   const { action } = body as { action: string };
 
@@ -69,10 +103,25 @@ export async function POST(req: Request) {
     }
 
     try {
+      const avatarName = name ?? `Avatar - ${user.email?.split("@")[0] ?? "user"}`;
       const result = await createPhotoAvatar({
         imageUrl: image_url,
-        name: name ?? `Avatar - ${user.email?.split("@")[0] ?? "user"}`,
+        name: avatarName,
       });
+
+      // Persist in DB — scoped to this user
+      await svc.from("user_avatars").upsert(
+        {
+          user_id: user.id,
+          type: "avatar",
+          external_id: result.avatarId,
+          name: avatarName,
+          preview_url: image_url,
+          metadata: { status: result.status },
+        },
+        { onConflict: "user_id,type,external_id" }
+      );
+
       console.log(
         `[heygen] avatar created: ${result.avatarId} for user=${user.id}`
       );
@@ -99,10 +148,24 @@ export async function POST(req: Request) {
     }
 
     try {
+      const voiceName = name ?? `Voice - ${user.email?.split("@")[0] ?? "user"}`;
       const result = await cloneVoice({
         audioUrl: audio_url,
-        name: name ?? `Voice - ${user.email?.split("@")[0] ?? "user"}`,
+        name: voiceName,
       });
+
+      // Persist in DB — scoped to this user
+      await svc.from("user_avatars").upsert(
+        {
+          user_id: user.id,
+          type: "voice",
+          external_id: result.voiceId,
+          name: voiceName,
+          metadata: { cloned: true },
+        },
+        { onConflict: "user_id,type,external_id" }
+      );
+
       console.log(
         `[heygen] voice cloned: ${result.voiceId} for user=${user.id}`
       );
