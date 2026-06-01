@@ -35,6 +35,13 @@ interface HeyGenVoice {
   isCloned: boolean;
 }
 
+interface HeyGenAvatar {
+  avatarId: string;
+  name: string;
+  gender: string;
+  previewUrl: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -44,6 +51,9 @@ export default function CreateAvatarPage() {
   // Auth & plan
   const [plan, setPlan] = useState<JobPlan>("free");
   const [planLoaded, setPlanLoaded] = useState(false);
+
+  // Existing avatars from HeyGen account
+  const [existingAvatars, setExistingAvatars] = useState<HeyGenAvatar[]>([]);
 
   // Step 1: Avatar (photo)
   const [avatarId, setAvatarId] = useState("");
@@ -88,11 +98,12 @@ export default function CreateAvatarPage() {
     }
     init();
 
-    // Fetch HeyGen voices
+    // Fetch HeyGen avatars + voices
     fetch("/api/heygen")
       .then((r) => r.ok ? r.json() : Promise.reject(r.status))
       .then((data) => {
         if (Array.isArray(data.voices)) setVoices(data.voices);
+        if (Array.isArray(data.avatars)) setExistingAvatars(data.avatars);
       })
       .catch(() => { /* silent */ });
   }, []);
@@ -304,21 +315,73 @@ export default function CreateAvatarPage() {
             {/* ── STEP 1: Avatar Photo ─────────────────────────────── */}
             <div className="rounded-xl border border-border/50 p-6">
               <div className="flex items-center gap-3 mb-4">
-                <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${avatarReady ? "bg-green-500/20 text-green-400" : "bg-primary/10 text-primary"}`}>
-                  {avatarReady ? <CheckCircle2 className="h-4 w-4" /> : "1"}
+                <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${(avatarReady || avatarId) ? "bg-green-500/20 text-green-400" : "bg-primary/10 text-primary"}`}>
+                  {(avatarReady || avatarId) ? <CheckCircle2 className="h-4 w-4" /> : "1"}
                 </div>
                 <div>
                   <h2 className="text-base font-semibold flex items-center gap-2">
                     <ImagePlus className="h-4 w-4 text-cyan-500" />
-                    Upload your photo
+                    Choose your avatar
                   </h2>
                   <p className="text-xs text-muted-foreground">
-                    Clear portrait photo, face visible. JPG/PNG, max 10MB.
+                    Select an existing avatar or upload a new photo.
                   </p>
                 </div>
               </div>
 
-              {avatarImagePreview ? (
+              {/* Existing avatars from HeyGen account */}
+              {existingAvatars.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+                    Your avatars
+                  </p>
+                  <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-48 overflow-y-auto">
+                    {existingAvatars.map((a) => (
+                      <button
+                        key={a.avatarId}
+                        type="button"
+                        onClick={() => {
+                          setAvatarId(a.avatarId);
+                          setAvatarReady(true);
+                          setAvatarImagePreview(a.previewUrl);
+                        }}
+                        className={`relative rounded-xl border-2 overflow-hidden transition-all ${
+                          avatarId === a.avatarId
+                            ? "border-cyan-500 ring-2 ring-cyan-500/20"
+                            : "border-border/30 hover:border-border"
+                        }`}
+                      >
+                        {a.previewUrl ? (
+                          <img
+                            src={a.previewUrl}
+                            alt={a.name}
+                            className="w-full aspect-square object-cover"
+                          />
+                        ) : (
+                          <div className="w-full aspect-square bg-muted/30 flex items-center justify-center">
+                            <User className="h-6 w-6 text-muted-foreground/30" />
+                          </div>
+                        )}
+                        <div className="absolute bottom-0 inset-x-0 bg-black/60 px-1 py-0.5">
+                          <p className="text-[9px] text-white truncate text-center">{a.name}</p>
+                        </div>
+                        {avatarId === a.avatarId && (
+                          <div className="absolute top-1 right-1 bg-cyan-500 rounded-full p-0.5">
+                            <CheckCircle2 className="h-3 w-3 text-white" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Upload new photo */}
+              <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+                {existingAvatars.length > 0 ? "Or upload a new photo" : "Upload your photo"}
+              </p>
+
+              {avatarImagePreview && !existingAvatars.some(a => a.avatarId === avatarId) ? (
                 <div className="flex items-center gap-4">
                   <div className="relative">
                     <img

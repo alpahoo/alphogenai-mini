@@ -4,13 +4,14 @@ import {
   createPhotoAvatar,
   cloneVoice,
   listVoices,
+  listAvatars,
 } from "@/lib/heygen-client";
 
 /**
- * GET /api/heygen — List available voices (stock + cloned).
+ * GET /api/heygen — List available avatars AND voices.
  * POST /api/heygen — Create a photo avatar or clone a voice.
  *
- * Auth required. Premium plan required.
+ * Auth required.
  */
 
 export async function GET() {
@@ -23,14 +24,25 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  try {
-    const voices = await listVoices();
-    return NextResponse.json({ voices });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("[heygen/voices] list failed:", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+  // Fetch avatars and voices in parallel
+  const [avatarsResult, voicesResult] = await Promise.allSettled([
+    listAvatars(),
+    listVoices(),
+  ]);
+
+  const avatars =
+    avatarsResult.status === "fulfilled" ? avatarsResult.value : [];
+  const voices =
+    voicesResult.status === "fulfilled" ? voicesResult.value : [];
+
+  if (avatarsResult.status === "rejected") {
+    console.error("[heygen] listAvatars failed:", avatarsResult.reason);
   }
+  if (voicesResult.status === "rejected") {
+    console.error("[heygen] listVoices failed:", voicesResult.reason);
+  }
+
+  return NextResponse.json({ avatars, voices });
 }
 
 export async function POST(req: Request) {

@@ -15,6 +15,7 @@
  */
 
 const HEYGEN_API_V1 = "https://api.heygen.com/v1";
+const HEYGEN_API_V2 = "https://api.heygen.com/v2";
 const HEYGEN_API_V3 = "https://api.heygen.com/v3";
 
 function getApiKey(): string {
@@ -86,6 +87,41 @@ export async function createPhotoAvatar(
     avatarId: String(avatarId),
     status: data.data?.status ?? "created",
   };
+}
+
+// ---------------------------------------------------------------------------
+// List existing avatars
+// ---------------------------------------------------------------------------
+
+export interface HeyGenAvatar {
+  avatarId: string;
+  name: string;
+  gender: string;
+  previewUrl: string | null;
+}
+
+/**
+ * List all avatars on the account (stock + photo avatars).
+ * Allows retrieving avatar_id for avatars created via the dashboard.
+ */
+export async function listAvatars(): Promise<HeyGenAvatar[]> {
+  const res = await fetch(`${HEYGEN_API_V2}/avatars`, {
+    headers: headers(),
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!res.ok) {
+    throw new Error(`HeyGen listAvatars failed (${res.status})`);
+  }
+
+  const data = await res.json();
+  const avatars = data.data?.avatars ?? data.avatars ?? [];
+  return avatars.map((a: Record<string, unknown>) => ({
+    avatarId: String(a.avatar_id ?? a.id ?? ""),
+    name: String(a.avatar_name ?? a.name ?? ""),
+    gender: String(a.gender ?? ""),
+    previewUrl: (a.preview_image_url as string) ?? null,
+  }));
 }
 
 // ---------------------------------------------------------------------------
