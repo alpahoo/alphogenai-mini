@@ -19,6 +19,7 @@ import {
   isHeyGenShotsEngine,
   createAvatarVideo,
   createAvatarShotsVideo,
+  generateSpeech,
 } from "@/lib/heygen-client";
 import { enhancePrompt } from "@/lib/prompt-enhancer";
 import type { JobPlan, ReferencePayload } from "@/lib/types";
@@ -373,20 +374,27 @@ export async function POST(req: Request) {
       try {
         let task;
         if (isHeyGenShotsEngine(engineKey)) {
-          // ── Cinematic: Avatar Shots (Seedance 2 + lip-sync) ──────────
-          // scene_prompt = director's brief; script_text = dialogue (lip-sync)
+          // ── Cinematic: Avatar Shots (Seedance 2) ─────────────────────
+          // scene_prompt = director's brief. For lip-sync with the chosen
+          // voice, generate TTS audio and pass it as an audio reference.
+          let audioReferenceUrl: string | undefined;
+          if (script_text?.trim() && voice_id) {
+            const audio = await generateSpeech(script_text.trim(), voice_id);
+            if (audio) audioReferenceUrl = audio;
+          }
           task = await createAvatarShotsVideo({
             avatarId: avatar_id,
             scenePrompt: (scene_prompt || prompt).trim(),
             scriptText: script_text?.trim() || undefined,
             voiceId: voice_id || undefined,
+            audioReferenceUrl,
             durationSeconds: safeDuration,
             resolution: "1080p",
             aspectRatio: aspect_ratio === "9:16" ? "9:16" : "16:9",
           });
           console.log(
             `[jobs] HeyGen avatar-shots: job=${job.id} task=${task.taskId} ` +
-            `avatar=${avatar_id} lipsync=${Boolean(script_text && voice_id)}`
+            `avatar=${avatar_id} audioRef=${Boolean(audioReferenceUrl)}`
           );
         } else {
           // ── Presenter: Avatar IV (talking head) ──────────────────────
@@ -394,8 +402,8 @@ export async function POST(req: Request) {
             avatarId: avatar_id,
             scriptText: prompt.trim(),
             voiceId: voice_id!,
-            dimensions: aspect_ratio === "9:16" ? "1080x1920" : "1920x1080",
-            motionPrompt: motion_prompt,
+            aspectRatio: aspect_ratio === "9:16" ? "9:16" : "16:9",
+            resolution: "1080p",
           });
           console.log(
             `[jobs] HeyGen avatar-iv: job=${job.id} task=${task.taskId} ` +

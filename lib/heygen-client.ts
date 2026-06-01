@@ -226,10 +226,10 @@ export interface CreateAvatarVideoParams {
   scriptText: string;
   /** Voice ID (cloned or stock) */
   voiceId: string;
-  /** Video dimensions (default "1920x1080") */
-  dimensions?: string;
-  /** Motion prompt for gestures/posture (Avatar IV feature) */
-  motionPrompt?: string;
+  /** Aspect ratio: "16:9" | "9:16" | "1:1" (default "16:9") */
+  aspectRatio?: string;
+  /** Resolution: "720p" | "1080p" | "4k" (default "1080p") */
+  resolution?: string;
 }
 
 export interface AvatarVideoTask {
@@ -246,28 +246,20 @@ export interface AvatarVideoTask {
 export async function createAvatarVideo(
   params: CreateAvatarVideoParams
 ): Promise<AvatarVideoTask> {
+  // Correct v3 schema: top-level `script` (string) + `voice_id`, engine avatar_iv
   const body: Record<string, unknown> = {
     type: "avatar",
     avatar_id: params.avatarId,
-    engine: { type: "avatar_v" },
-    input: {
-      type: "script",
-      script: {
-        text: params.scriptText,
-        voice_id: params.voiceId,
-      },
-    },
+    script: params.scriptText,
+    voice_id: params.voiceId,
+    engine: { type: "avatar_iv" },
+    resolution: params.resolution ?? "1080p",
+    aspect_ratio: params.aspectRatio ?? "16:9",
   };
 
-  // Optional dimensions
-  if (params.dimensions) {
-    body.dimensions = params.dimensions;
-  }
-
-  // Avatar IV custom motion prompt
-  if (params.motionPrompt) {
-    body.motion_prompt = params.motionPrompt;
-  }
+  console.log(
+    `[heygen] avatar-iv request: ${JSON.stringify(body).slice(0, 300)}`
+  );
 
   const res = await fetch(`${HEYGEN_API_V3}/videos`, {
     method: "POST",
@@ -318,57 +310,77 @@ export interface CreateAvatarShotsParams {
 }
 
 /**
- * Generate an Avatar Shots video (Seedance 2.0 + HeyGen lip-sync).
- * Cinematic shot driven by a scene prompt. When scriptText + voiceId are
- * provided, the avatar speaks with frame-accurate lip-sync while performing
- * the cinematic action.
+ * Generate TTS speech from text using a HeyGen voice (Starfish engine).
+ * Returns a public audio URL. Used to drive lip-sync in Avatar Shots with
+ * the user's cloned voice (passed as an audio reference).
+ */
+export async function generateSpeech(
+  text: string,
+  voiceId: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(`${HEYGEN_API_V3}/voices/speech`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ text, voice_id: voiceId }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) {
+      console.warn(`[heygen] generateSpeech failed (${res.status})`);
+      return null;
+    }
+    const data = await res.json();
+    const url =
+      data.data?.audio_url ?? data.audio_url ?? data.data?.url ?? data.url;
+    return url ? String(url) : null;
+  } catch (e) {
+    console.warn("[heygen] generateSpeech error:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/**
+ * Generate an Avatar Shots video (Seedance 2.0 cinematic).
+ * Per the v3 API, avatar_shots has NO script/voice fields — motion and
+ * speech are driven by the prompt and supplied references. To get lip-sync
+ * with a specific voice, generate TTS audio first and pass it as an audio
+ * reference (the caller does this and passes audioReferenceUrl).
  *
  * Cost: 4 credits/sec (720p) or 10 credits/sec (1080p).
- *
- * NOTE: The CreateVideoFromAvatarShots schema (POST /v3/videos, added
- * June 2026) is not fully documented publicly. This implementation uses
- * the documented field shape and is verified/adjusted against the live API.
  */
 export async function createAvatarShotsVideo(
-  params: CreateAvatarShotsParams
+  params: CreateAvatarShotsParams & { audioReferenceUrl?: string }
 ): Promise<AvatarVideoTask> {
-  // Snap duration to HeyGen's allowed values (5, 10, 15)
-  const allowed = [5, 10, 15];
+  // Duration: integer 4–15 (HeyGen). Snap & clamp.
   const requested = params.durationSeconds ?? 10;
-  const duration = allowed.reduce((prev, cur) =>
-    Math.abs(cur - requested) < Math.abs(prev - requested) ? cur : prev
-  );
+  const duration = Math.max(4, Math.min(15, Math.round(requested)));
 
-  const dimensions =
-    params.aspectRatio === "9:16"
-      ? { width: 1080, height: 1920 }
-      : { width: 1920, height: 1080 };
+  // Build the prompt: scene brief, plus inline dialogue if no audio reference
+  let prompt = params.scenePrompt;
+  if (params.scriptText && !params.audioReferenceUrl) {
+    // No cloned-voice audio → embed dialogue so the model speaks + lip-syncs
+    prompt += `\n\nThe person speaks this line, lip-synced: "${params.scriptText}"`;
+  }
 
   const body: Record<string, unknown> = {
     type: "avatar_shots",
-    avatar_id: params.avatarId,
-    engine: { type: "seedance_2" },
-    // Director's brief — cinematic action, camera, setting
-    prompt: params.scenePrompt,
+    // avatar_id MUST be an array of 1–3 look IDs
+    avatar_id: [params.avatarId],
+    prompt,
     duration,
     resolution: params.resolution ?? "1080p",
-    dimension: dimensions,
+    aspect_ratio: params.aspectRatio === "9:16" ? "9:16" : "16:9",
+    enhance_prompt: true,
   };
 
-  // Script mode → lip-sync. Omit for voice-over/cinematic-only mode.
-  if (params.scriptText && params.voiceId) {
-    body.input = {
-      type: "script",
-      script: {
-        text: params.scriptText,
-        voice_id: params.voiceId,
-      },
-    };
+  // Audio reference → drives speech + lip-sync with the chosen (cloned) voice
+  if (params.audioReferenceUrl) {
+    body.references = [{ type: "url", url: params.audioReferenceUrl }];
   }
 
   console.log(
     `[heygen] avatar-shots request: avatar=${params.avatarId} ` +
-      `duration=${duration}s lipsync=${Boolean(params.scriptText && params.voiceId)} ` +
+      `duration=${duration}s audioRef=${Boolean(params.audioReferenceUrl)} ` +
       `body=${JSON.stringify(body).slice(0, 400)}`
   );
 
