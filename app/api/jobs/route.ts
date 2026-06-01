@@ -279,6 +279,131 @@ export async function POST(req: Request) {
         ? Math.round(rawDuration)
         : plan === "pro" ? 15 : 5;
 
+    // ── HeyGen avatar jobs are ALWAYS single-scene ─────────────────────
+    // The avatar engine generates one complete video; never split into a
+    // multi-scene storyboard (which would leave scenes 2..N to fail in the
+    // normal pipeline). Skip prompt enhancement too — the script is verbatim.
+    const isAvatarJob =
+      Boolean(safePreferredEngine) && isHeyGenEngine(safePreferredEngine!);
+
+    if (isAvatarJob) {
+      const storyboard = [
+        {
+          scene_index: 0,
+          prompt: prompt.trim().slice(0, 5000),
+          engine: safePreferredEngine as import("@/lib/types").EngineKey,
+          duration_sec: 5,
+        },
+      ];
+
+      const { data: job, error: insertError } = await supabase
+        .from("jobs")
+        .insert({
+          prompt: prompt.trim(),
+          plan,
+          status: "pending",
+          current_stage: "queued",
+          target_duration_seconds: 0, // determined by HeyGen
+          storyboard,
+          multi_scene_chain: false,
+          ...(safeImageUrl ? { image_url: safeImageUrl } : {}),
+          ...(user?.id ? { user_id: user.id } : {}),
+          audio_mode: "none",
+          aspect_ratio:
+            aspect_ratio && ["16:9", "9:16", "1:1"].includes(aspect_ratio)
+              ? aspect_ratio
+              : "16:9",
+          caption_mode: "none",
+        })
+        .select()
+        .single();
+
+      if (insertError || !job) {
+        console.error("Failed to create avatar job:", insertError);
+        return NextResponse.json(
+          { error: insertError?.message ?? "Failed to create job" },
+          { status: 500 }
+        );
+      }
+
+      await supabase.from("job_scenes").insert({
+        job_id: job.id,
+        scene_index: 0,
+        prompt: prompt.trim().slice(0, 5000),
+        engine: safePreferredEngine,
+        duration_sec: 5,
+        status: "pending" as const,
+      });
+
+      // Fire the HeyGen generation (presenter or cinematic)
+      try {
+        let task;
+        if (isHeyGenShotsEngine(safePreferredEngine!)) {
+          let audioReferenceUrl: string | undefined;
+          if (script_text?.trim() && voice_id) {
+            const audio = await generateSpeech(script_text.trim(), voice_id);
+            if (audio) audioReferenceUrl = audio;
+          }
+          task = await createAvatarShotsVideo({
+            avatarId: avatar_id!,
+            scenePrompt: (scene_prompt || prompt).trim(),
+            scriptText: script_text?.trim() || undefined,
+            voiceId: voice_id || undefined,
+            audioReferenceUrl,
+            durationSeconds: safeDuration,
+            resolution: "1080p",
+            aspectRatio: aspect_ratio === "9:16" ? "9:16" : "16:9",
+          });
+          console.log(
+            `[jobs] HeyGen avatar-shots: job=${job.id} task=${task.taskId} ` +
+            `audioRef=${Boolean(audioReferenceUrl)}`
+          );
+        } else {
+          task = await createAvatarVideo({
+            avatarId: avatar_id!,
+            scriptText: prompt.trim(),
+            voiceId: voice_id!,
+            aspectRatio: aspect_ratio === "9:16" ? "9:16" : "16:9",
+            resolution: "1080p",
+          });
+          console.log(
+            `[jobs] HeyGen avatar-iv: job=${job.id} task=${task.taskId}`
+          );
+        }
+
+        await supabase
+          .from("job_scenes")
+          .update({ status: "generating", external_task_id: task.taskId })
+          .eq("job_id", job.id)
+          .eq("scene_index", 0);
+
+        await supabase
+          .from("jobs")
+          .update({
+            status: "in_progress",
+            current_stage: "generating_scene_1",
+            engine_used: safePreferredEngine,
+            external_task_id: task.taskId,
+            multi_scene_chain: false,
+          })
+          .eq("id", job.id);
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.error(`[jobs] HeyGen avatar create failed:`, errMsg);
+        await supabase
+          .from("jobs")
+          .update({ status: "failed", error_message: `HeyGen error: ${errMsg}` })
+          .eq("id", job.id);
+        await supabase
+          .from("job_scenes")
+          .update({ status: "failed", error_message: errMsg.slice(0, 400) })
+          .eq("job_id", job.id)
+          .eq("scene_index", 0);
+      }
+
+      return NextResponse.json({ success: true, jobId: job.id, job });
+    }
+
     // ── Enhance prompt via EvoLink LLM (transparent, non-blocking) ─────
     // Falls back silently to original if EvoLink is unavailable.
     const enhancedPrompt = await enhancePrompt(prompt.trim());
@@ -361,86 +486,11 @@ export async function POST(req: Request) {
     }));
     await supabase.from("job_scenes").insert(sceneRows);
 
-    // ── Route: HeyGen vs Bailian vs EvoLink vs Modal (GPU) ────────────────
+    // ── Route: Bailian vs EvoLink vs Modal (GPU) ──────────────────────────
+    // (HeyGen avatar jobs are handled earlier and return before this point.)
     // Feature flag: transparently reroute a % of EvoLink traffic to Bailian
     const rawEngineKey = safePreferredEngine ?? "wan_i2v";
     const engineKey = maybeRerouteToBailian(rawEngineKey);
-
-    // ── HeyGen Avatar path (IV presenter OR Shots cinematic) ────────────
-    if (isHeyGenEngine(engineKey) && avatar_id) {
-      try {
-        let task;
-        if (isHeyGenShotsEngine(engineKey)) {
-          // ── Cinematic: Avatar Shots (Seedance 2) ─────────────────────
-          // scene_prompt = director's brief. For lip-sync with the chosen
-          // voice, generate TTS audio and pass it as an audio reference.
-          let audioReferenceUrl: string | undefined;
-          if (script_text?.trim() && voice_id) {
-            const audio = await generateSpeech(script_text.trim(), voice_id);
-            if (audio) audioReferenceUrl = audio;
-          }
-          task = await createAvatarShotsVideo({
-            avatarId: avatar_id,
-            scenePrompt: (scene_prompt || prompt).trim(),
-            scriptText: script_text?.trim() || undefined,
-            voiceId: voice_id || undefined,
-            audioReferenceUrl,
-            durationSeconds: safeDuration,
-            resolution: "1080p",
-            aspectRatio: aspect_ratio === "9:16" ? "9:16" : "16:9",
-          });
-          console.log(
-            `[jobs] HeyGen avatar-shots: job=${job.id} task=${task.taskId} ` +
-            `avatar=${avatar_id} audioRef=${Boolean(audioReferenceUrl)}`
-          );
-        } else {
-          // ── Presenter: Avatar IV (talking head) ──────────────────────
-          task = await createAvatarVideo({
-            avatarId: avatar_id,
-            scriptText: prompt.trim(),
-            voiceId: voice_id!,
-            aspectRatio: aspect_ratio === "9:16" ? "9:16" : "16:9",
-            resolution: "1080p",
-          });
-          console.log(
-            `[jobs] HeyGen avatar-iv: job=${job.id} task=${task.taskId} ` +
-            `avatar=${avatar_id} voice=${voice_id}`
-          );
-        }
-
-        // Single scene for avatar — mark as generating
-        await supabase
-          .from("job_scenes")
-          .update({ status: "generating", external_task_id: task.taskId })
-          .eq("job_id", job.id)
-          .eq("scene_index", 0);
-
-        await supabase
-          .from("jobs")
-          .update({
-            status: "in_progress",
-            current_stage: "generating_scene_1",
-            engine_used: engineKey,
-            external_task_id: task.taskId,
-            multi_scene_chain: false, // Avatar = always single scene
-          })
-          .eq("id", job.id);
-      } catch (e) {
-        const errMsg = e instanceof Error ? e.message : String(e);
-        console.error(`[jobs] HeyGen avatar create failed:`, errMsg);
-        await supabase
-          .from("jobs")
-          .update({ status: "failed", error_message: `HeyGen error: ${errMsg}` })
-          .eq("id", job.id);
-        await supabase
-          .from("job_scenes")
-          .update({ status: "failed", error_message: errMsg.slice(0, 400) })
-          .eq("job_id", job.id)
-          .eq("scene_index", 0);
-      }
-
-      return NextResponse.json({ success: true, jobId: job.id, job });
-    }
 
     if (isBailianEngine(engineKey)) {
       // ── Bailian path (Alibaba Cloud DashScope) ────────────────────────
