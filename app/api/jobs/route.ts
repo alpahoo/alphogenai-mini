@@ -92,6 +92,7 @@ export async function POST(req: Request) {
       voice_id,
       scene_prompt,
       script_text,
+      cinematic_voice_mode,
     } = body as {
       prompt: string;
       target_duration_seconds?: unknown;
@@ -121,6 +122,9 @@ export async function POST(req: Request) {
       scene_prompt?: string;
       /** HeyGen Avatar Shots dialogue script (for lip-sync — cinematic mode) */
       script_text?: string;
+      /** Cinematic voice mode: "native" (Seedance generates, best quality) or
+       *  "exact" (cloned-voice TTS forced as audio reference, word-for-word) */
+      cinematic_voice_mode?: string;
     };
 
     // Default ON. Only set OFF if explicitly false (the user toggled it off
@@ -310,15 +314,29 @@ export async function POST(req: Request) {
         shots = [{ text: prompt.trim(), duration: 5 }];
       } else {
         const dialogue = script_text?.trim() || "";
-        if (dialogue && voice_id) {
-          // Split the dialogue, pre-generate TTS per chunk, size each shot.
+        // Voice mode: "native" (default) lets Seedance generate speech from the
+        // dialogue embedded in the prompt → best, most natural video quality.
+        // "exact" forces the cloned-voice TTS as an audio reference → word-for-
+        // word in your voice, but the forced audio acts as a rhythm guide that
+        // reduces visual naturalness.
+        const voiceModeExact = cinematic_voice_mode === "exact";
+
+        if (dialogue) {
           const textChunks = splitScriptIntoChunks(dialogue);
           for (const t of textChunks) {
-            const speech = await generateSpeech(t, voice_id);
-            const dur = speech?.durationSeconds
-              ? Math.max(4, Math.min(15, Math.ceil(speech.durationSeconds) + 1))
-              : Math.max(4, Math.min(15, safeDuration));
-            shots.push({ text: t, audioUrl: speech?.audioUrl, duration: dur });
+            if (voiceModeExact && voice_id) {
+              const speech = await generateSpeech(t, voice_id);
+              const dur = speech?.durationSeconds
+                ? Math.max(4, Math.min(15, Math.ceil(speech.durationSeconds) + 1))
+                : Math.max(4, Math.min(15, safeDuration));
+              shots.push({ text: t, audioUrl: speech?.audioUrl, duration: dur });
+            } else {
+              // Native: embed dialogue in the prompt, no forced audio. Estimate
+              // duration from words (~2.5 w/s) so the clip fits the speech.
+              const words = t.split(/\s+/).filter(Boolean).length;
+              const dur = Math.max(4, Math.min(15, Math.ceil(words / 2.3) + 1));
+              shots.push({ text: t, duration: dur });
+            }
           }
         }
         // Fallback / silent shot

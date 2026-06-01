@@ -109,6 +109,8 @@ export default function CreateAvatarPage() {
   // Cinematic mode fields
   const [scenePrompt, setScenePrompt] = useState("");
   const [cinematicDuration, setCinematicDuration] = useState<5 | 10 | 15>(10);
+  // "native" = Seedance generates speech (best quality); "exact" = cloned voice word-for-word
+  const [cinematicVoiceMode, setCinematicVoiceMode] = useState<"native" | "exact">("native");
 
   // Submit
   const [loading, setLoading] = useState(false);
@@ -261,9 +263,9 @@ export default function CreateAvatarPage() {
         setError("Please describe your cinematic shot.");
         return;
       }
-      // If a script is provided for lip-sync, a voice is required
-      if (scriptText.trim() && !voiceId) {
-        setError("Select a voice for lip-sync, or clear the dialogue for a silent shot.");
+      // Exact-voice mode needs a voice; native mode does not.
+      if (scriptText.trim() && cinematicVoiceMode === "exact" && !voiceId) {
+        setError("Exact-voice mode needs a voice. Pick one, or switch to Natural.");
         return;
       }
     }
@@ -289,6 +291,7 @@ export default function CreateAvatarPage() {
               voice_id: voiceId || undefined,
               scene_prompt: scenePrompt.trim(),
               script_text: scriptText.trim() || undefined,
+              cinematic_voice_mode: cinematicVoiceMode,
               aspect_ratio: aspectRatio,
               audio_mode: "none",
               target_duration_seconds: cinematicDuration,
@@ -818,6 +821,49 @@ export default function CreateAvatarPage() {
                 <span>{wordCount} words{mode === "presenter" ? ` · ~${estimatedDuration}s` : ""}</span>
                 <span>{scriptText.length}/5000</span>
               </div>
+
+              {/* Voice mode — cinematic with dialogue only */}
+              {mode === "cinematic" && scriptText.trim() && (
+                <div className="mt-4 rounded-lg border border-border/40 bg-muted/10 p-3">
+                  <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+                    Voice & quality
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCinematicVoiceMode("native")}
+                      className={`rounded-lg border px-3 py-2 text-left transition-all ${
+                        cinematicVoiceMode === "native"
+                          ? "border-cyan-500/50 bg-cyan-500/10"
+                          : "border-border/40 hover:border-border"
+                      }`}
+                    >
+                      <div className={`text-sm font-semibold ${cinematicVoiceMode === "native" ? "text-cyan-400" : "text-foreground"}`}>
+                        Natural ★
+                      </div>
+                      <div className="text-[11px] text-muted-foreground/70 mt-0.5">
+                        Best video quality. Seedance generates the voice.
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCinematicVoiceMode("exact")}
+                      className={`rounded-lg border px-3 py-2 text-left transition-all ${
+                        cinematicVoiceMode === "exact"
+                          ? "border-cyan-500/50 bg-cyan-500/10"
+                          : "border-border/40 hover:border-border"
+                      }`}
+                    >
+                      <div className={`text-sm font-semibold ${cinematicVoiceMode === "exact" ? "text-cyan-400" : "text-foreground"}`}>
+                        Exact voice
+                      </div>
+                      <div className="text-[11px] text-muted-foreground/70 mt-0.5">
+                        Your cloned voice, word-for-word. Slightly lower quality.
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* ── Options ──────────────────────────────────────────── */}
