@@ -320,6 +320,16 @@ export default function CreateAvatarPage() {
   const estimatedDuration = Math.max(5, Math.ceil((wordCount / 150) * 60));
   const estimatedCost = ((estimatedDuration / 60) * 3).toFixed(2);
 
+  // Cinematic estimate: dialogue auto-split into ~33-word shots (~13s each).
+  // Silent shot = 1 shot at the chosen duration. Cost ~$0.10/s (1080p).
+  const cinematicShots = scriptText.trim()
+    ? Math.max(1, Math.ceil(wordCount / 33))
+    : 1;
+  const cinematicSeconds = scriptText.trim()
+    ? cinematicShots * 13
+    : cinematicDuration;
+  const cinematicCost = (cinematicSeconds * 0.1).toFixed(2);
+
   // Filtered voices for search
   const filteredVoices = voices.filter(
     (v) =>
@@ -727,29 +737,39 @@ export default function CreateAvatarPage() {
                   disabled={loading}
                 />
 
-                {/* Duration selector for cinematic */}
-                <div className="mt-4">
-                  <p className="text-sm font-medium mb-2 flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-amber-500" />
-                    Duration
-                  </p>
-                  <div className="flex gap-2">
-                    {([5, 10, 15] as const).map((d) => (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => setCinematicDuration(d)}
-                        className={`rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
-                          cinematicDuration === d
-                            ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-400"
-                            : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground"
-                        }`}
-                      >
-                        {d}s
-                      </button>
-                    ))}
+                {/* Duration selector — only used for SILENT shots (no dialogue).
+                    With dialogue, length auto-matches the speech (multi-shot). */}
+                {!scriptText.trim() && (
+                  <div className="mt-4">
+                    <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-amber-500" />
+                      Duration <span className="text-xs text-muted-foreground/50 font-normal">(silent shot)</span>
+                    </p>
+                    <div className="flex gap-2">
+                      {([5, 10, 15] as const).map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setCinematicDuration(d)}
+                          className={`rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
+                            cinematicDuration === d
+                              ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-400"
+                              : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground"
+                          }`}
+                        >
+                          {d}s
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
+                {scriptText.trim() && (
+                  <p className="mt-3 text-xs text-cyan-400/80 flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5" />
+                    Duration auto-matches your dialogue — long scripts are split
+                    into multiple cinematic shots and stitched together.
+                  </p>
+                )}
               </div>
             )}
 
@@ -930,18 +950,25 @@ export default function CreateAvatarPage() {
                   Duration
                 </span>
                 <span className="font-semibold text-foreground">
-                  ~{mode === "presenter" ? estimatedDuration : cinematicDuration}s
+                  ~{mode === "presenter" ? estimatedDuration : cinematicSeconds}s
                 </span>
               </div>
+              {mode === "cinematic" && cinematicShots > 1 && (
+                <div className="flex justify-between items-center">
+                  <span className="flex items-center gap-2">
+                    <Clapperboard className="h-4 w-4 text-cyan-500" />
+                    Shots
+                  </span>
+                  <span className="font-semibold text-foreground">{cinematicShots}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center">
                 <span className="flex items-center gap-2">
                   <Crown className="h-4 w-4 text-purple-500" />
                   Est. cost
                 </span>
                 <span className="font-semibold text-foreground">
-                  ~${mode === "presenter"
-                    ? estimatedCost
-                    : ((cinematicDuration * 0.1)).toFixed(2)}
+                  ~${mode === "presenter" ? estimatedCost : cinematicCost}
                 </span>
               </div>
 

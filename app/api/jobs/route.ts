@@ -20,6 +20,7 @@ import {
   createAvatarVideo,
   createAvatarShotsVideo,
   generateSpeech,
+  splitScriptIntoChunks,
 } from "@/lib/heygen-client";
 import { enhancePrompt } from "@/lib/prompt-enhancer";
 import type { JobPlan, ReferencePayload } from "@/lib/types";
@@ -287,14 +288,54 @@ export async function POST(req: Request) {
       Boolean(safePreferredEngine) && isHeyGenEngine(safePreferredEngine!);
 
     if (isAvatarJob) {
-      const storyboard = [
-        {
-          scene_index: 0,
-          prompt: prompt.trim().slice(0, 5000),
-          engine: safePreferredEngine as import("@/lib/types").EngineKey,
-          duration_sec: 5,
-        },
-      ];
+      const isCinematic = isHeyGenShotsEngine(safePreferredEngine!);
+      const safeAvatarAspect =
+        aspect_ratio && ["16:9", "9:16", "1:1"].includes(aspect_ratio)
+          ? aspect_ratio
+          : "16:9";
+
+      // ── Build the list of shots to generate ──────────────────────────
+      // Presenter → exactly 1 Avatar IV scene.
+      // Cinematic → 1 silent shot, OR N shots (script auto-split into ≤15s
+      //   chunks for natural pacing; TTS pre-generated per chunk).
+      interface Shot {
+        text: string;          // dialogue chunk (empty = silent)
+        audioUrl?: string;     // pre-generated TTS audio (cloned voice)
+        duration: number;      // 4–15s, matched to the audio when available
+      }
+      let shots: Shot[] = [];
+
+      if (!isCinematic) {
+        // Presenter: single scene; HeyGen sizes duration to the script.
+        shots = [{ text: prompt.trim(), duration: 5 }];
+      } else {
+        const dialogue = script_text?.trim() || "";
+        if (dialogue && voice_id) {
+          // Split the dialogue, pre-generate TTS per chunk, size each shot.
+          const textChunks = splitScriptIntoChunks(dialogue);
+          for (const t of textChunks) {
+            const speech = await generateSpeech(t, voice_id);
+            const dur = speech?.durationSeconds
+              ? Math.max(4, Math.min(15, Math.ceil(speech.durationSeconds) + 1))
+              : Math.max(4, Math.min(15, safeDuration));
+            shots.push({ text: t, audioUrl: speech?.audioUrl, duration: dur });
+          }
+        }
+        // Fallback / silent shot
+        if (shots.length === 0) {
+          shots = [{ text: "", duration: Math.max(4, Math.min(15, safeDuration)) }];
+        }
+      }
+
+      const sceneBrief = (scene_prompt || prompt).trim();
+
+      // ── Insert job + scene rows ──────────────────────────────────────
+      const storyboard = shots.map((s, i) => ({
+        scene_index: i,
+        prompt: (isCinematic ? sceneBrief : prompt.trim()).slice(0, 2000),
+        engine: safePreferredEngine as import("@/lib/types").EngineKey,
+        duration_sec: s.duration,
+      }));
 
       const { data: job, error: insertError } = await supabase
         .from("jobs")
@@ -303,16 +344,13 @@ export async function POST(req: Request) {
           plan,
           status: "pending",
           current_stage: "queued",
-          target_duration_seconds: 0, // determined by HeyGen
+          target_duration_seconds: shots.reduce((a, s) => a + s.duration, 0),
           storyboard,
           multi_scene_chain: false,
           ...(safeImageUrl ? { image_url: safeImageUrl } : {}),
           ...(user?.id ? { user_id: user.id } : {}),
           audio_mode: "none",
-          aspect_ratio:
-            aspect_ratio && ["16:9", "9:16", "1:1"].includes(aspect_ratio)
-              ? aspect_ratio
-              : "16:9",
+          aspect_ratio: safeAvatarAspect,
           caption_mode: "none",
         })
         .select()
@@ -326,80 +364,92 @@ export async function POST(req: Request) {
         );
       }
 
-      await supabase.from("job_scenes").insert({
-        job_id: job.id,
-        scene_index: 0,
-        prompt: prompt.trim().slice(0, 5000),
-        engine: safePreferredEngine,
-        duration_sec: 5,
-        status: "pending" as const,
-      });
+      await supabase.from("job_scenes").insert(
+        shots.map((s, i) => ({
+          job_id: job.id,
+          scene_index: i,
+          prompt: (isCinematic ? sceneBrief : prompt.trim()).slice(0, 2000),
+          engine: safePreferredEngine,
+          duration_sec: s.duration,
+          status: "pending" as const,
+        }))
+      );
 
-      // Fire the HeyGen generation (presenter or cinematic)
-      try {
-        let task;
-        if (isHeyGenShotsEngine(safePreferredEngine!)) {
-          let audioReferenceUrl: string | undefined;
-          if (script_text?.trim() && voice_id) {
-            const audio = await generateSpeech(script_text.trim(), voice_id);
-            if (audio) audioReferenceUrl = audio;
+      // ── Fire all shots upfront (independent — no chaining needed) ─────
+      let anyFired = false;
+      for (let i = 0; i < shots.length; i++) {
+        const s = shots[i];
+        try {
+          let taskId: string;
+          if (isCinematic) {
+            const task = await createAvatarShotsVideo({
+              avatarId: avatar_id!,
+              scenePrompt: sceneBrief,
+              scriptText: s.text || undefined,
+              voiceId: voice_id || undefined,
+              audioReferenceUrl: s.audioUrl,
+              durationSeconds: s.duration,
+              resolution: "1080p",
+              aspectRatio: safeAvatarAspect === "9:16" ? "9:16" : "16:9",
+            });
+            taskId = task.taskId;
+          } else {
+            const task = await createAvatarVideo({
+              avatarId: avatar_id!,
+              scriptText: prompt.trim(),
+              voiceId: voice_id!,
+              aspectRatio: safeAvatarAspect === "9:16" ? "9:16" : "16:9",
+              resolution: "1080p",
+            });
+            taskId = task.taskId;
           }
-          task = await createAvatarShotsVideo({
-            avatarId: avatar_id!,
-            scenePrompt: (scene_prompt || prompt).trim(),
-            scriptText: script_text?.trim() || undefined,
-            voiceId: voice_id || undefined,
-            audioReferenceUrl,
-            durationSeconds: safeDuration,
-            resolution: "1080p",
-            aspectRatio: aspect_ratio === "9:16" ? "9:16" : "16:9",
-          });
+
+          await supabase
+            .from("job_scenes")
+            .update({ status: "generating", external_task_id: taskId })
+            .eq("job_id", job.id)
+            .eq("scene_index", i);
+          anyFired = true;
           console.log(
-            `[jobs] HeyGen avatar-shots: job=${job.id} task=${task.taskId} ` +
-            `audioRef=${Boolean(audioReferenceUrl)}`
+            `[jobs] HeyGen ${isCinematic ? "avatar-shots" : "avatar-iv"} ` +
+            `job=${job.id} scene=${i} task=${taskId}`
           );
-        } else {
-          task = await createAvatarVideo({
-            avatarId: avatar_id!,
-            scriptText: prompt.trim(),
-            voiceId: voice_id!,
-            aspectRatio: aspect_ratio === "9:16" ? "9:16" : "16:9",
-            resolution: "1080p",
-          });
-          console.log(
-            `[jobs] HeyGen avatar-iv: job=${job.id} task=${task.taskId}`
-          );
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          console.error(`[jobs] HeyGen shot ${i} failed:`, errMsg);
+          await supabase
+            .from("job_scenes")
+            .update({ status: "failed", error_message: errMsg.slice(0, 400) })
+            .eq("job_id", job.id)
+            .eq("scene_index", i);
         }
+      }
 
-        await supabase
-          .from("job_scenes")
-          .update({ status: "generating", external_task_id: task.taskId })
-          .eq("job_id", job.id)
-          .eq("scene_index", 0);
-
+      if (anyFired) {
         await supabase
           .from("jobs")
           .update({
             status: "in_progress",
             current_stage: "generating_scene_1",
             engine_used: safePreferredEngine,
-            external_task_id: task.taskId,
             multi_scene_chain: false,
           })
           .eq("id", job.id);
-      } catch (e) {
-        const errMsg = e instanceof Error ? e.message : String(e);
-        console.error(`[jobs] HeyGen avatar create failed:`, errMsg);
+      } else {
         await supabase
           .from("jobs")
-          .update({ status: "failed", error_message: `HeyGen error: ${errMsg}` })
+          .update({
+            status: "failed",
+            current_stage: "failed",
+            error_message: "All avatar shots failed to start. Please retry.",
+          })
           .eq("id", job.id);
-        await supabase
-          .from("job_scenes")
-          .update({ status: "failed", error_message: errMsg.slice(0, 400) })
-          .eq("job_id", job.id)
-          .eq("scene_index", 0);
       }
+
+      console.log(
+        `[jobs] HeyGen avatar job=${job.id} mode=${isCinematic ? "cinematic" : "presenter"} ` +
+        `shots=${shots.length} fired=${anyFired}`
+      );
 
       return NextResponse.json({ success: true, jobId: job.id, job });
     }

@@ -24,6 +24,65 @@ function getApiKey(): string {
   return key.trim();
 }
 
+/**
+ * Split a script into chunks that each fit within a single Avatar Shots clip
+ * (~15s). Splits on sentence boundaries, accumulating until a word budget is
+ * reached. ~2.5 words/sec → ~33 words ≈ 13s, leaving headroom under the 15s cap.
+ *
+ * Used for multi-scene cinematic: each chunk becomes one shot, then all shots
+ * are concatenated into a longer, naturally-paced video.
+ */
+export function splitScriptIntoChunks(
+  text: string,
+  maxWordsPerChunk = 33,
+  maxChunks = 8
+): string[] {
+  const clean = text.trim().replace(/\s+/g, " ");
+  if (!clean) return [];
+
+  // Split into sentences (keep terminal punctuation)
+  const sentences = clean.match(/[^.!?]+[.!?]*\s*/g) ?? [clean];
+
+  const chunks: string[] = [];
+  let current = "";
+  let currentWords = 0;
+
+  for (const raw of sentences) {
+    const sentence = raw.trim();
+    if (!sentence) continue;
+    const words = sentence.split(/\s+/).length;
+
+    // A single sentence longer than the budget becomes its own chunk
+    if (words > maxWordsPerChunk) {
+      if (current) {
+        chunks.push(current.trim());
+        current = "";
+        currentWords = 0;
+      }
+      chunks.push(sentence);
+      continue;
+    }
+
+    if (currentWords + words > maxWordsPerChunk && current) {
+      chunks.push(current.trim());
+      current = sentence;
+      currentWords = words;
+    } else {
+      current = current ? `${current} ${sentence}` : sentence;
+      currentWords += words;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+
+  // Cap total chunks (cost + maxDuration guard). Merge overflow into the last.
+  if (chunks.length > maxChunks) {
+    const head = chunks.slice(0, maxChunks - 1);
+    const tail = chunks.slice(maxChunks - 1).join(" ");
+    return [...head, tail];
+  }
+  return chunks;
+}
+
 function headers(): Record<string, string> {
   return {
     "X-Api-Key": getApiKey(),
@@ -309,15 +368,22 @@ export interface CreateAvatarShotsParams {
   aspectRatio?: string;
 }
 
+export interface SpeechResult {
+  audioUrl: string;
+  /** Duration of the generated audio in seconds (if returned by the API) */
+  durationSeconds: number | null;
+}
+
 /**
  * Generate TTS speech from text using a HeyGen voice (Starfish engine).
- * Returns a public audio URL. Used to drive lip-sync in Avatar Shots with
- * the user's cloned voice (passed as an audio reference).
+ * Returns the audio URL + duration. Used to drive lip-sync in Avatar Shots
+ * with the user's cloned voice (passed as an audio reference), and to size
+ * the cinematic shot duration to the actual speech length (natural pacing).
  */
 export async function generateSpeech(
   text: string,
   voiceId: string
-): Promise<string | null> {
+): Promise<SpeechResult | null> {
   try {
     const res = await fetch(`${HEYGEN_API_V3}/voices/speech`, {
       method: "POST",
@@ -330,9 +396,17 @@ export async function generateSpeech(
       return null;
     }
     const data = await res.json();
-    const url =
-      data.data?.audio_url ?? data.audio_url ?? data.data?.url ?? data.url;
-    return url ? String(url) : null;
+    const d = data.data ?? data;
+    const url = d.audio_url ?? d.url;
+    if (!url) return null;
+    const rawDur =
+      d.duration ?? d.duration_ms ?? d.audio_duration ?? d.length ?? null;
+    let durationSeconds: number | null = null;
+    if (typeof rawDur === "number") {
+      // Heuristic: values > 1000 are almost certainly milliseconds
+      durationSeconds = rawDur > 1000 ? rawDur / 1000 : rawDur;
+    }
+    return { audioUrl: String(url), durationSeconds };
   } catch (e) {
     console.warn("[heygen] generateSpeech error:", e instanceof Error ? e.message : e);
     return null;
