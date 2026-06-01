@@ -17,6 +17,8 @@ import {
   Loader2,
   Lock,
   Sparkles,
+  User,
+  Crown,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -188,7 +190,7 @@ export default function CreateHub() {
             Advanced Tools
           </h2>
         </div>
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {/* Scene Editor — live */}
           <Link
             href="/create/editor"
@@ -205,6 +207,31 @@ export default function CreateHub() {
               </p>
               <span className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity">
                 Open editor <ArrowRight className="h-4 w-4" />
+              </span>
+            </div>
+          </Link>
+
+          {/* Avatar Video — HeyGen */}
+          <Link
+            href="/create/avatar"
+            className="group relative flex items-start gap-5 rounded-2xl border border-border bg-card p-6 transition-all duration-200 hover:border-cyan-500/40 hover:shadow-lg hover:shadow-cyan-500/5 hover:-translate-y-1"
+          >
+            <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl bg-gradient-to-r from-cyan-500 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 transition-transform group-hover:scale-110">
+              <User className="h-6 w-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="text-base font-semibold">Avatar Video</h3>
+                <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-semibold text-purple-400">
+                  <Crown className="h-2.5 w-2.5" /> Premium
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Create a talking avatar from your photo and voice. Full body, lip-sync, and natural gestures.
+              </p>
+              <span className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-cyan-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                Get started <ArrowRight className="h-4 w-4" />
               </span>
             </div>
           </Link>
