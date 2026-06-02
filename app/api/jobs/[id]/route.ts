@@ -11,7 +11,6 @@ import { isBailianEngine, getBailianTask, createBailianTask } from "@/lib/bailia
 import {
   isHeyGenEngine,
   getHeyGenTask,
-  generateSpeech,
   createLipsync,
   getLipsyncTask,
 } from "@/lib/heygen-client";
@@ -287,13 +286,12 @@ async function advanceHeyGenScenes(
 
     if (result.status === "completed" && result.videoUrl) {
       if (stage === "video") {
-        // Lipsync flow: kick off TTS + lipsync onto the cinematic shot
+        // Lipsync flow: lip-sync the pre-generated TTS audio onto the shot.
+        // (Audio was generated at job creation so the shot duration matches.)
         try {
-          const chunk = String(meta.chunk_text ?? "");
-          const voiceId = String(meta.voice_id ?? "");
-          const speech = chunk && voiceId ? await generateSpeech(chunk, voiceId) : null;
-          if (!speech?.audioUrl) throw new Error("TTS produced no audio");
-          const lipsyncId = await createLipsync(result.videoUrl, speech.audioUrl, "precision");
+          const audioUrl = String(meta.audio_url ?? "");
+          if (!audioUrl) throw new Error("no pre-generated audio");
+          const lipsyncId = await createLipsync(result.videoUrl, audioUrl, "precision");
           await supabase
             .from("job_scenes")
             .update({

@@ -19,6 +19,7 @@ import {
   isHeyGenShotsEngine,
   createAvatarVideo,
   createAvatarShotsVideo,
+  generateSpeech,
   splitScriptIntoChunks,
 } from "@/lib/heygen-client";
 import { enhancePrompt } from "@/lib/prompt-enhancer";
@@ -303,7 +304,8 @@ export async function POST(req: Request) {
       interface Shot {
         sceneText: string;   // dialogue chunk for this shot ("" = vibe/silent)
         duration: number;    // 4–15s
-        lipsync: boolean;    // true → poller does TTS + lipsync after the shot
+        lipsync: boolean;    // true → poller lip-syncs audioUrl onto the shot
+        audioUrl?: string;   // pre-generated TTS (cloned voice) for lipsync
       }
       let shots: Shot[] = [];
       const cinematicDialogue = (script_text?.trim() || "");
@@ -316,9 +318,27 @@ export async function POST(req: Request) {
 
       if (!isCinematic) {
         shots = [{ sceneText: prompt.trim(), duration: 5, lipsync: false }];
-      } else if (cinematicDialogue) {
+      } else if (useLipsync) {
+        // Lipsync flow: TTS FIRST so the Seedance shot duration matches the
+        // speech (HeyGen lipsync requires audio/video within 15%).
         for (const t of splitScriptIntoChunks(cinematicDialogue)) {
-          shots.push({ sceneText: t, duration: wordsToDur(t), lipsync: useLipsync });
+          const speech = await generateSpeech(t, voice_id!);
+          if (speech?.audioUrl && speech.durationSeconds) {
+            shots.push({
+              sceneText: t,
+              duration: Math.max(4, Math.min(15, Math.round(speech.durationSeconds))),
+              lipsync: true,
+              audioUrl: speech.audioUrl,
+            });
+          } else {
+            // TTS failed → fall back to native (embed dialogue in prompt)
+            shots.push({ sceneText: t, duration: wordsToDur(t), lipsync: false });
+          }
+        }
+      } else if (cinematicDialogue) {
+        // No voice → native (dialogue embedded in prompt)
+        for (const t of splitScriptIntoChunks(cinematicDialogue)) {
+          shots.push({ sceneText: t, duration: wordsToDur(t), lipsync: false });
         }
       }
       if (shots.length === 0) {
@@ -370,10 +390,10 @@ export async function POST(req: Request) {
           engine: safePreferredEngine,
           duration_sec: s.duration,
           status: "pending" as const,
-          // Lipsync flow: store the exact words + voice so the poller can
-          // TTS + lipsync them onto the cinematic shot (2-stage per scene).
+          // Lipsync flow: store the pre-generated TTS audio so the poller can
+          // lip-sync it onto the cinematic shot once the shot is ready.
           metadata: s.lipsync
-            ? { stage: "video", chunk_text: s.sceneText, voice_id }
+            ? { stage: "video", chunk_text: s.sceneText, audio_url: s.audioUrl }
             : {},
         }))
       );
