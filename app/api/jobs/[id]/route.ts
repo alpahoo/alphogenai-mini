@@ -223,7 +223,7 @@ async function advanceHeyGenScenes(
   scenes: SceneRow[]
 ): Promise<void> {
   const now = () => new Date().toISOString();
-  const STALE_MS = 20 * 60_000; // HeyGen Seedance shots can be slow
+  const STALE_MS = 45 * 60_000; // HeyGen queues parallel shots — can be slow
 
   for (const s of scenes) {
     if (s.status !== "generating" || !s.external_task_id) continue;
