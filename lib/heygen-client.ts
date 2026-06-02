@@ -500,15 +500,24 @@ export async function createAvatarShotsVideo(
 export async function createLipsync(
   videoUrl: string,
   audioUrl: string,
-  mode: "speed" | "precision" = "precision"
+  mode: "speed" | "precision" = "precision",
+  /** Clip the source video to this length (seconds) so it matches the audio
+   *  — needed when reusing a fixed-duration Look with a shorter script. */
+  endTimeSeconds?: number
 ): Promise<string> {
-  const body = {
+  const body: Record<string, unknown> = {
     video: { type: "url", url: videoUrl },
     audio: { type: "url", url: audioUrl },
     mode,
     enable_dynamic_duration: true, // fit video length to the speech
     disable_music_track: true,
   };
+
+  // Trim the video to the audio length (lipsync requires audio/video ±15%).
+  if (endTimeSeconds && endTimeSeconds > 0) {
+    body.start_time = 0;
+    body.end_time = Math.round(endTimeSeconds * 100) / 100;
+  }
 
   console.log(`[heygen] lipsync request: video=${videoUrl.slice(0, 60)} audio=${audioUrl.slice(0, 60)}`);
 

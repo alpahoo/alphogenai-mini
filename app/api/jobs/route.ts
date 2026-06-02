@@ -348,10 +348,17 @@ export async function POST(req: Request) {
       });
 
       try {
-        // TTS the exact words, then lipsync onto the saved Look clip directly.
+        // TTS the exact words, then lipsync onto the saved Look clip. Clip the
+        // look video to the speech length (end_time) so the durations match —
+        // the look has a fixed length but the new script varies.
         const speech = await generateSpeech(script_text.trim(), voice_id);
         if (!speech?.audioUrl) throw new Error("TTS produced no audio");
-        const lipsyncId = await createLipsync(look.video_url, speech.audioUrl, "precision");
+        const lipsyncId = await createLipsync(
+          look.video_url,
+          speech.audioUrl,
+          "precision",
+          speech.durationSeconds ?? undefined
+        );
 
         await supabase
           .from("job_scenes")
