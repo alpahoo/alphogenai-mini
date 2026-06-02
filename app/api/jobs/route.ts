@@ -414,10 +414,8 @@ export async function POST(req: Request) {
       // Cinematic + dialogue, no voice → native (dialogue embedded in prompt).
       // Cinematic, no dialogue → single vibe shot.
       interface Shot {
-        sceneText: string;   // dialogue chunk for this shot ("" = vibe/silent)
+        sceneText: string;   // dialogue (native fallback only); "" otherwise
         duration: number;    // 4–15s
-        lipsync: boolean;    // true → poller lip-syncs audioUrl onto the shot
-        audioUrl?: string;   // pre-generated TTS (cloned voice) for lipsync
       }
       let shots: Shot[] = [];
       const cinematicDialogue = (script_text?.trim() || "");
@@ -428,34 +426,41 @@ export async function POST(req: Request) {
         return Math.max(4, Math.min(15, Math.ceil(w / 2.3) + 1));
       };
 
+      // Final-lipsync flow: generate the FULL TTS once, then create N native
+      // shots sized so their total ≈ the speech length. They're concatenated,
+      // then ONE lipsync applies the full speech over the whole video.
+      let finalAudioUrl: string | undefined;
+      let finalAudioDur: number | undefined;
+
       if (!isCinematic) {
-        shots = [{ sceneText: prompt.trim(), duration: 5, lipsync: false }];
+        shots = [{ sceneText: prompt.trim(), duration: 5 }];
       } else if (useLipsync) {
-        // Lipsync flow: TTS FIRST so the Seedance shot duration matches the
-        // speech (HeyGen lipsync requires audio/video within 15%).
-        for (const t of splitScriptIntoChunks(cinematicDialogue)) {
-          const speech = await generateSpeech(t, voice_id!);
-          if (speech?.audioUrl && speech.durationSeconds) {
-            shots.push({
-              sceneText: t,
-              duration: Math.max(4, Math.min(15, Math.round(speech.durationSeconds))),
-              lipsync: true,
-              audioUrl: speech.audioUrl,
-            });
-          } else {
-            // TTS failed → fall back to native (embed dialogue in prompt)
-            shots.push({ sceneText: t, duration: wordsToDur(t), lipsync: false });
+        const speech = await generateSpeech(cinematicDialogue, voice_id!);
+        if (speech?.audioUrl && speech.durationSeconds) {
+          finalAudioUrl = speech.audioUrl;
+          finalAudioDur = speech.durationSeconds;
+          const A = speech.durationSeconds;
+          const N = Math.max(1, Math.min(8, Math.ceil(A / 13)));
+          const shotDur = Math.max(4, Math.min(15, Math.round(A / N)));
+          for (let i = 0; i < N; i++) shots.push({ sceneText: "", duration: shotDur });
+        } else {
+          // TTS failed → native fallback (embed dialogue per chunk in prompt)
+          for (const t of splitScriptIntoChunks(cinematicDialogue)) {
+            shots.push({ sceneText: t, duration: wordsToDur(t) });
           }
         }
       } else if (cinematicDialogue) {
         // No voice → native (dialogue embedded in prompt)
         for (const t of splitScriptIntoChunks(cinematicDialogue)) {
-          shots.push({ sceneText: t, duration: wordsToDur(t), lipsync: false });
+          shots.push({ sceneText: t, duration: wordsToDur(t) });
         }
       }
       if (shots.length === 0) {
-        shots = [{ sceneText: "", duration: Math.max(4, Math.min(15, safeDuration)), lipsync: false }];
+        shots = [{ sceneText: "", duration: Math.max(4, Math.min(15, safeDuration)) }];
       }
+
+      // True when we'll do the concat → single final lipsync flow.
+      const isFinalLipsync = useLipsync && Boolean(finalAudioUrl);
 
       // Enrich the cinematic shot direction (short brief → rich cinematic
       // description) so shots look like a pro production, not a plain talking
@@ -489,6 +494,9 @@ export async function POST(req: Request) {
           audio_mode: "none",
           aspect_ratio: safeAvatarAspect,
           caption_mode: "none",
+          ...(isFinalLipsync
+            ? { avatar_final: { audio_url: finalAudioUrl, audio_dur: finalAudioDur, stage: "shots" } }
+            : {}),
         })
         .select()
         .single();
@@ -509,11 +517,9 @@ export async function POST(req: Request) {
           engine: safePreferredEngine,
           duration_sec: s.duration,
           status: "pending" as const,
-          // Lipsync flow: store the pre-generated TTS audio so the poller can
-          // lip-sync it onto the cinematic shot once the shot is ready.
-          metadata: s.lipsync
-            ? { stage: "video", chunk_text: s.sceneText, audio_url: s.audioUrl }
-            : {},
+          // Final-lipsync flow: shots are visual-only ("video_only") — they're
+          // concatenated then lip-synced together at the end.
+          metadata: isFinalLipsync ? { stage: "video_only" } : {},
         }))
       );
 
@@ -524,13 +530,13 @@ export async function POST(req: Request) {
         try {
           let taskId: string;
           if (isCinematic) {
-            // Lipsync shots: generate the cinematic visual only (no dialogue
-            // embedded) — the exact words are lip-synced later. Native shots
+            // Final-lipsync shots: cinematic visual only (no embedded dialogue)
+            // — exact words are lip-synced over the concat later. Native shots
             // (no voice): embed the dialogue so Seedance speaks it.
             const task = await createAvatarShotsVideo({
               avatarId: avatar_id!,
               scenePrompt: sceneBrief,
-              scriptText: s.lipsync ? undefined : (s.sceneText || undefined),
+              scriptText: isFinalLipsync ? undefined : (s.sceneText || undefined),
               durationSeconds: s.duration,
               resolution: "1080p",
               aspectRatio: safeAvatarAspect === "9:16" ? "9:16" : "16:9",

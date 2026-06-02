@@ -97,9 +97,25 @@ export async function GET(
     const isBailian = isBailianEngine(job.engine_used ?? "");
     const isHeyGen = isHeyGenEngine(job.engine_used ?? "");
 
-    // ── Provider state machine ────────────────────────────────────────
-    // Runs for EvoLink, Bailian, and HeyGen engines while the job is in flight.
-    if ((isEvoLink || isBailian || isHeyGen) && job.status === "in_progress") {
+    // ── HeyGen final-lipsync stage (concat → ONE lipsync over the whole
+    // video). Runs REGARDLESS of status, because Modal sets the job 'done'
+    // after concat and we still need to apply the final lipsync.
+    const avatarFinalStage = String(
+      ((job.avatar_final ?? {}) as Record<string, unknown>).stage ?? ""
+    );
+    if (
+      isHeyGen &&
+      ["concatenating", "lipsync_pending", "lipsync"].includes(avatarFinalStage)
+    ) {
+      try {
+        await advanceAvatarFinalLipsync(supabase, job);
+      } catch (e) {
+        console.warn(
+          `[jobs/status] final-lipsync error (job=${id}):`,
+          e instanceof Error ? e.message : e
+        );
+      }
+    } else if ((isEvoLink || isBailian || isHeyGen) && job.status === "in_progress") {
       const stage = (job.current_stage as string | null) ?? "";
 
       if (stage === "encoding" || stage === "uploading") {
@@ -209,6 +225,117 @@ export async function GET(
 }
 
 /**
+ * Drive the final-lipsync stage for a cinematic long job:
+ *   concatenating → (wait for Modal concat) → create ONE lipsync over the
+ *   whole video with the full speech → lipsync → done.
+ * Runs regardless of job status (Modal marks the job 'done' after concat).
+ */
+async function advanceAvatarFinalLipsync(
+  supabase: ReturnType<typeof createServiceClient>,
+  job: Record<string, unknown>
+): Promise<void> {
+  const jobId = job.id as string;
+  const af = (job.avatar_final ?? {}) as Record<string, unknown>;
+  const stage = String(af.stage ?? "");
+  const audioUrl = String(af.audio_url ?? "");
+  const now = () => new Date().toISOString();
+
+  const startLipsync = async (videoUrl: string) => {
+    try {
+      const lipsyncId = await createLipsync(videoUrl, audioUrl, "precision");
+      await supabase
+        .from("jobs")
+        .update({
+          status: "in_progress",
+          current_stage: "muxing_audio",
+          avatar_final: { ...af, stage: "lipsync", lipsync_id: lipsyncId, concat_url: videoUrl },
+          updated_at: now(),
+        })
+        .eq("id", jobId);
+      console.log(`[jobs/status] final lipsync started job=${jobId} id=${lipsyncId}`);
+    } catch (e) {
+      // Couldn't start lipsync → deliver the concat video as-is
+      console.warn(`[jobs/status] final lipsync start failed:`, e instanceof Error ? e.message : e);
+      await supabase
+        .from("jobs")
+        .update({
+          status: "done",
+          current_stage: "completed",
+          video_url: videoUrl,
+          output_url_final: videoUrl,
+          avatar_final: { ...af, stage: "done" },
+          updated_at: now(),
+        })
+        .eq("id", jobId);
+    }
+  };
+
+  // ── Waiting for Modal concat to produce the concatenated video ─────────
+  if (stage === "concatenating") {
+    const videoUrl = String(job.video_url ?? "");
+    if (videoUrl) {
+      await startLipsync(videoUrl);
+      return;
+    }
+    // Concat not done yet — retry trigger if it looks stalled (>5min)
+    const updatedAt = new Date(job.updated_at as string).getTime();
+    if (Date.now() - updatedAt > 5 * 60_000) {
+      try {
+        await triggerConcatScenes(jobId);
+        await supabase.from("jobs").update({ updated_at: now() }).eq("id", jobId);
+      } catch { /* next poll retries */ }
+    }
+    return;
+  }
+
+  // ── Single shot (no concat needed) → lipsync directly ──────────────────
+  if (stage === "lipsync_pending") {
+    const src = String(af.concat_url ?? job.video_url ?? "");
+    if (src) await startLipsync(src);
+    return;
+  }
+
+  // ── Lipsync running → poll to completion ───────────────────────────────
+  if (stage === "lipsync") {
+    let r: { status: string; videoUrl?: string };
+    try {
+      r = await getLipsyncTask(String(af.lipsync_id ?? ""));
+    } catch {
+      return; // transient — retry next poll
+    }
+    if (r.status === "completed" && r.videoUrl) {
+      await supabase
+        .from("jobs")
+        .update({
+          status: "done",
+          current_stage: "completed",
+          video_url: r.videoUrl,
+          output_url_final: r.videoUrl,
+          avatar_final: { ...af, stage: "done" },
+          updated_at: now(),
+        })
+        .eq("id", jobId);
+      console.log(`[jobs/status] final lipsync done job=${jobId}`);
+    } else if (r.status === "failed") {
+      // Fallback: keep the concatenated video (without exact-word lipsync)
+      const fallback = String(af.concat_url ?? job.video_url ?? "");
+      await supabase
+        .from("jobs")
+        .update({
+          status: "done",
+          current_stage: "completed",
+          ...(fallback ? { video_url: fallback, output_url_final: fallback } : {}),
+          avatar_final: { ...af, stage: "done" },
+          updated_at: now(),
+        })
+        .eq("id", jobId);
+    }
+    // else still processing → leave as-is (frontend keeps polling)
+    return;
+  }
+}
+
+/**
  * Advance a HeyGen avatar job. Unlike EvoLink (sequential chaining), all
  * HeyGen shots are fired up front and run in parallel, so we poll EVERY
  * generating scene each call, mark completed/failed ones, then finalize:
@@ -219,9 +346,11 @@ export async function GET(
  */
 async function advanceHeyGenScenes(
   supabase: ReturnType<typeof createServiceClient>,
-  jobId: string,
+  job: Record<string, unknown>,
   scenes: SceneRow[]
 ): Promise<void> {
+  const jobId = job.id as string;
+  const avatarFinal = (job.avatar_final ?? {}) as Record<string, unknown>;
   const now = () => new Date().toISOString();
   const STALE_MS = 45 * 60_000; // HeyGen queues parallel shots — can be slow
 
@@ -356,6 +485,39 @@ async function advanceHeyGenScenes(
   );
 
   if (allDone) {
+    // ── Final-lipsync flow: shots are visual-only → concat then ONE lipsync
+    // over the whole video with the full speech. Don't finalize here; the
+    // GET handler's advanceAvatarFinalLipsync drives concat→lipsync→done.
+    if (avatarFinal.stage === "shots") {
+      if (scenes.length === 1) {
+        await supabase
+          .from("jobs")
+          .update({
+            avatar_final: { ...avatarFinal, stage: "lipsync_pending", concat_url: scenes[0].clip_url },
+            current_stage: "muxing_audio",
+            updated_at: now(),
+          })
+          .eq("id", jobId)
+          .eq("status", "in_progress");
+      } else {
+        await supabase
+          .from("jobs")
+          .update({
+            avatar_final: { ...avatarFinal, stage: "concatenating" },
+            current_stage: "encoding",
+            updated_at: now(),
+          })
+          .eq("id", jobId)
+          .eq("status", "in_progress");
+        try {
+          await triggerConcatScenes(jobId);
+        } catch (e) {
+          console.error(`[jobs/status] heygen concat trigger failed:`, e);
+        }
+      }
+      return;
+    }
+
     if (scenes.length === 1) {
       const only = scenes[0].clip_url!;
       await supabase
@@ -444,7 +606,7 @@ async function advanceEvoLinkState(
   // each call (not just the first). Otherwise a slow scene 0 blocks
   // recognition of already-finished scenes 1..N (looks like an infinite loop).
   if (isHeyGenEngine(engineKey)) {
-    await advanceHeyGenScenes(supabase, jobId, effectiveScenes);
+    await advanceHeyGenScenes(supabase, job, effectiveScenes);
     return;
   }
 
