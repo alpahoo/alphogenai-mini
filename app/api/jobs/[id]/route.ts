@@ -204,6 +204,118 @@ export async function GET(
 }
 
 /**
+ * Advance a HeyGen avatar job. Unlike EvoLink (sequential chaining), all
+ * HeyGen shots are fired up front and run in parallel, so we poll EVERY
+ * generating scene each call, mark completed/failed ones, then finalize:
+ *   - all done + 1 scene  → write final URL directly
+ *   - all done + N scenes → trigger Modal concat
+ *   - any failed (none active) → fail the job (user retries)
+ *   - otherwise → heartbeat
+ */
+async function advanceHeyGenScenes(
+  supabase: ReturnType<typeof createServiceClient>,
+  jobId: string,
+  scenes: SceneRow[]
+): Promise<void> {
+  const now = () => new Date().toISOString();
+  const STALE_MS = 20 * 60_000; // HeyGen Seedance shots can be slow
+
+  for (const s of scenes) {
+    if (s.status !== "generating" || !s.external_task_id) continue;
+
+    let result: { status: string; videoUrl?: string; error?: string };
+    try {
+      result = await getHeyGenTask(s.external_task_id);
+    } catch {
+      continue; // transient — retry next poll
+    }
+
+    if (result.status === "completed" && result.videoUrl) {
+      await supabase
+        .from("job_scenes")
+        .update({ status: "done", clip_url: result.videoUrl, updated_at: now() })
+        .eq("id", s.id)
+        .eq("status", "generating");
+      s.status = "done";
+      s.clip_url = result.videoUrl;
+      console.log(`[jobs/status] heygen scene ${s.scene_index} done`);
+    } else if (result.status === "failed") {
+      await supabase
+        .from("job_scenes")
+        .update({
+          status: "failed",
+          error_message: (result.error || "Generation failed").slice(0, 400),
+        })
+        .eq("id", s.id);
+      s.status = "failed";
+    } else {
+      // still processing/pending — stale guard
+      const age = Date.now() - new Date(s.updated_at).getTime();
+      if (age > STALE_MS) {
+        await supabase
+          .from("job_scenes")
+          .update({ status: "failed", error_message: "Generation timed out (>20min)" })
+          .eq("id", s.id);
+        s.status = "failed";
+      }
+    }
+  }
+
+  const allDone = scenes.every((s) => s.status === "done");
+  const anyFailed = scenes.some((s) => s.status === "failed");
+  const anyActive = scenes.some(
+    (s) => s.status === "generating" || s.status === "pending"
+  );
+
+  if (allDone) {
+    if (scenes.length === 1) {
+      const only = scenes[0].clip_url!;
+      await supabase
+        .from("jobs")
+        .update({
+          status: "done",
+          current_stage: "completed",
+          video_url: only,
+          output_url_final: only,
+          updated_at: now(),
+        })
+        .eq("id", jobId)
+        .eq("status", "in_progress");
+    } else {
+      await supabase
+        .from("jobs")
+        .update({ current_stage: "encoding", updated_at: now() })
+        .eq("id", jobId)
+        .eq("status", "in_progress");
+      try {
+        await triggerConcatScenes(jobId);
+      } catch (e) {
+        console.error(`[jobs/status] heygen concat trigger failed:`, e);
+      }
+    }
+    return;
+  }
+
+  if (anyFailed && !anyActive) {
+    const doneCount = scenes.filter((s) => s.status === "done").length;
+    await supabase
+      .from("jobs")
+      .update({
+        status: "failed",
+        current_stage: "failed",
+        error_message: `${doneCount}/${scenes.length} shots completed; the rest failed. Please retry.`,
+        updated_at: now(),
+      })
+      .eq("id", jobId)
+      .eq("status", "in_progress");
+    return;
+  }
+
+  // Still in flight — heartbeat
+  await heartbeat(supabase, jobId);
+}
+
+/**
  * Advance the EvoLink scene state machine by exactly one transition.
  *
  * Steps in priority order:
@@ -239,6 +351,14 @@ async function advanceEvoLinkState(
 
   // Cap defense
   const effectiveScenes = scenes.slice(0, MAX_CHAIN_LENGTH);
+
+  // ── HeyGen: shots are fired in PARALLEL, so poll ALL generating scenes
+  // each call (not just the first). Otherwise a slow scene 0 blocks
+  // recognition of already-finished scenes 1..N (looks like an infinite loop).
+  if (isHeyGenEngine(engineKey)) {
+    await advanceHeyGenScenes(supabase, jobId, effectiveScenes);
+    return;
+  }
 
   // ── Step 1: poll the currently generating scene ──────────────────────
   const generating = effectiveScenes.find(
