@@ -538,7 +538,8 @@ export default function CreateAvatarPage() {
               </div>
             )}
 
-            {/* ── STEP 1: Avatar Photo ─────────────────────────────── */}
+            {/* ── STEP 1: Avatar Photo (hidden when reusing a Look) ── */}
+            {!(mode === "cinematic" && selectedLookId) && (
             <div className="rounded-xl border border-border/50 p-6">
               <div className="flex items-center gap-3 mb-4">
                 <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${(avatarReady || avatarId) ? "bg-green-500/20 text-green-400" : "bg-primary/10 text-primary"}`}>
@@ -653,6 +654,7 @@ export default function CreateAvatarPage() {
                 </label>
               )}
             </div>
+            )}
 
             {/* ── STEP 2: Voice Selection ──────────────────────────── */}
             <div className="rounded-xl border border-border/50 p-6">
@@ -812,8 +814,8 @@ export default function CreateAvatarPage() {
               </div>
             </div>
 
-            {/* ── STEP 3: Cinematic scene description (cinematic mode) ── */}
-            {mode === "cinematic" && (
+            {/* ── STEP 3: Cinematic scene description (hidden when reusing a Look) ── */}
+            {mode === "cinematic" && !selectedLookId && (
               <div className="rounded-xl border border-border/50 p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${scenePrompt.trim().length > 10 ? "bg-green-500/20 text-green-400" : "bg-primary/10 text-primary"}`}>
@@ -981,10 +983,11 @@ export default function CreateAvatarPage() {
               type="submit"
               disabled={
                 loading ||
-                !avatarId ||
                 (mode === "presenter"
-                  ? !voiceId || !scriptText.trim()
-                  : !scenePrompt.trim())
+                  ? !avatarId || !voiceId || !scriptText.trim()
+                  : selectedLookId
+                    ? !voiceId || !scriptText.trim()
+                    : !avatarId || !scenePrompt.trim())
               }
               className="flex w-full items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 py-4 text-base font-bold text-white shadow-md shadow-cyan-500/20 transition-all hover:brightness-110 hover:shadow-lg hover:shadow-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-50"
             >
