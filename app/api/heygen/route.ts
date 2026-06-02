@@ -9,13 +9,19 @@ import {
 } from "@/lib/heygen-client";
 
 /**
- * GET /api/heygen — List user's avatars & voices (DB) + stock voices (HeyGen).
- *   On first load (0 avatars in DB), auto-imports from HeyGen account.
+ * GET /api/heygen — List custom avatars + voices for the avatar studio.
  * POST /api/heygen — Create a photo avatar or clone a voice.
  *
- * Auth required. Each user only sees their own avatars and cloned voices.
- * Resources are stored in `user_avatars` table scoped by user_id.
+ * Auth required. Custom (user-created) avatars are read live from HeyGen
+ * and identified by their 32-char hex IDs (stock library avatars use
+ * descriptive IDs like "Abigail_..."). DB-tracked items (created via this
+ * app) are merged in. Stock voices are appended after cloned voices.
  */
+
+/** Custom photo/digital-twin avatars use 32-char hex IDs; stock use names. */
+function isCustomAvatarId(id: string): boolean {
+  return /^[a-f0-9]{32}$/.test(id);
+}
 
 export async function GET() {
   const supabase = await createClient();
@@ -29,110 +35,99 @@ export async function GET() {
 
   const svc = createServiceClient();
 
-  // Fetch user's own avatars & voices from DB
-  const { data: dbRows, error: dbErr } = await svc
+  // DB-tracked items (created via this app), if any
+  const { data: dbRows } = await svc
     .from("user_avatars")
     .select("*")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
-
-  if (dbErr) {
-    console.error("[heygen] DB query failed:", dbErr.message);
-  }
-
   const rows = dbRows ?? [];
-  let userAvatars = rows
-    .filter((r) => r.type === "avatar")
-    .map((r) => ({
+
+  // ── Avatars: live custom avatars from HeyGen (hex id) + DB-tracked ────
+  const avatarMap = new Map<
+    string,
+    { avatarId: string; name: string; previewUrl: string | null; gender: string }
+  >();
+
+  // DB-tracked first (so app-created names win)
+  for (const r of rows.filter((r) => r.type === "avatar")) {
+    avatarMap.set(String(r.external_id), {
       avatarId: String(r.external_id),
       name: String(r.name ?? ""),
       previewUrl: (r.preview_url as string | null) ?? null,
       gender: ((r.metadata as Record<string, string>)?.gender as string) ?? "",
-      isOwn: true as boolean,
-    }));
-
-  // ── Auto-import on first load ─────────────────────────────────────────
-  // If user has 0 avatars in DB, sync from HeyGen account (one-time).
-  // This imports avatars created via the HeyGen dashboard so the user
-  // doesn't have to recreate them.
-  if (userAvatars.length === 0) {
-    try {
-      const heygenAvatars = await listHeyGenAvatars();
-      if (heygenAvatars.length > 0) {
-        // Bulk insert into DB — all scoped to this user
-        const insertRows = heygenAvatars.map((a) => ({
-          user_id: user.id,
-          type: "avatar" as const,
-          external_id: a.avatarId,
-          name: a.name,
-          preview_url: a.previewUrl,
-          metadata: { gender: a.gender, imported: true },
-        }));
-
-        const { error: insertErr } = await svc
-          .from("user_avatars")
-          .upsert(insertRows, { onConflict: "user_id,type,external_id" });
-
-        if (insertErr) {
-          console.warn("[heygen] auto-import insert failed:", insertErr.message);
-        } else {
-          console.log(
-            `[heygen] auto-imported ${heygenAvatars.length} avatars for user=${user.id}`
-          );
-        }
-
-        // Use imported avatars for response
-        userAvatars = heygenAvatars.map((a) => ({
-          avatarId: a.avatarId,
-          name: a.name,
-          previewUrl: a.previewUrl,
-          gender: a.gender,
-          isOwn: true,
-        }));
-      }
-    } catch (e) {
-      console.warn(
-        "[heygen] auto-import failed (non-fatal):",
-        e instanceof Error ? e.message : e
-      );
-    }
+    });
   }
 
-  // ── Voices: user's cloned (DB) + stock (HeyGen API) ───────────────────
-  const userVoices = rows
-    .filter((r) => r.type === "voice")
-    .map((r) => ({
+  try {
+    const heygenAvatars = await listHeyGenAvatars();
+    for (const a of heygenAvatars) {
+      // Only custom avatars (exclude the ~1200 stock library entries)
+      if (!isCustomAvatarId(a.avatarId)) continue;
+      if (avatarMap.has(a.avatarId)) continue; // DB version wins
+      avatarMap.set(a.avatarId, {
+        avatarId: a.avatarId,
+        name: a.name,
+        previewUrl: a.previewUrl,
+        gender: a.gender,
+      });
+    }
+  } catch (e) {
+    console.warn("[heygen] listAvatars failed:", e instanceof Error ? e.message : e);
+  }
+
+  const avatars = Array.from(avatarMap.values());
+
+  // ── Voices: cloned (DB + HeyGen is_cloned) + stock ───────────────────
+  type VoiceOut = {
+    voiceId: string;
+    name: string;
+    language: string;
+    gender: string;
+    isCloned: boolean;
+    previewUrl: string | null;
+  };
+  const voiceMap = new Map<string, VoiceOut>();
+
+  // DB-tracked cloned voices first
+  for (const r of rows.filter((r) => r.type === "voice")) {
+    voiceMap.set(String(r.external_id), {
       voiceId: String(r.external_id),
       name: String(r.name ?? ""),
       language: ((r.metadata as Record<string, string>)?.language as string) ?? "",
       gender: ((r.metadata as Record<string, string>)?.gender as string) ?? "",
       isCloned: true,
       previewUrl:
-        (((r.metadata as Record<string, string>)?.preview_url as string) ??
-          null) as string | null,
-    }));
+        ((r.metadata as Record<string, string>)?.preview_url as string) ?? null,
+    });
+  }
 
-  // Stock voices from HeyGen (shared, read-only — non-blocking)
-  let stockVoices: typeof userVoices = [];
+  const clonedVoices: VoiceOut[] = [];
+  const stockVoices: VoiceOut[] = [];
   try {
     const allVoices = await listHeyGenVoices();
-    stockVoices = allVoices
-      .filter((v) => !v.isCloned)
-      .map((v) => ({
+    for (const v of allVoices) {
+      const out: VoiceOut = {
         voiceId: v.voiceId,
         name: v.name,
         language: v.language,
         gender: v.gender,
-        isCloned: false,
+        isCloned: v.isCloned,
         previewUrl: v.previewUrl,
-      }));
+      };
+      if (v.isCloned) {
+        if (!voiceMap.has(v.voiceId)) clonedVoices.push(out);
+      } else {
+        stockVoices.push(out);
+      }
+    }
   } catch (e) {
     console.warn("[heygen] listVoices failed:", e instanceof Error ? e.message : e);
   }
 
   return NextResponse.json({
-    avatars: userAvatars,
-    voices: [...userVoices, ...stockVoices],
+    avatars,
+    voices: [...Array.from(voiceMap.values()), ...clonedVoices, ...stockVoices],
   });
 }
 
