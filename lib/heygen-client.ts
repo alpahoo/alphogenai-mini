@@ -14,7 +14,6 @@
  * Docs: https://developers.heygen.com
  */
 
-const HEYGEN_API_V1 = "https://api.heygen.com/v1";
 const HEYGEN_API_V2 = "https://api.heygen.com/v2";
 const HEYGEN_API_V3 = "https://api.heygen.com/v3";
 
@@ -109,32 +108,34 @@ export interface PhotoAvatar {
 
 /**
  * Create a Photo Avatar from a single portrait image.
- * Cost: $1.00 per operation.
- * Returns the avatar_id to use in video generation.
+ * Uses POST /v3/avatars (type: "photo"). Returns the look-level avatar_id
+ * (avatar_item.id) to use in video creation.
  */
 export async function createPhotoAvatar(
   params: CreatePhotoAvatarParams
 ): Promise<PhotoAvatar> {
-  const res = await fetch(`${HEYGEN_API_V1}/photo_avatars`, {
+  const res = await fetch(`${HEYGEN_API_V3}/avatars`, {
     method: "POST",
     headers: headers(),
     body: JSON.stringify({
-      image_url: params.imageUrl,
+      type: "photo",
       name: params.name ?? "AlphoGen Avatar",
+      file: { type: "url", url: params.imageUrl },
     }),
   });
 
   if (!res.ok) {
     const err = await res.text().catch(() => res.statusText);
-    throw new Error(`HeyGen createPhotoAvatar failed (${res.status}): ${err}`);
+    throw new Error(`HeyGen createPhotoAvatar failed (${res.status}): ${err.slice(0, 200)}`);
   }
 
   const data = await res.json();
+  const d = data.data ?? data;
   const avatarId =
-    data.data?.photo_avatar_id ??
-    data.data?.avatar_id ??
-    data.photo_avatar_id ??
-    data.avatar_id;
+    d.avatar_item?.id ??
+    d.avatar_id ??
+    d.id ??
+    d.photo_avatar_id;
 
   if (!avatarId) {
     throw new Error(
@@ -144,7 +145,7 @@ export async function createPhotoAvatar(
 
   return {
     avatarId: String(avatarId),
-    status: data.data?.status ?? "created",
+    status: String(d.avatar_item?.status ?? d.status ?? "created"),
   };
 }
 
