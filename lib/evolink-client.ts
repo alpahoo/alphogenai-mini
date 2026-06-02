@@ -69,6 +69,32 @@ export async function callEvoLinkLLM(
   return content.trim();
 }
 
+/**
+ * Enrich a short cinematic shot description into a rich, detailed direction
+ * for Seedance (camera, lighting, depth of field, setting, color grading) so
+ * shots look professionally cinematic instead of a plain talking head.
+ * Non-blocking: falls back to the original on any error.
+ */
+export async function enhanceScenePrompt(shortDescription: string): Promise<string> {
+  const input = shortDescription.trim();
+  if (!input || input.length > 600) return input; // already detailed → leave it
+  try {
+    const system =
+      "You are a cinematographer writing a shot direction for an AI video model " +
+      "that animates a single real person speaking to camera. Expand the user's " +
+      "brief into ONE vivid sentence (max ~50 words) describing: a blurred, " +
+      "professional interior or environment with shallow depth of field, soft " +
+      "natural/key lighting, gentle camera movement, warm cinematic color grading, " +
+      "and a confident, natural demeanor. Keep the person centered and speaking to " +
+      "camera. Do NOT invent dialogue or names. Output ONLY the shot direction, no preamble.";
+    const out = await callEvoLinkLLM(system, input);
+    // Guard against the model returning quotes/labels
+    return out.replace(/^["']|["']$/g, "").slice(0, 600) || input;
+  } catch {
+    return input;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Engine registry — maps our engine keys to EvoLink model IDs
 // ---------------------------------------------------------------------------

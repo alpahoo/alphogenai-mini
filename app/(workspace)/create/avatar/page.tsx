@@ -827,7 +827,8 @@ export default function CreateAvatarPage() {
                       Describe your shot
                     </h2>
                     <p className="text-xs text-muted-foreground">
-                      Direct the scene: action, camera movement, setting, mood.
+                      Direct the scene: a few words are enough — AI auto-enhances
+                      it into a rich cinematic shot (lighting, depth of field, grading).
                     </p>
                   </div>
                 </div>

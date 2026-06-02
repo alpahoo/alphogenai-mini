@@ -6,6 +6,7 @@ import {
   isEvoLinkEngine,
   createEvoLinkTask,
   engineSupportsFirstFrame,
+  enhanceScenePrompt,
   EVOLINK_ENGINES,
 } from "@/lib/evolink-client";
 import {
@@ -456,7 +457,14 @@ export async function POST(req: Request) {
         shots = [{ sceneText: "", duration: Math.max(4, Math.min(15, safeDuration)), lipsync: false }];
       }
 
-      const sceneBrief = (scene_prompt || prompt).trim();
+      // Enrich the cinematic shot direction (short brief → rich cinematic
+      // description) so shots look like a pro production, not a plain talking
+      // head. Non-blocking — falls back to the original on any LLM error.
+      let sceneBrief = (scene_prompt || prompt).trim();
+      if (isCinematic) {
+        sceneBrief = await enhanceScenePrompt(sceneBrief);
+        console.log(`[jobs] enriched cinematic prompt: "${sceneBrief.slice(0, 120)}"`);
+      }
 
       // ── Insert job + scene rows ──────────────────────────────────────
       const storyboard = shots.map((s, i) => ({
