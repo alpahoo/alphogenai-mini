@@ -8,7 +8,13 @@ import {
   engineSupportsFirstFrame,
 } from "@/lib/evolink-client";
 import { isBailianEngine, getBailianTask, createBailianTask } from "@/lib/bailian-client";
-import { isHeyGenEngine, getHeyGenTask } from "@/lib/heygen-client";
+import {
+  isHeyGenEngine,
+  getHeyGenTask,
+  generateSpeech,
+  createLipsync,
+  getLipsyncTask,
+} from "@/lib/heygen-client";
 import { triggerExtractLastFrame, triggerConcatScenes } from "@/lib/modal-client";
 import { generateVoiceover, isTTSAvailable } from "@/lib/tts";
 import { uploadBufferToR2 } from "@/lib/r2";
@@ -223,6 +229,55 @@ async function advanceHeyGenScenes(
   for (const s of scenes) {
     if (s.status !== "generating" || !s.external_task_id) continue;
 
+    const meta = (s.metadata ?? {}) as Record<string, unknown>;
+    const stage = String(meta.stage ?? "direct");
+    const age = Date.now() - new Date(s.updated_at).getTime();
+
+    // ── Stage 2: lipsync in progress → poll the lipsync job ────────────
+    if (stage === "lipsync") {
+      let r: { status: string; videoUrl?: string; error?: string };
+      try {
+        r = await getLipsyncTask(String(meta.lipsync_id ?? ""));
+      } catch {
+        continue;
+      }
+      if (r.status === "completed" && r.videoUrl) {
+        await supabase
+          .from("job_scenes")
+          .update({ status: "done", clip_url: r.videoUrl, updated_at: now() })
+          .eq("id", s.id)
+          .eq("status", "generating");
+        s.status = "done";
+        s.clip_url = r.videoUrl;
+        console.log(`[jobs/status] heygen scene ${s.scene_index} lipsync done`);
+      } else if (r.status === "failed") {
+        // Lipsync failed → fall back to the cinematic video without exact words
+        const fallback = String(meta.cinematic_url ?? "");
+        if (fallback) {
+          await supabase
+            .from("job_scenes")
+            .update({ status: "done", clip_url: fallback, updated_at: now() })
+            .eq("id", s.id);
+          s.status = "done";
+          s.clip_url = fallback;
+        } else {
+          await supabase
+            .from("job_scenes")
+            .update({ status: "failed", error_message: (r.error || "Lipsync failed").slice(0, 400) })
+            .eq("id", s.id);
+          s.status = "failed";
+        }
+      } else if (age > STALE_MS) {
+        await supabase
+          .from("job_scenes")
+          .update({ status: "failed", error_message: "Lipsync timed out (>20min)" })
+          .eq("id", s.id);
+        s.status = "failed";
+      }
+      continue;
+    }
+
+    // ── Stage 1: cinematic shot → poll Avatar Shots ────────────────────
     let result: { status: string; videoUrl?: string; error?: string };
     try {
       result = await getHeyGenTask(s.external_task_id);
@@ -231,14 +286,53 @@ async function advanceHeyGenScenes(
     }
 
     if (result.status === "completed" && result.videoUrl) {
-      await supabase
-        .from("job_scenes")
-        .update({ status: "done", clip_url: result.videoUrl, updated_at: now() })
-        .eq("id", s.id)
-        .eq("status", "generating");
-      s.status = "done";
-      s.clip_url = result.videoUrl;
-      console.log(`[jobs/status] heygen scene ${s.scene_index} done`);
+      if (stage === "video") {
+        // Lipsync flow: kick off TTS + lipsync onto the cinematic shot
+        try {
+          const chunk = String(meta.chunk_text ?? "");
+          const voiceId = String(meta.voice_id ?? "");
+          const speech = chunk && voiceId ? await generateSpeech(chunk, voiceId) : null;
+          if (!speech?.audioUrl) throw new Error("TTS produced no audio");
+          const lipsyncId = await createLipsync(result.videoUrl, speech.audioUrl, "precision");
+          await supabase
+            .from("job_scenes")
+            .update({
+              metadata: {
+                ...meta,
+                stage: "lipsync",
+                lipsync_id: lipsyncId,
+                cinematic_url: result.videoUrl,
+              },
+              updated_at: now(),
+            })
+            .eq("id", s.id)
+            .eq("status", "generating");
+          console.log(`[jobs/status] heygen scene ${s.scene_index} → lipsync ${lipsyncId}`);
+        } catch (e) {
+          // Couldn't start lipsync → deliver the cinematic shot as-is
+          console.warn(
+            `[jobs/status] lipsync start failed scene ${s.scene_index}, using cinematic video:`,
+            e instanceof Error ? e.message : e
+          );
+          await supabase
+            .from("job_scenes")
+            .update({ status: "done", clip_url: result.videoUrl, updated_at: now() })
+            .eq("id", s.id)
+            .eq("status", "generating");
+          s.status = "done";
+          s.clip_url = result.videoUrl;
+        }
+      } else {
+        // Direct (vibe/native) → done
+        await supabase
+          .from("job_scenes")
+          .update({ status: "done", clip_url: result.videoUrl, updated_at: now() })
+          .eq("id", s.id)
+          .eq("status", "generating");
+        s.status = "done";
+        s.clip_url = result.videoUrl;
+        console.log(`[jobs/status] heygen scene ${s.scene_index} done`);
+      }
     } else if (result.status === "failed") {
       await supabase
         .from("job_scenes")
@@ -248,16 +342,12 @@ async function advanceHeyGenScenes(
         })
         .eq("id", s.id);
       s.status = "failed";
-    } else {
-      // still processing/pending — stale guard
-      const age = Date.now() - new Date(s.updated_at).getTime();
-      if (age > STALE_MS) {
-        await supabase
-          .from("job_scenes")
-          .update({ status: "failed", error_message: "Generation timed out (>20min)" })
-          .eq("id", s.id);
-        s.status = "failed";
-      }
+    } else if (age > STALE_MS) {
+      await supabase
+        .from("job_scenes")
+        .update({ status: "failed", error_message: "Generation timed out (>20min)" })
+        .eq("id", s.id);
+      s.status = "failed";
     }
   }
 

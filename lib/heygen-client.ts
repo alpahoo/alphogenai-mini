@@ -487,6 +487,86 @@ export async function createAvatarShotsVideo(
 }
 
 // ---------------------------------------------------------------------------
+// Lipsync — overlay exact speech onto a cinematic video (re-syncs lips)
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a lipsync job: replaces a video's audio with the given audio and
+ * re-animates the speaker's lips to match. This is how we get a cinematic
+ * Seedance shot to speak the EXACT script in the user's cloned voice.
+ *
+ * POST /v3/lipsyncs — returns a lipsync_id to poll via getLipsyncTask().
+ */
+export async function createLipsync(
+  videoUrl: string,
+  audioUrl: string,
+  mode: "speed" | "precision" = "precision"
+): Promise<string> {
+  const body = {
+    video: { type: "url", url: videoUrl },
+    audio: { type: "url", url: audioUrl },
+    mode,
+    enable_dynamic_duration: true, // fit video length to the speech
+    disable_music_track: true,
+  };
+
+  console.log(`[heygen] lipsync request: video=${videoUrl.slice(0, 60)} audio=${audioUrl.slice(0, 60)}`);
+
+  const res = await fetch(`${HEYGEN_API_V3}/lipsyncs`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText);
+    throw new Error(`HeyGen createLipsync failed (${res.status}): ${err}`);
+  }
+
+  const data = await res.json();
+  const id = data.data?.lipsync_id ?? data.lipsync_id ?? data.data?.id ?? data.id;
+  if (!id) {
+    throw new Error(
+      `HeyGen lipsync returned no id: ${JSON.stringify(data).slice(0, 300)}`
+    );
+  }
+  console.log(`[heygen] lipsync task created: ${id}`);
+  return String(id);
+}
+
+/** Poll a lipsync job. Reuses the HeyGenTaskResult shape. */
+export async function getLipsyncTask(lipsyncId: string): Promise<HeyGenTaskResult> {
+  const res = await fetch(`${HEYGEN_API_V3}/lipsyncs/${lipsyncId}`, {
+    headers: headers(),
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!res.ok) {
+    throw new Error(`HeyGen lipsync poll failed (${res.status})`);
+  }
+
+  const data = await res.json();
+  const d = data.data ?? data;
+  const state = String(d.status ?? "unknown").toLowerCase();
+
+  if (["completed", "done", "success"].includes(state)) {
+    const videoUrl = d.video_url ?? d.url ?? d.output_url;
+    if (!videoUrl) {
+      throw new Error("HeyGen lipsync completed but no video URL found");
+    }
+    return { status: "completed", videoUrl: String(videoUrl) };
+  }
+  if (["failed", "error", "cancelled"].includes(state)) {
+    const error = d.error?.message ?? d.error ?? d.message ?? "Unknown lipsync error";
+    return { status: "failed", error: String(error) };
+  }
+  return {
+    status: ["pending", "queued", "waiting"].includes(state) ? "pending" : "processing",
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Task polling
 // ---------------------------------------------------------------------------
 

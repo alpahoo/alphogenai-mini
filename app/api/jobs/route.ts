@@ -19,7 +19,6 @@ import {
   isHeyGenShotsEngine,
   createAvatarVideo,
   createAvatarShotsVideo,
-  generateSpeech,
   splitScriptIntoChunks,
 } from "@/lib/heygen-client";
 import { enhancePrompt } from "@/lib/prompt-enhancer";
@@ -92,7 +91,6 @@ export async function POST(req: Request) {
       voice_id,
       scene_prompt,
       script_text,
-      cinematic_voice_mode,
     } = body as {
       prompt: string;
       target_duration_seconds?: unknown;
@@ -122,9 +120,6 @@ export async function POST(req: Request) {
       scene_prompt?: string;
       /** HeyGen Avatar Shots dialogue script (for lip-sync — cinematic mode) */
       script_text?: string;
-      /** Cinematic voice mode: "native" (Seedance generates, best quality) or
-       *  "exact" (cloned-voice TTS forced as audio reference, word-for-word) */
-      cinematic_voice_mode?: string;
     };
 
     // Default ON. Only set OFF if explicitly false (the user toggled it off
@@ -299,50 +294,35 @@ export async function POST(req: Request) {
           : "16:9";
 
       // ── Build the list of shots to generate ──────────────────────────
-      // Presenter → exactly 1 Avatar IV scene.
-      // Cinematic → 1 silent shot, OR N shots (script auto-split into ≤15s
-      //   chunks for natural pacing; TTS pre-generated per chunk).
+      // Presenter → 1 Avatar IV scene.
+      // Cinematic + dialogue + voice → LIPSYNC flow (the Graal): each chunk is
+      //   a Seedance cinematic shot; the poller then TTS+lip-syncs the exact
+      //   words in the cloned voice onto it.
+      // Cinematic + dialogue, no voice → native (dialogue embedded in prompt).
+      // Cinematic, no dialogue → single vibe shot.
       interface Shot {
-        text: string;          // dialogue chunk (empty = silent)
-        audioUrl?: string;     // pre-generated TTS audio (cloned voice)
-        duration: number;      // 4–15s, matched to the audio when available
+        sceneText: string;   // dialogue chunk for this shot ("" = vibe/silent)
+        duration: number;    // 4–15s
+        lipsync: boolean;    // true → poller does TTS + lipsync after the shot
       }
       let shots: Shot[] = [];
+      const cinematicDialogue = (script_text?.trim() || "");
+      const useLipsync = isCinematic && Boolean(cinematicDialogue) && Boolean(voice_id);
+
+      const wordsToDur = (t: string) => {
+        const w = t.split(/\s+/).filter(Boolean).length;
+        return Math.max(4, Math.min(15, Math.ceil(w / 2.3) + 1));
+      };
 
       if (!isCinematic) {
-        // Presenter: single scene; HeyGen sizes duration to the script.
-        shots = [{ text: prompt.trim(), duration: 5 }];
-      } else {
-        const dialogue = script_text?.trim() || "";
-        // Voice mode: "native" (default) lets Seedance generate speech from the
-        // dialogue embedded in the prompt → best, most natural video quality.
-        // "exact" forces the cloned-voice TTS as an audio reference → word-for-
-        // word in your voice, but the forced audio acts as a rhythm guide that
-        // reduces visual naturalness.
-        const voiceModeExact = cinematic_voice_mode === "exact";
-
-        if (dialogue) {
-          const textChunks = splitScriptIntoChunks(dialogue);
-          for (const t of textChunks) {
-            if (voiceModeExact && voice_id) {
-              const speech = await generateSpeech(t, voice_id);
-              const dur = speech?.durationSeconds
-                ? Math.max(4, Math.min(15, Math.ceil(speech.durationSeconds) + 1))
-                : Math.max(4, Math.min(15, safeDuration));
-              shots.push({ text: t, audioUrl: speech?.audioUrl, duration: dur });
-            } else {
-              // Native: embed dialogue in the prompt, no forced audio. Estimate
-              // duration from words (~2.5 w/s) so the clip fits the speech.
-              const words = t.split(/\s+/).filter(Boolean).length;
-              const dur = Math.max(4, Math.min(15, Math.ceil(words / 2.3) + 1));
-              shots.push({ text: t, duration: dur });
-            }
-          }
+        shots = [{ sceneText: prompt.trim(), duration: 5, lipsync: false }];
+      } else if (cinematicDialogue) {
+        for (const t of splitScriptIntoChunks(cinematicDialogue)) {
+          shots.push({ sceneText: t, duration: wordsToDur(t), lipsync: useLipsync });
         }
-        // Fallback / silent shot
-        if (shots.length === 0) {
-          shots = [{ text: "", duration: Math.max(4, Math.min(15, safeDuration)) }];
-        }
+      }
+      if (shots.length === 0) {
+        shots = [{ sceneText: "", duration: Math.max(4, Math.min(15, safeDuration)), lipsync: false }];
       }
 
       const sceneBrief = (scene_prompt || prompt).trim();
@@ -390,6 +370,11 @@ export async function POST(req: Request) {
           engine: safePreferredEngine,
           duration_sec: s.duration,
           status: "pending" as const,
+          // Lipsync flow: store the exact words + voice so the poller can
+          // TTS + lipsync them onto the cinematic shot (2-stage per scene).
+          metadata: s.lipsync
+            ? { stage: "video", chunk_text: s.sceneText, voice_id }
+            : {},
         }))
       );
 
@@ -400,12 +385,13 @@ export async function POST(req: Request) {
         try {
           let taskId: string;
           if (isCinematic) {
+            // Lipsync shots: generate the cinematic visual only (no dialogue
+            // embedded) — the exact words are lip-synced later. Native shots
+            // (no voice): embed the dialogue so Seedance speaks it.
             const task = await createAvatarShotsVideo({
               avatarId: avatar_id!,
               scenePrompt: sceneBrief,
-              scriptText: s.text || undefined,
-              voiceId: voice_id || undefined,
-              audioReferenceUrl: s.audioUrl,
+              scriptText: s.lipsync ? undefined : (s.sceneText || undefined),
               durationSeconds: s.duration,
               resolution: "1080p",
               aspectRatio: safeAvatarAspect === "9:16" ? "9:16" : "16:9",
