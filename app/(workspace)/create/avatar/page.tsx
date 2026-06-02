@@ -110,6 +110,16 @@ export default function CreateAvatarPage() {
   const [scenePrompt, setScenePrompt] = useState("");
   const [cinematicDuration, setCinematicDuration] = useState<5 | 10 | 15>(10);
 
+  // Reusable Looks (saved cinematic shots → lipsync new scripts onto them)
+  interface CinematicLook {
+    id: string;
+    name: string;
+    video_url: string;
+    duration_sec: number | null;
+  }
+  const [looks, setLooks] = useState<CinematicLook[]>([]);
+  const [selectedLookId, setSelectedLookId] = useState<string | null>(null);
+
   // Submit
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +154,12 @@ export default function CreateAvatarPage() {
       })
       .catch(() => { /* silent */ })
       .finally(() => setVoicesLoading(false));
+
+    // Fetch saved cinematic Looks
+    fetch("/api/looks")
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((d) => { if (Array.isArray(d.looks)) setLooks(d.looks); })
+      .catch(() => { /* silent */ });
 
     // Stop any preview audio when leaving the page
     return () => {
@@ -245,8 +261,10 @@ export default function CreateAvatarPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation depends on mode
-    if (!avatarId) {
+    // Validation depends on mode. Reusing a Look needs no avatar (the Look
+    // is the visual) — only a voice + script.
+    const reusingLook = mode === "cinematic" && Boolean(selectedLookId);
+    if (!avatarId && !reusingLook) {
       setError("Please select or upload an avatar.");
       return;
     }
@@ -255,8 +273,14 @@ export default function CreateAvatarPage() {
         setError("Please select a voice and write your script.");
         return;
       }
+    } else if (selectedLookId) {
+      // Reusing a saved Look → only need a voice + script
+      if (!scriptText.trim() || !voiceId) {
+        setError("Reusing a Look needs a script and a voice.");
+        return;
+      }
     } else {
-      // cinematic
+      // cinematic (fresh shot)
       if (!scenePrompt.trim()) {
         setError("Please describe your cinematic shot.");
         return;
@@ -282,17 +306,27 @@ export default function CreateAvatarPage() {
               audio_mode: "none",
               target_duration_seconds: 60,
             }
-          : {
-              prompt: scenePrompt.trim(),
-              preferred_engine: "heygen_avatar_shots",
-              avatar_id: avatarId,
-              voice_id: voiceId || undefined,
-              scene_prompt: scenePrompt.trim(),
-              script_text: scriptText.trim() || undefined,
-              aspect_ratio: aspectRatio,
-              audio_mode: "none",
-              target_duration_seconds: cinematicDuration,
-            };
+          : reusingLook
+            ? {
+                // Reuse a saved Look → lipsync-only (skips Seedance)
+                prompt: scriptText.trim(),
+                preferred_engine: "heygen_avatar_shots",
+                look_id: selectedLookId,
+                voice_id: voiceId,
+                script_text: scriptText.trim(),
+                audio_mode: "none",
+              }
+            : {
+                prompt: scenePrompt.trim(),
+                preferred_engine: "heygen_avatar_shots",
+                avatar_id: avatarId,
+                voice_id: voiceId || undefined,
+                scene_prompt: scenePrompt.trim(),
+                script_text: scriptText.trim() || undefined,
+                aspect_ratio: aspectRatio,
+                audio_mode: "none",
+                target_duration_seconds: cinematicDuration,
+              };
 
       const res = await fetch("/api/jobs", {
         method: "POST",
@@ -440,6 +474,70 @@ export default function CreateAvatarPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-8">
+            {/* ── Reuse a saved Look (cinematic) ───────────────────── */}
+            {mode === "cinematic" && looks.length > 0 && (
+              <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/[0.03] p-6">
+                <div className="flex items-center justify-between mb-1">
+                  <h2 className="text-base font-semibold flex items-center gap-2">
+                    <Clapperboard className="h-4 w-4 text-cyan-500" />
+                    Reuse a saved Look
+                    <span className="text-xs text-muted-foreground/50 font-normal">(optional — cheaper & faster)</span>
+                  </h2>
+                  {selectedLookId && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedLookId(null)}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Apply a new script to a shot you already love — only the lip-sync
+                  is re-generated. No avatar or shot description needed.
+                </p>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {looks.map((lk) => (
+                    <button
+                      key={lk.id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedLookId(selectedLookId === lk.id ? null : lk.id)
+                      }
+                      className={`relative rounded-xl border-2 overflow-hidden transition-all ${
+                        selectedLookId === lk.id
+                          ? "border-cyan-500 ring-2 ring-cyan-500/20"
+                          : "border-border/30 hover:border-border"
+                      }`}
+                      title={lk.name}
+                    >
+                      <video
+                        src={lk.video_url}
+                        className="w-full aspect-video object-cover"
+                        muted
+                        playsInline
+                        preload="metadata"
+                        onMouseOver={(e) => (e.currentTarget as HTMLVideoElement).play().catch(() => {})}
+                        onMouseOut={(e) => { const v = e.currentTarget as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
+                      />
+                      {selectedLookId === lk.id && (
+                        <div className="absolute top-1 right-1 bg-cyan-500 rounded-full p-0.5">
+                          <CheckCircle2 className="h-3 w-3 text-white" />
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {selectedLookId && (
+                  <p className="mt-3 text-xs text-cyan-400/80">
+                    Using this Look — skip the avatar & shot steps below. Just pick
+                    a voice and write your script (keep it ~same length as the clip).
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* ── STEP 1: Avatar Photo ─────────────────────────────── */}
             <div className="rounded-xl border border-border/50 p-6">
               <div className="flex items-center gap-3 mb-4">

@@ -25,6 +25,7 @@ import {
   Volume2,
   ExternalLink,
   Wallet,
+  Clapperboard,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -426,6 +427,24 @@ export default function JobPage() {
     setDuplicating(false);
   };
 
+  const [savingLook, setSavingLook] = useState(false);
+  const [lookSaved, setLookSaved] = useState(false);
+  const handleSaveLook = async () => {
+    if (savingLook || !params.id) return;
+    setSavingLook(true);
+    try {
+      const res = await fetch("/api/looks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_id: params.id }),
+      });
+      const data = await res.json();
+      if (data.success) setLookSaved(true);
+      else setError(data.error || "Could not save Look");
+    } catch { setError("Could not save Look"); }
+    setSavingLook(false);
+  };
+
   const handleRetryScenes = async () => {
     if (retryingScenes || !params.id) return;
     setRetryingScenes(true);
@@ -786,6 +805,17 @@ export default function JobPage() {
                       {duplicating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CopyPlus className="h-4 w-4" />}
                       {duplicating ? "Creating..." : "Duplicate"}
                     </button>
+                    {job?.engine_used === "heygen_avatar_shots" && (
+                      <button
+                        onClick={handleSaveLook}
+                        disabled={savingLook || lookSaved}
+                        className="flex items-center gap-2 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-medium text-cyan-400 hover:bg-cyan-500/20 disabled:opacity-50"
+                        title="Save this cinematic shot to reuse with new scripts (lipsync only)"
+                      >
+                        {savingLook ? <Loader2 className="h-4 w-4 animate-spin" /> : lookSaved ? <Check className="h-4 w-4" /> : <Clapperboard className="h-4 w-4" />}
+                        {savingLook ? "Saving..." : lookSaved ? "Saved as Look" : "Save as Look"}
+                      </button>
+                    )}
                   </div>
                 </>
               )}

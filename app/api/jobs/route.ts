@@ -19,6 +19,7 @@ import {
   isHeyGenShotsEngine,
   createAvatarVideo,
   createAvatarShotsVideo,
+  createLipsync,
   generateSpeech,
   splitScriptIntoChunks,
 } from "@/lib/heygen-client";
@@ -92,6 +93,7 @@ export async function POST(req: Request) {
       voice_id,
       scene_prompt,
       script_text,
+      look_id,
     } = body as {
       prompt: string;
       target_duration_seconds?: unknown;
@@ -121,6 +123,8 @@ export async function POST(req: Request) {
       scene_prompt?: string;
       /** HeyGen Avatar Shots dialogue script (for lip-sync — cinematic mode) */
       script_text?: string;
+      /** Reuse a saved cinematic Look (lipsync-only — skips Seedance) */
+      look_id?: string;
     };
 
     // Default ON. Only set OFF if explicitly false (the user toggled it off
@@ -257,8 +261,9 @@ export async function POST(req: Request) {
           { status: 403 }
         );
       }
-      // An avatar is always required
-      if (!avatar_id) {
+      // An avatar is required — unless reusing a saved Look (the Look IS the
+      // visual; we only lip-sync onto it).
+      if (!avatar_id && !look_id) {
         return NextResponse.json(
           { error: "An avatar is required." },
           { status: 400 }
@@ -286,6 +291,105 @@ export async function POST(req: Request) {
     // normal pipeline). Skip prompt enhancement too — the script is verbatim.
     const isAvatarJob =
       Boolean(safePreferredEngine) && isHeyGenEngine(safePreferredEngine!);
+
+    // ── Reuse a saved Look (lipsync-only — skips Seedance) ───────────────
+    if (isAvatarJob && look_id) {
+      if (!script_text?.trim() || !voice_id) {
+        return NextResponse.json(
+          { error: "A script and a voice are required to reuse a Look." },
+          { status: 400 }
+        );
+      }
+
+      const { data: look } = await supabase
+        .from("cinematic_looks")
+        .select("id, user_id, video_url, name")
+        .eq("id", look_id)
+        .single();
+      if (!look || look.user_id !== user?.id) {
+        return NextResponse.json({ error: "Look not found" }, { status: 404 });
+      }
+
+      const { data: job, error: insertError } = await supabase
+        .from("jobs")
+        .insert({
+          prompt: script_text.trim(),
+          plan,
+          status: "pending",
+          current_stage: "queued",
+          target_duration_seconds: 0,
+          storyboard: [
+            { scene_index: 0, prompt: script_text.trim().slice(0, 2000), engine: safePreferredEngine, duration_sec: 0 },
+          ],
+          multi_scene_chain: false,
+          ...(user?.id ? { user_id: user.id } : {}),
+          audio_mode: "none",
+          aspect_ratio: "16:9",
+          caption_mode: "none",
+        })
+        .select()
+        .single();
+
+      if (insertError || !job) {
+        return NextResponse.json(
+          { error: insertError?.message ?? "Failed to create job" },
+          { status: 500 }
+        );
+      }
+
+      await supabase.from("job_scenes").insert({
+        job_id: job.id,
+        scene_index: 0,
+        prompt: script_text.trim().slice(0, 2000),
+        engine: safePreferredEngine,
+        duration_sec: 0,
+        status: "pending" as const,
+        metadata: {},
+      });
+
+      try {
+        // TTS the exact words, then lipsync onto the saved Look clip directly.
+        const speech = await generateSpeech(script_text.trim(), voice_id);
+        if (!speech?.audioUrl) throw new Error("TTS produced no audio");
+        const lipsyncId = await createLipsync(look.video_url, speech.audioUrl, "precision");
+
+        await supabase
+          .from("job_scenes")
+          .update({
+            status: "generating",
+            external_task_id: lipsyncId,
+            metadata: { stage: "lipsync", lipsync_id: lipsyncId, cinematic_url: look.video_url },
+          })
+          .eq("job_id", job.id)
+          .eq("scene_index", 0);
+
+        await supabase
+          .from("jobs")
+          .update({
+            status: "in_progress",
+            current_stage: "muxing_audio",
+            engine_used: safePreferredEngine,
+            multi_scene_chain: false,
+          })
+          .eq("id", job.id);
+
+        console.log(`[jobs] Look reuse: job=${job.id} look=${look_id} lipsync=${lipsyncId}`);
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.error(`[jobs] Look reuse failed:`, errMsg);
+        await supabase
+          .from("jobs")
+          .update({ status: "failed", error_message: `Lipsync error: ${errMsg}` })
+          .eq("id", job.id);
+        await supabase
+          .from("job_scenes")
+          .update({ status: "failed", error_message: errMsg.slice(0, 400) })
+          .eq("job_id", job.id)
+          .eq("scene_index", 0);
+      }
+
+      return NextResponse.json({ success: true, jobId: job.id, job });
+    }
 
     if (isAvatarJob) {
       const isCinematic = isHeyGenShotsEngine(safePreferredEngine!);
