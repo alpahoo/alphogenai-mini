@@ -95,6 +95,7 @@ export async function POST(req: Request) {
       scene_prompt,
       script_text,
       look_id,
+      lipsync_mode,
     } = body as {
       prompt: string;
       target_duration_seconds?: unknown;
@@ -126,6 +127,8 @@ export async function POST(req: Request) {
       script_text?: string;
       /** Reuse a saved cinematic Look (lipsync-only — skips Seedance) */
       look_id?: string;
+      /** Lip-sync quality: "speed" (cheaper, faster) or "precision" */
+      lipsync_mode?: string;
     };
 
     // Default ON. Only set OFF if explicitly false (the user toggled it off
@@ -357,7 +360,7 @@ export async function POST(req: Request) {
         const lipsyncId = await createLipsync(
           look.video_url,
           speech.audioUrl,
-          "precision",
+          lipsync_mode === "precision" ? "precision" : "speed",
           speech.durationSeconds ?? undefined
         );
 
@@ -495,7 +498,17 @@ export async function POST(req: Request) {
           aspect_ratio: safeAvatarAspect,
           caption_mode: "none",
           ...(isFinalLipsync
-            ? { avatar_final: { audio_url: finalAudioUrl, audio_dur: finalAudioDur, stage: "shots" } }
+            ? {
+                avatar_final: {
+                  audio_url: finalAudioUrl,
+                  audio_dur: finalAudioDur,
+                  stage: "shots",
+                  lipsync_mode: lipsync_mode === "precision" ? "precision" : "speed",
+                  avatar_id: avatar_id,
+                  scene_prompt: sceneBrief.slice(0, 1500),
+                  aspect_ratio: safeAvatarAspect,
+                },
+              }
             : {}),
         })
         .select()
@@ -523,9 +536,14 @@ export async function POST(req: Request) {
         }))
       );
 
-      // ── Fire all shots upfront (independent — no chaining needed) ─────
+      // ── Fire shots ───────────────────────────────────────────────────
+      // For the final-lipsync flow with multiple shots, fire ONLY shot 0 now;
+      // the poller fires shots 1..N once shot 0's last frame is ready, passing
+      // it as a reference so outfit/decor stay consistent. Other cases fire all.
+      const useReferenceInjection = isFinalLipsync && shots.length > 1;
+      const fireCount = useReferenceInjection ? 1 : shots.length;
       let anyFired = false;
-      for (let i = 0; i < shots.length; i++) {
+      for (let i = 0; i < fireCount; i++) {
         const s = shots[i];
         try {
           let taskId: string;

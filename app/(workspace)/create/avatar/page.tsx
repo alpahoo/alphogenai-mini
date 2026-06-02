@@ -119,6 +119,8 @@ export default function CreateAvatarPage() {
   }
   const [looks, setLooks] = useState<CinematicLook[]>([]);
   const [selectedLookId, setSelectedLookId] = useState<string | null>(null);
+  // Lip-sync quality: "speed" (cheaper, faster) or "precision" (best sync)
+  const [lipsyncMode, setLipsyncMode] = useState<"speed" | "precision">("speed");
 
   // Submit
   const [loading, setLoading] = useState(false);
@@ -314,6 +316,7 @@ export default function CreateAvatarPage() {
                 look_id: selectedLookId,
                 voice_id: voiceId,
                 script_text: scriptText.trim(),
+                lipsync_mode: lipsyncMode,
                 audio_mode: "none",
               }
             : {
@@ -323,6 +326,7 @@ export default function CreateAvatarPage() {
                 voice_id: voiceId || undefined,
                 scene_prompt: scenePrompt.trim(),
                 script_text: scriptText.trim() || undefined,
+                lipsync_mode: lipsyncMode,
                 aspect_ratio: aspectRatio,
                 audio_mode: "none",
                 target_duration_seconds: cinematicDuration,
@@ -363,10 +367,10 @@ export default function CreateAvatarPage() {
   const cinematicSeconds = scriptText.trim()
     ? cinematicShots * 13
     : cinematicDuration;
-  // With dialogue: each shot = Seedance (~$0.12) + lipsync precision (~$0.87/13s).
-  // Silent: just the Seedance shot.
+  // With dialogue: N Seedance shots (~$0.10 each) + ONE lipsync over the whole
+  // video (precision ~$0.067/s, speed ~$0.033/s). Silent: just the shots.
   const cinematicCost = scriptText.trim()
-    ? (cinematicShots * 1.0).toFixed(2)
+    ? (cinematicShots * 0.1 + cinematicSeconds * (lipsyncMode === "precision" ? 0.067 : 0.033)).toFixed(2)
     : (cinematicShots * 0.12).toFixed(2);
 
   // Filtered voices for search
@@ -924,13 +928,54 @@ export default function CreateAvatarPage() {
                 <span>{scriptText.length}/5000</span>
               </div>
 
-              {/* Lipsync info — cinematic with dialogue */}
+              {/* Lipsync info + quality toggle — cinematic with dialogue */}
               {mode === "cinematic" && scriptText.trim() && (
-                <p className="mt-3 text-xs text-cyan-400/80 flex items-center gap-1.5">
-                  <Mic className="h-3.5 w-3.5" />
-                  Your exact words will be lip-synced in your voice over the
-                  cinematic shot.
-                </p>
+                <>
+                  <p className="mt-3 text-xs text-cyan-400/80 flex items-center gap-1.5">
+                    <Mic className="h-3.5 w-3.5" />
+                    Your exact words will be lip-synced in your voice over the
+                    cinematic shot.
+                  </p>
+                  <div className="mt-3 rounded-lg border border-border/40 bg-muted/10 p-3">
+                    <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+                      Lip-sync quality
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setLipsyncMode("speed")}
+                        className={`rounded-lg border px-3 py-2 text-left transition-all ${
+                          lipsyncMode === "speed"
+                            ? "border-cyan-500/50 bg-cyan-500/10"
+                            : "border-border/40 hover:border-border"
+                        }`}
+                      >
+                        <div className={`text-sm font-semibold ${lipsyncMode === "speed" ? "text-cyan-400" : "text-foreground"}`}>
+                          Fast ★
+                        </div>
+                        <div className="text-[11px] text-muted-foreground/70 mt-0.5">
+                          ~2x cheaper, great sync. Recommended.
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLipsyncMode("precision")}
+                        className={`rounded-lg border px-3 py-2 text-left transition-all ${
+                          lipsyncMode === "precision"
+                            ? "border-cyan-500/50 bg-cyan-500/10"
+                            : "border-border/40 hover:border-border"
+                        }`}
+                      >
+                        <div className={`text-sm font-semibold ${lipsyncMode === "precision" ? "text-cyan-400" : "text-foreground"}`}>
+                          Precision
+                        </div>
+                        <div className="text-[11px] text-muted-foreground/70 mt-0.5">
+                          Highest sync accuracy. Costs more.
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
 

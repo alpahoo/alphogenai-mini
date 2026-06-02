@@ -366,6 +366,9 @@ export interface CreateAvatarShotsParams {
   resolution?: string;
   /** Aspect ratio: "16:9" | "9:16" */
   aspectRatio?: string;
+  /** Reference image URL (e.g., a frame of the first shot) to keep the same
+   *  outfit / decor / character across shots for consistency. */
+  referenceImageUrl?: string;
 }
 
 export interface SpeechResult {
@@ -447,10 +450,12 @@ export async function createAvatarShotsVideo(
     enhance_prompt: true,
   };
 
-  // Audio reference → drives speech + lip-sync with the chosen (cloned) voice
-  if (params.audioReferenceUrl) {
-    body.references = [{ type: "url", url: params.audioReferenceUrl }];
-  }
+  // References: audio (drives speech) and/or an image (keeps outfit/decor
+  // consistent across shots).
+  const refs: Array<Record<string, string>> = [];
+  if (params.audioReferenceUrl) refs.push({ type: "url", url: params.audioReferenceUrl });
+  if (params.referenceImageUrl) refs.push({ type: "url", url: params.referenceImageUrl });
+  if (refs.length > 0) body.references = refs;
 
   console.log(
     `[heygen] avatar-shots request: avatar=${params.avatarId} ` +
