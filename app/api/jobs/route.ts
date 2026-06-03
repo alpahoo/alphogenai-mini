@@ -82,6 +82,7 @@ export async function POST(req: Request) {
       image_url,
       references,
       multi_scene_chain,
+      chain_strategy,
       scenes: clientScenes,
       audio_mode,
       audio_prompt,
@@ -103,6 +104,8 @@ export async function POST(req: Request) {
       image_url?: string;
       references?: Record<string, unknown>;
       multi_scene_chain?: boolean;
+      /** Scene chaining strategy: "continuity" (fluid, quality decays) | "anchor" (stable quality) */
+      chain_strategy?: string;
       /** Optional pre-edited scenes from the editor (Phase C). Skips server-side storyboard generation. */
       scenes?: Array<{ prompt: string; engine?: string; duration_sec: number }>;
       /** Audio generation mode: "none" | "auto" | "custom" */
@@ -134,6 +137,8 @@ export async function POST(req: Request) {
     // Default ON. Only set OFF if explicitly false (the user toggled it off
     // in Advanced settings, or the chosen engine doesn't support I2V).
     const chainOptIn = multi_scene_chain !== false;
+    // Scene chaining strategy (only relevant when chaining is ON).
+    const safeChainStrategy = chain_strategy === "anchor" ? "anchor" : "continuity";
 
     // Validate image_url if provided
     const safeImageUrl =
@@ -658,6 +663,7 @@ export async function POST(req: Request) {
         target_duration_seconds: Math.round(targetDuration),
         storyboard,
         multi_scene_chain: chainOptIn,
+        chain_strategy: safeChainStrategy,
         ...(safeImageUrl ? { image_url: safeImageUrl } : {}),
         ...(safeReferences ? { references_payload: safeReferences } : {}),
         ...(user?.id ? { user_id: user.id } : {}),

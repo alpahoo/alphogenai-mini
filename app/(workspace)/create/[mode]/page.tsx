@@ -219,6 +219,10 @@ export default function CreateModePage({
   // of scene N so characters & composition stay consistent across cuts.
   // Default ON; user can opt out in Advanced settings.
   const [multiSceneChain, setMultiSceneChain] = useState(true);
+  // Scene chaining strategy when continuity is ON:
+  //  "continuity" → fluid motion, but image quality decays scene after scene
+  //  "anchor"     → every scene re-anchors to scene 1's clean frame (stable quality)
+  const [chainStrategy, setChainStrategy] = useState<"continuity" | "anchor">("continuity");
 
   const handleTemplateSelect = (template: PromptTemplate) => {
     setPrompt(template.prompt);
@@ -340,6 +344,8 @@ export default function CreateModePage({
           caption_mode: captionMode,
           // Only send when explicitly disabled — backend defaults to ON
           ...(multiSceneChain === false && { multi_scene_chain: false }),
+          // Chaining strategy (only meaningful when chaining is ON)
+          ...(multiSceneChain && { chain_strategy: chainStrategy }),
         }),
       });
 
@@ -901,6 +907,63 @@ export default function CreateModePage({
                         Recommended for story videos. Disable for stylistically
                         diverse cuts or when using Sora 2 (no I2V).
                       </p>
+
+                      {/* ── Chaining strategy (only when chaining is ON) ──── */}
+                      {multiSceneChain && (
+                        <div className="mt-4">
+                          <p className="text-xs font-semibold text-foreground mb-2">
+                            Chaining strategy
+                          </p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setChainStrategy("continuity")}
+                              className={`rounded-lg border px-3 py-2.5 text-left transition-all ${
+                                chainStrategy === "continuity"
+                                  ? "border-primary/50 bg-primary/10"
+                                  : "border-border/40 bg-muted/20 hover:border-border"
+                              }`}
+                            >
+                              <span
+                                className={`block text-xs font-semibold ${
+                                  chainStrategy === "continuity"
+                                    ? "text-primary"
+                                    : "text-foreground"
+                                }`}
+                              >
+                                Continuity
+                              </span>
+                              <span className="block text-[11px] text-muted-foreground/70 mt-0.5 leading-snug">
+                                Most fluid motion. Image quality may soften on
+                                longer videos.
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setChainStrategy("anchor")}
+                              className={`rounded-lg border px-3 py-2.5 text-left transition-all ${
+                                chainStrategy === "anchor"
+                                  ? "border-primary/50 bg-primary/10"
+                                  : "border-border/40 bg-muted/20 hover:border-border"
+                              }`}
+                            >
+                              <span
+                                className={`block text-xs font-semibold ${
+                                  chainStrategy === "anchor"
+                                    ? "text-primary"
+                                    : "text-foreground"
+                                }`}
+                              >
+                                Stable quality
+                              </span>
+                              <span className="block text-[11px] text-muted-foreground/70 mt-0.5 leading-snug">
+                                Every scene re-anchors to scene 1. No quality
+                                decay across cuts.
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

@@ -584,6 +584,15 @@ async function advanceEvoLinkState(
   const jobId = job.id as string;
   const engineKey = (job.engine_used as string) ?? "";
   const chainEnabled = job.multi_scene_chain !== false;
+  // Chaining strategy:
+  //  - "continuity" (default): each scene chains from the PREVIOUS scene's last
+  //    frame → fluid motion, but generation artifacts compound (quality decays
+  //    scene after scene).
+  //  - "anchor": every scene chains from scene 1's last frame (a single, clean
+  //    frame) → no cascading degradation, character stays consistent, at the
+  //    cost of less scene-to-scene motion continuity.
+  const chainStrategy =
+    (job.chain_strategy as string) === "anchor" ? "anchor" : "continuity";
 
   // Load all scenes for this job, ordered
   const { data: rawScenes } = await supabase
@@ -737,17 +746,27 @@ async function advanceEvoLinkState(
           }
         }
       } else if (chainEnabled && engineSupportsFirstFrame(engineKey)) {
-        // Need the last frame for chaining the next scene
-        try {
-          await markExtractTriggered(supabase, generating.id);
-          await triggerExtractLastFrame(jobId, generating.scene_index, result.videoUrl);
-        } catch (e) {
-          console.error(
-            `[jobs/status] extract trigger failed scene=${generating.scene_index}:`,
-            e
-          );
-          // Will retry on next poll via EXTRACT_RETRY_MS branch
+        // In "anchor" mode only scene 1's frame is ever used as the first
+        // frame, so we only extract it once (when scene 0 completes). All
+        // later scenes reuse that clean anchor — no per-scene extraction,
+        // no cascading degradation. In "continuity" mode we extract every
+        // scene's last frame to chain the next one.
+        const needExtract =
+          chainStrategy === "anchor" ? generating.scene_index === 0 : true;
+        if (needExtract) {
+          try {
+            await markExtractTriggered(supabase, generating.id);
+            await triggerExtractLastFrame(jobId, generating.scene_index, result.videoUrl);
+          } catch (e) {
+            console.error(
+              `[jobs/status] extract trigger failed scene=${generating.scene_index}:`,
+              e
+            );
+            // Will retry on next poll via EXTRACT_RETRY_MS branch
+          }
         }
+        // For anchor mode with scene_index > 0 we do nothing here; Step 2 on
+        // the next poll fires the next pending scene using scene 1's anchor.
       } else {
         // Chain disabled (or engine has no I2V): fire next scene immediately
         // without first_frame_url
@@ -830,25 +849,29 @@ async function advanceEvoLinkState(
     }
 
     if (chainEnabled && engineSupportsFirstFrame(engineKey)) {
-      if (prev.last_frame_url) {
-        // Frame is ready — fire the next scene with continuity
-        await fireNextScene(supabase, job, nextPending, prev.last_frame_url);
+      // "anchor" → always chain from scene 1's clean frame.
+      // "continuity" → chain from the immediate predecessor's frame.
+      const frameScene = chainStrategy === "anchor" ? effectiveScenes[0] : prev;
+
+      if (frameScene.last_frame_url) {
+        // Frame is ready — fire the next scene
+        await fireNextScene(supabase, job, nextPending, frameScene.last_frame_url);
         return;
       }
 
       // Frame extraction in flight. If it's been too long, retry the trigger.
-      const triggeredAt = parseTriggeredAt(prev);
+      const triggeredAt = parseTriggeredAt(frameScene);
       const sinceTrigger = triggeredAt ? Date.now() - triggeredAt : Infinity;
 
-      if (sinceTrigger > EXTRACT_RETRY_MS && prev.clip_url) {
+      if (sinceTrigger > EXTRACT_RETRY_MS && frameScene.clip_url) {
         console.warn(
-          `[jobs/status] extract for scene ${prev.scene_index} stale (${Math.round(
+          `[jobs/status] extract for scene ${frameScene.scene_index} stale (${Math.round(
             sinceTrigger / 1000
           )}s) — retrying`
         );
         try {
-          await markExtractTriggered(supabase, prev.id);
-          await triggerExtractLastFrame(jobId, prev.scene_index, prev.clip_url);
+          await markExtractTriggered(supabase, frameScene.id);
+          await triggerExtractLastFrame(jobId, frameScene.scene_index, frameScene.clip_url);
         } catch (e) {
           console.error(`[jobs/status] extract retry failed:`, e);
         }
