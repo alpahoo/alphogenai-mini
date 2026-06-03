@@ -481,57 +481,44 @@ async function advanceHeyGenScenes(
   }
 
   // ── Reference injection (consistency) ────────────────────────────────
-  // Once shot 0 is done, fire the pending shots using shot 0's last frame as
-  // a reference image so outfit / decor / character stay consistent.
+  // Once shot 0 is done, fire the pending shots using shot 0's VIDEO directly
+  // as a reference (Seedance references accept videos) so outfit / decor /
+  // character stay consistent. No Modal frame-extraction (it was unreliable
+  // on HeyGen URLs and could loop forever).
   const pending = scenes.filter((s) => s.status === "pending");
   if (pending.length > 0 && avatarFinal.stage === "shots") {
     const first = scenes.find((s) => s.scene_index === 0);
-    if (first && first.status === "done") {
+    if (first && first.status === "done" && first.clip_url) {
       const avatarId = String(avatarFinal.avatar_id ?? "");
       const aspect = String(avatarFinal.aspect_ratio) === "9:16" ? "9:16" : "16:9";
-      if (first.last_frame_url && avatarId) {
-        for (const p of pending) {
-          try {
-            const task = await createAvatarShotsVideo({
-              avatarId,
-              scenePrompt: String(avatarFinal.scene_prompt ?? p.prompt ?? ""),
-              durationSeconds: Math.round(Number(p.duration_sec) || 10),
-              resolution: "1080p",
-              aspectRatio: aspect,
-              referenceImageUrl: first.last_frame_url,
-            });
-            await supabase
-              .from("job_scenes")
-              .update({ status: "generating", external_task_id: task.taskId, updated_at: now() })
-              .eq("id", p.id)
-              .eq("status", "pending");
-            p.status = "generating";
-            console.log(`[jobs/status] fired consistent shot ${p.scene_index} (ref frame)`);
-          } catch (e) {
-            await supabase
-              .from("job_scenes")
-              .update({ status: "failed", error_message: (e instanceof Error ? e.message : "fire failed").slice(0, 400) })
-              .eq("id", p.id);
-            p.status = "failed";
-          }
+      for (const p of pending) {
+        try {
+          const task = await createAvatarShotsVideo({
+            avatarId,
+            scenePrompt: String(avatarFinal.scene_prompt ?? p.prompt ?? ""),
+            durationSeconds: Math.round(Number(p.duration_sec) || 10),
+            resolution: "1080p",
+            aspectRatio: aspect,
+            // Use shot 0's clip as a reference for consistency. If avatarId is
+            // missing this would fail, so guard below.
+            referenceImageUrl: avatarId ? first.clip_url : undefined,
+          });
+          await supabase
+            .from("job_scenes")
+            .update({ status: "generating", external_task_id: task.taskId, updated_at: now() })
+            .eq("id", p.id)
+            .eq("status", "pending");
+          p.status = "generating";
+          console.log(`[jobs/status] fired consistent shot ${p.scene_index} (ref clip)`);
+        } catch (e) {
+          await supabase
+            .from("job_scenes")
+            .update({ status: "failed", error_message: (e instanceof Error ? e.message : "fire failed").slice(0, 400) })
+            .eq("id", p.id);
+          p.status = "failed";
         }
-        return;
       }
-      // Frame not ready — trigger extraction (once / retry if stale)
-      if (first.clip_url && avatarId) {
-        const triggeredAt = parseTriggeredAt(first);
-        const since = triggeredAt ? Date.now() - triggeredAt : Infinity;
-        if (since > EXTRACT_RETRY_MS) {
-          try {
-            await markExtractTriggered(supabase, first.id);
-            await triggerExtractLastFrame(jobId, 0, first.clip_url);
-          } catch (e) {
-            console.warn(`[jobs/status] extract frame trigger failed:`, e instanceof Error ? e.message : e);
-          }
-        }
-        await heartbeat(supabase, jobId);
-        return;
-      }
+      return;
     }
     // Shot 0 not done yet → wait (heartbeat below)
   }
