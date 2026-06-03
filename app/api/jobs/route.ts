@@ -83,6 +83,7 @@ export async function POST(req: Request) {
       references,
       multi_scene_chain,
       chain_strategy,
+      num_scenes,
       scenes: clientScenes,
       audio_mode,
       audio_prompt,
@@ -106,6 +107,8 @@ export async function POST(req: Request) {
       multi_scene_chain?: boolean;
       /** Scene chaining strategy: "continuity" (fluid, quality decays) | "anchor" (stable quality) */
       chain_strategy?: string;
+      /** Explicit scene count ("auto" or omitted = duration-based auto split) */
+      num_scenes?: unknown;
       /** Optional pre-edited scenes from the editor (Phase C). Skips server-side storyboard generation. */
       scenes?: Array<{ prompt: string; engine?: string; duration_sec: number }>;
       /** Audio generation mode: "none" | "auto" | "custom" */
@@ -643,8 +646,22 @@ export async function POST(req: Request) {
         duration_sec: Math.max(3, Math.min(10, s.duration_sec ?? 5)),
       }));
     } else {
-      // Default: server-generated storyboard
-      const storyboardBase = generateStoryboard(enhancedPrompt, safeDuration, plan);
+      // Default: server-generated storyboard.
+      // Engine clip ceiling lets a short video stay a single long shot (e.g.
+      // Seedance supports up to 15s) instead of being split into repeated cuts.
+      const engineMaxClip =
+        (safePreferredEngine && EVOLINK_ENGINES[safePreferredEngine]?.maxDuration) ||
+        undefined;
+      // Explicit scene count from the UI "Scenes" control (numeric => forced).
+      const rawNumScenes = Number(num_scenes);
+      const forcedScenes =
+        Number.isFinite(rawNumScenes) && rawNumScenes >= 1
+          ? Math.round(rawNumScenes)
+          : undefined;
+      const storyboardBase = generateStoryboard(enhancedPrompt, safeDuration, plan, {
+        maxClipDuration: engineMaxClip,
+        forcedScenes,
+      });
       // For multi-scene jobs: enrich each scene with distinct LLM-crafted prompts
       storyboard = await enrichStoryboardWithLLM(storyboardBase, enhancedPrompt);
     }

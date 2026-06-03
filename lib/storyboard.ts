@@ -91,14 +91,31 @@ export function generateStoryboard(
   prompt: string,
   targetDuration: number = 5,
   plan: JobPlan = "free",
-  clipDuration: number = DEFAULT_CLIP_DURATION
+  opts: {
+    /** Per-clip cap of the chosen engine (e.g. Seedance supports up to 15s).
+     *  Lets a short video stay a SINGLE long shot instead of being split. */
+    maxClipDuration?: number;
+    /** Explicit scene count from the UI "Scenes" control. When set, overrides
+     *  the duration-based auto split (unstructured prompts only). */
+    forcedScenes?: number;
+    /** Override the default per-clip target length (rarely needed). */
+    clipDuration?: number;
+  } = {}
 ): StoryboardEntry[] {
   // Clamp target_duration to plan limit
   const maxDur = PLAN_MAX_DURATION[plan] ?? PLAN_MAX_DURATION.free;
   const td = Math.max(Math.min(targetDuration, maxDur), MIN_CLIP_DURATION);
 
-  // Clamp clip duration
-  const clipDur = Math.max(MIN_CLIP_DURATION, Math.min(clipDuration, MAX_CLIP_DURATION));
+  // Engine per-clip ceiling — defaults to the conservative global cap, but a
+  // 15s-capable engine lets a 15s request be a single clip (no repetition).
+  const engineMaxClip = Math.max(
+    MIN_CLIP_DURATION,
+    opts.maxClipDuration ?? MAX_CLIP_DURATION
+  );
+
+  // Clamp clip duration to the engine ceiling
+  const clipDuration = opts.clipDuration ?? DEFAULT_CLIP_DURATION;
+  const clipDur = Math.max(MIN_CLIP_DURATION, Math.min(clipDuration, engineMaxClip));
 
   const maxScenes = MAX_SCENES[plan] ?? 1;
 
@@ -118,6 +135,24 @@ export function generateStoryboard(
     return capped.map((s, i) => ({
       scene_index: i,
       prompt: s.prompt.slice(0, 1000),
+      engine: DEFAULT_ENGINE,
+      duration_sec: sceneDur,
+    }));
+  }
+
+  // ── Path A2: explicit scene count from the UI "Scenes" control ─────────
+  // The user can force how many scenes a single (unstructured) prompt becomes
+  // — e.g. pick "1" so a 15s cinematic shot stays ONE continuous moment
+  // instead of being auto-split into 3 near-identical shots.
+  if (opts.forcedScenes && opts.forcedScenes >= 1 && plan !== "free") {
+    const n = Math.min(Math.round(opts.forcedScenes), maxScenes);
+    // Spread the total duration evenly, clamped to the engine's clip ceiling.
+    const per = Math.max(MIN_CLIP_DURATION, Math.min(td / n, engineMaxClip));
+    const sceneDur = Math.round(per * 10) / 10;
+    console.log(`[storyboard] Forced ${n} scene(s) @ ${sceneDur}s (engineMax=${engineMaxClip}s)`);
+    return Array.from({ length: n }, (_, i) => ({
+      scene_index: i,
+      prompt: scenePrompt(prompt, i, n),
       engine: DEFAULT_ENGINE,
       duration_sec: sceneDur,
     }));

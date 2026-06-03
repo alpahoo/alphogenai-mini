@@ -140,6 +140,8 @@ export default function CreateModePage({
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState("5");
   const [selectedEngine, setSelectedEngine] = useState<EngineKey | "auto">("auto");
+  // Scene count: "auto" = duration-based split, or a forced integer count.
+  const [numScenes, setNumScenes] = useState<"auto" | number>("auto");
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const [references, setReferences] = useState<Record<string, ReferenceItem>>({});
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -346,6 +348,8 @@ export default function CreateModePage({
           ...(multiSceneChain === false && { multi_scene_chain: false }),
           // Chaining strategy (only meaningful when chaining is ON)
           ...(multiSceneChain && { chain_strategy: chainStrategy }),
+          // Forced scene count — omit for "auto" (duration-based split)
+          ...(numScenes !== "auto" && { num_scenes: sceneCount }),
         }),
       });
 
@@ -374,7 +378,23 @@ export default function CreateModePage({
   // Scene count estimate — matches backend logic in lib/storyboard.ts
   const dur = Math.min(parseInt(duration, 10), planMaxDuration);
   const planMaxScenes = PLAN_MAX_SCENES[plan] ?? 1;
-  const sceneCount = plan === "free" ? 1 : Math.min(Math.ceil(dur / 5), planMaxScenes);
+  const autoSceneCount = plan === "free" ? 1 : Math.min(Math.ceil(dur / 5), planMaxScenes);
+
+  // Per-clip ceiling of the selected engine (auto → Seedance Fast = 15s).
+  const selectedEngineMax =
+    selectedEngine === "auto"
+      ? 15
+      : engineOptions.find((e) => e.key === selectedEngine)?.maxDuration ?? 15;
+  // Available forced scene counts: from the minimum the duration allows on
+  // this engine, up to the plan / 3s-per-scene maximum.
+  const minScenes = Math.max(1, Math.ceil(dur / selectedEngineMax));
+  const maxUsefulScenes = Math.max(minScenes, Math.min(planMaxScenes, Math.floor(dur / 3)));
+  const sceneCountChoices: number[] = [];
+  for (let n = minScenes; n <= maxUsefulScenes; n++) sceneCountChoices.push(n);
+
+  // Effective scene count shown in estimates / loading steps.
+  const sceneCount =
+    numScenes === "auto" ? autoSceneCount : Math.min(Math.max(numScenes, minScenes), maxUsefulScenes);
 
   // Loading overlay steps — shows progress while waiting for job creation + redirect
   const loadingSteps = [
@@ -606,6 +626,34 @@ export default function CreateModePage({
                 </p>
               )}
             </div>
+
+            {/* ── Scenes (scene-count control) ───────────────────── */}
+            {plan !== "free" && planLoaded && sceneCountChoices.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-2.5">
+                  <Film className="h-4 w-4 text-purple-500" />
+                  <span className="text-sm font-semibold text-foreground">Scenes</span>
+                </div>
+                <SegmentedControl
+                  options={[
+                    { value: "auto", label: `Auto (${autoSceneCount})` },
+                    ...sceneCountChoices.map((n) => ({
+                      value: String(n),
+                      label: String(n),
+                    })),
+                  ]}
+                  value={numScenes === "auto" ? "auto" : String(sceneCount)}
+                  onChange={(v) =>
+                    setNumScenes(v === "auto" ? "auto" : parseInt(v, 10))
+                  }
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground/60 mt-2">
+                  Auto splits by duration. Pick <strong>1</strong> to keep a
+                  single continuous shot — no repeated near-identical cuts.
+                </p>
+              </div>
+            )}
 
             {/* ── Advanced ───────────────────────────────────────── */}
             <div className="rounded-xl border border-border/50 overflow-hidden">
