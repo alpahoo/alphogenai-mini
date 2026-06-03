@@ -536,14 +536,12 @@ export async function POST(req: Request) {
         }))
       );
 
-      // ── Fire shots ───────────────────────────────────────────────────
-      // For the final-lipsync flow with multiple shots, fire ONLY shot 0 now;
-      // the poller fires shots 1..N once shot 0's last frame is ready, passing
-      // it as a reference so outfit/decor stay consistent. Other cases fire all.
-      const useReferenceInjection = isFinalLipsync && shots.length > 1;
-      const fireCount = useReferenceInjection ? 1 : shots.length;
+      // ── Fire all shots in parallel (reliable + faster) ───────────────
+      // Reference-injection (sequential shot 0 → ref) caused loops/failures,
+      // so we fire all shots upfront. Consistency is handled via the shared
+      // enriched prompt; a more robust consistency method is a future task.
       let anyFired = false;
-      for (let i = 0; i < fireCount; i++) {
+      for (let i = 0; i < shots.length; i++) {
         const s = shots[i];
         try {
           let taskId: string;
