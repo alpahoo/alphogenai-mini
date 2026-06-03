@@ -73,6 +73,12 @@ export async function callEvoLinkLLM(
  * Enrich a short cinematic shot description into a rich, detailed direction
  * for Seedance (camera, lighting, depth of field, setting, color grading) so
  * shots look professionally cinematic instead of a plain talking head.
+ *
+ * Important: the shot is generated as a SOURCE for a lip-sync overlay, so the
+ * subject must be CALM and NOT speaking (lips at rest) — the lip-sync then
+ * drives the mouth from a clean base, which looks far more natural than
+ * overwriting Seedance's own talking motion.
+ *
  * Non-blocking: falls back to the original on any error.
  */
 export async function enhanceScenePrompt(shortDescription: string): Promise<string> {
@@ -81,12 +87,15 @@ export async function enhanceScenePrompt(shortDescription: string): Promise<stri
   try {
     const system =
       "You are a cinematographer writing a shot direction for an AI video model " +
-      "that animates a single real person speaking to camera. Expand the user's " +
-      "brief into ONE vivid sentence (max ~50 words) describing: a blurred, " +
-      "professional interior or environment with shallow depth of field, soft " +
-      "natural/key lighting, gentle camera movement, warm cinematic color grading, " +
-      "and a confident, natural demeanor. Keep the person centered and speaking to " +
-      "camera. Do NOT invent dialogue or names. Output ONLY the shot direction, no preamble.";
+      "that animates a single real person, centered, looking at camera. This shot " +
+      "is the SOURCE for a separate lip-sync pass, so the subject must be CALM and " +
+      "NOT talking: mouth closed and relaxed, lips at rest, a composed neutral-to-" +
+      "warm expression, only subtle natural micro-movements (slow blink, slight " +
+      "head settle). Expand the user's brief into ONE vivid sentence (max ~50 words) " +
+      "describing: a blurred professional interior/environment with shallow depth of " +
+      "field, soft natural key lighting, a gentle slow camera move, and warm cinematic " +
+      "color grading. Do NOT make the person speak, gesture while talking, or open the " +
+      "mouth. Do NOT invent dialogue or names. Output ONLY the shot direction, no preamble.";
     const out = await callEvoLinkLLM(system, input);
     // Guard against the model returning quotes/labels
     return out.replace(/^["']|["']$/g, "").slice(0, 600) || input;
