@@ -1,16 +1,7 @@
-// TEMPORARY debug — inspect avatar_group looks to find the id Avatar Shots
-// accepts. Secret-gated. DELETE after use.
+// TEMPORARY debug — test which avatar id format Avatar Shots accepts.
+// Secret-gated. DELETE after use.
 import { NextResponse } from "next/server";
-
-const V2 = "https://api.heygen.com/v2";
-
-function hg() {
-  return {
-    "X-Api-Key": process.env.HEYGEN_API_KEY ?? "",
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
-}
+import { createAvatarShotsVideo } from "@/lib/heygen-client";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -18,36 +9,26 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const out: Record<string, unknown> = {};
-  try {
-    const ar = await fetch(`${V2}/avatar_group.list?include_public=false`, { headers: hg() });
-    const ad = await ar.json();
-    const groups: Record<string, unknown>[] = ad.data?.avatar_group_list ?? [];
-    const result: Record<string, unknown>[] = [];
-    for (const g of groups) {
-      const gid = String(g.id ?? "");
-      const entry: Record<string, unknown> = {
-        groupId: gid,
-        name: g.name,
-        group_type: g.group_type,
-        num_looks: g.num_looks,
-        default_voice_id: g.default_voice_id,
-      };
-      try {
-        const lr = await fetch(`${V2}/avatar_group/${gid}/avatars`, { headers: hg() });
-        const ld = await lr.json();
-        entry.looksStatus = lr.status;
-        const looks = ld.data?.avatar_list ?? ld.data?.avatars ?? ld.avatar_list ?? [];
-        entry.looksRaw = JSON.stringify(looks).slice(0, 600);
-      } catch (e) {
-        entry.looksError = e instanceof Error ? e.message : String(e);
-      }
-      result.push(entry);
-    }
-    out.groups = result;
-  } catch (e) {
-    out.error = e instanceof Error ? e.message : String(e);
-  }
+  const candidates: Record<string, string> = {
+    v3_avatar_id: "7c87af6ea71b4f67b30d4bd8b813ed53", // digitalpaho v3 avatar look
+    talking_photo_id: "4c262fb93bf74b89b158afef962b46f5", // Lady2 talking_photo look
+    group_id: "916e371d494543faa938945258cb1719", // digitalpaho group
+  };
 
+  const out: Record<string, unknown> = {};
+  for (const [label, id] of Object.entries(candidates)) {
+    try {
+      const t = await createAvatarShotsVideo({
+        avatarId: id,
+        scenePrompt: "A person sitting calmly in a warm living room, cinematic.",
+        durationSeconds: 4,
+        resolution: "1080p",
+        aspectRatio: "16:9",
+      });
+      out[label] = { ok: true, taskId: t.taskId };
+    } catch (e) {
+      out[label] = { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
   return NextResponse.json(out);
 }
