@@ -98,6 +98,7 @@ export async function POST(req: Request) {
       script_text,
       look_id,
       lipsync_mode,
+      voice_mode,
     } = body as {
       prompt: string;
       target_duration_seconds?: unknown;
@@ -135,6 +136,8 @@ export async function POST(req: Request) {
       look_id?: string;
       /** Lip-sync quality: "speed" (cheaper, faster) or "precision" */
       lipsync_mode?: string;
+      /** Story Video voice mode: "lipsync" (burned-in, mouth synced) | "voiceover" (muxed audio track) */
+      voice_mode?: string;
     };
 
     // Default ON. Only set OFF if explicitly false (the user toggled it off
@@ -668,6 +671,39 @@ export async function POST(req: Request) {
 
     const targetDuration = storyboard.reduce((s, sc) => s + sc.duration_sec, 0);
 
+    // ── "Use my voice" (Story Video) ───────────────────────────────────
+    // When a cloned HeyGen voice + dialogue is provided, generate the TTS now
+    // and stash a voice-post config in `avatar_final`. After the video is
+    // generated + concatenated, the poller applies it:
+    //   - "lipsync"  → HeyGen lipsync over the final video (mouth synced, burned in)
+    //   - "voiceover" → Modal muxes the voice track into the final video
+    let voiceFinal: Record<string, unknown> | undefined;
+    const voiceScript = (script_text?.trim() || "");
+    const wantsVoice = Boolean(voice_id) && voiceScript.length > 1;
+    if (wantsVoice) {
+      const mode = voice_mode === "voiceover" ? "voiceover" : "lipsync";
+      const safeLipsyncMode = lipsync_mode === "precision" ? "precision" : "speed";
+      try {
+        const speech = await generateSpeech(voiceScript, voice_id!);
+        if (speech?.audioUrl) {
+          voiceFinal = {
+            stage: "awaiting_video",
+            voice_mode: mode,
+            lipsync_mode: safeLipsyncMode,
+            audio_url: speech.audioUrl,
+            audio_dur: speech.durationSeconds ?? null,
+            voice_id,
+            script_text: voiceScript.slice(0, 2000),
+          };
+          console.log(`[jobs] Story voice: mode=${mode} dur=${speech.durationSeconds}s job(pending)`);
+        } else {
+          console.warn(`[jobs] Story voice: TTS returned no audio — skipping voice step`);
+        }
+      } catch (e) {
+        console.warn(`[jobs] Story voice TTS failed (non-fatal):`, e instanceof Error ? e.message : e);
+      }
+    }
+
     // Insert job as "pending"
     // prompt = original (displayed to user), storyboard entries use enhancedPrompt
     const { data: job, error: insertError } = await supabase
@@ -681,11 +717,15 @@ export async function POST(req: Request) {
         storyboard,
         multi_scene_chain: chainOptIn,
         chain_strategy: safeChainStrategy,
+        ...(voiceFinal ? { avatar_final: voiceFinal } : {}),
         ...(safeImageUrl ? { image_url: safeImageUrl } : {}),
         ...(safeReferences ? { references_payload: safeReferences } : {}),
         ...(user?.id ? { user_id: user.id } : {}),
-        // Audio settings
-        ...(audio_mode && ["none", "auto", "custom"].includes(audio_mode)
+        // Audio settings — voice jobs force "none" so the concat step doesn't
+        // add background music that would compete with the cloned voice.
+        ...(voiceFinal
+          ? { audio_mode: "none" }
+          : audio_mode && ["none", "auto", "custom"].includes(audio_mode)
           ? { audio_mode }
           : { audio_mode: "auto" }),
         ...(audio_prompt && typeof audio_prompt === "string"

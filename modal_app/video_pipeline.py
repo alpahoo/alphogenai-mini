@@ -785,6 +785,78 @@ def concat_and_finalize(job_id: str) -> str:
         raise
 
 
+@app.function(image=base_image, secrets=[secrets], timeout=300, retries=0)
+def apply_voiceover_to_job(job_id: str) -> str:
+    """Mux a cloned-voice track into a Story Video's final video (voice-over).
+
+    Reads jobs.video_url + jobs.avatar_final.audio_url server-side, replaces the
+    clip's native audio with the voice track, uploads, and marks the job done.
+    The voice URL is never trusted from the client — it is read from the DB.
+    """
+    import traceback
+    import httpx
+
+    try:
+        sb = get_supabase_client()
+        job_row = sb.table("jobs") \
+            .select("video_url, output_url_final, avatar_final") \
+            .eq("id", job_id).single().execute()
+        job_data = job_row.data or {}
+        af = job_data.get("avatar_final") or {}
+        video_url = job_data.get("video_url") or job_data.get("output_url_final")
+        audio_url = af.get("audio_url")
+
+        if not video_url or not audio_url:
+            raise RuntimeError(
+                f"apply_voiceover: missing video_url={bool(video_url)} audio_url={bool(audio_url)}"
+            )
+
+        log(job_id, f"apply_voiceover: downloading video + voice track")
+        with httpx.Client(timeout=120, follow_redirects=True) as client:
+            v = client.get(video_url); v.raise_for_status()
+            a = client.get(audio_url); a.raise_for_status()
+        video_bytes = v.content
+        audio_bytes = a.content
+
+        # Replace native audio with the cloned voice (full volume).
+        muxed = mux_audio.remote(video_bytes, audio_bytes, music_volume=1.0)
+
+        final_url = upload_to_r2(muxed, job_id, suffix="_voiceover")
+        log(job_id, f"apply_voiceover uploaded → {final_url}")
+
+        update_job(
+            job_id,
+            status="done",
+            current_stage="completed",
+            video_url=final_url,
+            output_url_final=final_url,
+            avatar_final={**af, "stage": "done"},
+        )
+        return final_url
+    except Exception as e:
+        tb = traceback.format_exc()
+        log(job_id, f"apply_voiceover FAILED:\n{tb}")
+        # Fallback: keep the existing video (voice not burned in) so the job
+        # still completes rather than hanging.
+        try:
+            sb = get_supabase_client()
+            jr = sb.table("jobs").select("video_url, avatar_final").eq("id", job_id).single().execute()
+            jd = jr.data or {}
+            af = jd.get("avatar_final") or {}
+            vu = jd.get("video_url")
+            update_job(
+                job_id,
+                status="done",
+                current_stage="completed",
+                **({"video_url": vu, "output_url_final": vu} if vu else {}),
+                avatar_final={**af, "stage": "done"},
+            )
+        except Exception:
+            pass
+        _report_sentry(e, job_id=job_id, stage="voiceover")
+        raise
+
+
 # ---------------------------------------------------------------------------
 # Audio generation (AudioLDM2 on A10G — for Wan only, Seedance has native audio)
 # ---------------------------------------------------------------------------
@@ -1575,6 +1647,24 @@ def webhook():
             await concat_and_finalize.spawn.aio(req.job_id)
         except Exception as e:
             print(f"[webhook /concat-scenes] spawn failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e)[:200])
+        return {"success": True, "job_id": req.job_id}
+
+    @web.post("/apply-voiceover")
+    async def apply_voiceover(req: ConcatRequest, x_webhook_secret: str = Header(None)):
+        """Mux the cloned-voice track into a Story Video's final video.
+
+        Spawns apply_voiceover_to_job (reads video_url + avatar_final.audio_url
+        server-side from Supabase). Job is marked done when finished; the
+        Next.js poller observes the new video_url.
+        """
+        expected = os.environ.get("MODAL_WEBHOOK_SECRET")
+        if expected and x_webhook_secret != expected:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        try:
+            await apply_voiceover_to_job.spawn.aio(req.job_id)
+        except Exception as e:
+            print(f"[webhook /apply-voiceover] spawn failed: {e}")
             raise HTTPException(status_code=500, detail=str(e)[:200])
         return {"success": True, "job_id": req.job_id}
 

@@ -71,3 +71,26 @@ export async function triggerConcatScenes(jobId: string): Promise<void> {
     throw new Error(`Modal /concat-scenes ${res.status}: ${detail.slice(0, 200)}`);
   }
 }
+
+/**
+ * Mux a cloned-voice track into the job's final video (voice-over mode).
+ * Modal reads jobs.video_url + jobs.avatar_final.audio_url server-side, lowers
+ * the native audio, mixes the voice on top, uploads, and sets
+ * jobs.video_url + status="done" + avatar_final.stage="done".
+ */
+export async function triggerApplyVoiceover(jobId: string): Promise<void> {
+  const url = `${modalBase()}/apply-voiceover`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-webhook-secret": secret(),
+    },
+    body: JSON.stringify({ job_id: jobId }),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(`Modal /apply-voiceover ${res.status}: ${detail.slice(0, 200)}`);
+  }
+}

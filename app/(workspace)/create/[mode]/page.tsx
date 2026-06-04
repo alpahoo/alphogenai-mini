@@ -104,6 +104,15 @@ interface EngineOption {
   quality: string;
 }
 
+interface HeyGenVoice {
+  voiceId: string;
+  name: string;
+  language: string;
+  gender: string;
+  isCloned: boolean;
+  previewUrl: string | null;
+}
+
 /** Hardcoded fallback if /api/engines fails or hasn't loaded yet. */
 const FALLBACK_ENGINES: EngineOption[] = [
   { key: "wan_i2v",        label: "Wan 2.2 I2V",       desc: "GPU - up to 60s",                    gate: null,      supportsRefs: false, supportsI2v: true,  maxDuration: 60, minDuration: null, quality: "720p" },
@@ -161,6 +170,15 @@ export default function CreateModePage({
   const [audioPrompt, setAudioPrompt] = useState("");
   const [voiceoverEnabled, setVoiceoverEnabled] = useState(false);
   const [voiceoverText, setVoiceoverText] = useState("");
+
+  // "Use my voice" — cloned HeyGen voice on the Story Video
+  const [useMyVoice, setUseMyVoice] = useState(false);
+  const [clonedVoices, setClonedVoices] = useState<HeyGenVoice[]>([]);
+  const [clonedVoicesLoading, setClonedVoicesLoading] = useState(false);
+  const [myVoiceId, setMyVoiceId] = useState("");
+  const [voiceScript, setVoiceScript] = useState("");
+  const [voiceMode, setVoiceMode] = useState<"lipsync" | "voiceover">("lipsync");
+  const [voiceLipsyncMode, setVoiceLipsyncMode] = useState<"speed" | "precision">("speed");
 
   // Dynamic engine list (fetched from /api/engines, fallback to hardcoded)
   const [engineOptions, setEngineOptions] = useState<EngineOption[]>(FALLBACK_ENGINES);
@@ -304,6 +322,22 @@ export default function CreateModePage({
     return () => clearInterval(t);
   }, [loading]);
 
+  // Lazy-load the user's cloned voices the first time "Use my voice" is on.
+  useEffect(() => {
+    if (!useMyVoice || clonedVoices.length > 0 || clonedVoicesLoading) return;
+    setClonedVoicesLoading(true);
+    fetch("/api/heygen")
+      .then((r) => r.json())
+      .then((data) => {
+        const all: HeyGenVoice[] = Array.isArray(data.voices) ? data.voices : [];
+        const cloned = all.filter((v) => v.isCloned);
+        setClonedVoices(cloned);
+        if (cloned.length > 0 && !myVoiceId) setMyVoiceId(cloned[0].voiceId);
+      })
+      .catch(() => {})
+      .finally(() => setClonedVoicesLoading(false));
+  }, [useMyVoice, clonedVoices.length, clonedVoicesLoading, myVoiceId]);
+
   const planMaxDuration = PLAN_MAX_DURATION[plan] ?? 5;
   const durationOptions = DURATION_OPTIONS.map((opt) => {
     const dur = parseInt(opt.value, 10);
@@ -350,6 +384,13 @@ export default function CreateModePage({
           ...(multiSceneChain && { chain_strategy: chainStrategy }),
           // Forced scene count — omit for "auto" (duration-based split)
           ...(numScenes !== "auto" && { num_scenes: sceneCount }),
+          // "Use my voice" — cloned HeyGen voice (lipsync or voice-over)
+          ...(useMyVoice && myVoiceId && voiceScript.trim().length > 1 && {
+            voice_id: myVoiceId,
+            script_text: voiceScript.trim(),
+            voice_mode: voiceMode,
+            lipsync_mode: voiceLipsyncMode,
+          }),
         }),
       });
 
@@ -652,6 +693,146 @@ export default function CreateModePage({
                   Auto splits by duration. Pick <strong>1</strong> to keep a
                   single continuous shot — no repeated near-identical cuts.
                 </p>
+              </div>
+            )}
+
+            {/* ── Use my voice (cloned HeyGen voice) ─────────────── */}
+            {plan !== "free" && (
+              <div>
+                <div className="flex items-center justify-between mb-2.5">
+                  <span className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <Mic className="h-4 w-4 text-rose-500" />
+                    Use my voice
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setUseMyVoice((v) => !v)}
+                    className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${
+                      useMyVoice ? "bg-primary" : "bg-muted-foreground/30"
+                    }`}
+                    aria-pressed={useMyVoice}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-4 w-4 rounded-full bg-background transition-transform ${
+                        useMyVoice ? "translate-x-4" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {useMyVoice && (
+                  <div className="rounded-xl border border-border/40 bg-card/50 p-3.5 space-y-3.5">
+                    {clonedVoicesLoading ? (
+                      <p className="text-xs text-muted-foreground/60 flex items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading your voices…
+                      </p>
+                    ) : clonedVoices.length === 0 ? (
+                      <p className="text-xs text-muted-foreground/70">
+                        No cloned voice yet.{" "}
+                        <Link href="/create/avatar" className="text-primary hover:underline">
+                          Create one in the Avatar studio
+                        </Link>{" "}
+                        then come back here.
+                      </p>
+                    ) : (
+                      <>
+                        {/* Voice picker + preview */}
+                        <div>
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">
+                            Voice
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={myVoiceId}
+                              onChange={(e) => setMyVoiceId(e.target.value)}
+                              className="flex-1 rounded-lg border border-border/40 bg-background px-3 py-2 text-xs text-foreground"
+                            >
+                              {clonedVoices.map((v) => (
+                                <option key={v.voiceId} value={v.voiceId}>
+                                  {v.name} {v.language ? `· ${v.language}` : ""}
+                                </option>
+                              ))}
+                            </select>
+                            {(() => {
+                              const sel = clonedVoices.find((v) => v.voiceId === myVoiceId);
+                              return sel?.previewUrl ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    try { new Audio(sel.previewUrl!).play(); } catch {}
+                                  }}
+                                  className="rounded-lg border border-border/40 p-2 text-muted-foreground hover:text-primary hover:border-primary/40"
+                                  title="Preview voice"
+                                >
+                                  <Volume2 className="h-4 w-4" />
+                                </button>
+                              ) : null;
+                            })()}
+                          </div>
+                        </div>
+
+                        {/* Dialogue / script */}
+                        <div>
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">
+                            What should be said (exact words)
+                          </label>
+                          <textarea
+                            value={voiceScript}
+                            onChange={(e) => setVoiceScript(e.target.value)}
+                            placeholder="Type the dialogue or narration to speak in your voice…"
+                            rows={3}
+                            maxLength={2000}
+                            className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-xs text-foreground resize-none"
+                          />
+                        </div>
+
+                        {/* Mode: lipsync vs voice-over */}
+                        <div>
+                          <label className="text-xs font-medium text-foreground mb-1.5 block">
+                            Mode
+                          </label>
+                          <SegmentedControl
+                            options={[
+                              { value: "lipsync", label: "Lip-sync" },
+                              { value: "voiceover", label: "Voice-over" },
+                            ]}
+                            value={voiceMode}
+                            onChange={(v) => setVoiceMode(v as "lipsync" | "voiceover")}
+                            className="w-full"
+                          />
+                          <p className="text-[11px] text-muted-foreground/60 mt-1.5 leading-snug">
+                            {voiceMode === "lipsync"
+                              ? "Mouth synced to your voice on the main character (burned in)."
+                              : "Your voice as a narration track over the scene (works for any scene, incl. multi-character)."}
+                          </p>
+                        </div>
+
+                        {/* Lip-sync quality (lipsync only) */}
+                        {voiceMode === "lipsync" && (
+                          <div>
+                            <label className="text-xs font-medium text-foreground mb-1.5 block">
+                              Lip-sync quality
+                            </label>
+                            <SegmentedControl
+                              options={[
+                                { value: "speed", label: "Fast" },
+                                { value: "precision", label: "Precision" },
+                              ]}
+                              value={voiceLipsyncMode}
+                              onChange={(v) => setVoiceLipsyncMode(v as "speed" | "precision")}
+                              className="w-full"
+                            />
+                          </div>
+                        )}
+
+                        <p className="text-[11px] text-muted-foreground/50 leading-snug">
+                          Best with the <strong>Seedance 2.0</strong> or <strong>Kling O3</strong> engine.
+                          For lip-sync, keep the dialogue length close to the video duration.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

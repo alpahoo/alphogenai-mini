@@ -14,7 +14,7 @@ import {
   createLipsync,
   getLipsyncTask,
 } from "@/lib/heygen-client";
-import { triggerExtractLastFrame, triggerConcatScenes } from "@/lib/modal-client";
+import { triggerExtractLastFrame, triggerConcatScenes, triggerApplyVoiceover } from "@/lib/modal-client";
 import { generateVoiceover, isTTSAvailable } from "@/lib/tts";
 import { uploadBufferToR2 } from "@/lib/r2";
 
@@ -104,8 +104,14 @@ export async function GET(
       ((job.avatar_final ?? {}) as Record<string, unknown>).stage ?? ""
     );
     if (
-      isHeyGen &&
-      ["concatenating", "lipsync_pending", "lipsync"].includes(avatarFinalStage)
+      (isHeyGen || isEvoLink || isBailian) &&
+      [
+        "concatenating",
+        "lipsync_pending",
+        "lipsync",
+        "voiceover_pending",
+        "voiceover_muxing",
+      ].includes(avatarFinalStage)
     ) {
       try {
         await advanceAvatarFinalLipsync(supabase, job);
@@ -240,6 +246,39 @@ async function advanceAvatarFinalLipsync(
   const audioUrl = String(af.audio_url ?? "");
   const now = () => new Date().toISOString();
 
+  const voiceMode = af.voice_mode === "voiceover" ? "voiceover" : "lipsync";
+
+  // Voice-over: mux the cloned-voice track into the final video (Modal).
+  const startVoiceover = async (videoUrl: string) => {
+    try {
+      await triggerApplyVoiceover(jobId);
+      await supabase
+        .from("jobs")
+        .update({
+          status: "in_progress",
+          current_stage: "muxing_audio",
+          avatar_final: { ...af, stage: "voiceover_muxing", concat_url: videoUrl },
+          updated_at: now(),
+        })
+        .eq("id", jobId);
+      console.log(`[jobs/status] voiceover mux started job=${jobId}`);
+    } catch (e) {
+      // Couldn't start mux → deliver the video as-is (voice not burned in)
+      console.warn(`[jobs/status] voiceover mux start failed:`, e instanceof Error ? e.message : e);
+      await supabase
+        .from("jobs")
+        .update({
+          status: "done",
+          current_stage: "completed",
+          video_url: videoUrl,
+          output_url_final: videoUrl,
+          avatar_final: { ...af, stage: "done" },
+          updated_at: now(),
+        })
+        .eq("id", jobId);
+    }
+  };
+
   const lipsyncMode = af.lipsync_mode === "precision" ? "precision" : "speed";
   const startLipsync = async (videoUrl: string) => {
     try {
@@ -275,7 +314,8 @@ async function advanceAvatarFinalLipsync(
   if (stage === "concatenating") {
     const videoUrl = String(job.video_url ?? "");
     if (videoUrl) {
-      await startLipsync(videoUrl);
+      if (voiceMode === "voiceover") await startVoiceover(videoUrl);
+      else await startLipsync(videoUrl);
       return;
     }
     // Concat not done yet — retry trigger if it looks stalled (>5min)
@@ -293,6 +333,25 @@ async function advanceAvatarFinalLipsync(
   if (stage === "lipsync_pending") {
     const src = String(af.concat_url ?? job.video_url ?? "");
     if (src) await startLipsync(src);
+    return;
+  }
+
+  // ── Voice-over: mux the cloned voice into the (single-shot) video ───────
+  if (stage === "voiceover_pending") {
+    const src = String(af.concat_url ?? job.video_url ?? "");
+    if (src) await startVoiceover(src);
+    return;
+  }
+
+  // ── Voice-over mux running on Modal → wait; retry if stalled (>5min) ────
+  if (stage === "voiceover_muxing") {
+    const updatedAt = new Date(job.updated_at as string).getTime();
+    if (Date.now() - updatedAt > 5 * 60_000) {
+      try {
+        await triggerApplyVoiceover(jobId);
+        await supabase.from("jobs").update({ updated_at: now() }).eq("id", jobId);
+      } catch { /* next poll retries */ }
+    }
     return;
   }
 
@@ -724,20 +783,52 @@ async function advanceEvoLinkState(
           .eq("id", jobId)
           .eq("status", "in_progress");
 
+        const af = (job.avatar_final ?? {}) as Record<string, unknown>;
+        const voicePending = String(af.stage ?? "") === "awaiting_video";
+
         if (effectiveScenes.length === 1) {
-          // Single-scene EvoLink job: no concat needed, write final URL directly
-          await supabase
-            .from("jobs")
-            .update({
-              status: "done",
-              current_stage: "completed",
-              video_url: result.videoUrl,
-              output_url_final: result.videoUrl,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", jobId)
-            .eq("status", "in_progress");
+          if (voicePending) {
+            // Voice post-step pending → hand off to the voice machine instead
+            // of finishing. Single scene = no concat needed.
+            const nextStage =
+              af.voice_mode === "voiceover" ? "voiceover_pending" : "lipsync_pending";
+            await supabase
+              .from("jobs")
+              .update({
+                status: "in_progress",
+                current_stage: "muxing_audio",
+                video_url: result.videoUrl,
+                avatar_final: { ...af, stage: nextStage, concat_url: result.videoUrl },
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", jobId)
+              .eq("status", "in_progress");
+          } else {
+            // Single-scene EvoLink job: no concat needed, write final URL directly
+            await supabase
+              .from("jobs")
+              .update({
+                status: "done",
+                current_stage: "completed",
+                video_url: result.videoUrl,
+                output_url_final: result.videoUrl,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", jobId)
+              .eq("status", "in_progress");
+          }
         } else {
+          if (voicePending) {
+            // Mark the voice stage so the GET handler picks up the voice
+            // machine once Modal concat sets video_url.
+            await supabase
+              .from("jobs")
+              .update({
+                avatar_final: { ...af, stage: "concatenating" },
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", jobId);
+          }
           try {
             await triggerConcatScenes(jobId);
           } catch (e) {
@@ -891,20 +982,47 @@ async function advanceEvoLinkState(
   const allDone = effectiveScenes.every((s) => s.status === "done");
   if (allDone && !job.video_url) {
     console.log(`[jobs/status] all scenes done, finalizing job=${jobId}`);
+    const af = (job.avatar_final ?? {}) as Record<string, unknown>;
+    const voicePending = String(af.stage ?? "") === "awaiting_video";
     if (effectiveScenes.length === 1) {
       const only = effectiveScenes[0].clip_url!;
-      await supabase
-        .from("jobs")
-        .update({
-          status: "done",
-          current_stage: "completed",
-          video_url: only,
-          output_url_final: only,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", jobId)
-        .eq("status", "in_progress");
+      if (voicePending) {
+        const nextStage =
+          af.voice_mode === "voiceover" ? "voiceover_pending" : "lipsync_pending";
+        await supabase
+          .from("jobs")
+          .update({
+            status: "in_progress",
+            current_stage: "muxing_audio",
+            video_url: only,
+            avatar_final: { ...af, stage: nextStage, concat_url: only },
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", jobId)
+          .eq("status", "in_progress");
+      } else {
+        await supabase
+          .from("jobs")
+          .update({
+            status: "done",
+            current_stage: "completed",
+            video_url: only,
+            output_url_final: only,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", jobId)
+          .eq("status", "in_progress");
+      }
     } else {
+      if (voicePending) {
+        await supabase
+          .from("jobs")
+          .update({
+            avatar_final: { ...af, stage: "concatenating" },
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", jobId);
+      }
       try {
         await triggerConcatScenes(jobId);
       } catch (e) {
