@@ -158,6 +158,9 @@ export interface HeyGenAvatar {
   name: string;
   gender: string;
   previewUrl: string | null;
+  /** "avatar" = studio/instant avatar (v3 avatar_id) ; "talking_photo" =
+   *  photo avatar (talking_photo_id). Drives the correct generation payload. */
+  kind: "avatar" | "talking_photo";
 }
 
 /**
@@ -175,13 +178,29 @@ export async function listAvatars(): Promise<HeyGenAvatar[]> {
   }
 
   const data = await res.json();
-  const avatars = data.data?.avatars ?? data.avatars ?? [];
-  return avatars.map((a: Record<string, unknown>) => ({
+  const root = data.data ?? data;
+  const avatars: Record<string, unknown>[] = root.avatars ?? [];
+  // HeyGen returns the account's photo avatars in a SEPARATE array — these are
+  // always custom (no stock entries), so surface every one of them.
+  const talkingPhotos: Record<string, unknown>[] = root.talking_photos ?? [];
+
+  const fromAvatars: HeyGenAvatar[] = avatars.map((a) => ({
     avatarId: String(a.avatar_id ?? a.id ?? ""),
     name: String(a.avatar_name ?? a.name ?? ""),
     gender: String(a.gender ?? ""),
     previewUrl: (a.preview_image_url as string) ?? null,
+    kind: "avatar" as const,
   }));
+
+  const fromTalkingPhotos: HeyGenAvatar[] = talkingPhotos.map((t) => ({
+    avatarId: String(t.talking_photo_id ?? t.id ?? ""),
+    name: String(t.talking_photo_name ?? t.name ?? ""),
+    gender: String(t.gender ?? ""),
+    previewUrl: (t.preview_image_url as string) ?? null,
+    kind: "talking_photo" as const,
+  }));
+
+  return [...fromAvatars, ...fromTalkingPhotos].filter((a) => a.avatarId);
 }
 
 // ---------------------------------------------------------------------------

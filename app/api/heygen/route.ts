@@ -43,33 +43,46 @@ export async function GET() {
     .order("created_at", { ascending: false });
   const rows = dbRows ?? [];
 
-  // ── Avatars: live custom avatars from HeyGen (hex id) + DB-tracked ────
+  // ── Avatars: every avatar from the account's HeyGen + DB-tracked ──────
   const avatarMap = new Map<
     string,
-    { avatarId: string; name: string; previewUrl: string | null; gender: string }
+    {
+      avatarId: string;
+      name: string;
+      previewUrl: string | null;
+      gender: string;
+      kind: "avatar" | "talking_photo";
+    }
   >();
 
   // DB-tracked first (so app-created names win)
   for (const r of rows.filter((r) => r.type === "avatar")) {
+    const kind =
+      ((r.metadata as Record<string, string>)?.kind as "avatar" | "talking_photo") ??
+      "avatar";
     avatarMap.set(String(r.external_id), {
       avatarId: String(r.external_id),
       name: String(r.name ?? ""),
       previewUrl: (r.preview_url as string | null) ?? null,
       gender: ((r.metadata as Record<string, string>)?.gender as string) ?? "",
+      kind,
     });
   }
 
   try {
     const heygenAvatars = await listHeyGenAvatars();
     for (const a of heygenAvatars) {
-      // Only custom avatars (exclude the ~1200 stock library entries)
-      if (!isCustomAvatarId(a.avatarId)) continue;
+      // Photo avatars (talking_photos) are ALWAYS the account's own — include
+      // every one. Studio/instant avatars are mixed with ~1200 stock library
+      // entries, so keep the custom-hex-id heuristic to exclude stock.
+      if (a.kind === "avatar" && !isCustomAvatarId(a.avatarId)) continue;
       if (avatarMap.has(a.avatarId)) continue; // DB version wins
       avatarMap.set(a.avatarId, {
         avatarId: a.avatarId,
         name: a.name,
         previewUrl: a.previewUrl,
         gender: a.gender,
+        kind: a.kind,
       });
     }
   } catch (e) {
