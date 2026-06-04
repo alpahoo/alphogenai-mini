@@ -525,7 +525,10 @@ export async function createAvatarShotsVideo(
   }
 
   const body: Record<string, unknown> = {
-    type: "avatar_shots",
+    // HeyGen renamed the Avatar Shots video type: "avatar_shots" is rejected;
+    // the current valid tag is "cinematic_avatar". avatar_id stays an array and
+    // accepts both v3 avatar ids and talking_photo ids (verified live).
+    type: "cinematic_avatar",
     // avatar_id MUST be an array of 1–3 look IDs
     avatar_id: [params.avatarId],
     prompt,
