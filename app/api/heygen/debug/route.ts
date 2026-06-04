@@ -34,13 +34,20 @@ export async function GET(req: Request) {
     out.voicesError = e instanceof Error ? e.message : String(e);
   }
 
-  try {
-    const ar = await fetch(`${V2}/avatar_group.list?include_public=false`, { headers: hg() });
-    const ad = await ar.json();
-    out.avatarGroupStatus = ar.status;
-    out.avatarGroupRaw = ad;
-  } catch (e) {
-    out.avatarGroupError = e instanceof Error ? e.message : String(e);
+  // Probe candidate "owned voices" endpoints
+  const V1 = "https://api.heygen.com/v1";
+  for (const [label, ep] of [
+    ["brandVoice", `${V1}/brand_voice/list`],
+    ["voiceList", `${V1}/voice.list`],
+  ] as const) {
+    try {
+      const r = await fetch(ep, { headers: hg() });
+      const j = await r.json().catch(() => ({}));
+      out[`${label}Status`] = r.status;
+      out[`${label}Raw`] = JSON.stringify(j).slice(0, 1200);
+    } catch (e) {
+      out[`${label}Error`] = e instanceof Error ? e.message : String(e);
+    }
   }
 
   return NextResponse.json(out);
