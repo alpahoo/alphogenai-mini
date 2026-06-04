@@ -428,8 +428,9 @@ export async function POST(req: Request) {
       // Cinematic + dialogue, no voice → native (dialogue embedded in prompt).
       // Cinematic, no dialogue → single vibe shot.
       interface Shot {
-        sceneText: string;   // dialogue (native fallback only); "" otherwise
+        sceneText: string;   // dialogue (native-embed fallback only); "" otherwise
         duration: number;    // 4–15s
+        audioUrl?: string;   // cloned-voice TTS chunk → native lip-sync reference
       }
       let shots: Shot[] = [];
       const cinematicDialogue = (script_text?.trim() || "");
@@ -440,27 +441,26 @@ export async function POST(req: Request) {
         return Math.max(4, Math.min(15, Math.ceil(w / 2.3) + 1));
       };
 
-      // Final-lipsync flow: generate the FULL TTS once, then create N native
-      // shots sized so their total ≈ the speech length. They're concatenated,
-      // then ONE lipsync applies the full speech over the whole video.
-      let finalAudioUrl: string | undefined;
-      let finalAudioDur: number | undefined;
+      // Native lip-sync flow: split the dialogue into chunks (<=~14s of speech
+      // each), TTS each chunk in the cloned voice, and generate ONE cinematic
+      // shot per chunk WITH that audio as a reference. HeyGen lip-syncs the
+      // exact words natively during generation — no post-hoc lipsync (which
+      // sounded like a voice-over laid over the clip).
+      const finalAudioUrl: string | undefined = undefined; // legacy post-lipsync flow disabled
+      const finalAudioDur: number | undefined = undefined;
 
       if (!isCinematic) {
         shots = [{ sceneText: prompt.trim(), duration: 5 }];
       } else if (useLipsync) {
-        const speech = await generateSpeech(cinematicDialogue, voice_id!);
-        if (speech?.audioUrl && speech.durationSeconds) {
-          finalAudioUrl = speech.audioUrl;
-          finalAudioDur = speech.durationSeconds;
-          const A = speech.durationSeconds;
-          const N = Math.max(1, Math.min(8, Math.ceil(A / 13)));
-          const shotDur = Math.max(4, Math.min(15, Math.round(A / N)));
-          for (let i = 0; i < N; i++) shots.push({ sceneText: "", duration: shotDur });
-        } else {
-          // TTS failed → native fallback (embed dialogue per chunk in prompt)
-          for (const t of splitScriptIntoChunks(cinematicDialogue)) {
-            shots.push({ sceneText: t, duration: wordsToDur(t) });
+        const chunks = splitScriptIntoChunks(cinematicDialogue);
+        for (const chunk of (chunks.length ? chunks : [cinematicDialogue])) {
+          const speech = await generateSpeech(chunk, voice_id!);
+          if (speech?.audioUrl) {
+            const dur = Math.max(4, Math.min(15, Math.round(speech.durationSeconds ?? wordsToDur(chunk))));
+            shots.push({ sceneText: "", duration: dur, audioUrl: speech.audioUrl });
+          } else {
+            // TTS failed for this chunk → embed the dialogue so the model speaks it
+            shots.push({ sceneText: chunk, duration: wordsToDur(chunk) });
           }
         }
       } else if (cinematicDialogue) {
@@ -557,16 +557,18 @@ export async function POST(req: Request) {
         try {
           let taskId: string;
           if (isCinematic) {
-            // Final-lipsync shots: cinematic visual only (no embedded dialogue)
-            // — exact words are lip-synced over the concat later. Native shots
-            // (no voice): embed the dialogue so Seedance speaks it.
+            // Native lip-sync: when the shot carries a cloned-voice audio chunk,
+            // pass it as an audio reference so HeyGen makes the avatar SPEAK the
+            // exact words during generation (no post-hoc lipsync). Otherwise,
+            // embed the dialogue text so the model speaks it.
             const task = await createAvatarShotsVideo({
               avatarId: avatar_id!,
               scenePrompt: sceneBrief,
-              scriptText: isFinalLipsync ? undefined : (s.sceneText || undefined),
+              scriptText: s.audioUrl ? undefined : (s.sceneText || undefined),
               durationSeconds: s.duration,
               resolution: "1080p",
               aspectRatio: safeAvatarAspect === "9:16" ? "9:16" : "16:9",
+              ...(s.audioUrl ? { audioReferenceUrl: s.audioUrl } : {}),
               // Story Video "Reference image" → HeyGen reference for outfit /
               // decor consistency across shots (identity comes from the avatar).
               ...(safeImageUrl ? { referenceImageUrl: safeImageUrl } : {}),
