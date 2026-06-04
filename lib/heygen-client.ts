@@ -209,6 +209,11 @@ export async function listOwnedAvatars(): Promise<HeyGenAvatar[]> {
   const root = data.data ?? data;
   const groups: Record<string, unknown>[] =
     root.avatar_group_list ?? root.avatar_groups ?? root.groups ?? [];
+  // TEMP DEBUG — inspect real avatar_group shape.
+  try {
+    console.log(`[heygen-debug] avatar_group rootKeys=${JSON.stringify(Object.keys(root))} groups=${groups.length}`);
+    if (groups[0]) console.log(`[heygen-debug] group[0]=${JSON.stringify(groups[0]).slice(0, 500)}`);
+  } catch { /* ignore */ }
 
   const out: HeyGenAvatar[] = [];
   for (const g of groups) {
@@ -324,6 +329,16 @@ export async function listVoices(): Promise<HeyGenVoice[]> {
 
   const data = await res.json();
   const voices = data.data?.voices ?? data.voices ?? [];
+  // TEMP DEBUG — inspect real HeyGen voice shape to fix cloned detection.
+  try {
+    console.log(`[heygen-debug] voices total=${voices.length}`);
+    if (voices[0]) console.log(`[heygen-debug] voice keys=${JSON.stringify(Object.keys(voices[0]))}`);
+    const candidates = (voices as Record<string, unknown>[]).filter((v) => {
+      const blob = JSON.stringify(v).toLowerCase();
+      return blob.includes("clon") || blob.includes("custom") || blob.includes("instant") || v.is_cloned;
+    });
+    console.log(`[heygen-debug] cloned-candidates=${candidates.length}: ${JSON.stringify(candidates.slice(0, 6))}`);
+  } catch { /* ignore */ }
   return voices.map((v: Record<string, unknown>) => ({
     voiceId: String(v.voice_id ?? v.id ?? ""),
     name: String(v.name ?? ""),
