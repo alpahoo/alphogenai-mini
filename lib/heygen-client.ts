@@ -180,27 +180,71 @@ export async function listAvatars(): Promise<HeyGenAvatar[]> {
   const data = await res.json();
   const root = data.data ?? data;
   const avatars: Record<string, unknown>[] = root.avatars ?? [];
-  // HeyGen returns the account's photo avatars in a SEPARATE array — these are
-  // always custom (no stock entries), so surface every one of them.
-  const talkingPhotos: Record<string, unknown>[] = root.talking_photos ?? [];
+  return avatars
+    .map((a) => ({
+      avatarId: String(a.avatar_id ?? a.id ?? ""),
+      name: String(a.avatar_name ?? a.name ?? ""),
+      gender: String(a.gender ?? ""),
+      previewUrl: (a.preview_image_url as string) ?? null,
+      kind: "avatar" as const,
+    }))
+    .filter((a) => a.avatarId);
+}
 
-  const fromAvatars: HeyGenAvatar[] = avatars.map((a) => ({
-    avatarId: String(a.avatar_id ?? a.id ?? ""),
-    name: String(a.avatar_name ?? a.name ?? ""),
-    gender: String(a.gender ?? ""),
-    previewUrl: (a.preview_image_url as string) ?? null,
-    kind: "avatar" as const,
-  }));
+/**
+ * List ONLY the account's own avatars ("My Avatars"), excluding the large
+ * public library. Uses HeyGen avatar_group.list?include_public=false, then
+ * resolves a usable look id + preview per group.
+ */
+export async function listOwnedAvatars(): Promise<HeyGenAvatar[]> {
+  const res = await fetch(
+    `${HEYGEN_API_V2}/avatar_group.list?include_public=false`,
+    { headers: headers(), signal: AbortSignal.timeout(15_000) }
+  );
+  if (!res.ok) {
+    throw new Error(`HeyGen avatar_group.list failed (${res.status})`);
+  }
 
-  const fromTalkingPhotos: HeyGenAvatar[] = talkingPhotos.map((t) => ({
-    avatarId: String(t.talking_photo_id ?? t.id ?? ""),
-    name: String(t.talking_photo_name ?? t.name ?? ""),
-    gender: String(t.gender ?? ""),
-    previewUrl: (t.preview_image_url as string) ?? null,
-    kind: "talking_photo" as const,
-  }));
+  const data = await res.json();
+  const root = data.data ?? data;
+  const groups: Record<string, unknown>[] =
+    root.avatar_group_list ?? root.avatar_groups ?? root.groups ?? [];
 
-  return [...fromAvatars, ...fromTalkingPhotos].filter((a) => a.avatarId);
+  const out: HeyGenAvatar[] = [];
+  for (const g of groups) {
+    const groupId = String(g.id ?? g.group_id ?? "");
+    if (!groupId) continue;
+    const name = String(g.name ?? g.group_name ?? "");
+    let previewUrl = (g.preview_image as string) ?? (g.preview_image_url as string) ?? null;
+    // Photo-avatar groups are usable via their look id; instant/studio avatars
+    // use the group/avatar id directly.
+    const isPhoto = String(g.group_type ?? g.type ?? "").toUpperCase().includes("PHOTO");
+    let avatarId = groupId;
+    let kind: "avatar" | "talking_photo" = isPhoto ? "talking_photo" : "avatar";
+
+    try {
+      const lr = await fetch(`${HEYGEN_API_V2}/avatar_group/${groupId}/avatars`, {
+        headers: headers(),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (lr.ok) {
+        const ld = await lr.json();
+        const looks: Record<string, unknown>[] =
+          ld.data?.avatar_list ?? ld.avatar_list ?? ld.data?.avatars ?? [];
+        const first = looks.find((l) => l.id ?? l.avatar_id ?? l.talking_photo_id);
+        if (first) {
+          avatarId = String(first.id ?? first.avatar_id ?? first.talking_photo_id ?? groupId);
+          previewUrl = (first.image_url as string) ?? (first.preview_image_url as string) ?? previewUrl;
+          if (first.talking_photo_id) kind = "talking_photo";
+        }
+      }
+    } catch {
+      /* fall back to group id + preview */
+    }
+
+    out.push({ avatarId, name, gender: "", previewUrl, kind });
+  }
+  return out.filter((a) => a.avatarId);
 }
 
 // ---------------------------------------------------------------------------

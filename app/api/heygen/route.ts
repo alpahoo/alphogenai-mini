@@ -5,7 +5,7 @@ import {
   createPhotoAvatar,
   cloneVoice,
   listVoices as listHeyGenVoices,
-  listAvatars as listHeyGenAvatars,
+  listOwnedAvatars as listHeyGenOwnedAvatars,
 } from "@/lib/heygen-client";
 
 /**
@@ -17,11 +17,6 @@ import {
  * descriptive IDs like "Abigail_..."). DB-tracked items (created via this
  * app) are merged in. Stock voices are appended after cloned voices.
  */
-
-/** Custom photo/digital-twin avatars use 32-char hex IDs; stock use names. */
-function isCustomAvatarId(id: string): boolean {
-  return /^[a-f0-9]{32}$/.test(id);
-}
 
 export async function GET() {
   const supabase = await createClient();
@@ -70,12 +65,9 @@ export async function GET() {
   }
 
   try {
-    const heygenAvatars = await listHeyGenAvatars();
-    for (const a of heygenAvatars) {
-      // Photo avatars (talking_photos) are ALWAYS the account's own — include
-      // every one. Studio/instant avatars are mixed with ~1200 stock library
-      // entries, so keep the custom-hex-id heuristic to exclude stock.
-      if (a.kind === "avatar" && !isCustomAvatarId(a.avatarId)) continue;
+    // ONLY the account's own avatars ("My Avatars") — never the public library.
+    const ownedAvatars = await listHeyGenOwnedAvatars();
+    for (const a of ownedAvatars) {
       if (avatarMap.has(a.avatarId)) continue; // DB version wins
       avatarMap.set(a.avatarId, {
         avatarId: a.avatarId,
@@ -86,7 +78,7 @@ export async function GET() {
       });
     }
   } catch (e) {
-    console.warn("[heygen] listAvatars failed:", e instanceof Error ? e.message : e);
+    console.warn("[heygen] listOwnedAvatars failed:", e instanceof Error ? e.message : e);
   }
 
   const avatars = Array.from(avatarMap.values());
