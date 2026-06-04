@@ -9,6 +9,7 @@ import {
 } from "@/lib/evolink-client";
 import { isBailianEngine, getBailianTask, createBailianTask } from "@/lib/bailian-client";
 import { isBytePlusEngine, getBytePlusTask, createBytePlusTask } from "@/lib/byteplus-client";
+import { isAtlasEngine, getAtlasTask, createAtlasTask } from "@/lib/atlascloud-client";
 import {
   isHeyGenEngine,
   getHeyGenTask,
@@ -98,6 +99,7 @@ export async function GET(
     const isBailian = isBailianEngine(job.engine_used ?? "");
     const isHeyGen = isHeyGenEngine(job.engine_used ?? "");
     const isBytePlus = isBytePlusEngine(job.engine_used ?? "");
+    const isAtlas = isAtlasEngine(job.engine_used ?? "");
 
     // ── HeyGen final-lipsync stage (concat → ONE lipsync over the whole
     // video). Runs REGARDLESS of status, because Modal sets the job 'done'
@@ -123,7 +125,7 @@ export async function GET(
           e instanceof Error ? e.message : e
         );
       }
-    } else if ((isEvoLink || isBailian || isHeyGen || isBytePlus) && job.status === "in_progress") {
+    } else if ((isEvoLink || isBailian || isHeyGen || isBytePlus || isAtlas) && job.status === "in_progress") {
       const stage = (job.current_stage as string | null) ?? "";
 
       if (stage === "encoding" || stage === "uploading") {
@@ -731,6 +733,9 @@ async function advanceEvoLinkState(
       } else if (isBytePlusEngine(engineKey)) {
         const bp = await getBytePlusTask(generating.external_task_id!);
         result = { status: bp.status, videoUrl: bp.videoUrl, errorMessage: bp.error };
+      } else if (isAtlasEngine(engineKey)) {
+        const at = await getAtlasTask(generating.external_task_id!);
+        result = { status: at.status, videoUrl: at.videoUrl, errorMessage: at.error };
       } else {
         const er = await getEvoLinkTask(generating.external_task_id!);
         result = {
@@ -1124,6 +1129,15 @@ async function fireNextScene(
         imageUrl: firstFrameUrl,
         aspectRatio: (job.aspect_ratio as string) ?? "16:9",
         references: jobReferences as Parameters<typeof createBytePlusTask>[0]["references"],
+      });
+    } else if (isAtlasEngine(engineKey)) {
+      taskId = await createAtlasTask({
+        engineKey,
+        prompt,
+        duration,
+        imageUrl: firstFrameUrl,
+        aspectRatio: (job.aspect_ratio as string) ?? "16:9",
+        references: jobReferences as Parameters<typeof createAtlasTask>[0]["references"],
       });
     } else {
       taskId = await createEvoLinkTask({

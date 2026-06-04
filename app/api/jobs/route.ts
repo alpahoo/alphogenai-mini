@@ -21,6 +21,11 @@ import {
   BYTEPLUS_ENGINES,
 } from "@/lib/byteplus-client";
 import {
+  isAtlasEngine,
+  createAtlasTask,
+  ATLAS_ENGINES,
+} from "@/lib/atlascloud-client";
+import {
   isHeyGenEngine,
   isHeyGenShotsEngine,
   createAvatarVideo,
@@ -49,6 +54,7 @@ const VALID_ENGINES = [
   ...Object.keys(EVOLINK_ENGINES),
   ...Object.keys(BAILIAN_ENGINES),
   ...Object.keys(BYTEPLUS_ENGINES),
+  ...Object.keys(ATLAS_ENGINES),
 ];
 
 // Hard cap on multi-scene chaining length (defense in depth — storyboard
@@ -832,8 +838,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, jobId: job.id, job });
     }
 
-    if (isEvoLinkEngine(engineKey) || isBytePlusEngine(engineKey)) {
-      // ── EvoLink / BytePlus path (same multi-scene state machine) ────────
+    if (isEvoLinkEngine(engineKey) || isBytePlusEngine(engineKey) || isAtlasEngine(engineKey)) {
+      // ── EvoLink / BytePlus / Atlas path (same multi-scene state machine) ─
       // EvoLink generates ONE video per task. For multi-scene jobs we fire
       // ONLY scene 0 here; the GET poller advances the chain (scene N done
       // → extract last frame → fire scene N+1 with first_frame=that frame).
@@ -880,6 +886,15 @@ export async function POST(req: Request) {
               imageUrl: scene0FirstFrame,
               aspectRatio: safeAspectRatio,
               references: safeReferences as Parameters<typeof createBytePlusTask>[0]["references"],
+            })
+          : isAtlasEngine(engineKey)
+          ? await createAtlasTask({
+              engineKey,
+              prompt: scene0Prompt,
+              duration: scene0Duration,
+              imageUrl: scene0FirstFrame,
+              aspectRatio: safeAspectRatio,
+              references: safeReferences as Parameters<typeof createAtlasTask>[0]["references"],
             })
           : await createEvoLinkTask({
               engineKey,

@@ -81,7 +81,9 @@ export type EngineKey =
   | "heygen_avatar_iv"
   | "heygen_avatar_shots"
   | "seedance2_byteplus"
-  | "seedance2_fast_byteplus";
+  | "seedance2_fast_byteplus"
+  | "seedance2_atlas"
+  | "seedance2_fast_atlas";
 
 export interface StoryboardScene {
   scene_index: number;
@@ -230,6 +232,8 @@ export const ENGINE_DISPLAY_NAMES: Record<string, string> = {
   heygen_avatar_shots: "Avatar Shots (Seedance 2)",
   seedance2_byteplus: "Seedance 2.0 (Direct)",
   seedance2_fast_byteplus: "Seedance 2.0 Fast (Direct)",
+  seedance2_atlas: "Seedance 2.0 (Atlas)",
+  seedance2_fast_atlas: "Seedance 2.0 Fast (Atlas)",
 };
 
 export function getEngineDisplayName(engine: string | null | undefined): string {

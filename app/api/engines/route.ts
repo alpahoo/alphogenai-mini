@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { EVOLINK_ENGINES } from "@/lib/evolink-client";
 import { BAILIAN_ENGINES } from "@/lib/bailian-client";
 import { BYTEPLUS_ENGINES } from "@/lib/byteplus-client";
+import { ATLAS_ENGINES } from "@/lib/atlascloud-client";
 import { HEYGEN_ENGINE, HEYGEN_SHOTS_ENGINE } from "@/lib/heygen-client";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -129,6 +130,24 @@ export async function GET() {
         key,
         label: cfg.label,
         desc: "Direct ByteDance · multimodal refs · native audio",
+        gate: "premium",
+        supportsRefs: true,
+        supportsI2v: true,
+        maxDuration: cfg.maxDuration,
+        minDuration: null,
+        quality: cfg.resolution,
+      });
+    }
+  }
+
+  // Atlas Cloud Seedance 2.0 — requires ATLASCLOUD_API_KEY. Same model EvoLink
+  // resells, ~5x cheaper, multimodal refs + native audio.
+  if (process.env.ATLASCLOUD_API_KEY) {
+    for (const [key, cfg] of Object.entries(ATLAS_ENGINES)) {
+      engines.push({
+        key,
+        label: cfg.label,
+        desc: "ByteDance Seedance · ~$0.096/s · multimodal refs · native audio",
         gate: "premium",
         supportsRefs: true,
         supportsI2v: true,
