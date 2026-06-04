@@ -209,11 +209,6 @@ export async function listOwnedAvatars(): Promise<HeyGenAvatar[]> {
   const root = data.data ?? data;
   const groups: Record<string, unknown>[] =
     root.avatar_group_list ?? root.avatar_groups ?? root.groups ?? [];
-  // TEMP DEBUG — inspect real avatar_group shape.
-  try {
-    console.log(`[heygen-debug] avatar_group rootKeys=${JSON.stringify(Object.keys(root))} groups=${groups.length}`);
-    if (groups[0]) console.log(`[heygen-debug] group[0]=${JSON.stringify(groups[0]).slice(0, 500)}`);
-  } catch { /* ignore */ }
 
   const out: HeyGenAvatar[] = [];
   for (const g of groups) {
@@ -329,16 +324,6 @@ export async function listVoices(): Promise<HeyGenVoice[]> {
 
   const data = await res.json();
   const voices = data.data?.voices ?? data.voices ?? [];
-  // TEMP DEBUG — inspect real HeyGen voice shape to fix cloned detection.
-  try {
-    console.log(`[heygen-debug] voices total=${voices.length}`);
-    if (voices[0]) console.log(`[heygen-debug] voice keys=${JSON.stringify(Object.keys(voices[0]))}`);
-    const candidates = (voices as Record<string, unknown>[]).filter((v) => {
-      const blob = JSON.stringify(v).toLowerCase();
-      return blob.includes("clon") || blob.includes("custom") || blob.includes("instant") || v.is_cloned;
-    });
-    console.log(`[heygen-debug] cloned-candidates=${candidates.length}: ${JSON.stringify(candidates.slice(0, 6))}`);
-  } catch { /* ignore */ }
   return voices.map((v: Record<string, unknown>) => ({
     voiceId: String(v.voice_id ?? v.id ?? ""),
     name: String(v.name ?? ""),
@@ -351,6 +336,27 @@ export async function listVoices(): Promise<HeyGenVoice[]> {
       (v.sample_url as string) ??
       null,
   }));
+}
+
+/**
+ * Voice IDs that belong to the ACCOUNT (custom / cloned voices). /v2/voices
+ * mixes ~2300 public voices with no "is_cloned" flag, so the only reliable way
+ * to know which voices are the user's is /v1/voice.list (returns only owned).
+ * Returns a Set of voice_ids; cross-reference against /v2/voices for metadata.
+ */
+export async function listOwnedVoiceIds(): Promise<Set<string>> {
+  const res = await fetch(`https://api.heygen.com/v1/voice.list`, {
+    headers: headers(),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    throw new Error(`HeyGen voice.list failed (${res.status})`);
+  }
+  const data = await res.json();
+  const list: Record<string, unknown>[] = data.data?.list ?? data.list ?? [];
+  return new Set(
+    list.map((v) => String(v.voice_id ?? v.id ?? "")).filter(Boolean)
+  );
 }
 
 // ---------------------------------------------------------------------------

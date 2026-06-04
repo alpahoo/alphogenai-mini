@@ -5,6 +5,7 @@ import {
   createPhotoAvatar,
   cloneVoice,
   listVoices as listHeyGenVoices,
+  listOwnedVoiceIds as listHeyGenOwnedVoiceIds,
   listOwnedAvatars as listHeyGenOwnedAvatars,
 } from "@/lib/heygen-client";
 
@@ -107,20 +108,30 @@ export async function GET() {
     });
   }
 
+  // Owned voice ids (custom/cloned) — /v2/voices has no is_cloned flag, so the
+  // only reliable source is /v1/voice.list.
+  let ownedVoiceIds = new Set<string>();
+  try {
+    ownedVoiceIds = await listHeyGenOwnedVoiceIds();
+  } catch (e) {
+    console.warn("[heygen] listOwnedVoiceIds failed:", e instanceof Error ? e.message : e);
+  }
+
   const clonedVoices: VoiceOut[] = [];
   const stockVoices: VoiceOut[] = [];
   try {
     const allVoices = await listHeyGenVoices();
     for (const v of allVoices) {
+      const mine = ownedVoiceIds.has(v.voiceId) || v.isCloned;
       const out: VoiceOut = {
         voiceId: v.voiceId,
         name: v.name,
         language: v.language,
         gender: v.gender,
-        isCloned: v.isCloned,
+        isCloned: mine,
         previewUrl: v.previewUrl,
       };
-      if (v.isCloned) {
+      if (mine) {
         if (!voiceMap.has(v.voiceId)) clonedVoices.push(out);
       } else {
         stockVoices.push(out);
