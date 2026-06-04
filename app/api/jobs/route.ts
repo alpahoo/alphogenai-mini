@@ -567,6 +567,9 @@ export async function POST(req: Request) {
               durationSeconds: s.duration,
               resolution: "1080p",
               aspectRatio: safeAvatarAspect === "9:16" ? "9:16" : "16:9",
+              // Story Video "Reference image" → HeyGen reference for outfit /
+              // decor consistency across shots (identity comes from the avatar).
+              ...(safeImageUrl ? { referenceImageUrl: safeImageUrl } : {}),
             });
             taskId = task.taskId;
           } else {

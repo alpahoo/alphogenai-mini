@@ -18,6 +18,7 @@ import {
   Music,
   Mic,
   Volume2,
+  User,
   Cpu,
   Film,
   Crown,
@@ -113,6 +114,13 @@ interface HeyGenVoice {
   previewUrl: string | null;
 }
 
+interface HeyGenAvatar {
+  avatarId: string;
+  name: string;
+  gender: string;
+  previewUrl: string | null;
+}
+
 /** Hardcoded fallback if /api/engines fails or hasn't loaded yet. */
 const FALLBACK_ENGINES: EngineOption[] = [
   { key: "wan_i2v",        label: "Wan 2.2 I2V",       desc: "GPU - up to 60s",                    gate: null,      supportsRefs: false, supportsI2v: true,  maxDuration: 60, minDuration: null, quality: "720p" },
@@ -179,6 +187,17 @@ export default function CreateModePage({
   const [voiceScript, setVoiceScript] = useState("");
   const [voiceMode, setVoiceMode] = useState<"lipsync" | "voiceover">("lipsync");
   const [voiceLipsyncMode, setVoiceLipsyncMode] = useState<"speed" | "precision">("speed");
+
+  // HeyGen avatars (used when an Avatar Shots / Avatar IV model is selected —
+  // billed on HeyGen credits, ~60x cheaper than EvoLink Seedance)
+  const [heygenAvatars, setHeygenAvatars] = useState<HeyGenAvatar[]>([]);
+  const [heygenAvatarsLoading, setHeygenAvatarsLoading] = useState(false);
+  const [selectedAvatarId, setSelectedAvatarId] = useState("");
+
+  // True when a HeyGen avatar model is selected (needs an avatar + voice;
+  // billed on HeyGen credits instead of EvoLink).
+  const isHeyGenEngineSelected =
+    selectedEngine === "heygen_avatar_iv" || selectedEngine === "heygen_avatar_shots";
 
   // Dynamic engine list (fetched from /api/engines, fallback to hardcoded)
   const [engineOptions, setEngineOptions] = useState<EngineOption[]>(FALLBACK_ENGINES);
@@ -322,21 +341,45 @@ export default function CreateModePage({
     return () => clearInterval(t);
   }, [loading]);
 
-  // Lazy-load the user's cloned voices the first time "Use my voice" is on.
+  // Lazy-load the user's HeyGen avatars + cloned voices the first time they're
+  // needed ("Use my voice" enabled, or a HeyGen avatar model selected).
   useEffect(() => {
-    if (!useMyVoice || clonedVoices.length > 0 || clonedVoicesLoading) return;
+    const needed = useMyVoice || isHeyGenEngineSelected;
+    if (!needed) return;
+    if (clonedVoices.length > 0 || heygenAvatars.length > 0) return;
+    if (clonedVoicesLoading || heygenAvatarsLoading) return;
     setClonedVoicesLoading(true);
+    setHeygenAvatarsLoading(true);
     fetch("/api/heygen")
       .then((r) => r.json())
       .then((data) => {
-        const all: HeyGenVoice[] = Array.isArray(data.voices) ? data.voices : [];
-        const cloned = all.filter((v) => v.isCloned);
+        const voices: HeyGenVoice[] = Array.isArray(data.voices) ? data.voices : [];
+        const cloned = voices.filter((v) => v.isCloned);
         setClonedVoices(cloned);
         if (cloned.length > 0 && !myVoiceId) setMyVoiceId(cloned[0].voiceId);
+        const avatars: HeyGenAvatar[] = Array.isArray(data.avatars) ? data.avatars : [];
+        setHeygenAvatars(avatars);
       })
       .catch(() => {})
-      .finally(() => setClonedVoicesLoading(false));
-  }, [useMyVoice, clonedVoices.length, clonedVoicesLoading, myVoiceId]);
+      .finally(() => {
+        setClonedVoicesLoading(false);
+        setHeygenAvatarsLoading(false);
+      });
+  }, [
+    useMyVoice,
+    isHeyGenEngineSelected,
+    clonedVoices.length,
+    heygenAvatars.length,
+    clonedVoicesLoading,
+    heygenAvatarsLoading,
+    myVoiceId,
+  ]);
+
+  // HeyGen avatar models require a voice (else the model invents speech) —
+  // auto-enable "Use my voice" when one is selected.
+  useEffect(() => {
+    if (isHeyGenEngineSelected && !useMyVoice) setUseMyVoice(true);
+  }, [isHeyGenEngineSelected, useMyVoice]);
 
   const planMaxDuration = PLAN_MAX_DURATION[plan] ?? 5;
   const durationOptions = DURATION_OPTIONS.map((opt) => {
@@ -358,6 +401,17 @@ export default function CreateModePage({
     if (!trimmed || trimmed.length < 3) {
       setError("Prompt must be at least 3 characters");
       return;
+    }
+    // HeyGen avatar models need an avatar + a voice (else the model invents speech).
+    if (isHeyGenEngineSelected) {
+      if (!selectedAvatarId) {
+        setError("Select an avatar to use this model.");
+        return;
+      }
+      if (!useMyVoice || !myVoiceId || voiceScript.trim().length < 2) {
+        setError("Avatar models need your voice + the dialogue. Fill in “Use my voice”.");
+        return;
+      }
     }
     setError(null);
     setShowUpgrade(false);
@@ -390,6 +444,10 @@ export default function CreateModePage({
             script_text: voiceScript.trim(),
             voice_mode: voiceMode,
             lipsync_mode: voiceLipsyncMode,
+          }),
+          // HeyGen avatar models → route to the avatar pipeline (HeyGen credits)
+          ...(isHeyGenEngineSelected && selectedAvatarId && {
+            avatar_id: selectedAvatarId,
           }),
         }),
       });
@@ -635,6 +693,76 @@ export default function CreateModePage({
               locked={plan === "free"}
               engineSupportsRefs={selectedEngine === "auto" || engineOptions.some((e) => e.key === selectedEngine && e.supportsRefs)}
             />
+
+            {/* ── Avatar picker (HeyGen models only) ───────────────── */}
+            {isHeyGenEngineSelected && (
+              <div className="rounded-xl border border-primary/30 bg-primary/[0.03] p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <User className="h-4 w-4 text-primary" />
+                    Avatar <span className="text-rose-500">*</span>
+                  </span>
+                  <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                    HeyGen credits · ~60× cheaper
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground/60 mb-3">
+                  This model puts your avatar in the scene and speaks your script
+                  in your voice (set below in “Use my voice”).
+                </p>
+
+                {heygenAvatarsLoading ? (
+                  <p className="text-xs text-muted-foreground/60 flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading your avatars…
+                  </p>
+                ) : heygenAvatars.length === 0 ? (
+                  <p className="text-xs text-muted-foreground/70">
+                    No avatar yet.{" "}
+                    <Link href="/create/avatar" className="text-primary hover:underline">
+                      Create one in the Avatar studio
+                    </Link>{" "}
+                    then come back here.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
+                    {heygenAvatars.map((a) => {
+                      const active = selectedAvatarId === a.avatarId;
+                      return (
+                        <button
+                          key={a.avatarId}
+                          type="button"
+                          onClick={() => setSelectedAvatarId(active ? "" : a.avatarId)}
+                          className={`group relative overflow-hidden rounded-lg border text-left transition-all ${
+                            active
+                              ? "border-primary ring-2 ring-primary/40"
+                              : "border-border/40 hover:border-primary/40"
+                          }`}
+                          title={a.name}
+                        >
+                          <div className="aspect-square bg-muted/30">
+                            {a.previewUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={a.previewUrl}
+                                alt={a.name}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full items-center justify-center">
+                                <User className="h-6 w-6 text-muted-foreground/40" />
+                              </div>
+                            )}
+                          </div>
+                          <span className="block truncate px-2 py-1 text-[11px] text-foreground">
+                            {a.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ── Duration ───────────────────────────────────────── */}
             <div>
@@ -1220,6 +1348,24 @@ export default function CreateModePage({
               // Determine provider for the selected engine
               const engineKey = selectedEngine === "auto" ? "evolink_fast" : selectedEngine;
               const isBailianEngine = engineKey.includes("bailian");
+
+              // HeyGen avatar models — billed on HeyGen credits (not EvoLink)
+              if (isHeyGenEngineSelected) {
+                return (
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 flex items-start gap-3">
+                    <Wallet className="h-5 w-5 shrink-0 mt-0.5 text-emerald-400" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-emerald-500">
+                        HeyGen credits — Avatar Shots (~$0.008/s)
+                      </p>
+                      <p className="text-xs text-muted-foreground/70 mt-0.5">
+                        ~60× cheaper than EvoLink Seedance for the same scene.
+                        Billed on your HeyGen wallet, not EvoLink.
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
 
               // Bailian: no balance API — show a note to check Alibaba console
               if (isBailianEngine) {
