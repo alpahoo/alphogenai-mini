@@ -16,6 +16,11 @@ import {
   BAILIAN_ENGINES,
 } from "@/lib/bailian-client";
 import {
+  isBytePlusEngine,
+  createBytePlusTask,
+  BYTEPLUS_ENGINES,
+} from "@/lib/byteplus-client";
+import {
   isHeyGenEngine,
   isHeyGenShotsEngine,
   createAvatarVideo,
@@ -43,6 +48,7 @@ const VALID_ENGINES = [
   "heygen_avatar_shots",
   ...Object.keys(EVOLINK_ENGINES),
   ...Object.keys(BAILIAN_ENGINES),
+  ...Object.keys(BYTEPLUS_ENGINES),
 ];
 
 // Hard cap on multi-scene chaining length (defense in depth — storyboard
@@ -826,8 +832,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, jobId: job.id, job });
     }
 
-    if (isEvoLinkEngine(engineKey)) {
-      // ── EvoLink path ───────────────────────────────────────────────────
+    if (isEvoLinkEngine(engineKey) || isBytePlusEngine(engineKey)) {
+      // ── EvoLink / BytePlus path (same multi-scene state machine) ────────
       // EvoLink generates ONE video per task. For multi-scene jobs we fire
       // ONLY scene 0 here; the GET poller advances the chain (scene N done
       // → extract last frame → fire scene N+1 with first_frame=that frame).
@@ -866,18 +872,27 @@ export async function POST(req: Request) {
             ? aspect_ratio
             : "16:9";
 
-        const taskId = await createEvoLinkTask({
-          engineKey,
-          prompt: scene0Prompt,
-          duration: scene0Duration,
-          imageUrl: scene0FirstFrame,
-          aspectRatio: safeAspectRatio,
-          // V1 Multi-Reference: forward image refs to EvoLink. The same
-          // payload is also persisted on `jobs.references_payload`, so the
-          // GET poller (`fireNextScene`) can re-use it for scenes 1..N —
-          // character continuity persists across the whole multi-scene render.
-          references: safeReferences as Parameters<typeof createEvoLinkTask>[0]["references"],
-        });
+        const taskId = isBytePlusEngine(engineKey)
+          ? await createBytePlusTask({
+              engineKey,
+              prompt: scene0Prompt,
+              duration: scene0Duration,
+              imageUrl: scene0FirstFrame,
+              aspectRatio: safeAspectRatio,
+              references: safeReferences as Parameters<typeof createBytePlusTask>[0]["references"],
+            })
+          : await createEvoLinkTask({
+              engineKey,
+              prompt: scene0Prompt,
+              duration: scene0Duration,
+              imageUrl: scene0FirstFrame,
+              aspectRatio: safeAspectRatio,
+              // V1 Multi-Reference: forward image refs to EvoLink. The same
+              // payload is also persisted on `jobs.references_payload`, so the
+              // GET poller (`fireNextScene`) can re-use it for scenes 1..N —
+              // character continuity persists across the whole multi-scene render.
+              references: safeReferences as Parameters<typeof createEvoLinkTask>[0]["references"],
+            });
         console.log(
           `[jobs] EvoLink scene 0: job=${job.id} engine=${engineKey} ` +
           `chain=${chainable ? "ON" : "OFF"} scenes=${sceneCount} ` +

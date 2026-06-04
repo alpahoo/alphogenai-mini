@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { EVOLINK_ENGINES } from "@/lib/evolink-client";
 import { BAILIAN_ENGINES } from "@/lib/bailian-client";
+import { BYTEPLUS_ENGINES } from "@/lib/byteplus-client";
 import { HEYGEN_ENGINE, HEYGEN_SHOTS_ENGINE } from "@/lib/heygen-client";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -115,6 +116,25 @@ export async function GET() {
         maxDuration: cfg.maxDuration,
         minDuration: cfg.minDuration ?? null,
         quality: cfg.quality ?? "720p",
+      });
+    }
+  }
+
+  // BytePlus Seedance 2.0 (direct from ByteDance) — requires BYTEPLUS_ARK_API_KEY.
+  // Same model EvoLink resells, billed directly (no markup), with multimodal
+  // references + native audio (multi-character speaking scenes).
+  if (process.env.BYTEPLUS_ARK_API_KEY) {
+    for (const [key, cfg] of Object.entries(BYTEPLUS_ENGINES)) {
+      engines.push({
+        key,
+        label: cfg.label,
+        desc: "Direct ByteDance · multimodal refs · native audio",
+        gate: "premium",
+        supportsRefs: true,
+        supportsI2v: true,
+        maxDuration: cfg.maxDuration,
+        minDuration: null,
+        quality: cfg.resolution,
       });
     }
   }
