@@ -33,6 +33,7 @@ import {
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { SegmentedControl } from "@/components/create/segmented-control";
+import { estimateBytePlusCost } from "@/lib/byteplus-cost";
 import { TemplatePicker } from "@/components/create/template-picker";
 import { ReferenceUpload, buildReferencePayload } from "@/components/create/reference-upload";
 import { isAdminEmail } from "@/lib/flags";
@@ -1361,6 +1362,49 @@ export default function CreateModePage({
                       <p className="text-xs text-muted-foreground/70 mt-0.5">
                         ~60× cheaper than EvoLink Seedance for the same scene.
                         Billed on your HeyGen wallet, not EvoLink.
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+
+              // BytePlus / Atlas Seedance — surgical token-based cost estimate
+              const isByteplusSel =
+                selectedEngine === "seedance2_byteplus" ||
+                selectedEngine === "seedance2_fast_byteplus";
+              const isAtlasSel =
+                selectedEngine === "seedance2_atlas" ||
+                selectedEngine === "seedance2_fast_atlas";
+              if (isByteplusSel || isAtlasSel) {
+                const isFast = selectedEngine.includes("fast");
+                const resolution = isFast ? "720p" : "1080p";
+                const est = estimateBytePlusCost(resolution, dur);
+                const provider = isByteplusSel
+                  ? "BytePlus (token plan)"
+                  : "AtlasCloud (pay-as-you-go)";
+                return (
+                  <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 px-4 py-3 flex items-start gap-3">
+                    <Wallet className="h-5 w-5 shrink-0 mt-0.5 text-violet-400" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-violet-500">
+                        Seedance 2.0 — coût estimé · {provider}
+                      </p>
+                      <ul className="text-xs text-muted-foreground/80 mt-1.5 space-y-0.5">
+                        <li>
+                          ≈ <span className="font-semibold text-foreground">{est.tokensPerSecond.toLocaleString()}</span> tokens/s
+                          {" "}· {resolution} · {est.fps} fps
+                        </li>
+                        <li>
+                          ≈ <span className="font-semibold text-foreground">{est.tokens.toLocaleString()}</span> tokens pour {dur}s
+                        </li>
+                        <li>
+                          ≈ <span className="font-semibold text-emerald-500">${est.costUsd.toFixed(2)}</span>
+                          {" "}<span className="text-muted-foreground/50">(à ${est.usdPerMToken}/1M tokens)</span>
+                        </li>
+                      </ul>
+                      <p className="text-[11px] text-muted-foreground/50 mt-1.5">
+                        Formule officielle : (L × H × FPS × durée) / 1024. Le montant réel
+                        consommé est enregistré après génération.
                       </p>
                     </div>
                   </div>

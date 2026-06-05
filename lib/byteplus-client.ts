@@ -167,6 +167,8 @@ export interface BytePlusTaskResult {
   videoUrl?: string;
   lastFrameUrl?: string;
   error?: string;
+  /** Real tokens consumed, if the API reports usage (surgical actual cost). */
+  tokens?: number;
 }
 
 /** Poll a Seedance 2.0 task. */
@@ -186,9 +188,14 @@ export async function getBytePlusTask(taskId: string): Promise<BytePlusTaskResul
   const raw = String(d.status ?? "").toLowerCase();
   const videoUrl = d.content?.video_url ?? d.video_url ?? undefined;
   const lastFrameUrl = d.content?.last_frame_url ?? d.last_frame_url ?? undefined;
+  // Real token usage, if reported (field name varies across API versions).
+  const u = d.usage ?? data.usage ?? {};
+  const tokens =
+    Number(u.total_tokens ?? u.tokens ?? u.output_tokens ?? u.completion_tokens) || undefined;
 
   if (raw === "succeeded" && videoUrl) {
-    return { status: "completed", videoUrl, lastFrameUrl };
+    if (tokens) console.log(`[byteplus] task done: ${tokens} tokens used`);
+    return { status: "completed", videoUrl, lastFrameUrl, tokens };
   }
   if (["failed", "expired", "cancelled", "canceled"].includes(raw)) {
     return {
