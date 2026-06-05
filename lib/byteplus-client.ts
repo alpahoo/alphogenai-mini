@@ -30,6 +30,15 @@ export interface BytePlusEngineConfig {
  * ModelArk model sent to the API.
  */
 export const BYTEPLUS_ENGINES: Record<string, BytePlusEngineConfig> = {
+  // Seedance 1.5 Pro — verified working on the account (model id confirmed live).
+  // Native synchronized audio (dialogue + SFX), up to 1080p, 4–12s.
+  seedance15pro_byteplus: {
+    modelId: process.env.BYTEPLUS_SEEDANCE_15PRO_MODEL || "seedance-1-5-pro-251215",
+    label: "Seedance 1.5 Pro (Direct)",
+    maxDuration: 12,
+    resolution: "1080p",
+  },
+  // Seedance 2.0 — region-gated on some accounts (needs Safe Experience Mode off).
   seedance2_byteplus: {
     modelId: process.env.BYTEPLUS_SEEDANCE_MODEL || "dreamina-seedance-2-0-260128",
     label: "Seedance 2.0 (Direct)",

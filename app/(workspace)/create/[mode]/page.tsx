@@ -1370,6 +1370,7 @@ export default function CreateModePage({
 
               // BytePlus / Atlas Seedance — surgical token-based cost estimate
               const isByteplusSel =
+                selectedEngine === "seedance15pro_byteplus" ||
                 selectedEngine === "seedance2_byteplus" ||
                 selectedEngine === "seedance2_fast_byteplus";
               const isAtlasSel =
