@@ -115,28 +115,35 @@ export async function createBytePlusTask(params: CreateBytePlusParams): Promise<
 
   const duration = Math.max(4, Math.min(config.maxDuration, Math.round(params.duration || 5)));
 
-  // Build the multimodal content array: prompt text + first frame + references.
+  // Build the multimodal content array: prompt text + images.
   const content: Array<Record<string, unknown>> = [
     { type: "text", text: params.prompt.slice(0, 5000) },
   ];
 
-  if (params.imageUrl && params.imageUrl.startsWith("http")) {
-    content.push({
-      type: "image_url",
-      image_url: { url: params.imageUrl },
-      role: "first_frame",
-    });
-  }
-
+  // Resolve reference images first.
   const refImages = params.references?.images;
+  const refUrls: string[] = [];
   if (Array.isArray(refImages) && refImages.length > 0) {
-    const limited = refImages.slice(0, MAX_REFERENCE_IMAGES);
-    const resolved = await Promise.all(limited.map((r) => resolveRefUrl(r)));
-    for (const url of resolved) {
-      if (url) {
-        content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
-      }
+    const resolved = await Promise.all(
+      refImages.slice(0, MAX_REFERENCE_IMAGES).map((r) => resolveRefUrl(r))
+    );
+    for (const url of resolved) if (url) refUrls.push(url);
+  }
+  const firstFrame =
+    params.imageUrl && params.imageUrl.startsWith("http") ? params.imageUrl : undefined;
+
+  // BytePlus rejects mixing first/last frame content with reference content.
+  // So: if we have references → send EVERYTHING (incl. the start image) as
+  // reference_image. Otherwise → use the single image as the first frame (I2V).
+  if (refUrls.length > 0) {
+    if (firstFrame) {
+      content.push({ type: "image_url", image_url: { url: firstFrame }, role: "reference_image" });
     }
+    for (const url of refUrls) {
+      content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
+    }
+  } else if (firstFrame) {
+    content.push({ type: "image_url", image_url: { url: firstFrame }, role: "first_frame" });
   }
 
   const body = {
