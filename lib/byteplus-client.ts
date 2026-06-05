@@ -23,6 +23,9 @@ export interface BytePlusEngineConfig {
   label: string;
   maxDuration: number;
   resolution: "480p" | "720p" | "1080p";
+  /** reference-to-video (multi face/character references). 2.0 only — 1.5 Pro
+   *  rejects r2v ("task_type r2v does not support model seedance-1-5-pro"). */
+  supportsReferences: boolean;
 }
 
 /**
@@ -37,12 +40,14 @@ export const BYTEPLUS_ENGINES: Record<string, BytePlusEngineConfig> = {
     label: "Seedance 1.5 Pro · 1080p (Direct)",
     maxDuration: 12,
     resolution: "1080p",
+    supportsReferences: false, // 1.5 Pro: t2v / i2v only (no r2v)
   },
   seedance15pro_720p_byteplus: {
     modelId: process.env.BYTEPLUS_SEEDANCE_15PRO_MODEL || "seedance-1-5-pro-251215",
     label: "Seedance 1.5 Pro · 720p (Direct)",
     maxDuration: 12,
     resolution: "720p",
+    supportsReferences: false,
   },
   // Seedance 2.0 — region-gated on some accounts (needs Safe Experience Mode off).
   seedance2_byteplus: {
@@ -50,6 +55,7 @@ export const BYTEPLUS_ENGINES: Record<string, BytePlusEngineConfig> = {
     label: "Seedance 2.0 (Direct)",
     maxDuration: 15,
     resolution: "1080p",
+    supportsReferences: true, // 2.0 supports reference-to-video
   },
   seedance2_fast_byteplus: {
     modelId:
@@ -57,6 +63,7 @@ export const BYTEPLUS_ENGINES: Record<string, BytePlusEngineConfig> = {
     label: "Seedance 2.0 Fast (Direct)",
     maxDuration: 15,
     resolution: "720p",
+    supportsReferences: true,
   },
 };
 
@@ -132,18 +139,31 @@ export async function createBytePlusTask(params: CreateBytePlusParams): Promise<
   const firstFrame =
     params.imageUrl && params.imageUrl.startsWith("http") ? params.imageUrl : undefined;
 
-  // BytePlus rejects mixing first/last frame content with reference content.
-  // So: if we have references → send EVERYTHING (incl. the start image) as
-  // reference_image. Otherwise → use the single image as the first frame (I2V).
-  if (refUrls.length > 0) {
+  // Image handling depends on the model's capabilities:
+  //  - 2.0 (supportsReferences) → reference-to-video: ALL images as
+  //    reference_image (BytePlus forbids mixing first/last frame with reference).
+  //  - 1.5 Pro (no r2v) → image-to-video: a SINGLE first frame only. If the user
+  //    supplied references, use the first one as the start frame (best effort).
+  if (config.supportsReferences && refUrls.length > 0) {
     if (firstFrame) {
       content.push({ type: "image_url", image_url: { url: firstFrame }, role: "reference_image" });
     }
     for (const url of refUrls) {
       content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
     }
-  } else if (firstFrame) {
-    content.push({ type: "image_url", image_url: { url: firstFrame }, role: "first_frame" });
+  } else {
+    // 1.5 Pro (no r2v): image-to-video from an explicit start frame only. Face
+    // references can't be consumed by this model, so they're dropped (use 2.0
+    // for character references) rather than forced as a portrait start frame.
+    if (firstFrame) {
+      content.push({ type: "image_url", image_url: { url: firstFrame }, role: "first_frame" });
+    }
+    if (!config.supportsReferences && refUrls.length > 0) {
+      console.warn(
+        `[byteplus] ${params.engineKey} has no reference-to-video; ` +
+          `dropping ${refUrls.length} reference image(s). Use Seedance 2.0 for face references.`
+      );
+    }
   }
 
   const body = {
