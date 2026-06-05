@@ -81,6 +81,7 @@ export type EngineKey =
   | "heygen_avatar_iv"
   | "heygen_avatar_shots"
   | "seedance15pro_byteplus"
+  | "seedance15pro_720p_byteplus"
   | "seedance2_byteplus"
   | "seedance2_fast_byteplus"
   | "seedance2_atlas"
@@ -231,7 +232,8 @@ export const ENGINE_DISPLAY_NAMES: Record<string, string> = {
   realesrgan_4x: "Real-ESRGAN 4x",
   heygen_avatar_iv: "Avatar IV (HeyGen)",
   heygen_avatar_shots: "Avatar Shots (Seedance 2)",
-  seedance15pro_byteplus: "Seedance 1.5 Pro (Direct)",
+  seedance15pro_byteplus: "Seedance 1.5 Pro · 1080p (Direct)",
+  seedance15pro_720p_byteplus: "Seedance 1.5 Pro · 720p (Direct)",
   seedance2_byteplus: "Seedance 2.0 (Direct)",
   seedance2_fast_byteplus: "Seedance 2.0 Fast (Direct)",
   seedance2_atlas: "Seedance 2.0 (Atlas)",

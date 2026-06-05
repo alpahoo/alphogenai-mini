@@ -14,8 +14,22 @@
 /** Seedance default output frame rate. */
 export const SEEDANCE_FPS = 24;
 
-/** Default price: Light Plan rate ($30.10 / 7,000,000 tokens). */
-export const DEFAULT_USD_PER_MTOKEN = 4.3;
+/** Default price (fallback). */
+export const DEFAULT_USD_PER_MTOKEN = 2.4;
+
+/**
+ * Real BytePlus ModelArk per-1M-token pricing (USD), WITH audio (our default).
+ * Source: account Model Activation page. Without audio is roughly half.
+ */
+export const SEEDANCE_USD_PER_MTOKEN: Record<string, number> = {
+  seedance15pro_byteplus: 2.4, // $0.0024/K with audio
+  seedance15pro_720p_byteplus: 2.4,
+  seedance2_byteplus: 7.7, // $0.0077/K, input without video
+  seedance2_fast_byteplus: 5.6, // $0.0056/K
+  // Atlas Cloud is per-second (markup); token estimate is rough.
+  seedance2_atlas: 4.3,
+  seedance2_fast_atlas: 3.4,
+};
 
 /** Output pixel dimensions per resolution tier. */
 const RES_DIMS: Record<string, [number, number]> = {

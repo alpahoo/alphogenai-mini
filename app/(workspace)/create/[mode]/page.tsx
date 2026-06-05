@@ -33,7 +33,7 @@ import {
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { SegmentedControl } from "@/components/create/segmented-control";
-import { estimateBytePlusCost } from "@/lib/byteplus-cost";
+import { estimateBytePlusCost, SEEDANCE_USD_PER_MTOKEN } from "@/lib/byteplus-cost";
 import { TemplatePicker } from "@/components/create/template-picker";
 import { ReferenceUpload, buildReferencePayload } from "@/components/create/reference-upload";
 import { isAdminEmail } from "@/lib/flags";
@@ -1371,6 +1371,7 @@ export default function CreateModePage({
               // BytePlus / Atlas Seedance — surgical token-based cost estimate
               const isByteplusSel =
                 selectedEngine === "seedance15pro_byteplus" ||
+                selectedEngine === "seedance15pro_720p_byteplus" ||
                 selectedEngine === "seedance2_byteplus" ||
                 selectedEngine === "seedance2_fast_byteplus";
               const isAtlasSel =
@@ -1378,10 +1379,12 @@ export default function CreateModePage({
                 selectedEngine === "seedance2_fast_atlas";
               if (isByteplusSel || isAtlasSel) {
                 const isFast = selectedEngine.includes("fast");
-                const resolution = isFast ? "720p" : "1080p";
-                const est = estimateBytePlusCost(resolution, dur);
+                const resolution =
+                  selectedEngine.includes("720") || isFast ? "720p" : "1080p";
+                const usdPerMToken = SEEDANCE_USD_PER_MTOKEN[selectedEngine] ?? 2.4;
+                const est = estimateBytePlusCost(resolution, dur, { usdPerMToken });
                 const provider = isByteplusSel
-                  ? "BytePlus (token plan)"
+                  ? "BytePlus (token)"
                   : "AtlasCloud (pay-as-you-go)";
                 return (
                   <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 px-4 py-3 flex items-start gap-3">

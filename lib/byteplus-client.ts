@@ -34,9 +34,15 @@ export const BYTEPLUS_ENGINES: Record<string, BytePlusEngineConfig> = {
   // Native synchronized audio (dialogue + SFX), up to 1080p, 4–12s.
   seedance15pro_byteplus: {
     modelId: process.env.BYTEPLUS_SEEDANCE_15PRO_MODEL || "seedance-1-5-pro-251215",
-    label: "Seedance 1.5 Pro (Direct)",
+    label: "Seedance 1.5 Pro · 1080p (Direct)",
     maxDuration: 12,
     resolution: "1080p",
+  },
+  seedance15pro_720p_byteplus: {
+    modelId: process.env.BYTEPLUS_SEEDANCE_15PRO_MODEL || "seedance-1-5-pro-251215",
+    label: "Seedance 1.5 Pro · 720p (Direct)",
+    maxDuration: 12,
+    resolution: "720p",
   },
   // Seedance 2.0 — region-gated on some accounts (needs Safe Experience Mode off).
   seedance2_byteplus: {
