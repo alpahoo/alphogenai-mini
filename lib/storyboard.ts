@@ -223,7 +223,13 @@ Rules:
 - Always include: main subject + action, camera angle, lighting mood, atmosphere
 - Max 200 characters per scene prompt
 - Write in English
-- Output ONLY the JSON array — no explanation, no markdown`;
+- Output ONLY the JSON array — no explanation, no markdown
+
+MODERATION-SAFE STYLE (critical — avoids false content flags):
+- Describe ONLY what the camera sees: setting, subjects, action, shot type, lens, lighting. NO backstory, motivations, relationships, or narrative/emotional history.
+- Use neutral character roles ("a woman", "an older man", "a family"), NEVER age words like child/kid/boy/girl/young/teen.
+- Use film-production vocabulary (wide shot, close-up, dolly in, 35mm, golden hour, rim light) — it is evaluated with more latitude.
+- NEVER name real people, celebrities, brands, logos, or copyrighted characters/franchises.`;
 
 /**
  * Enrich a storyboard's scene prompts using EvoLink LLM.

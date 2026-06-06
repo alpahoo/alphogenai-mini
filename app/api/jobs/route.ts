@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateStoryboard, enrichStoryboardWithLLM } from "@/lib/storyboard";
+import { screenPrompt } from "@/lib/content-policy";
 import {
   isEvoLinkEngine,
   createEvoLinkTask,
@@ -186,6 +187,20 @@ export async function POST(req: Request) {
     if (prompt.trim().length > 2000) {
       return NextResponse.json(
         { error: "Prompt too long (max 2000 characters)" },
+        { status: 400 }
+      );
+    }
+
+    // --- AlphoGen content policy (our own layer, before any provider) ----
+    const policy = screenPrompt(`${prompt}\n${typeof script_text === "string" ? script_text : ""}`);
+    const block = policy.findings.find((f) => f.level === "block");
+    if (block) {
+      return NextResponse.json(
+        {
+          error: block.message,
+          code: block.code,
+          policy: policy.findings,
+        },
         { status: 400 }
       );
     }

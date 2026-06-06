@@ -54,11 +54,18 @@ interface ReferenceUploadProps {
 
 export function ReferenceUpload({ references, onChange, locked, engineSupportsRefs = true }: ReferenceUploadProps) {
   const [uploading, setUploading] = useState<string | null>(null);
+  // Consent gate (like HeyGen): the user must attest they own / have the right
+  // to use any face before uploading a Character Face reference.
+  const [faceConsent, setFaceConsent] = useState(false);
   const hasImageRefs = Object.entries(references).some(
     ([k, v]) => !!v && (k.startsWith("character_face") || k === "outfit_style"),
   );
 
   const handleUpload = async (key: string, meta: SlotMeta, file: File) => {
+    if (meta.role === "character_face" && !faceConsent) {
+      alert("Please confirm you have the right to use this face (consent checkbox) first.");
+      return;
+    }
     setUploading(key);
     try {
       const formData = new FormData();
@@ -128,6 +135,7 @@ export function ReferenceUpload({ references, onChange, locked, engineSupportsRe
     const isUploading = uploading === key;
     const Icon = meta.icon;
     const isComingSoon = COMING_SOON_ROLES.has(meta.role);
+    const blockedByConsent = meta.role === "character_face" && !faceConsent;
 
     return (
       <div
@@ -159,9 +167,9 @@ export function ReferenceUpload({ references, onChange, locked, engineSupportsRe
           </div>
         ) : (
           <label className={`flex h-12 items-center justify-center rounded-lg border border-dashed border-border/40 bg-muted/10 text-xs text-muted-foreground/60 transition-colors${
-            isComingSoon ? " cursor-default" : " cursor-pointer hover:border-primary/30 hover:bg-primary/5"
+            isComingSoon || blockedByConsent ? " cursor-not-allowed opacity-70" : " cursor-pointer hover:border-primary/30 hover:bg-primary/5"
           }`}>
-            {!isComingSoon && (
+            {!isComingSoon && !blockedByConsent && (
               <input
                 type="file"
                 accept={meta.accept}
@@ -178,6 +186,8 @@ export function ReferenceUpload({ references, onChange, locked, engineSupportsRe
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : isComingSoon ? (
               <span className="text-muted-foreground/40">Not available yet</span>
+            ) : blockedByConsent ? (
+              <span className="text-muted-foreground/50 px-2 text-center">Confirm consent below ↓</span>
             ) : (
               <span className="flex items-center gap-1.5">
                 <Upload className="h-3.5 w-3.5" />
@@ -204,6 +214,21 @@ export function ReferenceUpload({ references, onChange, locked, engineSupportsRe
         {/* Single-instance slots */}
         {OTHER_SLOTS.map((slot) => renderSlot(slot.role, slot, slot.label))}
       </div>
+
+      {/* ── Consent gate for face uploads (AlphoGen policy) ──────────── */}
+      <label className="mt-2.5 flex items-start gap-2.5 rounded-xl border border-border/40 bg-muted/10 px-3.5 py-2.5 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={faceConsent}
+          onChange={(e) => setFaceConsent(e.target.checked)}
+          className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+        />
+        <span className="text-xs text-muted-foreground/80 leading-snug">
+          I confirm the face(s) I upload are <strong>my own</strong> or that I have the{" "}
+          <strong>rights and consent</strong> to use this likeness. No real public
+          figures / celebrities without authorization.
+        </span>
+      </label>
 
       {filledFaceKeys.length >= 1 && (
         <p className="text-xs text-muted-foreground/50 mt-2">
