@@ -584,6 +584,92 @@ export default function CreateModePage({
   // Smooth progress: 0-90% over ~30s, never reaches 100% until redirect
   const loadingProgress = Math.min(90, (loadingElapsed / 30) * 90);
 
+  // Model selector — defined once, rendered prominently at the top (was buried
+  // in Advanced). Selecting the model first makes the contextual sections
+  // (references, faces, cost) appear logically below.
+  const modelBlock = (
+    <div>
+      <p className="text-sm font-semibold text-foreground mb-2.5 flex items-center gap-2">
+        <Cpu className="h-4 w-4 text-indigo-500" />
+        Model
+      </p>
+      <div className="flex gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => setSelectedEngine("auto")}
+          className={`relative rounded-md border px-3 py-1.5 text-[11px] font-medium transition-all ${
+            selectedEngine === "auto"
+              ? "border-primary/50 bg-primary/10 text-primary"
+              : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground cursor-pointer"
+          }`}
+          title="Best model for your plan"
+        >
+          <Cpu className="inline h-3 w-3 mr-1" />
+          Auto
+        </button>
+        {engineOptions.map((opt) => {
+          const locked =
+            (opt.gate === "premium" && plan !== "premium") ||
+            (opt.gate === "pro" && plan === "free");
+          const active = selectedEngine === opt.key;
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              disabled={locked}
+              onClick={() => setSelectedEngine(opt.key as EngineKey)}
+              className={`relative rounded-md border px-3 py-1.5 text-[11px] font-medium transition-all ${
+                active
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : locked
+                  ? "border-border/20 bg-muted/10 text-muted-foreground/40 cursor-not-allowed"
+                  : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground cursor-pointer"
+              }`}
+              title={
+                locked
+                  ? `${opt.gate === "premium" ? "Premium" : "Pro"} only`
+                  : opt.supportsRefs
+                  ? `${opt.desc} · Supports character references`
+                  : `${opt.desc} · Character references not supported`
+              }
+            >
+              <Cpu className="inline h-3 w-3 mr-1" />
+              {opt.label}
+              {opt.quality === "1080p" && !locked && (
+                <span className="ml-1 inline-flex rounded-sm bg-blue-500/15 px-1 py-px text-[8px] font-semibold text-blue-400 leading-tight align-middle">
+                  HD
+                </span>
+              )}
+              {!locked && opt.supportsRefs && (
+                <span className="ml-1 inline-flex rounded-sm bg-emerald-500/15 px-1 py-px text-[8px] font-semibold text-emerald-400 leading-tight align-middle">
+                  Refs
+                </span>
+              )}
+              {!locked && engineHealth[opt.key] !== undefined && engineHealth[opt.key] !== -1 && (
+                <span
+                  className={`ml-1 inline-block h-1.5 w-1.5 rounded-full align-middle ${
+                    engineHealth[opt.key] >= 0.9
+                      ? "bg-green-400"
+                      : engineHealth[opt.key] >= 0.6
+                        ? "bg-amber-400"
+                        : "bg-red-400"
+                  }`}
+                  title={`${Math.round(engineHealth[opt.key] * 100)}% success rate (24h)`}
+                />
+              )}
+              {locked && <Lock className="inline h-2.5 w-2.5 ml-1 opacity-50" />}
+            </button>
+          );
+        })}
+      </div>
+      {plan === "free" && (
+        <p className="text-xs text-muted-foreground/60 mt-2">
+          Advanced models require <Link href="/pricing" className="text-primary font-medium hover:underline">Pro or Premium</Link>
+        </p>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex h-full relative">
       {/* ── Full-page loading overlay ─────────────────────────────── */}
@@ -716,6 +802,9 @@ export default function CreateModePage({
                 ))}
               </div>
             </div>
+
+            {/* ── Model (promoted out of Advanced) ───────────────── */}
+            {planLoaded && modelBlock}
 
             {/* ── Reference Image (I2V) ──────────────────────────── */}
             <div>
@@ -857,9 +946,15 @@ export default function CreateModePage({
                   </a>
                 </div>
                 <p className="text-xs text-muted-foreground/60 mb-3">
-                  Verified real-person assets from your BytePlus library. Selected faces
-                  become <strong>image 1, image 2…</strong> — reference them in your prompt
-                  (e.g. “the man in image 1 …”).
+                  BytePlus blocks raw uploads of real faces, so faces here must be
+                  <strong> verified once</strong> (console QR) — then reused by ID. Selected
+                  faces become <strong>image 1, image 2…</strong> → reference them in your
+                  prompt (e.g. “the man in image 1 …”).
+                  <br />
+                  <span className="text-muted-foreground/45">
+                    Want to just upload a face image? Use the “Character Face” reference above
+                    with Seedance 2.0 (Atlas) or Wan / Kling (those allow direct upload).
+                  </span>
                 </p>
 
                 {byteplusAssetsLoading ? (
@@ -1319,89 +1414,7 @@ export default function CreateModePage({
                     )}
                   </div>
 
-                  <div>
-                    <p className="text-sm font-semibold text-foreground mb-2.5 flex items-center gap-2">
-                      <Cpu className="h-4 w-4 text-indigo-500" />
-                      Model
-                    </p>
-                    <div className="flex gap-2 flex-wrap">
-                      {/* Auto option (always first) */}
-                      <button
-                        type="button"
-                        onClick={() => setSelectedEngine("auto")}
-                        className={`relative rounded-md border px-3 py-1.5 text-[11px] font-medium transition-all ${
-                          selectedEngine === "auto"
-                            ? "border-primary/50 bg-primary/10 text-primary"
-                            : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground cursor-pointer"
-                        }`}
-                        title="Best model for your plan"
-                      >
-                        <Cpu className="inline h-3 w-3 mr-1" />
-                        Auto
-                      </button>
-                      {/* Dynamic engine list from /api/engines (with fallback) */}
-                      {engineOptions.map((opt) => {
-                        const locked =
-                          (opt.gate === "premium" && plan !== "premium") ||
-                          (opt.gate === "pro" && plan === "free");
-                        const active = selectedEngine === opt.key;
-                        return (
-                          <button
-                            key={opt.key}
-                            type="button"
-                            disabled={locked}
-                            onClick={() => setSelectedEngine(opt.key as EngineKey)}
-                            className={`relative rounded-md border px-3 py-1.5 text-[11px] font-medium transition-all ${
-                              active
-                                ? "border-primary/50 bg-primary/10 text-primary"
-                                : locked
-                                ? "border-border/20 bg-muted/10 text-muted-foreground/40 cursor-not-allowed"
-                                : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground cursor-pointer"
-                            }`}
-                            title={
-                              locked
-                                ? `${opt.gate === "premium" ? "Premium" : "Pro"} only`
-                                : opt.supportsRefs
-                                ? `${opt.desc} · Supports character references`
-                                : `${opt.desc} · Character references not supported`
-                            }
-                          >
-                            <Cpu className="inline h-3 w-3 mr-1" />
-                            {opt.label}
-                            {opt.quality === "1080p" && !locked && (
-                              <span className="ml-1 inline-flex rounded-sm bg-blue-500/15 px-1 py-px text-[8px] font-semibold text-blue-400 leading-tight align-middle">
-                                HD
-                              </span>
-                            )}
-                            {!locked && opt.supportsRefs && (
-                              <span className="ml-1 inline-flex rounded-sm bg-emerald-500/15 px-1 py-px text-[8px] font-semibold text-emerald-400 leading-tight align-middle">
-                                Refs
-                              </span>
-                            )}
-                            {/* Health badge: green = >90%, yellow = >60%, red = <=60% */}
-                            {!locked && engineHealth[opt.key] !== undefined && engineHealth[opt.key] !== -1 && (
-                              <span
-                                className={`ml-1 inline-block h-1.5 w-1.5 rounded-full align-middle ${
-                                  engineHealth[opt.key] >= 0.9
-                                    ? "bg-green-400"
-                                    : engineHealth[opt.key] >= 0.6
-                                      ? "bg-amber-400"
-                                      : "bg-red-400"
-                                }`}
-                                title={`${Math.round(engineHealth[opt.key] * 100)}% success rate (24h)`}
-                              />
-                            )}
-                            {locked && <Lock className="inline h-2.5 w-2.5 ml-1 opacity-50" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {plan === "free" && (
-                      <p className="text-xs text-muted-foreground/60 mt-2">
-                        Advanced models require <Link href="/pricing" className="text-primary font-medium hover:underline">Pro or Premium</Link>
-                      </p>
-                    )}
-                  </div>
+                  {/* Model selector moved to the top of the form (out of Advanced). */}
 
                   {/* ── Multi-scene continuity ──────────────────────── */}
                   {/* Only matters when the storyboard has ≥2 scenes. For Pro      */}
