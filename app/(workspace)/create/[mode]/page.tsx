@@ -179,6 +179,9 @@ export default function CreateModePage({
   // the backend receives it through the existing reference pipeline.
   const [composerUploads, setComposerUploads] = useState<MediaRefData[]>([]);
   const [composerUploading, setComposerUploading] = useState(false);
+  // url -> full ReferenceItem for composer uploads. Only the ones still present
+  // as chips in the prompt are sent at submit (avoids stale/duplicate refs).
+  const [composerUploadItems, setComposerUploadItems] = useState<Record<string, ReferenceItem>>({});
   const [duration, setDuration] = useState("5");
   const [selectedEngine, setSelectedEngine] = useState<EngineKey | "auto">("auto");
   // Scene count: "auto" = duration-based split, or a forced integer count.
@@ -363,7 +366,6 @@ export default function CreateModePage({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
 
-      const key = `composer_img_${Date.now()}`;
       const item: ReferenceItem = {
         role: "outfit_style", // generic non-face image reference
         url: data.url,
@@ -372,10 +374,16 @@ export default function CreateModePage({
         filename: file.name,
         weight: 0.7,
       };
-      setReferences((prev) => ({ ...prev, [key]: item }));
+      // Store by url; sent only if its chip is still in the prompt at submit.
+      setComposerUploadItems((prev) => ({ ...prev, [data.url]: item }));
 
-      const label = (file.name.replace(/\.[^.]+$/, "") || "image").slice(0, 18);
-      const media: MediaRefData = { refType: "image", label, url: data.url, thumb: data.url };
+      // Clean, stable label ("image N") independent of the raw file name.
+      const media: MediaRefData = {
+        refType: "image",
+        label: `image ${composerUploads.length + 1}`,
+        url: data.url,
+        thumb: data.url,
+      };
       setComposerUploads((prev) => [...prev, media]);
       composerRef.current?.insertRef(media);
     } catch (err) {
@@ -546,6 +554,16 @@ export default function CreateModePage({
     const mergedAssetIds = Array.from(
       new Set([...composerAssetIds, ...selectedAssetIds]),
     );
+    // Composer-uploaded images: send ONLY those still present as chips in the
+    // prompt (avoids stale/removed/duplicate uploads being silently sent).
+    const activeRefUrls = new Set(
+      composerRefs.map((r) => r.url).filter((u): u is string => !!u),
+    );
+    const activeComposerRefs: Record<string, ReferenceItem> = {};
+    Object.entries(composerUploadItems).forEach(([url, item]) => {
+      if (activeRefUrls.has(url)) activeComposerRefs[url] = item;
+    });
+    const allReferences = { ...references, ...activeComposerRefs };
     // HeyGen avatar models need an avatar + a voice (else the model invents speech).
     if (isHeyGenEngineSelected) {
       if (!selectedAvatarId) {
@@ -569,7 +587,7 @@ export default function CreateModePage({
           prompt: trimmed,
           target_duration_seconds: parseInt(duration, 10),
           ...(uploadedImageUrl && { image_url: uploadedImageUrl }),
-          ...(Object.keys(references).length > 0 && { references: buildReferencePayload(references) }),
+          ...(Object.keys(allReferences).length > 0 && { references: buildReferencePayload(allReferences) }),
           ...(selectedEngine !== "auto" && { preferred_engine: selectedEngine }),
           audio_mode: audioMode,
           ...(audioMode === "custom" && audioPrompt.trim() && { audio_prompt: audioPrompt.trim() }),
@@ -878,6 +896,16 @@ export default function CreateModePage({
                   or type <span className="font-medium text-foreground/70">@</span> to insert a saved face / image
                 </span>
               </div>
+              {isBytePlus2Selected && composerRefs.some((r) => r.refType === "image" && r.url) && (
+                <div className="mb-2 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600 dark:text-amber-300/90">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                  <span>
+                    BytePlus (Seedance 2.0) <strong>rejects raw photos of real people</strong>.
+                    For a person, insert your <strong>verified face</strong> (@) instead — or
+                    switch to Kling O3 / Atlas to use an uploaded photo.
+                  </span>
+                </div>
+              )}
               <div className="relative">
                 <PromptComposer
                   ref={composerRef}
