@@ -19,6 +19,7 @@ import {
   Mic,
   Volume2,
   User,
+  X,
   Cpu,
   Film,
   Crown,
@@ -122,6 +123,13 @@ interface HeyGenAvatar {
   previewUrl: string | null;
 }
 
+interface BytePlusAsset {
+  id: string;
+  asset_id: string;
+  group_id: string | null;
+  name: string;
+}
+
 /** Hardcoded fallback if /api/engines fails or hasn't loaded yet. */
 const FALLBACK_ENGINES: EngineOption[] = [
   { key: "wan_i2v",        label: "Wan 2.2 I2V",       desc: "GPU - up to 60s",                    gate: null,      supportsRefs: false, supportsI2v: true,  maxDuration: 60, minDuration: null, quality: "720p" },
@@ -199,6 +207,16 @@ export default function CreateModePage({
   // billed on HeyGen credits instead of EvoLink).
   const isHeyGenEngineSelected =
     selectedEngine === "heygen_avatar_iv" || selectedEngine === "heygen_avatar_shots";
+
+  // BytePlus Seedance 2.0 supports reference-to-video (verified face assets).
+  const isBytePlus2Selected =
+    selectedEngine === "seedance2_byteplus" || selectedEngine === "seedance2_fast_byteplus";
+  // BytePlus verified-face asset library
+  const [byteplusAssets, setByteplusAssets] = useState<BytePlusAsset[]>([]);
+  const [byteplusAssetsLoading, setByteplusAssetsLoading] = useState(false);
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
+  const [newAssetId, setNewAssetId] = useState("");
+  const [newAssetName, setNewAssetName] = useState("");
 
   // Dynamic engine list (fetched from /api/engines, fallback to hardcoded)
   const [engineOptions, setEngineOptions] = useState<EngineOption[]>(FALLBACK_ENGINES);
@@ -382,6 +400,58 @@ export default function CreateModePage({
     if (isHeyGenEngineSelected && !useMyVoice) setUseMyVoice(true);
   }, [isHeyGenEngineSelected, useMyVoice]);
 
+  // Lazy-load the user's verified BytePlus face assets when a 2.0 engine is on.
+  const loadByteplusAssets = () => {
+    setByteplusAssetsLoading(true);
+    fetch("/api/byteplus-assets")
+      .then((r) => r.json())
+      .then((data) => setByteplusAssets(Array.isArray(data.assets) ? data.assets : []))
+      .catch(() => {})
+      .finally(() => setByteplusAssetsLoading(false));
+  };
+  useEffect(() => {
+    if (isBytePlus2Selected && byteplusAssets.length === 0 && !byteplusAssetsLoading) {
+      loadByteplusAssets();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBytePlus2Selected]);
+
+  const addByteplusAsset = async () => {
+    const assetId = newAssetId.trim();
+    if (!/^asset-/.test(assetId)) {
+      setError("Asset ID invalide (doit commencer par 'asset-').");
+      return;
+    }
+    try {
+      const res = await fetch("/api/byteplus-assets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asset_id: assetId, name: newAssetName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Échec de l'ajout");
+      setByteplusAssets((prev) => [data.asset, ...prev.filter((a) => a.id !== data.asset.id)]);
+      setSelectedAssetIds((prev) => [...prev, data.asset.asset_id]);
+      setNewAssetId("");
+      setNewAssetName("");
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Échec de l'ajout");
+    }
+  };
+
+  const deleteByteplusAsset = async (id: string, assetId: string) => {
+    await fetch(`/api/byteplus-assets?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+    setByteplusAssets((prev) => prev.filter((a) => a.id !== id));
+    setSelectedAssetIds((prev) => prev.filter((x) => x !== assetId));
+  };
+
+  const toggleAssetSelect = (assetId: string) => {
+    setSelectedAssetIds((prev) =>
+      prev.includes(assetId) ? prev.filter((x) => x !== assetId) : [...prev, assetId]
+    );
+  };
+
   const planMaxDuration = PLAN_MAX_DURATION[plan] ?? 5;
   const durationOptions = DURATION_OPTIONS.map((opt) => {
     const dur = parseInt(opt.value, 10);
@@ -449,6 +519,10 @@ export default function CreateModePage({
           // HeyGen avatar models → route to the avatar pipeline (HeyGen credits)
           ...(isHeyGenEngineSelected && selectedAvatarId && {
             avatar_id: selectedAvatarId,
+          }),
+          // BytePlus verified face assets (Seedance 2.0 reference-to-video)
+          ...(isBytePlus2Selected && selectedAssetIds.length > 0 && {
+            byteplus_asset_ids: selectedAssetIds,
           }),
         }),
       });
@@ -761,6 +835,115 @@ export default function CreateModePage({
                       );
                     })}
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* ── BytePlus verified faces (Seedance 2.0 r2v) ───────── */}
+            {isBytePlus2Selected && (
+              <div className="rounded-xl border border-primary/30 bg-primary/[0.03] p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <User className="h-4 w-4 text-primary" />
+                    Your faces (BytePlus)
+                  </span>
+                  <a
+                    href="https://console.byteplus.com/ark/region:ark+ap-southeast-1/openManagement"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] text-primary/80 hover:underline"
+                  >
+                    Verify a new face ↗
+                  </a>
+                </div>
+                <p className="text-xs text-muted-foreground/60 mb-3">
+                  Verified real-person assets from your BytePlus library. Selected faces
+                  become <strong>image 1, image 2…</strong> — reference them in your prompt
+                  (e.g. “the man in image 1 …”).
+                </p>
+
+                {byteplusAssetsLoading ? (
+                  <p className="text-xs text-muted-foreground/60 flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading your faces…
+                  </p>
+                ) : (
+                  <>
+                    {byteplusAssets.length > 0 && (
+                      <div className="space-y-1.5 mb-3">
+                        {byteplusAssets.map((a) => {
+                          const idx = selectedAssetIds.indexOf(a.asset_id);
+                          const selected = idx >= 0;
+                          return (
+                            <div
+                              key={a.id}
+                              className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
+                                selected ? "border-primary/50 bg-primary/10" : "border-border/40 bg-muted/20"
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => toggleAssetSelect(a.asset_id)}
+                                className="flex-1 flex items-center gap-2 text-left"
+                              >
+                                <span
+                                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold ${
+                                    selected
+                                      ? "border-primary bg-primary text-primary-foreground"
+                                      : "border-border/50 text-transparent"
+                                  }`}
+                                >
+                                  {selected ? idx + 1 : ""}
+                                </span>
+                                <span className="text-xs font-medium text-foreground truncate">
+                                  {a.name || a.asset_id}
+                                </span>
+                                {selected && (
+                                  <span className="text-[10px] text-primary/80">image {idx + 1}</span>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteByteplusAsset(a.id, a.asset_id)}
+                                className="rounded-full p-1 text-muted-foreground hover:text-destructive"
+                                title="Remove"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Add an approved Asset ID */}
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        type="text"
+                        value={newAssetName}
+                        onChange={(e) => setNewAssetName(e.target.value)}
+                        placeholder="Name (e.g. Me)"
+                        className="sm:w-32 rounded-lg border border-border/40 bg-background px-3 py-2 text-xs text-foreground"
+                      />
+                      <input
+                        type="text"
+                        value={newAssetId}
+                        onChange={(e) => setNewAssetId(e.target.value)}
+                        placeholder="BytePlus Asset ID (asset-…)"
+                        className="flex-1 rounded-lg border border-border/40 bg-background px-3 py-2 text-xs text-foreground font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={addByteplusAsset}
+                        className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:brightness-110"
+                      >
+                        + Add face
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground/50 mt-2">
+                      Create &amp; verify a face once in the BytePlus console (Media → Real-human →
+                      New asset group → QR), then paste its <strong>Asset ID</strong> here. Reusable.
+                    </p>
+                  </>
                 )}
               </div>
             )}

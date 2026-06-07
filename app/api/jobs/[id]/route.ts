@@ -1129,6 +1129,9 @@ async function fireNextScene(
         imageUrl: firstFrameUrl,
         aspectRatio: (job.aspect_ratio as string) ?? "16:9",
         references: jobReferences as Parameters<typeof createBytePlusTask>[0]["references"],
+        assetIds: Array.isArray(job.byteplus_asset_ids)
+          ? (job.byteplus_asset_ids as string[])
+          : undefined,
       });
     } else if (isAtlasEngine(engineKey)) {
       taskId = await createAtlasTask({

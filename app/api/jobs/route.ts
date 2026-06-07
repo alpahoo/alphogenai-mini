@@ -97,6 +97,7 @@ export async function POST(req: Request) {
       multi_scene_chain,
       chain_strategy,
       num_scenes,
+      byteplus_asset_ids,
       scenes: clientScenes,
       audio_mode,
       audio_prompt,
@@ -123,6 +124,8 @@ export async function POST(req: Request) {
       chain_strategy?: string;
       /** Explicit scene count ("auto" or omitted = duration-based auto split) */
       num_scenes?: unknown;
+      /** Verified BytePlus real-human asset IDs (asset-...) for Seedance 2.0 r2v */
+      byteplus_asset_ids?: unknown;
       /** Optional pre-edited scenes from the editor (Phase C). Skips server-side storyboard generation. */
       scenes?: Array<{ prompt: string; engine?: string; duration_sec: number }>;
       /** Audio generation mode: "none" | "auto" | "custom" */
@@ -158,6 +161,13 @@ export async function POST(req: Request) {
     const chainOptIn = multi_scene_chain !== false;
     // Scene chaining strategy (only relevant when chaining is ON).
     const safeChainStrategy = chain_strategy === "anchor" ? "anchor" : "continuity";
+    // Verified BytePlus real-human asset IDs (asset-...) for Seedance 2.0 r2v.
+    const safeAssetIds = Array.isArray(byteplus_asset_ids)
+      ? byteplus_asset_ids
+          .filter((x): x is string => typeof x === "string" && /^asset-/.test(x.trim()))
+          .map((s) => s.trim())
+          .slice(0, 9)
+      : [];
 
     // Validate image_url if provided
     const safeImageUrl =
@@ -749,6 +759,7 @@ export async function POST(req: Request) {
         storyboard,
         multi_scene_chain: chainOptIn,
         chain_strategy: safeChainStrategy,
+        ...(safeAssetIds.length ? { byteplus_asset_ids: safeAssetIds } : {}),
         ...(voiceFinal ? { avatar_final: voiceFinal } : {}),
         ...(safeImageUrl ? { image_url: safeImageUrl } : {}),
         ...(safeReferences ? { references_payload: safeReferences } : {}),
@@ -901,6 +912,7 @@ export async function POST(req: Request) {
               imageUrl: scene0FirstFrame,
               aspectRatio: safeAspectRatio,
               references: safeReferences as Parameters<typeof createBytePlusTask>[0]["references"],
+              assetIds: safeAssetIds,
             })
           : isAtlasEngine(engineKey)
           ? await createAtlasTask({

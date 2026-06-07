@@ -109,6 +109,10 @@ export interface CreateBytePlusParams {
   aspectRatio?: string;
   /** Multi-reference payload (character faces / style images). */
   references?: ReferencePayload | null;
+  /** Verified BytePlus real-human asset IDs (asset-...). Referenced as
+   *  asset://<id> reference_image, in order → "image 1", "image 2" in the prompt.
+   *  2.0 only (reference-to-video). */
+  assetIds?: string[];
   /** Whether the model should generate native audio (multi-char dialogue). */
   generateAudio?: boolean;
 }
@@ -144,7 +148,20 @@ export async function createBytePlusTask(params: CreateBytePlusParams): Promise<
   //    reference_image (BytePlus forbids mixing first/last frame with reference).
   //  - 1.5 Pro (no r2v) → image-to-video: a SINGLE first frame only. If the user
   //    supplied references, use the first one as the start frame (best effort).
-  if (config.supportsReferences && refUrls.length > 0) {
+  // Verified real-human asset URIs (asset://<id>) — these come FIRST so they
+  // map predictably to "image 1", "image 2"… in the prompt.
+  const assetUris = (params.assetIds ?? [])
+    .map((s) => (s || "").trim())
+    .filter(Boolean)
+    .map((id) => (id.startsWith("asset://") ? id : `asset://${id}`));
+
+  if (config.supportsReferences) {
+    // 2.0 reference-to-video: verified face assets first, then any raw refs.
+    // (BytePlus forbids mixing first/last frame with reference, so the start
+    // image is sent as a reference too.)
+    for (const uri of assetUris) {
+      content.push({ type: "image_url", image_url: { url: uri }, role: "reference_image" });
+    }
     if (firstFrame) {
       content.push({ type: "image_url", image_url: { url: firstFrame }, role: "reference_image" });
     }
@@ -152,16 +169,15 @@ export async function createBytePlusTask(params: CreateBytePlusParams): Promise<
       content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
     }
   } else {
-    // 1.5 Pro (no r2v): image-to-video from an explicit start frame only. Face
-    // references can't be consumed by this model, so they're dropped (use 2.0
-    // for character references) rather than forced as a portrait start frame.
+    // 1.5 Pro (no r2v): image-to-video from an explicit start frame only.
+    // Verified assets + face refs can't be consumed by this model → dropped.
     if (firstFrame) {
       content.push({ type: "image_url", image_url: { url: firstFrame }, role: "first_frame" });
     }
-    if (!config.supportsReferences && refUrls.length > 0) {
+    if (assetUris.length > 0 || refUrls.length > 0) {
       console.warn(
-        `[byteplus] ${params.engineKey} has no reference-to-video; ` +
-          `dropping ${refUrls.length} reference image(s). Use Seedance 2.0 for face references.`
+        `[byteplus] ${params.engineKey} has no reference-to-video; dropping ` +
+          `${assetUris.length} asset + ${refUrls.length} reference image(s). Use Seedance 2.0.`
       );
     }
   }
