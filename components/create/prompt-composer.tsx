@@ -162,7 +162,13 @@ const SuggestionList = fwd<SuggestionListHandle, SuggestionProps<MediaRefData>>(
       },
     }));
 
-    if (items.length === 0) return null;
+    if (items.length === 0)
+      return (
+        <div className="z-50 w-64 rounded-lg border border-border/50 bg-background shadow-lg p-3 text-xs text-muted-foreground/70">
+          No saved face or image yet. Click <span className="font-medium text-foreground/80">Upload image</span> to add one,
+          or add a verified face below.
+        </div>
+      );
     return (
       <div className="z-50 max-h-64 w-56 overflow-auto rounded-lg border border-border/50 bg-background shadow-lg p-1">
         {items.map((item, i) => (
