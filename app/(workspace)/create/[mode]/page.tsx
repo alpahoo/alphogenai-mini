@@ -41,6 +41,7 @@ import {
   PromptComposer,
   type PromptComposerHandle,
   type ComposerReference,
+  type MediaRefData,
 } from "@/components/create/prompt-composer";
 import { isAdminEmail } from "@/lib/flags";
 import type { PromptTemplate } from "@/lib/prompt-templates";
@@ -173,6 +174,11 @@ export default function CreateModePage({
   // `composerRefs` holds the ordered inline media chips (faces/images/…).
   const composerRef = useRef<PromptComposerHandle>(null);
   const [composerRefs, setComposerRefs] = useState<ComposerReference[]>([]);
+  // Images uploaded straight from the composer toolbar (→ @image chips). Kept
+  // for the @-menu; the actual ReferenceItem is also added to `references` so
+  // the backend receives it through the existing reference pipeline.
+  const [composerUploads, setComposerUploads] = useState<MediaRefData[]>([]);
+  const [composerUploading, setComposerUploading] = useState(false);
   const [duration, setDuration] = useState("5");
   const [selectedEngine, setSelectedEngine] = useState<EngineKey | "auto">("auto");
   // Scene count: "auto" = duration-based split, or a forced integer count.
@@ -336,6 +342,47 @@ export default function CreateModePage({
   const clearImage = () => {
     setUploadedImageUrl(null);
     setImagePreview(null);
+  };
+
+  // Upload an image from the composer toolbar → insert an @image chip and
+  // register it as a reference (sent to the backend via references_payload).
+  const handleComposerUpload = async (file: File) => {
+    if (file.size > 10 * 1024 * 1024) {
+      setError("Image too large (max 10MB)");
+      return;
+    }
+    setComposerUploading(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/upload?bucket=references", { method: "POST", body: fd });
+      if (!res.headers.get("content-type")?.includes("application/json")) {
+        throw new Error("Upload server error — please retry.");
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+
+      const key = `composer_img_${Date.now()}`;
+      const item: ReferenceItem = {
+        role: "outfit_style", // generic non-face image reference
+        url: data.url,
+        ...(typeof data.storage_path === "string" && { storage_path: data.storage_path }),
+        mime_type: file.type,
+        filename: file.name,
+        weight: 0.7,
+      };
+      setReferences((prev) => ({ ...prev, [key]: item }));
+
+      const label = (file.name.replace(/\.[^.]+$/, "") || "image").slice(0, 18);
+      const media: MediaRefData = { refType: "image", label, url: data.url, thumb: data.url };
+      setComposerUploads((prev) => [...prev, media]);
+      composerRef.current?.insertRef(media);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setComposerUploading(false);
+    }
   };
 
   useEffect(() => {
@@ -800,6 +847,37 @@ export default function CreateModePage({
                   Templates
                 </button>
               </label>
+              {/* Composer toolbar: insert media references */}
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <label
+                  className={`flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted/30 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors ${
+                    composerUploading
+                      ? "cursor-wait opacity-70"
+                      : "cursor-pointer hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
+                  }`}
+                >
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={composerUploading || loading}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleComposerUpload(f);
+                      e.target.value = "";
+                    }}
+                  />
+                  {composerUploading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <ImagePlus className="h-3.5 w-3.5" />
+                  )}
+                  Upload image
+                </label>
+                <span className="text-xs text-muted-foreground/50">
+                  or type <span className="font-medium text-foreground/70">@</span> to insert a saved face / image
+                </span>
+              </div>
               <div className="relative">
                 <PromptComposer
                   ref={composerRef}
@@ -808,13 +886,16 @@ export default function CreateModePage({
                     setPrompt(out.prompt);
                     setComposerRefs(out.references);
                   }}
-                  suggestions={byteplusAssets.map((a) => ({
-                    refType: "face" as const,
-                    label: a.name || a.asset_id,
-                    assetId: a.asset_id,
-                    provider: "byteplus",
-                    thumb: null,
-                  }))}
+                  suggestions={[
+                    ...byteplusAssets.map((a) => ({
+                      refType: "face" as const,
+                      label: a.name || a.asset_id,
+                      assetId: a.asset_id,
+                      provider: "byteplus",
+                      thumb: null,
+                    })),
+                    ...composerUploads,
+                  ]}
                 />
                 <span className={`pointer-events-none absolute bottom-2 right-3 text-xs tabular-nums ${prompt.length > 1800 ? "text-amber-500 font-medium" : "text-muted-foreground/40"}`}>
                   {prompt.length}/2000
