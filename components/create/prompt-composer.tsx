@@ -10,16 +10,25 @@
  * The @-autocomplete popup is layered on next.
  */
 
-import { forwardRef, useImperativeHandle, useRef } from "react";
+import {
+  forwardRef,
+  useImperativeHandle,
+  useRef,
+  useEffect,
+  useState,
+  forwardRef as fwd,
+} from "react";
 import {
   useEditor,
   EditorContent,
   ReactNodeViewRenderer,
+  ReactRenderer,
   NodeViewWrapper,
   type NodeViewProps,
   type Editor,
 } from "@tiptap/react";
-import { Node, mergeAttributes } from "@tiptap/core";
+import { Node, mergeAttributes, Extension } from "@tiptap/core";
+import Suggestion, { type SuggestionProps, type SuggestionKeyDownProps } from "@tiptap/suggestion";
 import StarterKit from "@tiptap/starter-kit";
 import { X } from "lucide-react";
 
@@ -48,6 +57,7 @@ export interface PromptComposerHandle {
   insertRef: (data: MediaRefData) => void;
   focus: () => void;
   clear: () => void;
+  setText: (text: string) => void;
 }
 
 const TYPE_STYLES: Record<MediaRefType, string> = {
@@ -118,6 +128,129 @@ const MediaRef = Node.create({
   },
 });
 
+// ── @ autocomplete ─────────────────────────────────────────────────────────
+
+interface SuggestionListHandle {
+  onKeyDown: (props: SuggestionKeyDownProps) => boolean;
+}
+
+const SuggestionList = fwd<SuggestionListHandle, SuggestionProps<MediaRefData>>(
+  function SuggestionList({ items, command }, ref) {
+    const [selected, setSelected] = useState(0);
+    useEffect(() => setSelected(0), [items]);
+
+    const pick = (i: number) => {
+      const item = items[i];
+      if (item) command(item);
+    };
+
+    useImperativeHandle(ref, () => ({
+      onKeyDown: ({ event }) => {
+        if (event.key === "ArrowUp") {
+          setSelected((s) => (s + items.length - 1) % items.length);
+          return true;
+        }
+        if (event.key === "ArrowDown") {
+          setSelected((s) => (s + 1) % items.length);
+          return true;
+        }
+        if (event.key === "Enter") {
+          pick(selected);
+          return true;
+        }
+        return false;
+      },
+    }));
+
+    if (items.length === 0) return null;
+    return (
+      <div className="z-50 max-h-64 w-56 overflow-auto rounded-lg border border-border/50 bg-background shadow-lg p-1">
+        {items.map((item, i) => (
+          <button
+            key={`${item.refType}-${item.label}-${i}`}
+            type="button"
+            onClick={() => pick(i)}
+            className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs ${
+              i === selected ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted/40"
+            }`}
+          >
+            {item.thumb ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={item.thumb} alt="" className="h-5 w-5 rounded object-cover" />
+            ) : (
+              <span className="h-5 w-5 rounded bg-muted/50" />
+            )}
+            <span className="truncate">@{item.label}</span>
+            <span className="ml-auto text-[10px] text-muted-foreground/50">{item.refType}</span>
+          </button>
+        ))}
+      </div>
+    );
+  }
+);
+
+/** Custom @ trigger that inserts a mediaRef chip on select. */
+function createMentionExtension(getItems: (query: string) => MediaRefData[]) {
+  return Extension.create({
+    name: "mediaMention",
+    addProseMirrorPlugins() {
+      return [
+        Suggestion<MediaRefData>({
+          editor: this.editor,
+          char: "@",
+          allowSpaces: false,
+          items: ({ query }) => getItems(query),
+          command: ({ editor, range, props }) => {
+            editor
+              .chain()
+              .focus()
+              .deleteRange(range)
+              .insertContent([
+                { type: "mediaRef", attrs: props as Record<string, unknown> },
+                { type: "text", text: " " },
+              ])
+              .run();
+          },
+          render: () => {
+            let component: ReactRenderer<SuggestionListHandle> | null = null;
+            let popup: HTMLDivElement | null = null;
+            const place = (rect: DOMRect | null) => {
+              if (!popup || !rect) return;
+              popup.style.position = "fixed";
+              popup.style.left = `${rect.left}px`;
+              popup.style.top = `${rect.bottom + 6}px`;
+            };
+            return {
+              onStart: (props) => {
+                component = new ReactRenderer(SuggestionList, { props, editor: props.editor });
+                popup = document.createElement("div");
+                popup.style.zIndex = "60";
+                popup.appendChild(component.element);
+                document.body.appendChild(popup);
+                place(props.clientRect?.() ?? null);
+              },
+              onUpdate: (props) => {
+                component?.updateProps(props);
+                place(props.clientRect?.() ?? null);
+              },
+              onKeyDown: (props) => {
+                if (props.event.key === "Escape") return true;
+                return component?.ref?.onKeyDown(props) ?? false;
+              },
+              onExit: () => {
+                popup?.remove();
+                component?.destroy();
+                popup = null;
+                component = null;
+              },
+            };
+          },
+        }),
+      ];
+    },
+  });
+}
+
 /** Serialize the editor doc → { prompt, references }. */
 function serialize(editor: Editor): ComposerOutput {
   const references: ComposerReference[] = [];
@@ -148,12 +281,17 @@ function serialize(editor: Editor): ComposerOutput {
 interface PromptComposerProps {
   placeholder?: string;
   onChange?: (out: ComposerOutput) => void;
+  /** Items proposed when the user types "@". */
+  suggestions?: MediaRefData[];
 }
 
 export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerProps>(
-  function PromptComposer({ placeholder, onChange }, ref) {
+  function PromptComposer({ placeholder, onChange, suggestions }, ref) {
     const onChangeRef = useRef(onChange);
     onChangeRef.current = onChange;
+    // Keep latest suggestions readable by the (once-created) @ extension.
+    const suggestionsRef = useRef<MediaRefData[]>([]);
+    suggestionsRef.current = suggestions ?? [];
 
     const editor = useEditor({
       // Next.js SSR: avoid hydration mismatch.
@@ -168,6 +306,12 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
           horizontalRule: false,
         }),
         MediaRef,
+        createMentionExtension((query) => {
+          const q = query.toLowerCase();
+          return suggestionsRef.current
+            .filter((a) => a.label.toLowerCase().includes(q))
+            .slice(0, 8);
+        }),
       ],
       editorProps: {
         attributes: {
@@ -195,6 +339,7 @@ export const PromptComposer = forwardRef<PromptComposerHandle, PromptComposerPro
       },
       focus: () => editor?.chain().focus().run(),
       clear: () => editor?.commands.clearContent(true),
+      setText: (text: string) => editor?.commands.setContent(text),
     }));
 
     return (

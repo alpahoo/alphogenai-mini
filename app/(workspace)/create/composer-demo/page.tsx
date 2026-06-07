@@ -50,8 +50,9 @@ export default function ComposerDemoPage() {
 
       <PromptComposer
         ref={composer}
-        placeholder="A black man @image1 walks through a futuristic city…"
+        placeholder="Type @ to insert a face/image, or write freely…"
         onChange={setOut}
+        suggestions={SAMPLE}
       />
 
       <div className="flex flex-wrap gap-2">
