@@ -74,3 +74,17 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* TipTap prompt composer: show the placeholder while the editor is empty. */
+.ProseMirror {
+  position: relative;
+}
+.ProseMirror[data-placeholder]:has(> p:only-child:empty)::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: hsl(var(--muted-foreground) / 0.4);
+  pointer-events: none;
+  height: 0;
+}

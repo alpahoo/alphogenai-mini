@@ -427,6 +427,13 @@ export default function CreateModePage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isBytePlus2Selected]);
 
+  // Also load verified faces on mount so the composer's @-menu has them ready
+  // (regardless of the selected engine).
+  useEffect(() => {
+    loadByteplusAssets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const addByteplusAsset = async () => {
     const assetId = newAssetId.trim();
     if (!/^asset-/.test(assetId)) {
