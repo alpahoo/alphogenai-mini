@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -37,6 +37,11 @@ import { SegmentedControl } from "@/components/create/segmented-control";
 import { estimateBytePlusCost, SEEDANCE_USD_PER_MTOKEN } from "@/lib/byteplus-cost";
 import { TemplatePicker } from "@/components/create/template-picker";
 import { ReferenceUpload, buildReferencePayload } from "@/components/create/reference-upload";
+import {
+  PromptComposer,
+  type PromptComposerHandle,
+  type ComposerReference,
+} from "@/components/create/prompt-composer";
 import { isAdminEmail } from "@/lib/flags";
 import type { PromptTemplate } from "@/lib/prompt-templates";
 import type { JobPlan, EngineKey, ReferenceItem } from "@/lib/types";
@@ -164,6 +169,10 @@ export default function CreateModePage({
 
   // Form
   const [prompt, setPrompt] = useState("");
+  // Tokenized prompt composer (TipTap). `prompt` mirrors its plain text;
+  // `composerRefs` holds the ordered inline media chips (faces/images/…).
+  const composerRef = useRef<PromptComposerHandle>(null);
+  const [composerRefs, setComposerRefs] = useState<ComposerReference[]>([]);
   const [duration, setDuration] = useState("5");
   const [selectedEngine, setSelectedEngine] = useState<EngineKey | "auto">("auto");
   // Scene count: "auto" = duration-based split, or a forced integer count.
@@ -284,6 +293,8 @@ export default function CreateModePage({
 
   const handleTemplateSelect = (template: PromptTemplate) => {
     setPrompt(template.prompt);
+    setComposerRefs([]);
+    composerRef.current?.setText(template.prompt);
     if (template.duration && plan !== "free") {
       setDuration(String(template.duration));
     }
@@ -473,6 +484,14 @@ export default function CreateModePage({
       setError("Prompt must be at least 3 characters");
       return;
     }
+    // Verified face assets from the composer's @face chips, merged (deduped)
+    // with any legacy panel selection. Only chips carrying a verified assetId.
+    const composerAssetIds = composerRefs
+      .filter((r) => r.refType === "face" && r.assetId)
+      .map((r) => r.assetId as string);
+    const mergedAssetIds = Array.from(
+      new Set([...composerAssetIds, ...selectedAssetIds]),
+    );
     // HeyGen avatar models need an avatar + a voice (else the model invents speech).
     if (isHeyGenEngineSelected) {
       if (!selectedAvatarId) {
@@ -521,8 +540,8 @@ export default function CreateModePage({
             avatar_id: selectedAvatarId,
           }),
           // BytePlus verified face assets (Seedance 2.0 reference-to-video)
-          ...(isBytePlus2Selected && selectedAssetIds.length > 0 && {
-            byteplus_asset_ids: selectedAssetIds,
+          ...(isBytePlus2Selected && mergedAssetIds.length > 0 && {
+            byteplus_asset_ids: mergedAssetIds,
           }),
         }),
       });
@@ -775,16 +794,22 @@ export default function CreateModePage({
                 </button>
               </label>
               <div className="relative">
-                <textarea
-                  id="prompt"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
+                <PromptComposer
+                  ref={composerRef}
                   placeholder={config.placeholder}
-                  className="h-36 w-full resize-none rounded-xl border border-border bg-card p-4 pb-8 text-base text-foreground shadow-sm placeholder:text-muted-foreground/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                  disabled={loading}
-                  maxLength={2000}
+                  onChange={(out) => {
+                    setPrompt(out.prompt);
+                    setComposerRefs(out.references);
+                  }}
+                  suggestions={byteplusAssets.map((a) => ({
+                    refType: "face" as const,
+                    label: a.name || a.asset_id,
+                    assetId: a.asset_id,
+                    provider: "byteplus",
+                    thumb: null,
+                  }))}
                 />
-                <span className={`absolute bottom-2.5 right-3 text-xs tabular-nums ${prompt.length > 1800 ? "text-amber-500 font-medium" : "text-muted-foreground/40"}`}>
+                <span className={`pointer-events-none absolute bottom-2 right-3 text-xs tabular-nums ${prompt.length > 1800 ? "text-amber-500 font-medium" : "text-muted-foreground/40"}`}>
                   {prompt.length}/2000
                 </span>
               </div>
@@ -793,7 +818,11 @@ export default function CreateModePage({
                   <button
                     key={ex}
                     type="button"
-                    onClick={() => setPrompt(ex)}
+                    onClick={() => {
+                      setPrompt(ex);
+                      setComposerRefs([]);
+                      composerRef.current?.setText(ex);
+                    }}
                     disabled={loading}
                     className="rounded-lg border border-border/50 bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground disabled:opacity-40"
                   >
