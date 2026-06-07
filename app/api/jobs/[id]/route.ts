@@ -18,7 +18,26 @@ import {
 } from "@/lib/heygen-client";
 import { triggerExtractLastFrame, triggerConcatScenes, triggerApplyVoiceover } from "@/lib/modal-client";
 import { generateVoiceover, isTTSAvailable } from "@/lib/tts";
-import { uploadBufferToR2 } from "@/lib/r2";
+import { uploadBufferToR2, downloadAndUploadToR2 } from "@/lib/r2";
+
+/**
+ * Persist a direct-provider video output to R2. BytePlus / EvoLink / Atlas
+ * return TEMPORARY signed URLs (e.g. BytePlus TOS expires in 24h), so a
+ * single-scene job that wrote the provider URL directly would 404 after a day.
+ * Download + re-host on R2; fall back to the original URL if that fails (never
+ * break the job over persistence).
+ */
+async function persistFinalVideo(url: string, jobId: string): Promise<string> {
+  try {
+    return await downloadAndUploadToR2(url, `videos/${jobId}/final.mp4`);
+  } catch (e) {
+    console.warn(
+      `[jobs/status] R2 persist failed (job=${jobId}), keeping provider URL:`,
+      e instanceof Error ? e.message : e
+    );
+    return url;
+  }
+}
 
 // Give this route enough time to poll EvoLink, fire the next scene, and
 // trigger Modal helpers. No large file work happens here — only HTTP.
@@ -814,14 +833,16 @@ async function advanceEvoLinkState(
               .eq("id", jobId)
               .eq("status", "in_progress");
           } else {
-            // Single-scene EvoLink job: no concat needed, write final URL directly
+            // Single-scene direct-provider job: persist to R2 (provider URL is
+            // temporary) then write the final URL.
+            const finalUrl = await persistFinalVideo(result.videoUrl, jobId);
             await supabase
               .from("jobs")
               .update({
                 status: "done",
                 current_stage: "completed",
-                video_url: result.videoUrl,
-                output_url_final: result.videoUrl,
+                video_url: finalUrl,
+                output_url_final: finalUrl,
                 updated_at: new Date().toISOString(),
               })
               .eq("id", jobId)
@@ -1011,13 +1032,14 @@ async function advanceEvoLinkState(
           .eq("id", jobId)
           .eq("status", "in_progress");
       } else {
+        const finalUrl = await persistFinalVideo(only, jobId);
         await supabase
           .from("jobs")
           .update({
             status: "done",
             current_stage: "completed",
-            video_url: only,
-            output_url_final: only,
+            video_url: finalUrl,
+            output_url_final: finalUrl,
             updated_at: new Date().toISOString(),
           })
           .eq("id", jobId)
