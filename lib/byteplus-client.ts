@@ -156,17 +156,30 @@ export async function createBytePlusTask(params: CreateBytePlusParams): Promise<
     .map((id) => (id.startsWith("asset://") ? id : `asset://${id}`));
 
   if (config.supportsReferences) {
-    // 2.0 reference-to-video: verified face assets first, then any raw refs.
-    // (BytePlus forbids mixing first/last frame with reference, so the start
-    // image is sent as a reference too.)
-    for (const uri of assetUris) {
-      content.push({ type: "image_url", image_url: { url: uri }, role: "reference_image" });
-    }
-    if (firstFrame) {
-      content.push({ type: "image_url", image_url: { url: firstFrame }, role: "reference_image" });
-    }
-    for (const url of refUrls) {
-      content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
+    // 2.0 reference-to-video.
+    if (assetUris.length > 0) {
+      // Verified face assets present → send ONLY those. Raw image references of
+      // a real face would trip BytePlus's privacy filter
+      // (InputImageSensitiveContentDetected), so we drop them when a verified
+      // asset exists (it's the approved version of the same person).
+      for (const uri of assetUris) {
+        content.push({ type: "image_url", image_url: { url: uri }, role: "reference_image" });
+      }
+      if (firstFrame || refUrls.length > 0) {
+        console.warn(
+          `[byteplus] verified asset(s) present → dropping ${refUrls.length} raw ref(s)` +
+            `${firstFrame ? " + first frame" : ""} (would trip the privacy filter).`
+        );
+      }
+    } else {
+      // No verified assets → raw references (works for non-face refs; a raw real
+      // face will be blocked by BytePlus — use a verified asset for faces).
+      if (firstFrame) {
+        content.push({ type: "image_url", image_url: { url: firstFrame }, role: "reference_image" });
+      }
+      for (const url of refUrls) {
+        content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
+      }
     }
   } else {
     // 1.5 Pro (no r2v): image-to-video from an explicit start frame only.
