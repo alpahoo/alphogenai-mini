@@ -759,6 +759,10 @@ export async function POST(req: Request) {
         storyboard,
         multi_scene_chain: chainOptIn,
         chain_strategy: safeChainStrategy,
+        // Persist the chosen engine up front so a job that fails at creation
+        // still records the intent (retry needs it; engine_used is otherwise
+        // only set after the first scene fires).
+        ...(safePreferredEngine ? { engine_used: safePreferredEngine } : {}),
         ...(safeAssetIds.length ? { byteplus_asset_ids: safeAssetIds } : {}),
         ...(voiceFinal ? { avatar_final: voiceFinal } : {}),
         ...(safeImageUrl ? { image_url: safeImageUrl } : {}),

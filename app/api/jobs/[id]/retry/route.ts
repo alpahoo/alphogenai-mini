@@ -26,7 +26,7 @@ export async function POST(
   // Fetch the original job
   const { data: job, error } = await supabase
     .from("jobs")
-    .select("prompt, plan, target_duration_seconds, engine_used, image_url, references_payload, user_id, status")
+    .select("prompt, plan, target_duration_seconds, engine_used, image_url, references_payload, byteplus_asset_ids, user_id, status")
     .eq("id", id)
     .single();
 
@@ -56,6 +56,9 @@ export async function POST(
   if (job.engine_used) payload.preferred_engine = job.engine_used;
   if (job.image_url) payload.image_url = job.image_url;
   if (job.references_payload) payload.references = job.references_payload;
+  if (Array.isArray(job.byteplus_asset_ids) && job.byteplus_asset_ids.length > 0) {
+    payload.byteplus_asset_ids = job.byteplus_asset_ids;
+  }
 
   // Forward to POST /api/jobs — reuse all existing validation/quota/routing
   const origin = new URL(req.url).origin;
