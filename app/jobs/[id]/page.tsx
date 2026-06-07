@@ -120,6 +120,12 @@ function friendlyError(raw: string | null | undefined): string {
     msg.includes("copyrighted ip")
   )
     return "Your prompt may reference copyrighted content (brand names, logos, movie characters, celebrities). Rephrase with generic descriptions and try again.";
+  if (
+    msg.includes("privacyinformation") ||
+    msg.includes("real person") ||
+    msg.includes("inputimagesensitive")
+  )
+    return "BytePlus (Seedance 2.0) blocks uploaded photos that look like a real person. To put a person in the scene, use your VERIFIED face (type @ in the prompt and pick the face tagged “face”) — or switch the model to Kling O3 / Atlas, which accept uploaded face photos directly.";
   if (msg.includes("nsfw") || msg.includes("unsafe") || msg.includes("policy violation"))
     return "Your prompt was flagged by the safety filter. Try rephrasing with different wording.";
   if (msg.includes("insufficient_quota") || msg.includes("insufficient credits"))
