@@ -483,7 +483,6 @@ export default function CreateModePage({
   // (regardless of the selected engine).
   useEffect(() => {
     loadByteplusAssets();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const planMaxDuration = PLAN_MAX_DURATION[plan] ?? 5;
@@ -886,6 +885,7 @@ export default function CreateModePage({
               </p>
               {imagePreview ? (
                 <div className="relative inline-block">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={imagePreview}
                     alt="Reference"

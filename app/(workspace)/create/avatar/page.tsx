@@ -583,6 +583,7 @@ export default function CreateAvatarPage() {
                         }`}
                       >
                         {a.previewUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={a.previewUrl}
                             alt={a.name}
@@ -615,6 +616,7 @@ export default function CreateAvatarPage() {
               {avatarImagePreview && !existingAvatars.some(a => a.avatarId === avatarId) ? (
                 <div className="flex items-center gap-4">
                   <div className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={avatarImagePreview}
                       alt="Avatar"
@@ -1067,6 +1069,7 @@ export default function CreateAvatarPage() {
           <div className="flex-1 flex flex-col items-center justify-center">
             {avatarImagePreview ? (
               <div className="w-full max-w-[200px]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={avatarImagePreview}
                   alt="Avatar preview"

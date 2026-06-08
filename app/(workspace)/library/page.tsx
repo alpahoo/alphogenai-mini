@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Film, Image, Music, Play } from "lucide-react";
+import { Film, Image as ImageIcon, Music, Play } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 interface VideoAsset {
@@ -156,7 +156,7 @@ export default function LibraryPage() {
           Images
         </h2>
         <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/30 py-10">
-          <Image className="h-6 w-6 text-muted-foreground/15 mb-2" />
+          <ImageIcon className="h-6 w-6 text-muted-foreground/15 mb-2" />
           <p className="text-xs text-muted-foreground/40">No images yet</p>
         </div>
       </section>

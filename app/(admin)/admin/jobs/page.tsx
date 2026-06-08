@@ -55,7 +55,7 @@ export default function AdminJobsPage() {
         .then((r) => r.json())
         .then((d) => {
           setJobs(d.jobs ?? []);
-          setPagination(d.pagination ?? pagination);
+          setPagination((prev) => d.pagination ?? prev);
         })
         .catch(console.error)
         .finally(() => setLoading(false));
