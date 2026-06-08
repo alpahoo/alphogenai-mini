@@ -442,3 +442,10 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Couverture : 401 sans user, GET scope `user_id` + signed thumbnail, POST validation asset id + upsert trimme, PATCH no-op + scope id/user, DELETE id requis + scope id/user.
 - Aucun appel Supabase/provider reel ; pas de runtime modifie.
 - Validation : `vitest` 258/258, `tsc` clean, `lint` clean, `build` OK.
+
+
+## 2026-06-08 - Codex - T-602b upload references route tests
+- Fait : ajout de `app/api/upload/route.test.ts`, tests route-level du chemin `POST /api/upload?bucket=references`.
+- Mocks : `createClient`, `uuid.v4`, `file-type/fromBuffer`; aucun appel Supabase/R2/provider reel.
+- Couverture : auth 401, fichier requis, magic bytes absents, MIME mismatch, upload user-scoped `user_id/uuid.ext`, signed URL 6h, erreur storage.
+- Validation : `vitest` 264/264, `tsc` clean, `lint` clean, `build` OK.

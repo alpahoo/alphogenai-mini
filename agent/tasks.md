@@ -235,9 +235,12 @@ polir l'existant.
 - **Fait T-602a (Codex)** : tests route-level mockes
   `app/api/byteplus-assets/route.test.ts` couvrant auth 401, GET scoped user +
   signed thumbnails, POST validation/upsert, PATCH scoped update et DELETE scoped delete.
-- Etat validation : **258 tests** au total, tsc/lint/build clean au dernier passage.
-- **Reste** : tests d integration `POST /api/jobs` (routing/plan gate/content policy)
-  et `upload` (references bucket + legacy fallback). Mock Supabase ; pas de vrais providers. (R-005.)
+- **Fait T-602b (Codex)** : tests route-level mockes
+  `app/api/upload/route.test.ts` pour `?bucket=references` : auth 401, fichier requis,
+  magic bytes absents, MIME mismatch, upload user-scoped + signed URL, erreur storage.
+- Etat validation : **264 tests** au total, tsc/lint/build clean au dernier passage.
+- **Reste** : tests d integration `POST /api/jobs` (routing/plan gate/content policy).
+  Mock Supabase/providers ; pas de vrais providers. (R-005.)
 
 ### [T-603] Lint 100 % clean — `status: done` · `owner: claude`
 - `next lint` → no warnings/errors. (Fait.)

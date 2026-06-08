@@ -65,7 +65,10 @@ Format :
   de tests d integration mockes (`jobs` / `byteplus-assets` / `upload`).
 - Avance T-602a : `byteplus-assets` est couvert au niveau route handler avec Supabase
   mocke (auth, scope user, signed thumbnail, CRUD).
-- Reste : `POST /api/jobs` et `upload`.
+- Avance T-602b : `upload?bucket=references` est couvert au niveau route handler
+  avec Supabase + magic-byte detection mockes (validation, storage path user-scoped,
+  signed preview URL, erreurs storage).
+- Reste : `POST /api/jobs`, a faire avec mocks Supabase/providers plus prudents.
 
 ### [R-006] Lien « verified face ID » pointe vers la console provider — `severity: low` · `status: open`
 - Contexte : dans `faces-manager.tsx`, le lien « Need help finding your verified face
