@@ -790,38 +790,59 @@ export default function JobPage() {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-3">
-                    <a href={videoUrl} download className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:brightness-110">
-                      <Download className="h-4 w-4" /> Download
-                    </a>
-                    <button onClick={shareVideo} className="flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted">
-                      {copiedShare ? <><Check className="h-4 w-4 text-green-400" /> Link copied</> : <><Share2 className="h-4 w-4" /> Share</>}
-                    </button>
-                    <button onClick={() => copyLink(videoUrl)} className="flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted">
-                      {copied ? <><Check className="h-4 w-4 text-green-400" /> Copied</> : <><Copy className="h-4 w-4" /> Copy link</>}
-                    </button>
-                    <button onClick={() => copyPrompt(job.prompt)} className="flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted">
-                      {copiedPrompt ? <><Check className="h-4 w-4 text-green-400" /> Copied</> : <><ClipboardCopy className="h-4 w-4" /> Copy prompt</>}
-                    </button>
-                    <button
-                      onClick={handleDuplicate}
-                      disabled={duplicating}
-                      className="flex items-center gap-2 rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
-                    >
-                      {duplicating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CopyPlus className="h-4 w-4" />}
-                      {duplicating ? "Creating..." : "Duplicate"}
-                    </button>
-                    {job?.engine_used === "heygen_avatar_shots" && (
-                      <button
-                        onClick={handleSaveLook}
-                        disabled={savingLook || lookSaved}
-                        className="flex items-center gap-2 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-medium text-cyan-400 hover:bg-cyan-500/20 disabled:opacity-50"
-                        title="Save this cinematic shot to reuse with new scripts (lipsync only)"
-                      >
-                        {savingLook ? <Loader2 className="h-4 w-4 animate-spin" /> : lookSaved ? <Check className="h-4 w-4" /> : <Clapperboard className="h-4 w-4" />}
-                        {savingLook ? "Saving..." : lookSaved ? "Saved as Look" : "Save as Look"}
-                      </button>
-                    )}
+                  <div className="rounded-xl border border-border/40 bg-card/55 p-3 shadow-sm">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                        <a
+                          href={videoUrl}
+                          download
+                          className="col-span-2 flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-110 sm:col-span-1"
+                        >
+                          <Download className="h-4 w-4" />
+                          Download
+                        </a>
+                        <button
+                          onClick={shareVideo}
+                          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background/40 px-4 py-2.5 text-sm font-medium transition hover:bg-muted"
+                        >
+                          {copiedShare ? <><Check className="h-4 w-4 text-green-400" /> Link copied</> : <><Share2 className="h-4 w-4" /> Share</>}
+                        </button>
+                        <button
+                          onClick={() => copyLink(videoUrl)}
+                          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background/40 px-4 py-2.5 text-sm font-medium transition hover:bg-muted"
+                        >
+                          {copied ? <><Check className="h-4 w-4 text-green-400" /> Copied</> : <><Copy className="h-4 w-4" /> Copy link</>}
+                        </button>
+                        <button
+                          onClick={() => copyPrompt(job.prompt)}
+                          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background/40 px-4 py-2.5 text-sm font-medium transition hover:bg-muted"
+                        >
+                          {copiedPrompt ? <><Check className="h-4 w-4 text-green-400" /> Copied</> : <><ClipboardCopy className="h-4 w-4" /> Copy prompt</>}
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap lg:justify-end">
+                        <button
+                          onClick={handleDuplicate}
+                          disabled={duplicating}
+                          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background/40 px-4 py-2.5 text-sm font-medium transition hover:bg-muted disabled:opacity-50"
+                        >
+                          {duplicating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CopyPlus className="h-4 w-4" />}
+                          {duplicating ? "Creating..." : "Duplicate job"}
+                        </button>
+                        {job?.engine_used === "heygen_avatar_shots" && (
+                          <button
+                            onClick={handleSaveLook}
+                            disabled={savingLook || lookSaved}
+                            className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-medium text-cyan-400 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                            title="Save this cinematic shot to reuse with new scripts"
+                          >
+                            {savingLook ? <Loader2 className="h-4 w-4 animate-spin" /> : lookSaved ? <Check className="h-4 w-4" /> : <Clapperboard className="h-4 w-4" />}
+                            {savingLook ? "Saving..." : lookSaved ? "Saved as Look" : "Save as Look"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </>
               )}

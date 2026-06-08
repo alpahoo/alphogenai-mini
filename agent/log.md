@@ -367,3 +367,13 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Livre docs-only : `docs/product/post-generation-studio-spec.md` avec decoupage T-501b/c/d/e et prompt de reprise pour Claude Code.
 - Coordination : `agent/tasks.md` Axe 5 recadre (ne pas creer de doublon, reutiliser SocialExportPanel/ThumbnailPicker/routes existantes). `agent/review.md` ajoute R-012 duplicate fidelity et R-013 Use as reference decision.
 - Scope : docs-only, aucun runtime/route/API/DB.
+
+## 2026-06-08 — Codex — T-501b Job action bar premium
+- Fait : action bar des jobs termines regroupee dans un rail responsive plus premium.
+  Zone gauche : Download, Share, Copy link, Copy prompt. Zone droite : Duplicate job,
+  Save as Look quand supporte.
+- Decision UX : conserver `Duplicate job` au lieu de `Create variation`, car la route
+  actuelle relance directement un job et ne garantit pas encore toute la fidelite des
+  assets/options (R-012).
+- Scope : UI-only (`app/jobs/[id]/page.tsx`) ; handlers/routes existants inchanges ; aucune route/API/DB/state machine.
+- Validation : `vitest` 240/240 · `tsc` clean · `lint` clean · `build` OK.

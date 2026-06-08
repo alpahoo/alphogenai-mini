@@ -143,12 +143,13 @@ polir l'existant.
 - Decision : T-501 est surtout une consolidation UX. `SocialExportPanel` gere deja
   exports TikTok/Reels/Instagram/YouTube, thumbnail, AI copy, publish et schedule.
 
-### [T-501b] Job action bar premium — `status: todo` · `owner: codex|claude`
-- Objectif : regrouper/polir les actions visibles sur un job termine : Download,
-  Share, Copy link, Copy prompt, Duplicate/Create variation, Save as Look si supporte.
-- Scope : UI-only, reutiliser les handlers/routes existants dans `app/jobs/[id]/page.tsx`.
-- Attention : ne pas renommer `Duplicate` en `Create variation` si le flux genere
-  directement un nouveau job sans passage par un editeur de variation.
+### [T-501b] Job action bar premium — `status: done` · `owner: codex`
+- Livre UI-only : action bar du job termine regroupee dans un rail premium et stable.
+  Actions conservees : Download, Share, Copy link, Copy prompt, Duplicate job,
+  Save as Look si supporte.
+- Fichier : `app/jobs/[id]/page.tsx`. Handlers/routes inchanges ; aucune route/API/DB.
+- Decision : libelle prudent `Duplicate job` (pas `Create variation`) tant que la route
+  duplique et relance directement sans editeur de variation complet (voir R-012).
 
 ### [T-501c] Social Pack consolidation — `status: todo` · `owner: codex|claude`
 - Objectif : rendre `components/job/social-export-panel.tsx` plus premium et lisible
@@ -226,4 +227,5 @@ polir l'existant.
 - [DONE] Model selector → dropdown compact ; Duration/Format/Scenes compacts.
 - [DONE] Fix build local `/gallery` sans secrets ; `HANDOVER.md` ; bandeau README.
 - [DONE] Lint 100 % clean (CTO list).
+
 
