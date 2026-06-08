@@ -1,4 +1,4 @@
-﻿# agent/tasks.md — Backlog partagé
+# agent/tasks.md — Backlog partagé
 
 Format d'une tâche :
 - **[ID] Titre** — `status: todo|in_progress|blocked|done` · `owner: claude|codex|chatgpt|—`
@@ -176,9 +176,13 @@ polir l'existant.
 - Helper pur : `lib/job-reference-image.ts` + tests `lib/__tests__/job-reference-image.test.ts`.
 - Validation : 244 tests, tsc clean. Route backend, aucune migration.
 
-### [T-501d2] Create prefill from reference job - `status: todo` - `owner: codex|claude`
-- Objectif : `/create/story?reference_job_id=<id>` appelle la route T-501d1,
-  ajoute la reference au state et optionnellement un chip `@image`.
+### [T-501d2] Create prefill from reference job - `status: done` - `owner: codex`
+- Livre UI/backend glue : `/create/story?reference_job_id=<id>` appelle
+  `POST /api/jobs/[id]/reference-image`, ajoute le `ReferenceItem` au state
+  `references` + `composerUploadItems`, insere un chip `@reference`, ouvre la zone
+  references et affiche un statut loading/ready/error dans le composer.
+- Fichier : `app/(workspace)/create/[mode]/page.tsx`. Validation : 244 tests,
+  tsc, lint, build OK.
 
 ### [T-501d3] Job page Use as reference action - `status: todo` - `owner: codex|claude`
 - Objectif : ajouter le bouton `Use as reference` sur un job termine, sans generation

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, use, useRef, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -11,6 +11,7 @@ import {
   Lock,
   Clock,
   ChevronDown,
+  Check,
   Monitor,
   Type,
   Music,
@@ -169,6 +170,7 @@ export default function CreateModePage({
 }) {
   const { mode } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const config = MODE_CONFIG[mode] ?? MODE_CONFIG.story;
 
   // Plan
@@ -180,12 +182,14 @@ export default function CreateModePage({
   // Tokenized prompt composer (TipTap). `prompt` mirrors its plain text;
   // `composerRefs` holds the ordered inline media chips (faces/images/…).
   const composerRef = useRef<PromptComposerHandle>(null);
+  const referenceJobPrefillRef = useRef<string | null>(null);
   const [composerRefs, setComposerRefs] = useState<ComposerReference[]>([]);
   // Images uploaded straight from the composer toolbar (→ @image chips). Kept
   // for the @-menu; the actual ReferenceItem is also added to `references` so
   // the backend receives it through the existing reference pipeline.
   const [composerUploads, setComposerUploads] = useState<MediaRefData[]>([]);
   const [composerUploading, setComposerUploading] = useState(false);
+  const [referencePrefillStatus, setReferencePrefillStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   // url -> full ReferenceItem for composer uploads. Only the ones still present
   // as chips in the prompt are sent at submit (avoids stale/duplicate refs).
   const [composerUploadItems, setComposerUploadItems] = useState<Record<string, ReferenceItem>>({});
@@ -355,6 +359,47 @@ export default function CreateModePage({
     setUploadedImageUrl(null);
     setImagePreview(null);
   };
+
+  useEffect(() => {
+    const referenceJobId = searchParams.get("reference_job_id");
+    if (!referenceJobId || referenceJobPrefillRef.current === referenceJobId) return;
+
+    referenceJobPrefillRef.current = referenceJobId;
+    setReferencePrefillStatus("loading");
+    setShowReferences(true);
+
+    async function prepareReference() {
+      try {
+        const res = await fetch(`/api/jobs/${referenceJobId}/reference-image`, { method: "POST" });
+        const data = await res.json();
+        if (!res.ok || !data.reference?.url) {
+          throw new Error(data.error || "Could not prepare reference");
+        }
+
+        const item = data.reference as ReferenceItem;
+        const media: MediaRefData = {
+          refType: "image",
+          label: "reference",
+          url: item.url,
+          thumb: item.url,
+        };
+
+        setComposerUploads((prev) => {
+          if (prev.some((m) => m.url === item.url)) return prev;
+          return [...prev, media];
+        });
+        setComposerUploadItems((prev) => ({ ...prev, [item.url]: item }));
+        setReferences((prev) => ({ ...prev, job_reference: item }));
+        composerRef.current?.insertRef(media);
+        setReferencePrefillStatus("ready");
+      } catch (err) {
+        setReferencePrefillStatus("error");
+        setError(err instanceof Error ? err.message : "Could not prepare a reference from this video yet");
+      }
+    }
+
+    void prepareReference();
+  }, [searchParams]);
 
   // Upload an image from the composer toolbar → insert an @image chip and
   // register it as a reference (sent to the backend via references_payload).
@@ -1017,6 +1062,26 @@ export default function CreateModePage({
                   or type <span className="font-medium text-foreground/70">@</span> to insert a saved face / image
                 </span>
               </div>
+              {referencePrefillStatus !== "idle" && (
+                <div className={`mb-2 flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${
+                  referencePrefillStatus === "error"
+                    ? "border-destructive/30 bg-destructive/5 text-destructive"
+                    : "border-violet-500/30 bg-violet-500/5 text-violet-500"
+                }`}>
+                  {referencePrefillStatus === "loading" ? (
+                    <Loader2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 animate-spin" />
+                  ) : referencePrefillStatus === "ready" ? (
+                    <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                  ) : (
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                  )}
+                  <span>
+                    {referencePrefillStatus === "loading" && "Preparing reference from your previous video..."}
+                    {referencePrefillStatus === "ready" && "Reference added. Edit the prompt or generate when ready."}
+                    {referencePrefillStatus === "error" && "Could not prepare the reference automatically. You can still upload one manually."}
+                  </span>
+                </div>
+              )}
               {isBytePlus2Selected && composerRefs.some((r) => r.refType === "image" && r.url) && (
                 <div className="mb-2 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600 dark:text-amber-300/90">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />

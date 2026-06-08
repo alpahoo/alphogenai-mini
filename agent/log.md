@@ -398,3 +398,10 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Helper pur : `lib/job-reference-image.ts` (`pickJobReferenceImageSource`, path builder, item builder) + tests unitaires.
 - Scope : backend additive route + helper ; aucune migration, aucune UI encore. Prochaine suite : T-501d2 create prefill.
 - Validation : `vitest` 244/244 - `tsc` clean - `lint` clean - `build` OK.
+
+
+## 2026-06-08 - Codex - T-501d2 Create prefill from reference job
+- Fait : `app/(workspace)/create/[mode]/page.tsx` lit `reference_job_id` via `useSearchParams`, appelle `POST /api/jobs/[id]/reference-image`, puis ajoute la reference au state existant.
+- Le prefill ajoute `job_reference` dans `references`, mappe la reference dans `composerUploadItems`, insere un chip `@reference`, ouvre la zone references, et affiche un statut loading/ready/error.
+- Scope : glue UI vers route T-501d1 ; aucune nouvelle route/DB/migration. Prochaine suite : T-501d3 bouton `Use as reference` sur la page job.
+- Validation : `vitest` 244/244 - `tsc` clean - `lint` clean - `build` OK.
