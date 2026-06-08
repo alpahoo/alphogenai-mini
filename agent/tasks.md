@@ -228,12 +228,16 @@ polir l'existant.
   d'intégration), compteur tests → **226**, snapshot lint ajouté.
 - Docs-only ; tsc · build · lint · 226 tests verts. R-001 résolu.
 
-### [T-602] Tests d'intégration API + guards — `status: in_progress` · `owner: codex|claude`
+### [T-602] Tests d'int?gration API + guards - `status: in_progress` - `owner: codex|claude`
 - **Fait** : guard anti-leak provider `lib/__tests__/provider-leak-guard.test.ts`
   (ENGINE_DISPLAY_NAMES + getEngineDisplayName + cleanModelName ; 6 cas). Verrouille
-  T-102/T-605. 226 tests au total.
-- **Reste** : tests d'intégration `POST /api/jobs` (routing/plan gate/content policy),
-  `byteplus-assets` (CRUD/RLS), `upload`. Mock Supabase ; pas de vrais providers. (R-005.)
+  T-102/T-605.
+- **Fait T-602a (Codex)** : tests route-level mockes
+  `app/api/byteplus-assets/route.test.ts` couvrant auth 401, GET scoped user +
+  signed thumbnails, POST validation/upsert, PATCH scoped update et DELETE scoped delete.
+- Etat validation : **258 tests** au total, tsc/lint/build clean au dernier passage.
+- **Reste** : tests d integration `POST /api/jobs` (routing/plan gate/content policy)
+  et `upload` (references bucket + legacy fallback). Mock Supabase ; pas de vrais providers. (R-005.)
 
 ### [T-603] Lint 100 % clean — `status: done` · `owner: claude`
 - `next lint` → no warnings/errors. (Fait.)

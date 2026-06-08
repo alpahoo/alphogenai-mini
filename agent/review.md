@@ -60,10 +60,12 @@ Format :
 - Reco : retirer le flag dans un commit dédié après confirmation `tsc` clean en CI.
   Ne pas toucher sans validation.
 
-### [R-005] Couverture de tests sur les nouveaux flux — `severity: low` · `status: open`
-- Contexte : 220 tests unitaires passent, mais pas de tests d'intégration sur
-  `jobs` / `byteplus-assets` / `upload` (flux récents les plus actifs).
-- Reco : T-004.
+### [R-005] Couverture de tests sur les nouveaux flux - `severity: low` - `status: open`
+- Contexte : la suite couvre beaucoup de helpers, mais les routes actives ont besoin
+  de tests d integration mockes (`jobs` / `byteplus-assets` / `upload`).
+- Avance T-602a : `byteplus-assets` est couvert au niveau route handler avec Supabase
+  mocke (auth, scope user, signed thumbnail, CRUD).
+- Reste : `POST /api/jobs` et `upload`.
 
 ### [R-006] Lien « verified face ID » pointe vers la console provider — `severity: low` · `status: open`
 - Contexte : dans `faces-manager.tsx`, le lien « Need help finding your verified face

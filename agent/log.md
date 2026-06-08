@@ -435,3 +435,10 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Fait : nouveau helper pur `lib/director-engine.ts` + test ; `/create/[mode]` resout `selectedEngine === "auto"` vers cette cle pour `scenes[].engine` quand le Director genere.
 - Le quality/cost read-out utilise la meme cle resolue ; labels publics restent provider-neutral.
 - Priorites suivantes consignees : T-602, R-003, T-604, T-401, avatar/look duplicate, T-301c, R-006.
+
+
+## 2026-06-08 - Codex - T-602a byteplus-assets route tests
+- Fait : ajout de `app/api/byteplus-assets/route.test.ts`, tests route-level avec `createClient` Supabase mocke.
+- Couverture : 401 sans user, GET scope `user_id` + signed thumbnail, POST validation asset id + upsert trimme, PATCH no-op + scope id/user, DELETE id requis + scope id/user.
+- Aucun appel Supabase/provider reel ; pas de runtime modifie.
+- Validation : `vitest` 258/258, `tsc` clean, `lint` clean, `build` OK.
