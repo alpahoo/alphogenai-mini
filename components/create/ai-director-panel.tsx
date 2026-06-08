@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * AI Director — pre-generation review panel (T-201b, MOCK/STATIC).
+ * AI Director — editable pre-generation plan panel.
  *
- * Display + local editing only. NO backend, NO new route, NO change to the
- * generation pipeline. Spec: docs/product/ai-director-spec.md.
+ * Renders an editable scene plan + quality read-out. Submission is wired by the
+ * page (`Generate now` → submitJob({ directorScenes }) → existing POST /api/jobs
+ * `scenes[]` path). Spec: docs/product/ai-director-spec.md.
  * Provider/aggregator names must never appear here — only models/capabilities.
  */
 

@@ -203,7 +203,7 @@ export default function CreateModePage({
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showReferences, setShowReferences] = useState(false);
-  // AI Director (T-201b — mock/static preview before generation)
+  // AI Director — editable pre-generation plan (submit wired in submitJob)
   const [directorOpen, setDirectorOpen] = useState(false);
   const [directorScenes, setDirectorScenes] = useState<DirectorSceneVM[]>([]);
   const [directorQuality, setDirectorQuality] = useState<QualityReadout | null>(null);
@@ -679,8 +679,9 @@ export default function CreateModePage({
       engineOptions.some((e) => e.key === selectedEngine && e.supportsRefs),
   };
 
-  // ── AI Director (mock/static) — derive a readable plan + quality read-out
-  //    from the current inputs. Pure/local; no backend, no provider names.
+  // ── AI Director — derive a readable, editable plan + quality read-out from
+  //    the current inputs. Pure/local; the plan is sent on "Generate now" via
+  //    submitJob({ directorScenes }). No provider names surface here.
   const buildDirectorPlan = (): { scenes: DirectorSceneVM[]; quality: QualityReadout } => {
     const n = Math.max(1, sceneCount || 1);
     const total = Math.max(1, parseInt(duration, 10) || 5);
@@ -767,7 +768,7 @@ export default function CreateModePage({
         if (action === "realistic") p = add("photorealistic, natural skin texture");
         if (action === "improve") p = add("detailed, coherent, high quality");
         if (action === "tiktok") d = Math.min(d, 5);
-        // keep-character: mock no-op (driven by the @face chips already in the plan)
+        // keep-character: local no-op (driven by the @face chips already in the plan)
         return { ...s, prompt: p, durationSec: d };
       }),
     );
@@ -1820,7 +1821,7 @@ export default function CreateModePage({
               );
             })()}
 
-            {/* ── AI Director (mock/static preview) ──────────────── */}
+            {/* ── AI Director (edited plan) ──────────────────────── */}
             {directorOpen && directorQuality && (
               <AIDirectorPanel
                 scenes={directorScenes}

@@ -12,6 +12,14 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — T-201c : cleanup commentaires obsolètes (review Codex)
+- Fait (comments-only, zéro runtime) : en-tête `ai-director-panel.tsx` → « editable
+  pre-generation plan panel » + mention submit câblé par la page ; `page.tsx` :
+  « mock/static preview » → « edited plan » (état + bloc JSX + commentaire builder) ;
+  « mock no-op » → « local no-op ». R-009 laissé ouvert (pas de mapping auto Director).
+- Fichiers : `components/create/ai-director-panel.tsx`, `app/(workspace)/create/[mode]/page.tsx`.
+- Tests : `tsc` clean · `vitest` 226/226 · `lint` clean.
+
 ## 2026-06-08 — Claude (Opus 4.8) — T-201c : plan Director → génération (scenes[])
 - Fait (UI-only) : `submitJob({ directorScenes? })` extrait de `handleSubmit`. Form
   `Generate Video` inchangé (`submitJob()` sans scènes). « Generate now » du Director →
