@@ -98,6 +98,16 @@ Format :
   envoyer un engine résolu côté client, soit ajuster le backend (hors scope UI-only).
   À arbitrer si on veut un vrai « Auto » dans le Director.
 
+### [R-010] Régénération single-scene limitée à certains moteurs — `severity: low` · `status: open`
+- Contexte : `POST /api/jobs/[id]/scenes/[sceneIndex]` (régénère **une** scène)
+  n'appelle que `createEvoLinkTask`/`createBailianTask` → **EvoLink/Bailian only**.
+  Les scènes BytePlus/Atlas/HeyGen ne peuvent pas être régénérées individuellement.
+- Impact : faible. Pour ces moteurs, le board s'appuiera sur `retry-scenes`
+  (job-level, job *failed*). T-301 : n'afficher le bouton regen single-scene que
+  lorsque le moteur est supporté ; sinon le masquer.
+- Reco : si on veut le regen single-scene multi-provider, c'est une évolution
+  **backend** (hors scope T-301 UI-only) — à arbitrer plus tard.
+
 ## Décisions actées
 
 - `HANDOVER.md` = source de vérité courante (prime sur README/CLAUDE si conflit).

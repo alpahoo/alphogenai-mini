@@ -12,6 +12,21 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — T-301a : spec Scene Board runtime (docs-only)
+- Inspecté (read-only) : `app/jobs/[id]/page.tsx` (scenes live déjà fetchées+mergées,
+  failedScenes/doneScenes/hasRetryableScenes, retry-scenes, seek par scène),
+  `retry-scenes/route.ts` (retry all failed, job failed), `scenes/[i]/route.ts`
+  (PATCH prompt + POST regen single-scene EvoLink/Bailian only).
+- Écrit `docs/product/scene-board-runtime-spec.md` : V1 = read-only + statuts live +
+  retry failed + modèle provider-clean ; pas d'édition runtime (V2) ; composants
+  (`scene-board.tsx`, `scene-card.tsx`, `lib/scene-status.ts`), endpoints existants,
+  risques (R-010 : regen single-scene multi-provider non supporté), tests, découpage
+  T-301a/b/c/d. R-009 gardé séparé.
+- **Docs-only** ; aucun code/route/DB.
+- Fichiers : `docs/product/scene-board-runtime-spec.md`, `agent/tasks.md`,
+  `agent/log.md`, `agent/review.md`.
+- Prochaine étape : sur validation spec → T-301b (SceneBoard read-only).
+
 ## 2026-06-08 — Claude (Opus 4.8) — T-202 fix P2 : risk sur les prompts de scènes
 - Bug Codex (P2) : `computeDirectorQuality` n'analysait que `input.prompt`, alors que
   depuis T-201c les prompts envoyés sont `directorScenes[].prompt` → une scène éditée
