@@ -26,6 +26,7 @@ import {
   ExternalLink,
   Wallet,
   Clapperboard,
+  Link2,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -830,6 +831,13 @@ export default function JobPage() {
                           {duplicating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CopyPlus className="h-4 w-4" />}
                           {duplicating ? "Creating..." : "Duplicate job"}
                         </button>
+                        <Link
+                          href={`/create/story?reference_job_id=${params.id}`}
+                          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-violet-500/35 bg-violet-500/10 px-4 py-2.5 text-sm font-medium text-violet-500 transition hover:bg-violet-500/15"
+                        >
+                          <Link2 className="h-4 w-4" />
+                          Use as reference
+                        </Link>
                         {job?.engine_used === "heygen_avatar_shots" && (
                           <button
                             onClick={handleSaveLook}

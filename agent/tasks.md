@@ -184,9 +184,11 @@ polir l'existant.
 - Fichier : `app/(workspace)/create/[mode]/page.tsx`. Validation : 244 tests,
   tsc, lint, build OK.
 
-### [T-501d3] Job page Use as reference action - `status: todo` - `owner: codex|claude`
-- Objectif : ajouter le bouton `Use as reference` sur un job termine, sans generation
-  directe et sans provider names.
+### [T-501d3] Job page Use as reference action - `status: done` - `owner: codex`
+- Livre UI-only : bouton `Use as reference` dans l action bar des jobs termines.
+  Il pointe vers `/create/story?reference_job_id=<job_id>` et reutilise le prefill
+  T-501d2 ; aucune generation directe, aucun provider visible.
+- Fichier : `app/jobs/[id]/page.tsx`. Validation : 244 tests, tsc, lint, build OK.
 ### [T-501e] Duplicate fidelity audit — `status: todo` · `owner: codex|claude`
 - Objectif : verifier puis ameliorer `POST /api/jobs/[id]/duplicate` pour vraiment
   dupliquer les assets/options (aspect ratio, audio/caption modes, verified faces,

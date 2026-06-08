@@ -405,3 +405,10 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Le prefill ajoute `job_reference` dans `references`, mappe la reference dans `composerUploadItems`, insere un chip `@reference`, ouvre la zone references, et affiche un statut loading/ready/error.
 - Scope : glue UI vers route T-501d1 ; aucune nouvelle route/DB/migration. Prochaine suite : T-501d3 bouton `Use as reference` sur la page job.
 - Validation : `vitest` 244/244 - `tsc` clean - `lint` clean - `build` OK.
+
+
+## 2026-06-08 - Codex - T-501d3 Job page Use as reference action
+- Fait : ajout du bouton `Use as reference` dans l action bar des jobs termines (`app/jobs/[id]/page.tsx`).
+- Le bouton est un lien vers `/create/story?reference_job_id=<job_id>` ; il ne genere rien directement et s appuie sur T-501d1/T-501d2 pour preparer et attacher la reference.
+- Scope : UI-only ; aucun nouveau endpoint, aucune DB/migration, aucun provider visible.
+- Validation : `vitest` 244/244 - `tsc` clean - `lint` clean - `build` OK.
