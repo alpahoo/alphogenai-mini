@@ -463,3 +463,10 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Nettoyage : retrait du fetch profil local `plan/email` devenu inutile.
 - Coordination : ajout Axe 7 Visible Premium Pass, R-014 (perception visuelle encore insuffisante), R-015 (dettes restantes rappelees par Paul), et push policy autonome.
 - Validation : `vitest` 270/270, `tsc` clean, `lint` clean, `build` OK.
+
+
+## 2026-06-09 - Codex - T-702 Landing public refresh
+- Fait : refresh `app/page.tsx`, suppression du message date "open-source AI models on Modal".
+- Nouveau positionnement : AI video direction workspace, Director plan, assets, post-generation studio, CTA "Create with Director".
+- Scope : UI/copy-only, provider-neutral ; aucune route/API/DB.
+- Validation : `vitest` 270/270, `tsc` clean, `lint` clean, `build` OK. Dev server local a repondu HTTP 200 ; Browser plugin indisponible pendant le check.

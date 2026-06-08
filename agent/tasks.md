@@ -314,11 +314,12 @@ polir l'existant.
 - Nettoyage : suppression du fetch profil local `plan/email` devenu inutile.
 - Validation : 270 tests, tsc, lint, build OK.
 
-### [T-702] Landing public refresh - `status: todo` - `owner: codex`
-- Objectif : remplacer le positionnement date ("open-source AI models on Modal")
-  par le positionnement actuel AlphoGenAI : Director Console, models premium, assets,
-  social/post-generation studio.
-- Scope : UI/copy only, provider-neutral.
+### [T-702] Landing public refresh - `status: done` - `owner: codex`
+- Livre UI/copy-only : `app/page.tsx` remplace le hero date "Text to Video / Modal"
+  par un positionnement product-led : AI video direction workspace, Director plan,
+  assets, post-generation studio.
+- Provider-neutral ; aucun backend/route/DB. Validation : 270 tests, tsc, lint, build OK.
+- Note verification : dev server HTTP 200 ; Browser plugin indisponible dans cet environnement au moment du check.
 
 ### [T-703] Create flow premium pass - `status: todo` - `owner: codex`
 - Objectif : rendre AI Director plus central et visible, moins cache sous un bouton
