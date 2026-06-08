@@ -420,3 +420,11 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Livre docs-only : `docs/product/duplicate-fidelity-audit.md` avec gaps P1/P2/P3, recommendation T-501e1, test plan et copy guidance.
 - Coordination : T-501e done ; T-501e1 ajoute comme implementation backend + tests ; R-012 reste open et passe medium jusqu a correction route.
 - Scope : docs-only ; aucun runtime/route/API/DB modifie.
+
+
+## 2026-06-08 - Codex - T-501e1 Duplicate route fidelity implementation
+- Fait : helper pur `lib/job-duplicate-payload.ts` pour construire le body `POST /api/jobs` depuis une row jobs existante, sans copier outputs/status/couts.
+- Route `app/api/jobs/[id]/duplicate/route.ts` : select etendu (storyboard, verified face IDs, aspect, audio/captions, chain settings, avatar_final) puis forward centralise vers `POST /api/jobs`.
+- Fidelite : storyboard persiste -> `scenes[]` pour conserver les plans Director ; aspect ratio, captions/audio, chain settings, references/image_url et verified faces repris.
+- Avatar/look jobs : blocage explicite 409 provider-neutral (pas de duplication trompeuse tant que les champs source dedies ne sont pas persistables/reconstructibles).
+- Tests : `lib/__tests__/job-duplicate-payload.test.ts` couvre copie moderne, invalid optionals, non-copie plan/outputs, avatar block, prompt manquant.

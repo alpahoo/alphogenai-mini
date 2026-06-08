@@ -117,7 +117,7 @@ Format :
   `cleanModelName(getEngineDisplayName(jobEngine ?? scene.engine))`; `jobEngine` est
   cable depuis la page job pour les panneaux mobile + desktop.
 
-### [R-012] Duplicate job ne duplique pas encore toute la configuration - `severity: medium` - `status: open`
+### [R-012] Duplicate job ne duplique pas encore toute la configuration - `severity: medium` - `status: resolved`
 - Contexte : `POST /api/jobs/[id]/duplicate` forward bien vers `POST /api/jobs` (bon
   choix d architecture), mais ne copie aujourd hui que prompt, duration, engine,
   image URL et references payload.
@@ -126,10 +126,10 @@ Format :
   preservees, chain settings et audio/captions non repris.
 - Risque : un duplicate de job moderne peut produire un format, un personnage, une
   scene ou un habillage social differents du job original.
-- Reco : garder le label prudent `Duplicate job` jusqu a T-501e1. Implementation
-  recommandee : expand select + payload builder teste ; convertir `storyboard` en
-  `scenes[]` ; traiter avatar/look jobs explicitement car ils ne sont pas encore
-  reconstructibles fidelement depuis la row generique.
+- Resolu T-501e1 : route duplicate branchee sur `lib/job-duplicate-payload.ts`
+  avec tests. Les champs de fidelite sont copies et `storyboard` est converti en
+  `scenes[]`. Avatar/look jobs restent explicitement non duplicables (409
+  provider-neutral) tant qu un contrat dedie n existe pas.
 
 ### [R-013] Use as reference doit etre decide avant implementation - `severity: low` - `status: resolved`
 - Contexte : la page job devrait idealement proposer `Use as reference`, mais le

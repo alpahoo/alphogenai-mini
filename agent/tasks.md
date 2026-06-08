@@ -196,15 +196,17 @@ polir l'existant.
   Director scenes/storyboard, chain settings, audio/captions.
 - Decision : garder le label prudent `Duplicate job` tant que T-501e1 n est pas livre.
 
-### [T-501e1] Duplicate route fidelity implementation - `status: todo` - `owner: codex|claude`
-- Objectif : ameliorer `POST /api/jobs/[id]/duplicate` selon l audit T-501e : copier
-  aspect ratio, captions/audio, chain settings, verified face IDs, et convertir le
+### [T-501e1] Duplicate route fidelity implementation - `status: done` - `owner: codex`
+- Livre backend + tests : helper pur `lib/job-duplicate-payload.ts` + test
+  `lib/__tests__/job-duplicate-payload.test.ts`, route
+  `app/api/jobs/[id]/duplicate/route.ts` branchee dessus.
+- Duplicate copie desormais les champs de fidelite : aspect ratio, captions/audio,
+  chain settings, verified face IDs, references, image_url, engine, et convertit le
   storyboard persiste en `scenes[]` pour preserver les plans Director.
-- Fichiers probables : `app/api/jobs/[id]/duplicate/route.ts`, helper pur optionnel
-  `lib/job-duplicate-payload.ts`, tests `lib/__tests__/job-duplicate-payload.test.ts`.
-- Risques : avatar/look jobs ne sont pas reconstructibles fidelement aujourd hui ; les
-  bloquer explicitement ou les laisser hors scope avec erreur claire, sans provider visible.
-- Validation : tests unitaires du builder + `vitest`/`tsc`/`lint`/`build`.
+- Avatar/look jobs : blocage explicite 409 avec message provider-neutral tant que la
+  source generique `jobs` ne permet pas une reconstruction fidele.
+- Architecture conservee : forward vers `POST /api/jobs` pour garder quota/policy/routing
+  centralises ; aucun output/status/cout/provider task ID n est copie.
 
 ## Axe 6 — Nettoyage docs / lint / tests  `status: in_progress`
 
