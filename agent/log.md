@@ -12,6 +12,24 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — Review Director : boot OK + vérif code (auth bloquante)
+- Dev : `npm run dev` OK. `/create/story` → 307 (auth gate, **pas de 500 ni d'erreur de
+  compilation**) ; `/login` → 200 ; **zéro erreur** dans le log dev.
+- **Limite** : la passe visuelle *authentifiée* nécessite un login que je ne réalise pas
+  (saisie de mot de passe = action que je ne fais pas ; pas d'identifiants). → à faire
+  par un humain/Codex connecté.
+- Vérif **par revue de code** des 5 points :
+  1. Intégration : `AIDirectorPanel` rendu dans la colonne principale (form), avant le CTA. ✓
+  2. Lisibilité desktop/mobile : quality read-out `flex flex-wrap`, scene cards pleine
+     largeur empilées, actions `flex flex-wrap`. ✓ (structurel)
+  3. Édition prompt (textarea) + durée `min=3/max=10` + clamp [3,10]. ✓
+  4. Skip path `Generate Video` (type=submit) conservé ; « Plan with AI Director »
+     uniquement quand le panneau est fermé. ✓
+  5. `Generate now` → `submitJob({ directorScenes })` → body `scenes[]` (chemin
+     clientScenes backend). ✓ **par code** ; la création réelle du job reste à
+     confirmer en session authentifiée.
+- Aucun code modifié pendant la passe.
+
 ## 2026-06-08 — Claude (Opus 4.8) — T-201c : cleanup commentaires obsolètes (review Codex)
 - Fait (comments-only, zéro runtime) : en-tête `ai-director-panel.tsx` → « editable
   pre-generation plan panel » + mention submit câblé par la page ; `page.tsx` :
