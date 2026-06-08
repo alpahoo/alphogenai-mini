@@ -12,6 +12,36 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — Préparation T-202 (read-only, plan ; aucun code)
+Helpers lus : `content-policy.ts` (`screenPrompt(prompt) → {blocked, findings[]}`,
+findings level block/warn + message), `byteplus-cost.ts`
+(`estimateBytePlusCost(res, durSec, {fps,usdPerMToken}) → {costUsd,…}` ;
+`SEEDANCE_USD_PER_MTOKEN`), `engine-intentions.ts` (`faceCompat`/`uploadCompat`/
+`cleanModelName`), `types.ts`. Inspecté `buildDirectorPlan()` + `QualityReadout`.
+
+**Plan d'implémentation T-202 (à exécuter APRÈS « review OK »)** :
+- Nouveau helper pur **`lib/director-quality.ts`** : `computeQuality(input) → QualityReadout`
+  (déplacer le type `QualityReadout` ici, l'`ai-director-panel.tsx` l'importera).
+  Input : `{ prompt, scenes[], hasFace, hasRawImage, engineCompat, selectedEngineKey, aspectRatio }`.
+  Logique (remplace les heuristiques mock) :
+  1. **prompt clarity/risk** ← `screenPrompt(prompt)` : `blocked`→risky « Review prompt » ;
+     `warn`→medium (code/msg) ; sinon longueur → Good/Okay/Thin.
+  2. **cost** ← somme des `durationSec` des scènes (reflète les éditions) ; si moteur
+     Seedance (clé ∈ SEEDANCE_USD_PER_MTOKEN ou inclut seedance/byteplus/atlas) →
+     `estimateBytePlusCost(res, totalDur, {usdPerMToken})` → `~$X` ; sinon « Estimated after plan ».
+  3. **model/reference compat** ← `faceCompat`/`uploadCompat(engineCompat)` + présence @face
+     (labels déjà provider-neutres).
+  4. **social fit** ← `aspectRatio` + durée totale : 9:16 → « TikTok/Reels OK » (medium si
+     totalDur > ~180s) ; 1:1 → « Square/Feed » ; 16:9 → « Landscape/YouTube ».
+  - character (High/Medium/None) + time (`~n–2n min`) déplacés dans le helper.
+- **Réactivité** : recalculer `directorQuality` quand `directorScenes` change (les
+  éditions mettent à jour cost/social/risk en direct) — dérivé en render ou `useMemo`.
+- (Option) surfacer une **note de risque** issue de `screenPrompt` dans le panneau.
+- **Test** : `lib/__tests__/director-quality.test.ts` (tons ; cost présent pour Seedance ;
+  social fit par aspect ; **aucun nom provider** dans les labels).
+- Contraintes : helper **pur**, **UI-only**, pas de route/API/DB, providers confidentiels.
+  Risque faible (la génération T-201c reste intacte ; seuls les libellés du read-out changent).
+
 ## 2026-06-08 — Claude (Opus 4.8) — Review Director : boot OK + vérif code (auth bloquante)
 - Dev : `npm run dev` OK. `/create/story` → 307 (auth gate, **pas de 500 ni d'erreur de
   compilation**) ; `/login` → 200 ; **zéro erreur** dans le log dev.
