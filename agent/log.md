@@ -12,6 +12,17 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — Protocole multi-agents : rôles + backlog 6 axes
+- Fait : ajout de la section « Rôles des agents » dans `AGENTS.md` (Claude Code /
+  Codex local / ChatGPT : périmètres, droits, règle de non-collision avec owner) ;
+  restructuration de `agent/tasks.md` en **6 axes Director Console** (polish create
+  flow, AI Director, Scene Board, Saved Looks, post-gen studio, cleanup docs/lint/
+  tests) avec `owner` par tâche.
+- Fichiers : `AGENTS.md`, `agent/tasks.md`, `agent/log.md`. **Aucun code applicatif.**
+- Tests : docs-only → build non requis.
+- Prochaine étape : sur décision de Paul, démarrer T-102 (labels friendly + badges
+  compat) ou un autre axe.
+
 ## 2026-06-08 — Claude (Opus 4.8) — T-001 Director Console (layout-only) + migration rétro
 - Fait :
   - Rangée de contrôles unifiée **Model · Duration · Format · Scenes** en haut

@@ -1,68 +1,89 @@
 # agent/tasks.md — Backlog partagé
 
 Format d'une tâche :
-- **[ID] Titre** — `status: todo|in_progress|blocked|done`
+- **[ID] Titre** — `status: todo|in_progress|blocked|done` · `owner: claude|codex|chatgpt|—`
   - Objectif :
   - Fichiers probables :
   - Risques :
   - Critères de validation :
 
-> Mettre à jour le statut au fil de l'eau. Une tâche « importante » doit être
-> créée ici **avant** de coder (protocole AGENTS.md #1).
+> Règles : créer la tâche **avant** de coder (AGENTS.md #1) ; une tâche
+> `in_progress` n'a **qu'un seul owner** ; `git pull` avant de prendre une tâche.
 
 ---
 
-## En cours / prochaines
+# Backlog — Roadmap Director Console (6 axes)
 
-### [T-001] Director Console — Phase 1 (ex « B »)  — `status: done (layout-only)`
-- Livré : rangée unifiée Model·Duration·Format·Scenes en haut ; sections
-  Reference image + References repliées dans un collapsible (fermé par défaut).
-  Labels techniques conservés (choix « layout only », R-002).
-- Fichiers : `app/(workspace)/create/[mode]/page.tsx`.
-- Validation : tsc · build · lint · 220 tests → verts.
-- Reste pour la suite : labels provider-friendly + badges compat (T-002),
-  intégrer Advanced dans la même rangée si souhaité.
+## Axe 1 — Polish du create flow  `status: in_progress`
 
-### [T-002] Labels « provider-friendly » + statut compatibilité assets — `status: todo`
-- Objectif : masquer les noms techniques (ex. « Seedance 2.0 r2v ») derrière des
-  intentions (« Realistic character », « Fast draft », « Avatar »…) ; afficher un
-  statut par asset (`Ready` / `Needs verification` / `Works with BytePlus asset://`
-  / `Works with Kling/Atlas` / `Not compatible with this model`).
-- Fichiers probables : `components/create/asset-panel.tsx`,
-  `components/create/faces-manager.tsx`, `app/(workspace)/create/[mode]/page.tsx`,
+### [T-101] Rangée de contrôles unifiée + références repliées — `status: done` · `owner: claude`
+- Livré : Model·Duration·Format·Scenes en une rangée (dropdowns) ; sections
+  Reference image + References dans un collapsible fermé par défaut.
+- Fichier : `app/(workspace)/create/[mode]/page.tsx`. Validé (tsc/build/lint/tests).
+
+### [T-102] Labels « provider-friendly » + statut compatibilité assets — `status: todo` · `owner: claude`
+- Objectif : masquer les noms techniques (« Seedance 2.0 r2v ») derrière des
+  intentions (« Realistic character », « Fast draft », « Avatar »…) ; statut par
+  asset (`Ready` / `Needs verification` / `Works with BytePlus asset://` /
+  `Works with Kling/Atlas` / `Not compatible with this model`).
+- Fichiers : `asset-panel.tsx`, `faces-manager.tsx`, `create/[mode]/page.tsx`,
   mapping engine→intention dans `lib/`.
-- Risques : ne pas casser la sélection d'engine existante (valeurs envoyées à l'API).
-- Validation : tests + build ; vérifier que `byteplus_asset_ids` part toujours bien.
-- Décision produit ouverte : voir `agent/review.md` R-002.
+- Risques : ne pas changer la valeur d'engine envoyée à l'API.
+- Validation : tests + build ; `byteplus_asset_ids` part toujours. (Décision R-002.)
 
-### [T-003] Refresh `README.md` + `CLAUDE.md` — `status: todo`
-- Objectif : aligner la doc sur la stack réelle (multi-provider BytePlus/Atlas/
-  EvoLink/HeyGen/Wan + composer multimodal). `HANDOVER.md` reste la source courte.
-- Fichiers : `README.md`, `CLAUDE.md`, éventuellement `future-proof-notes.md`
-  (ajouter une section « virage 2026-06 » sans réécrire l'historique).
-- Risques : faible (doc).
-- Validation : relecture ; cohérence avec `HANDOVER.md`.
+## Axe 2 — AI Director visible  `status: todo`
 
-### [T-004] Tests d'intégration API (jobs / byteplus-assets / upload) — `status: todo`
-- Objectif : couvrir `POST /api/jobs` (routing + plan gate + content policy),
-  `byteplus-assets` (CRUD + RLS), `upload` (references bucket).
-- Fichiers : `tests/` (+ helpers mock Supabase).
-- Risques : mocking Supabase/RLS ; ne pas appeler de vrais providers.
-- Validation : nouveaux tests verts dans `npm test`.
+### [T-201] Storyboard éditable avant génération — `status: todo` · `owner: chatgpt(spec)→claude(impl)`
+- Objectif : étape visible/éditable (scène, caméra, personnage, style, modèle
+  recommandé, risque) + boutons « Generate now / Improve / More cinematic /
+  More realistic / Shorter for TikTok / Keep same character ».
+- Briques : `lib/storyboard.ts`, `lib/prompt-enhancer.ts`, `references_payload`.
+- Risques : ne pas dupliquer la logique de génération ; rester additif.
 
-## Roadmap produit CTO (au-delà de Phase 1)
+### [T-202] Quality score + cost/time estimate — `status: todo` · `owner: claude`
+- Objectif : diagnostic pré-génération (character consistency, prompt clarity,
+  provider compat, social fit, cost, durée estimée).
+- Briques : `lib/byteplus-cost.ts`, `lib/content-policy.ts`.
 
-- **Phase 2** — AI Director visible : storyboard éditable, recommandation de
-  modèle, **quality score** + cost/time estimate avant génération.
-  Briques existantes : `lib/storyboard.ts`, `lib/prompt-enhancer.ts`,
-  `lib/content-policy.ts`, `byteplus-cost.ts`.
-- **Phase 2** — **Scene Board** horizontal éditable (miniature, prompt, chips,
-  durée, modèle, statut queued/generating/done/failed, actions retry/duplicate/
-  replace/extend/upscale). Briques : `job_scenes`, retry scenes, last-frame chaining.
-- **Phase 3** — **Looks** réutilisables (« Create a look once, reuse it forever »),
-  bibliothèque Characters/Products/Styles/Motion/Brand Kits/Saved Looks.
-- **Phase 4** — Studio post-génération (variation, retry failed scenes, upscale,
-  social pack, schedule, save as Look/reference).
+## Axe 3 — Scene Board éditable  `status: todo`
+
+### [T-301] Scene Board horizontal — `status: todo` · `owner: chatgpt(spec)→claude(impl)`
+- Objectif : bandeau de scènes (miniature, prompt éditable, chips assets, durée,
+  modèle, statut queued/generating/done/failed, actions retry/duplicate/replace/
+  extend/upscale).
+- Briques : `job_scenes`, retry scenes, last-frame chaining (NE PAS toucher la
+  state machine sans review — `future-proof-notes` §2.1).
+
+## Axe 4 — Saved Looks  `status: todo`
+
+### [T-401] Looks réutilisables — `status: todo` · `owner: chatgpt(spec)→claude(impl)`
+- Objectif : « Create a look once, reuse it forever » — sauvegarder un rendu comme
+  Look, le réutiliser (nouveau script, lipsync voix clonée, déclinaisons social).
+- Briques : `cinematic_looks`/HeyGen look reuse, lipsync/voiceover existants.
+- Note : nouvelle table probable → migration additive (R-003 process).
+
+## Axe 5 — Post-generation studio  `status: todo`
+
+### [T-501] Page résultat premium + actions — `status: todo` · `owner: claude`
+- Objectif : `Create variation`, `Retry failed scenes`, `Use as reference`,
+  `Save as Look`, `Generate caption pack`, `Schedule post`, `Export TikTok/Reels/
+  Shorts`, `Duplicate with same assets` — rendre visibles les routes existantes.
+- Fichiers : `app/jobs/[id]/page.tsx`, routes social/export/scheduled.
+
+## Axe 6 — Nettoyage docs / lint / tests  `status: in_progress`
+
+### [T-601] Refresh README.md + CLAUDE.md — `status: todo` · `owner: codex|claude`
+- Aligner sur la stack réelle ; `HANDOVER.md` reste la source courte. (R-001.)
+
+### [T-602] Tests d'intégration API — `status: todo` · `owner: codex`
+- `POST /api/jobs` (routing/plan gate/content policy), `byteplus-assets` (CRUD/RLS),
+  `upload`. Mock Supabase ; ne pas appeler de vrais providers. (R-005.)
+
+### [T-603] Lint 100 % clean — `status: done` · `owner: claude`
+- `next lint` → no warnings/errors. (Fait.)
+
+### [T-604] Retirer `typescript.ignoreBuildErrors` — `status: blocked` · `owner: claude`
+- `tsc` est clean ; mais fichier config critique → validation requise. (R-004.)
 
 ## Terminé (résumé — détails dans agent/log.md)
 
