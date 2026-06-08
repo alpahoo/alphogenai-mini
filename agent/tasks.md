@@ -105,14 +105,18 @@ de migration ni de modif state machine**.
   créer, endpoints dispo (retry-scenes / PATCH prompt / POST regen single-scene),
   risques (R-010), tests, découpage T-301a/b/c (+ V2 d).
 
-### [T-301b] SceneBoard read-only + statuts + seek + modèle clean — `status: todo` · `owner: claude`
-- `lib/scene-status.ts` (pur) + `components/job/scene-board.tsx` (+ card) branchés
-  sur `scenes` existant ; seek vidéo réutilisé ; nom modèle via
-  `cleanModelName(getEngineDisplayName(...))`. UI-only.
+### [T-301b] Réutiliser SceneTimeline/ScenePanel (pas de doublon) — `status: todo` · `owner: claude`
+- **Addendum spec (2026-06-08)** : la page job utilise DÉJÀ
+  `components/editor/SceneTimeline.tsx` (= board read-only complet) + `ScenePanel.tsx`
+  (détail + Save/Regenerate). **Ne pas créer `scene-board.tsx`.**
+- À faire (UI-only, petit diff) : (a) `ScenePanel` libellé « Engine » → « Model » +
+  `cleanModelName(getEngineDisplayName(...))` ; (b) **gater Regenerate** (EvoLink/
+  Bailian only, R-010) ; (c) optionnel `lib/scene-status.ts` pur + test, adopté par
+  les 2 composants. `SceneTimeline` quasi inchangé.
 
 ### [T-301c] Retry affordances — `status: todo` · `owner: claude`
-- Retry job-level (`retry-scenes`, job failed) ; regen single-scene **uniquement**
-  où supporté (R-010). Pas de modif route.
+- Retry job-level (`retry-scenes`, job failed) déjà présent sur la page ; regen
+  single-scene via `ScenePanel` **gaté** (R-010). Pas de modif route.
 
 ### [T-301d] (V2) Édition prompt par scène via `PATCH` — `status: blocked` · `owner: claude`
 - Déféré V2 (l'endpoint `PATCH /scenes/[i]` existe déjà).

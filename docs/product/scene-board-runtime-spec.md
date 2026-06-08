@@ -128,6 +128,52 @@ No new route, no migration. Model name display reuses `lib/types`
 Validation gate per step: `npm test` · `npx tsc --noEmit -p tsconfig.json` ·
 `npm run lint` · `npm run build`; provider-leak guard stays green.
 
+## 9. Addendum 2026-06-08 — REUSE existing editor components (read before T-301b)
+
+Audit (read-only) shows the job page **already** uses
+`components/editor/SceneTimeline.tsx` + `ScenePanel.tsx` (imported at
+`app/jobs/[id]/page.tsx:39`). **Do not build a duplicate `scene-board.tsx`.**
+This addendum supersedes §4's "new components" plan.
+
+**What exists already**
+- **`SceneTimeline.tsx`** — IS the read-only Scene Board: horizontal scrollable
+  strip, per-scene thumbnail (`clip_url` video / `last_frame_url` img / placeholder),
+  status indicator + label (provider-neutral), "Scene N", prompt (line-clamped),
+  duration badge, play overlay on done, selected indicator, progress bar; click →
+  `onSelect(i)` (seek). **No model/provider shown → no leak.** Renders only when
+  `scenes.length > 1`.
+- **`ScenePanel.tsx`** — the per-scene detail/edit side panel: preview, **editable
+  prompt textarea**, **Save** (`PATCH /scenes/[i]`) + **Regenerate** (`POST /scenes/[i]`),
+  status badge, duration, engine row, error. Gated by an `editable` prop (job
+  done/failed).
+
+**Decisions for T-301b (revises §4)**
+1. **Reuse, don't duplicate.** Treat **`SceneTimeline` = the Scene Board V1** (already
+   read-only + live + seek). No `components/job/scene-board.tsx`.
+2. **"V1 read-only" reconciled with reality**: the board (`SceneTimeline`) stays
+   **read-only**; editing/actions already live in **`ScenePanel`** (Save/Regenerate).
+   So V1 is "read-only board + existing per-scene panel actions, properly gated" —
+   not a regression of current behavior.
+3. **Keep `ScenePanel` actions only where correctly supported/gated:**
+   - **Save** (PATCH prompt) — fine for all engines (DB-only), keep.
+   - **Regenerate** (POST single-scene) — **EvoLink/Bailian only (R-010)**. Currently
+     shown unconditionally → **gate it**: hide/disable the Regenerate button when the
+     engine isn't supported (otherwise it errors for BytePlus/Atlas/HeyGen scenes).
+4. **Provider-clean labels in `ScenePanel`** (currently leaks-prone):
+   - Row label **"Engine" → "Model"** (public-facing job page).
+   - Value **`getEngineDisplayName(...)` → `cleanModelName(getEngineDisplayName(...))`**
+     (defends against keys not in the display map, e.g. raw `*_byteplus`).
+5. **Optional DRY + testability**: extract the duplicated status→label/icon logic
+   (`SceneTimeline.statusLabel/statusIndicator` + `ScenePanel.statusBadge`) into a
+   tiny pure `lib/scene-status.ts` (`sceneStatusMeta(status) → { label, tone }`) and
+   unit-test it (incl. provider-neutral labels). Both components consume it.
+
+**Revised T-301b scope** (smaller than §7): no new board component;
+(a) `ScenePanel` provider-clean labels (Model + cleanModelName); (b) gate
+Regenerate per R-010; (c) optional `lib/scene-status.ts` + test + adopt in both
+components. `SceneTimeline` largely unchanged (optionally surface the clean model
+name per card if desired — low priority).
+
 ## 8. Non-goals (V1)
 
 - No state-machine / pipeline / webhook / Stripe / auth changes.

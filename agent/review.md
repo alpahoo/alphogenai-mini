@@ -107,6 +107,14 @@ Format :
   lorsque le moteur est supporté ; sinon le masquer.
 - Reco : si on veut le regen single-scene multi-provider, c'est une évolution
   **backend** (hors scope T-301 UI-only) — à arbitrer plus tard.
+- Constat T-301 audit : `ScenePanel.tsx` affiche le bouton **Regenerate sans gating**
+  moteur → il échoue pour BytePlus/Atlas/HeyGen. T-301b doit le **gater**.
+
+### [R-011] `ScenePanel` libellé « Engine » + clé non nettoyée — `severity: low` · `status: open`
+- `components/editor/ScenePanel.tsx:227-229` : libellé public « Engine » + valeur
+  `getEngineDisplayName(jobEngine ?? scene.engine)` **sans** `cleanModelName` (fuite
+  possible si la clé n'est pas dans la map, ex. `*_byteplus`). T-301b : « Engine »→
+  « Model » + wrapper `cleanModelName(...)`.
 
 ## Décisions actées
 

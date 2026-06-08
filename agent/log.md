@@ -12,6 +12,20 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — T-301a addendum : réutiliser SceneTimeline/ScenePanel
+- Audit (read-only, correction de cadrage Codex) : la page job utilise DÉJÀ
+  `components/editor/SceneTimeline.tsx` (board read-only complet : strip, thumbs,
+  statuts, prompt, durée, seek, progress ; aucun modèle/provider) + `ScenePanel.tsx`
+  (détail + prompt éditable + Save PATCH / Regenerate POST).
+- Addendum docs-only à `scene-board-runtime-spec.md` (§9) : **ne pas créer de doublon** ;
+  T-301b = réutiliser/évoluer ces composants ; board read-only ; garder Save (tous
+  moteurs) ; **gater Regenerate** (R-010) ; `ScenePanel` libellé « Engine »→« Model » +
+  `cleanModelName` (R-011) ; optionnel `lib/scene-status.ts` pur + test.
+- Risques notés : R-010 (regen non gaté), R-011 (libellé/clé ScenePanel).
+- **Docs-only** ; aucun code.
+- Fichiers : `docs/product/scene-board-runtime-spec.md`, `agent/tasks.md`,
+  `agent/log.md`, `agent/review.md`.
+
 ## 2026-06-08 — Claude (Opus 4.8) — T-301a : spec Scene Board runtime (docs-only)
 - Inspecté (read-only) : `app/jobs/[id]/page.tsx` (scenes live déjà fetchées+mergées,
   failedScenes/doneScenes/hasRetryableScenes, retry-scenes, seek par scène),
