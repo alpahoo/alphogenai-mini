@@ -383,3 +383,10 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Comportement conserve : aucun changement de route/API/state ; export-social, thumbnail, generate-metadata, publish direct et scheduled-posts restent les chemins existants.
 - Scope : UI-only ; gates free/pro/social connections conserves ; aucun provider visible.
 - Validation : `vitest` 240/240 - `tsc` clean - `lint` clean - `build` OK.
+
+
+## 2026-06-08 - Codex - T-501d Use as reference decision
+- Audit read-only : le create flow envoie des references structurees (`ReferenceItem`/`ReferencePayload`) ; source canonique = `storage_path` dans le bucket prive `references` ; `upload?bucket=references` est image-only (JPG/PNG/WEBP). Les slots video/audio sont encore coming soon.
+- Decision : V1 = `Use as image reference`, pas full video reference. Utiliser thumbnail/last_frame/image_url, role `outfit_style`, jamais `character_face` automatique.
+- Livre docs-only : `docs/product/use-as-reference-decision.md` + backlog decoupe T-501d1/d2/d3. R-013 resolved.
+- Scope : docs-only ; aucune route/API/DB/runtime.

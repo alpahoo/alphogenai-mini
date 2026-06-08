@@ -127,14 +127,13 @@ Format :
   un vrai "Create variation" ou "Duplicate with same assets", faire T-501e : audit
   backend + tests avant changement.
 
-### [R-013] Use as reference doit etre decide avant implementation — `severity: low` · `status: open`
+### [R-013] Use as reference doit etre decide avant implementation - `severity: low` - `status: resolved`
 - Contexte : la page job devrait idealement proposer `Use as reference`, mais le
   create flow attend des references structurees et `reference-upload.tsx` marque encore
   certains slots video/audio comme coming soon.
 - Risque : un simple lien vers `/create/story` avec une URL video pourrait ne pas etre
   compatible avec le composer/payload attendu, ou creer une UX trompeuse.
-- Reco : ecrire une mini decision T-501d avant code : query param job id, asset
-  reference server-side, ou version simple open-create/copy URL. Ne pas coder a l'aveugle.
+- Resolu T-501d : `docs/product/use-as-reference-decision.md`. Decision V1 = image reference structuree (`outfit_style`) depuis thumbnail/last_frame/image_url, via une future route server-side qui copie dans le bucket prive `references`. Full video reference est deferred V2.
 ## Décisions actées
 
 - `HANDOVER.md` = source de vérité courante (prime sur README/CLAUDE si conflit).

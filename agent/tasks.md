@@ -159,11 +159,27 @@ polir l'existant.
 - Fichier : `components/job/social-export-panel.tsx`. Validation : 240 tests,
   tsc, lint, build OK.
 
-### [T-501d] Use as reference decision — `status: todo` · `owner: chatgpt(spec)→claude(impl)`
-- Objectif : definir comment un job termine devient reference du prochain create flow.
-- Decision requise avant code : query param job id vs asset reference server-side vs
-  version simple open-create/copy URL. Le composer attend des references structurees.
+### [T-501d] Use as reference decision - `status: done` - `owner: codex`
+- Livre docs-only : `docs/product/use-as-reference-decision.md`.
+- Decision : V1 = **Use as image reference**, pas full video reference. Utiliser une
+  image stable du job (thumbnail/last_frame/image_url) comme reference `outfit_style`
+  dans le create flow. Ne jamais auto-classer en `character_face`.
+- Raison : le pipeline structure actuel repose sur `ReferenceItem.storage_path` dans
+  le bucket prive `references`, image-only aujourd'hui ; video/audio refs restent
+  partiellement coming soon.
 
+### [T-501d1] Backend reference-image route - `status: todo` - `owner: codex|claude`
+- Objectif : `POST /api/jobs/[id]/reference-image` choisit une still image du job,
+  la copie dans le bucket prive `references`, retourne un `ReferenceItem` role
+  `outfit_style`. Backend + tests.
+
+### [T-501d2] Create prefill from reference job - `status: todo` - `owner: codex|claude`
+- Objectif : `/create/story?reference_job_id=<id>` appelle la route T-501d1,
+  ajoute la reference au state et optionnellement un chip `@image`.
+
+### [T-501d3] Job page Use as reference action - `status: todo` - `owner: codex|claude`
+- Objectif : ajouter le bouton `Use as reference` sur un job termine, sans generation
+  directe et sans provider names.
 ### [T-501e] Duplicate fidelity audit — `status: todo` · `owner: codex|claude`
 - Objectif : verifier puis ameliorer `POST /api/jobs/[id]/duplicate` pour vraiment
   dupliquer les assets/options (aspect ratio, audio/caption modes, verified faces,
