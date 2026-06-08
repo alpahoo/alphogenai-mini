@@ -22,19 +22,29 @@ interface GalleryVideo {
 }
 
 export default async function GalleryPage() {
-  const supabase = createServiceClient();
-
-  const { data: videos } = await supabase
-    .from("jobs")
-    .select(
-      "id, prompt, engine_used, target_duration_seconds, output_url_final, social_exports, created_at",
-    )
-    .eq("status", "done")
-    .not("output_url_final", "is", null)
-    .order("created_at", { ascending: false })
-    .limit(24);
-
-  const items = (videos ?? []) as GalleryVideo[];
+  // Resilient fetch: during a build without secrets (e.g. local
+  // `next build` with no SUPABASE_SERVICE_ROLE_KEY) this page must still
+  // prerender — it just renders an empty gallery and fills in at runtime
+  // on Vercel where the key is present.
+  let items: GalleryVideo[] = [];
+  try {
+    const supabase = createServiceClient();
+    const { data: videos } = await supabase
+      .from("jobs")
+      .select(
+        "id, prompt, engine_used, target_duration_seconds, output_url_final, social_exports, created_at",
+      )
+      .eq("status", "done")
+      .not("output_url_final", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(24);
+    items = (videos ?? []) as GalleryVideo[];
+  } catch (e) {
+    console.warn(
+      "[gallery] data fetch skipped (likely missing SUPABASE_SERVICE_ROLE_KEY at build):",
+      e instanceof Error ? e.message : e,
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

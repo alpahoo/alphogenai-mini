@@ -1,11 +1,13 @@
 <h1 align="center">AlphoGenAI Mini</h1>
 
-<p align="center">
- AI-powered video generation SaaS built with Next.js, Supabase, and LangGraph
-</p>
+> ⚠️ **Onboarding? Read [`HANDOVER.md`](./HANDOVER.md) first — it is the current
+> source of truth.** Parts of this README are historical (Runpod / SVI /
+> AudioLDM2 / LangGraph) and no longer reflect the live system, which now runs on
+> a multi-provider video pipeline (BytePlus Seedance / AtlasCloud / EvoLink /
+> HeyGen / Wan) with a TipTap multimodal prompt composer.
 
 <p align="center">
-  <strong>SVI (Stable Video Infinity)</strong> → <strong>AudioLDM2</strong> → <strong>Audio Mixing</strong>
+ AI-powered video generation SaaS built with Next.js, Supabase, Vercel, R2 and Modal
 </p>
 
 <p align="center">
