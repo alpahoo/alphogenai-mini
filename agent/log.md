@@ -12,6 +12,21 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — Déblocage dev local (review visuelle Codex)
+- Symptôme : `/create/story` → 500 en dev (`lib/supabase/middleware.ts` : « URL and
+  Key are required »). Cause : le `.env.local` réel (gitignored) ne contenait que les
+  7 vars R2, **aucune var Supabase** (le `.env.example` committé les liste pourtant).
+- Fix : ajout dans `.env.local` (gitignored, non commité) de `NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY` —
+  valeurs **publiques** (clé anon/publishable récupérées via Supabase MCP get_project_url
+  / get_publishable_keys). **JAMAIS** la `SUPABASE_SERVICE_ROLE_KEY`.
+- Vérif : `npm run dev` → `/create/story` renvoie **HTTP 307** (redirige `/login`,
+  pas de session) = client Supabase OK, plus de 500. Dev server arrêté ensuite.
+- **Aucun code applicatif touché** ; aucun secret commité (`.env.local` gitignored ;
+  les valeurs ajoutées sont des clés publiques navigateur).
+- Note pour Codex : si tu lances un autre checkout, copie `.env.example` → `.env.local`
+  et renseigne les vars Supabase publiques (mêmes noms).
+
 ## 2026-06-08 — Claude (Opus 4.8) — Décision mapping Director→génération (pré-T-201c)
 - Fait : `docs/product/director-plan-mapping-decision.md` après inspection read-only
   de `app/api/jobs/route.ts`. **Découverte** : le backend accepte déjà un tableau
