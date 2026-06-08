@@ -12,6 +12,20 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — Décision mapping Director→génération (pré-T-201c)
+- Fait : `docs/product/director-plan-mapping-decision.md` après inspection read-only
+  de `app/api/jobs/route.ts`. **Découverte** : le backend accepte déjà un tableau
+  `scenes[]` (`:101`, `:129-130`, `:681-692`, « Phase C: editor-provided scenes »)
+  qui alimente le même storyboard + state machine, avec validation serveur
+  (cap MAX_SCENES[plan], duration clamp [3,10], prompt ≤2000).
+- **Décision : Option B** (envoyer les scènes éditées) — zéro modif backend/state
+  machine, fidèle au plan éditable. Option A (prompt unique re-splitté) rejetée.
+  Résout R-008 ; cadre T-201c (mapping UI-only).
+- **Docs-only** ; aucun code modifié.
+- Fichiers : `docs/product/director-plan-mapping-decision.md`, `agent/tasks.md`,
+  `agent/log.md`, `agent/review.md`.
+- Tests : (validation ci-dessous).
+
 ## 2026-06-08 — Claude (Opus 4.8) — T-201b : AI Director mock panel
 - Fait : `components/create/ai-director-panel.tsx` (mock/static) + câblage page
   (`buildDirectorPlan`, état directorOpen/scenes/quality, bouton « Plan with AI

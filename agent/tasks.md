@@ -58,9 +58,17 @@ score, contraintes techniques, découpage). Le Director est une couche **avant**
 - UI-only ; aucune route/DB/state machine touchée. tsc · build · lint · 226 tests verts.
 - Compromis : plan édité = preview-only (R-008) → câblage en T-201c.
 
-### [T-201c] Connect storyboard generation — `status: todo` · `owner: claude`
-- Route `POST /api/director/plan` (pure) → storyboard + enhancer + content-policy.
-  Plan en lecture seule ; pas de DB ; pas d'appel provider. Risque moyen (nouvelle route).
+### [T-201c] Wire edited plan → generation — `status: todo` · `owner: claude`
+- **Décision** (`docs/product/director-plan-mapping-decision.md`) : **Option B** —
+  envoyer les scènes éditées via le tableau `scenes[]` **déjà supporté** par
+  `app/api/jobs/route.ts:681-692` (« Phase C: editor-provided scenes »). **Aucune
+  modif backend ni state machine.**
+- À faire (UI-only) : sur « Generate now » du Director, POST `scenes:[{prompt,
+  duration_sec(3..10),engine:<key>}]` (ordre) + champs existants ; clamp durée
+  UI à [3,10] ; garder `prompt` original + references/byteplus_asset_ids.
+- (La route `/api/director/plan` de la spec n'est PAS nécessaire pour B — le plan
+  est construit côté client via `buildDirectorPlan`. À garder seulement si on veut
+  un plan serveur enrichi plus tard.)
 
 ### [T-202] Quality score + cost/time estimate — `status: todo` · `owner: claude`
 - Diagnostic pré-génération (character consistency, prompt clarity, model compat,

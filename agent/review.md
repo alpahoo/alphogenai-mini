@@ -79,13 +79,13 @@ Format :
   (Direct) »). C'est **voulu** : on cache le provider, l'utilisateur voit le modèle.
   La clé technique (`engine_used`) reste distincte côté data/admin.
 
-### [R-008] AI Director (T-201b) : plan édité = preview-only — `severity: info` · `status: open`
-- Contexte : la mock UI laisse éditer prompt/durée par scène, mais `Generate now`
-  lance la génération avec le **prompt courant** (pas les scènes éditées). C'est
-  volontaire en phase mock (pas de backend). Un texte d'aide le dit dans le panneau.
-- Risque : faible (UX claire). À lever en **T-201c** (mapper le plan édité vers
-  l'entrée `POST /api/jobs` sans toucher la state machine). Décision d'archi ouverte
-  (prompt enrichi unique vs prompts par scène) à trancher avec CTO avant T-201c.
+### [R-008] AI Director (T-201b) : plan édité = preview-only — `severity: info` · `status: resolved`
+- Résolu (décision) : `docs/product/director-plan-mapping-decision.md` → **Option B**.
+  Le backend `app/api/jobs/route.ts:681-692` **accepte déjà** un tableau `scenes[]`
+  (« Phase C: editor-provided scenes ») qui alimente le même storyboard/state machine.
+  T-201c = mapping UI-only (POST `scenes[]`), **aucune modif backend/state machine**.
+  L'ancienne question « prompt unique vs prompts par scène » est tranchée : prompts
+  par scène, voie déjà supportée et validée serveur (cap/clamp/troncature).
 
 ## Décisions actées
 
