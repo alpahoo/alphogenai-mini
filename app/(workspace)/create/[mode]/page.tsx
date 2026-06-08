@@ -21,7 +21,6 @@ import {
   User,
   Cpu,
   Film,
-  Crown,
   Link2,
   ShoppingBag,
   Share2,
@@ -43,10 +42,11 @@ import {
   type MediaRefData,
 } from "@/components/create/prompt-composer";
 import { FacesManager } from "@/components/create/faces-manager";
+import { AssetPanel } from "@/components/create/asset-panel";
 import { isAdminEmail } from "@/lib/flags";
 import type { PromptTemplate } from "@/lib/prompt-templates";
 import type { JobPlan, EngineKey, ReferenceItem } from "@/lib/types";
-import { ENGINE_DISPLAY_NAMES, PLAN_MAX_DURATION, PLAN_MAX_SCENES } from "@/lib/types";
+import { PLAN_MAX_DURATION, PLAN_MAX_SCENES } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Mode config
@@ -1037,9 +1037,9 @@ export default function CreateModePage({
               </div>
             )}
 
-            {/* ── Your verified faces — photo tiles, fully self-service ── */}
+            {/* ── Your verified faces (mobile fallback; desktop uses the right Assets panel) ── */}
             {isBytePlus2Selected && (
-              <div className="rounded-xl border border-primary/30 bg-primary/[0.03] p-4">
+              <div className="rounded-xl border border-primary/30 bg-primary/[0.03] p-4 lg:hidden">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-semibold text-foreground flex items-center gap-2">
                     <User className="h-4 w-4 text-primary" />
@@ -1751,76 +1751,15 @@ export default function CreateModePage({
           transition={{ delay: 0.2 }}
           className="flex flex-col h-full"
         >
-          {/* Preview placeholder */}
-          <div className="flex-1 flex flex-col items-center justify-center">
-            <div className="w-full aspect-video rounded-xl border border-dashed border-border/50 bg-card/50 flex flex-col items-center justify-center gap-3">
-              <Film className="h-10 w-10 text-muted-foreground/20" />
-              <p className="text-sm text-muted-foreground/40">
-                Your video will appear here
-              </p>
-            </div>
-          </div>
-
-          {/* Info card */}
-          <div className="mt-6 rounded-xl border border-border/40 bg-card p-5 space-y-4 shadow-sm">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Generation details
-            </h3>
-
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <div className="flex justify-between items-center">
-                <span className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-amber-500" />
-                  Duration
-                </span>
-                <span className="font-semibold text-foreground">{duration}s</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="flex items-center gap-2">
-                  <Monitor className="h-4 w-4 text-blue-500" />
-                  Format
-                </span>
-                <span className="font-semibold text-foreground">
-                  {aspectRatio === "16:9" ? "Landscape" : aspectRatio === "9:16" ? "Portrait" : "Square"} ({aspectRatio})
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="flex items-center gap-2">
-                  <Film className="h-4 w-4 text-violet-500" />
-                  Scenes
-                </span>
-                <span className="font-semibold text-foreground">
-                  {sceneCount}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="flex items-center gap-2">
-                  <Cpu className="h-4 w-4 text-indigo-500" />
-                  Model
-                </span>
-                <span className="font-semibold text-foreground">{selectedEngine === "auto" ? "Auto" : ENGINE_DISPLAY_NAMES[selectedEngine] ?? selectedEngine}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="flex items-center gap-2">
-                  <Crown className="h-4 w-4 text-purple-500" />
-                  Plan
-                </span>
-                <span className="font-semibold text-foreground capitalize">
-                  {plan}
-                </span>
-              </div>
-            </div>
-
-            {plan === "free" && (
-              <Link
-                href="/pricing"
-                className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition-all hover:brightness-110"
-              >
-                <Crown className="h-4 w-4" />
-                Upgrade for longer videos
-              </Link>
-            )}
-          </div>
+          <AssetPanel
+            faces={byteplusAssets}
+            facesLoading={byteplusAssetsLoading}
+            onReloadFaces={loadByteplusAssets}
+            uploads={composerUploads}
+            onUploadImage={handleComposerUpload}
+            uploading={composerUploading}
+            onInsert={(m) => composerRef.current?.insertRef(m)}
+          />
         </motion.div>
       </div>
 
