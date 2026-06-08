@@ -718,7 +718,7 @@ export default function JobPage() {
                           className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-500"
                         >
                           <Wallet className="h-4 w-4" />
-                          Top up {PROVIDER_TOP_UP[job.engine_used].label}
+                          Top up credits
                           <ExternalLink className="h-3 w-3" />
                         </a>
                       )}
@@ -1000,11 +1000,11 @@ function InfoCards({
         }`}>
           <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
             <Wallet className="h-3 w-3" />
-            Provider Credits
+            Generation Credits
           </h3>
           <div className="space-y-2 text-xs">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">EvoLink balance</span>
+              <span className="text-muted-foreground">Credit balance</span>
               <span className={`font-semibold tabular-nums ${
                 adminCredits.status === "critical"
                   ? "text-red-400"
@@ -1024,9 +1024,7 @@ function InfoCards({
             )}
             {(() => {
               const engineKey = job?.engine_used ?? "";
-              const providerInfo = PROVIDER_TOP_UP[engineKey];
-              const topUpUrl = providerInfo?.url ?? "https://evolink.ai/fr/dashboard/credits";
-              const topUpLabel = providerInfo?.label ?? "EvoLink";
+              const topUpUrl = PROVIDER_TOP_UP[engineKey]?.url ?? "https://evolink.ai/fr/dashboard/credits";
               return (
                 <a
                   href={topUpUrl}
@@ -1034,7 +1032,7 @@ function InfoCards({
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-[11px] text-primary hover:underline"
                 >
-                  <ExternalLink className="h-3 w-3" /> Top up on {topUpLabel}
+                  <ExternalLink className="h-3 w-3" /> Top up credits
                 </a>
               );
             })()}

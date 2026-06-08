@@ -12,6 +12,22 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — T-605b : provider-leak cleanup page job (review OK)
+- Contexte : review visuelle utilisateur **OK** (flux Director → job créé/terminé). Capture
+  montrait « Provider Credits / EvoLink balance / Top up on EvoLink » + clé brute
+  « Engine: seedance2_byteplus ».
+- Fait (UI-only) : `app/jobs/[id]/page.tsx` — « Provider Credits »→« Generation Credits »,
+  « EvoLink balance »→« Credit balance », « Top up on/ {label} »→« Top up credits » (×2,
+  url conservée). `components/job/JobCostBadge.tsx` — affiche
+  `cleanModelName(getEngineDisplayName(engine))` (ex. « Seedance 2.0 (Direct) ») + label
+  « Model: » au lieu de « Engine: <clé brute> ».
+- Gating confirmé : tous ces blocs sont **admin-only** ; nettoyés quand même. Reste
+  uniquement des URLs dashboard (hrefs admin) + champ `label` non rendu dans
+  `PROVIDER_TOP_UP`. Guard test non étendu (rendu JSX non trivial à tester) — le guard
+  existant couvre déjà getEngineDisplayName/cleanModelName utilisés par JobCostBadge.
+- **Aucune route/API/DB/state machine.** tsc clean · vitest 226/226 · lint clean · build OK.
+- Prochaine étape : **T-202** (review OK reçu).
+
 ## 2026-06-08 — Claude (Opus 4.8) — Préparation T-202 (read-only, plan ; aucun code)
 Helpers lus : `content-policy.ts` (`screenPrompt(prompt) → {blocked, findings[]}`,
 findings level block/warn + message), `byteplus-cost.ts`

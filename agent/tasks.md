@@ -135,6 +135,18 @@ score, contraintes techniques, découpage). Le Director est une couche **avant**
 ### [T-604] Retirer `typescript.ignoreBuildErrors` — `status: blocked` · `owner: claude`
 - `tsc` est clean ; mais fichier config critique → validation requise. (R-004.)
 
+### [T-605b] Cleanup provider names on the job page — `status: done` · `owner: claude`
+- Suite à la review visuelle (job réel). Page `app/jobs/[id]/page.tsx` + `JobCostBadge` :
+  « Provider Credits » → « Generation Credits » ; « EvoLink balance » → « Credit balance » ;
+  « Top up on EvoLink »/« Top up {label} » → « Top up credits » ; `JobCostBadge` affiche
+  désormais `cleanModelName(getEngineDisplayName(engine))` (« Seedance 2.0 (Direct) ») au
+  lieu de la clé brute `seedance2_byteplus`.
+- Gating confirmé par code : ces blocs sont **admin-only** (`isAdmin`/`adminCredits`/
+  `SHOW_COST_TRACKING_UI`) — nettoyés quand même (polish + future-proof). Les seules
+  occurrences restantes sont des **URLs** de dashboard (hrefs admin) + un champ `label`
+  non rendu dans `PROVIDER_TOP_UP`. Aucun nom provider en texte visible.
+- UI-only ; aucune route/API/DB/state machine. tsc · build · lint · 226 tests verts.
+
 ### [T-605] Cleanup provider names in public create flow — `status: done` · `owner: claude`
 - Livré (UI-only, aucune route/DB/Stripe/Modal touchée) :
   - Avatar picker badge `HeyGen credits · ~60× cheaper` → `Avatar mode · lower cost`.
