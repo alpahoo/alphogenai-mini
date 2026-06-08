@@ -78,12 +78,16 @@ Format d'une tâche :
 
 ## Axe 6 — Nettoyage docs / lint / tests  `status: in_progress`
 
-### [T-601] Refresh README.md + CLAUDE.md — `status: in_progress` · `owner: claude`
-- **Fait** : `CLAUDE.md` — addendum daté 2026-06-08 en tête (pipeline multi-provider,
-  Director Console, composer/assets/verified faces, règle confidentialité providers
-  T-102/T-605 + guard test, état validations 226 tests). Corps historique conservé ;
-  bandeau « HANDOVER.md gagne ». Mise à jour ciblée (pas de réécriture massive).
-- **Reste** : corps README (bandeau déjà en place, corps encore historique). (R-001.)
+### [T-601] Refresh README.md + CLAUDE.md + HANDOVER status — `status: done` · `owner: claude`
+- `CLAUDE.md` : addendum daté 2026-06-08 (pipeline multi-provider, Director Console,
+  composer/assets/verified faces, confidentialité providers T-102/T-605 + guard test).
+  Corps historique conservé ; bandeau « HANDOVER.md gagne ».
+- `README.md` : remplacé par une version **courte, actuelle**, renvoyant vers
+  `HANDOVER.md` (stack réelle, commandes, coordonnées, checks). Plus de mentions
+  Runpod/SVI/AudioLDM2/LangGraph comme stack actuelle.
+- `HANDOVER.md` : « Known gaps » mis à jour (README/CLAUDE/lint ✅ ; reste tests
+  d'intégration), compteur tests → **226**, snapshot lint ajouté.
+- Docs-only ; tsc · build · lint · 226 tests verts. R-001 résolu.
 
 ### [T-602] Tests d'intégration API + guards — `status: in_progress` · `owner: codex|claude`
 - **Fait** : guard anti-leak provider `lib/__tests__/provider-leak-guard.test.ts`

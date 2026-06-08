@@ -10,7 +10,11 @@ Format :
 
 ## Risques & dette
 
-### [R-001] Dette documentaire : CLAUDE.md / future-proof-notes périmés — `severity: medium` · `status: open`
+### [R-001] Dette documentaire : CLAUDE.md / future-proof-notes périmés — `severity: medium` · `status: resolved`
+- Résolu (2026-06-08) : `CLAUDE.md` a un addendum daté à jour ; `README.md` est court
+  et pointe vers `HANDOVER.md` ; `HANDOVER.md` à jour (226 tests). `future-proof-notes`
+  garde sa valeur historique/garde-fous (bandeau « HANDOVER.md gagne » partout).
+- (contexte historique ci-dessous)
 - Contexte : `CLAUDE.md` et `docs/architecture/future-proof-notes.md` datent du
   2026-05-11 et présentent **EvoLink comme provider principal** + pipeline Modal,
   sans le virage **BytePlus (Seedance `asset://`) / AtlasCloud / HeyGen** ni le

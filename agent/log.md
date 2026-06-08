@@ -12,6 +12,15 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — T-601 fin : README court + HANDOVER status
+- Fait : `README.md` remplacé par une version courte/actuelle (renvoi `HANDOVER.md`,
+  stack réelle, commandes, coordonnées, checks) — plus de Runpod/SVI/AudioLDM2/
+  LangGraph comme stack. `HANDOVER.md` « Known gaps » : README/CLAUDE/lint marqués ✅,
+  compteur tests → 226, snapshot lint ajouté. R-001 → resolved.
+- **Docs-only** ; aucun code/route/DB/secret.
+- Fichiers : `README.md`, `HANDOVER.md`, `agent/tasks.md`, `agent/log.md`, `agent/review.md`.
+- Tests : vitest **226/226** · tsc clean · lint clean · build OK.
+
 ## 2026-06-08 — Claude (Opus 4.8) — T-601 : refresh CLAUDE.md (ciblé)
 - Fait : addendum daté 2026-06-08 en tête de `CLAUDE.md` (pipeline multi-provider
   BytePlus/Atlas/EvoLink/HeyGen/Wan ; Director Console ; composer TipTap + Assets

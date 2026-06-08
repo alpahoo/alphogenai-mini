@@ -110,13 +110,14 @@ lib/storyboard.ts                         Multi-scene storyboard generation
 ## Known gaps / TODO (CTO consolidation list)
 
 1. ~~Fix local `/gallery` build without secrets~~ ✅ done.
-2. Refresh `README.md` (still references retired Runpod/SVI/AudioLDM2/LangGraph). This file is the interim source of truth.
-3. Refresh `CLAUDE.md` to reflect the BytePlus/Atlas/HeyGen/composer pivot.
-4. Clean remaining lint warnings (mostly `@next/next/no-img-element`, a couple a11y/exhaustive-deps).
-5. Add integration tests for the jobs/assets API (current 220+ unit tests pass).
+2. ~~Refresh `README.md`~~ ✅ done — now a short README pointing here (no more Runpod/SVI/AudioLDM2/LangGraph).
+3. ~~Refresh `CLAUDE.md` for the BytePlus/Atlas/HeyGen/composer pivot~~ ✅ done (dated 2026-06-08 addendum).
+4. ~~Clean remaining lint warnings~~ ✅ done — `next lint` reports no warnings or errors.
+5. Add **integration** tests for the jobs/assets API (the provider-leak guard test is done; unit suite is 226 tests).
 
 ## Build/health snapshot
 
 - `npx tsc --noEmit` → clean.
-- `npm run test` → 220+ Vitest tests pass.
-- `npm run build` → compiles; full build now succeeds locally.
+- `npm run test` → **226** Vitest tests pass.
+- `npm run lint` → no warnings or errors.
+- `npm run build` → full build succeeds locally (without secrets; `/gallery` degrades gracefully).
