@@ -81,9 +81,12 @@ Format d'une tâche :
 ### [T-601] Refresh README.md + CLAUDE.md — `status: todo` · `owner: codex|claude`
 - Aligner sur la stack réelle ; `HANDOVER.md` reste la source courte. (R-001.)
 
-### [T-602] Tests d'intégration API — `status: todo` · `owner: codex`
-- `POST /api/jobs` (routing/plan gate/content policy), `byteplus-assets` (CRUD/RLS),
-  `upload`. Mock Supabase ; ne pas appeler de vrais providers. (R-005.)
+### [T-602] Tests d'intégration API + guards — `status: in_progress` · `owner: codex|claude`
+- **Fait** : guard anti-leak provider `lib/__tests__/provider-leak-guard.test.ts`
+  (ENGINE_DISPLAY_NAMES + getEngineDisplayName + cleanModelName ; 6 cas). Verrouille
+  T-102/T-605. 226 tests au total.
+- **Reste** : tests d'intégration `POST /api/jobs` (routing/plan gate/content policy),
+  `byteplus-assets` (CRUD/RLS), `upload`. Mock Supabase ; pas de vrais providers. (R-005.)
 
 ### [T-603] Lint 100 % clean — `status: done` · `owner: claude`
 - `next lint` → no warnings/errors. (Fait.)

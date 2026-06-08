@@ -12,6 +12,15 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — Guard test anti provider-leak (T-602)
+- Fait : `lib/__tests__/provider-leak-guard.test.ts` — assure qu'aucun label public
+  ne contient BytePlus/AtlasCloud/EvoLink/Bailian/Kie.ai/HeyGen (ENGINE_DISPLAY_NAMES,
+  getEngineDisplayName, cleanModelName + cas réalistes + non-over-stripping). Verrouille
+  T-102/T-605 contre toute régression future.
+- Test-only ; aucun code applicatif modifié.
+- Fichiers : `lib/__tests__/provider-leak-guard.test.ts`.
+- Tests : **226/226** (10 fichiers) · `tsc` clean · `lint` clean · `build` OK.
+
 ## 2026-06-08 — Claude (Opus 4.8) — T-605 : remove public provider names
 - Fait (UI-only ; aucune route/DB/Stripe/Modal) :
   - Avatar picker badge `HeyGen credits · ~60× cheaper` → `Avatar mode · lower cost`.
