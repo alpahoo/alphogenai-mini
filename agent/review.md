@@ -79,6 +79,14 @@ Format :
   (Direct) »). C'est **voulu** : on cache le provider, l'utilisateur voit le modèle.
   La clé technique (`engine_used`) reste distincte côté data/admin.
 
+### [R-008] AI Director (T-201b) : plan édité = preview-only — `severity: info` · `status: open`
+- Contexte : la mock UI laisse éditer prompt/durée par scène, mais `Generate now`
+  lance la génération avec le **prompt courant** (pas les scènes éditées). C'est
+  volontaire en phase mock (pas de backend). Un texte d'aide le dit dans le panneau.
+- Risque : faible (UX claire). À lever en **T-201c** (mapper le plan édité vers
+  l'entrée `POST /api/jobs` sans toucher la state machine). Décision d'archi ouverte
+  (prompt enrichi unique vs prompts par scène) à trancher avec CTO avant T-201c.
+
 ## Décisions actées
 
 - `HANDOVER.md` = source de vérité courante (prime sur README/CLAUDE si conflit).

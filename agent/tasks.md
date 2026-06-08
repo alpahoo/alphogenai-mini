@@ -47,8 +47,16 @@ score, contraintes techniques, découpage). Le Director est une couche **avant**
 - `docs/product/ai-director-spec.md` rédigée (spec-only, providers confidentiels,
   réutilise storyboard/prompt-enhancer/content-policy/byteplus-cost/engine-intentions).
 
-### [T-201b] Director UI (mock/static state) — `status: todo` · `owner: claude`
-- Cartes scène + quality read-out, **sans backend** (valide l'UX). UI-only, low risk.
+### [T-201b] Director UI (mock/static state) — `status: done` · `owner: claude`
+- Livré : `components/create/ai-director-panel.tsx` (mock/static) — quality read-out
+  compact (Character/Prompt/Model/Social/Cost/Time), scene cards éditables (title,
+  prompt textarea, durée, asset chips, recommended model, risk notes), actions
+  Generate now / Improve / More cinematic / More realistic / Shorter for TikTok /
+  Keep same character (mutent le mock local, aucun appel API).
+- Page : bouton « Plan with AI Director » + état local + `buildDirectorPlan()` ;
+  **skip path `Generate Video` préservé** ; providers confidentiels (cleanModelName).
+- UI-only ; aucune route/DB/state machine touchée. tsc · build · lint · 226 tests verts.
+- Compromis : plan édité = preview-only (R-008) → câblage en T-201c.
 
 ### [T-201c] Connect storyboard generation — `status: todo` · `owner: claude`
 - Route `POST /api/director/plan` (pure) → storyboard + enhancer + content-policy.

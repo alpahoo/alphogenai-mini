@@ -26,6 +26,7 @@ import {
   AlertTriangle,
   ExternalLink,
   Wallet,
+  Clapperboard,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -42,6 +43,12 @@ import {
 import { FacesManager } from "@/components/create/faces-manager";
 import { AssetPanel } from "@/components/create/asset-panel";
 import { getEngineIntention, cleanModelName, faceCompat, type EngineCompatContext } from "@/lib/engine-intentions";
+import {
+  AIDirectorPanel,
+  type DirectorSceneVM,
+  type QualityReadout,
+  type DirectorAction,
+} from "@/components/create/ai-director-panel";
 import { isAdminEmail } from "@/lib/flags";
 import type { PromptTemplate } from "@/lib/prompt-templates";
 import type { JobPlan, EngineKey, ReferenceItem } from "@/lib/types";
@@ -196,6 +203,10 @@ export default function CreateModePage({
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showReferences, setShowReferences] = useState(false);
+  // AI Director (T-201b — mock/static preview before generation)
+  const [directorOpen, setDirectorOpen] = useState(false);
+  const [directorScenes, setDirectorScenes] = useState<DirectorSceneVM[]>([]);
+  const [directorQuality, setDirectorQuality] = useState<QualityReadout | null>(null);
 
   // Format & captions
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16" | "1:1">("16:9");
@@ -648,6 +659,100 @@ export default function CreateModePage({
     supportsRefs:
       selectedEngine === "auto" ||
       engineOptions.some((e) => e.key === selectedEngine && e.supportsRefs),
+  };
+
+  // ── AI Director (mock/static) — derive a readable plan + quality read-out
+  //    from the current inputs. Pure/local; no backend, no provider names.
+  const buildDirectorPlan = (): { scenes: DirectorSceneVM[]; quality: QualityReadout } => {
+    const n = Math.max(1, sceneCount || 1);
+    const total = Math.max(1, parseInt(duration, 10) || 5);
+    const per = Math.max(1, Math.round(total / n));
+    const TITLES = ["Establishing shot", "Reaction", "Detail / insert", "Wide shot", "Close-up", "Transition"];
+    const CAMERAS = ["slow dolly-in", "handheld", "static", "slow pan", "tracking"];
+    const base = prompt.trim() || config.placeholder;
+    const assets = composerRefs.map((r) => ({
+      kind: (r.refType === "video" ? "image" : r.refType) as "face" | "image" | "style",
+      label: r.label,
+      thumb: r.thumb ?? null,
+    }));
+    const modelName =
+      selectedEngine === "auto"
+        ? "Auto"
+        : cleanModelName(engineOptions.find((e) => e.key === selectedEngine)?.label ?? selectedEngine);
+    const hasFace = composerRefs.some((r) => r.refType === "face");
+
+    const scenes: DirectorSceneVM[] = Array.from({ length: n }, (_, i) => ({
+      index: i,
+      title: TITLES[i % TITLES.length],
+      prompt: n === 1 ? base : `${TITLES[i % TITLES.length]} — ${base}`,
+      durationSec: per,
+      camera: CAMERAS[i % CAMERAS.length],
+      assets,
+      recommendedModel: modelName,
+      notes: !hasFace && engineCompat.isBytePlus2 ? ["character consistency: add a verified face"] : undefined,
+    }));
+
+    const character: QualityReadout["character"] = hasFace
+      ? { label: "High", tone: "good" }
+      : composerRefs.some((r) => r.refType === "image" && r.url)
+        ? { label: "Medium", tone: "medium" }
+        : { label: "None", tone: "medium" };
+    const promptQ: QualityReadout["prompt"] =
+      base.length > 60 ? { label: "Good", tone: "good" } : base.length > 20 ? { label: "Okay", tone: "medium" } : { label: "Thin", tone: "risky" };
+    const modelQ: QualityReadout["model"] = engineCompat.isAuto
+      ? { label: "Auto OK", tone: "good" }
+      : hasFace
+        ? engineCompat.isBytePlus2
+          ? { label: "OK", tone: "good" }
+          : { label: "Use verified-face model", tone: "medium" }
+        : engineCompat.supportsRefs
+          ? { label: "OK", tone: "good" }
+          : { label: "No references", tone: "medium" };
+    const social: QualityReadout["social"] =
+      aspectRatio === "9:16"
+        ? { label: "TikTok 9:16 OK", tone: "good" }
+        : aspectRatio === "1:1"
+          ? { label: "Square 1:1", tone: "good" }
+          : { label: "Landscape 16:9", tone: "good" };
+
+    let costLabel = "Estimated after plan";
+    const isSeedanceCost =
+      selectedEngine.includes("seedance") || selectedEngine.includes("byteplus") || selectedEngine.includes("atlas");
+    if (isSeedanceCost) {
+      const res = selectedEngine.includes("720") || selectedEngine.includes("fast") ? "720p" : "1080p";
+      const usd = SEEDANCE_USD_PER_MTOKEN[selectedEngine] ?? 2.4;
+      const est = estimateBytePlusCost(res, total, { usdPerMToken: usd });
+      costLabel = `~$${est.costUsd.toFixed(2)}`;
+    }
+    const timeLabel = `~${n}–${n * 2} min`;
+
+    return { scenes, quality: { character, prompt: promptQ, model: modelQ, social, costLabel, timeLabel } };
+  };
+
+  const openDirector = () => {
+    const plan = buildDirectorPlan();
+    setDirectorScenes(plan.scenes);
+    setDirectorQuality(plan.quality);
+    setDirectorOpen(true);
+  };
+
+  const applyDirectorAction = (action: DirectorAction) => {
+    setDirectorScenes((prev) =>
+      prev.map((s) => {
+        let p = s.prompt;
+        let d = s.durationSec;
+        const add = (suffix: string) =>
+          p.toLowerCase().includes(suffix.split(",")[0].toLowerCase())
+            ? p
+            : `${p.replace(/[.\s]+$/, "")}. ${suffix}`;
+        if (action === "cinematic") p = add("cinematic lighting, shallow depth of field");
+        if (action === "realistic") p = add("photorealistic, natural skin texture");
+        if (action === "improve") p = add("detailed, coherent, high quality");
+        if (action === "tiktok") d = Math.min(d, 5);
+        // keep-character: mock no-op (driven by the @face chips already in the plan)
+        return { ...s, prompt: p, durationSec: d };
+      }),
+    );
   };
 
   // Unified control row: Model · Duration · Format · Scenes (CTO mockup).
@@ -1697,7 +1802,38 @@ export default function CreateModePage({
               );
             })()}
 
-            {/* ── Generate CTA ───────────────────────────────────── */}
+            {/* ── AI Director (mock/static preview) ──────────────── */}
+            {directorOpen && directorQuality && (
+              <AIDirectorPanel
+                scenes={directorScenes}
+                quality={directorQuality}
+                generating={loading}
+                previewOnly
+                onSceneChange={(index, patch) =>
+                  setDirectorScenes((prev) => prev.map((s) => (s.index === index ? { ...s, ...patch } : s)))
+                }
+                onAction={applyDirectorAction}
+                onClose={() => setDirectorOpen(false)}
+                onGenerate={() => {
+                  setDirectorOpen(false);
+                  handleSubmit({ preventDefault() {} } as React.FormEvent);
+                }}
+              />
+            )}
+
+            {!directorOpen && (
+              <button
+                type="button"
+                onClick={openDirector}
+                disabled={loading || !prompt.trim()}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/5 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Clapperboard className="h-4 w-4" />
+                Plan with AI Director
+              </button>
+            )}
+
+            {/* ── Generate CTA (skip path) ───────────────────────── */}
             <button
               type="submit"
               disabled={loading || !prompt.trim()}

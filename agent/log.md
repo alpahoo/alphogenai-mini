@@ -12,6 +12,18 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — T-201b : AI Director mock panel
+- Fait : `components/create/ai-director-panel.tsx` (mock/static) + câblage page
+  (`buildDirectorPlan`, état directorOpen/scenes/quality, bouton « Plan with AI
+  Director », actions locales). Quality read-out + scene cards éditables + 6 actions
+  de direction (mutent le mock). Skip path `Generate Video` intact. Providers
+  confidentiels (cleanModelName). Note R-008 : plan édité = preview-only (→ T-201c).
+- **UI-only** : aucune route/DB/POST /api/jobs/state machine/Stripe/auth/Modal.
+- Fichiers : `components/create/ai-director-panel.tsx`,
+  `app/(workspace)/create/[mode]/page.tsx`.
+- Tests : `tsc` clean · `vitest` 226/226 · `build` OK · `lint` clean.
+- Prochaine étape : review Codex UX, puis T-201c (connect storyboard) après décision archi.
+
 ## 2026-06-08 — Claude (Opus 4.8) — T-201a : spec AI Director (+ fix compteur HANDOVER)
 - Fait : `docs/product/ai-director-spec.md` (spec-only) — UX flow (Plan with AI
   Director, storyboard éditable, actions Generate/Improve/Cinematic/Realistic/
