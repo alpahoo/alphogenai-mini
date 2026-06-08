@@ -646,75 +646,40 @@ export default function CreateModePage({
         <Cpu className="h-4 w-4 text-indigo-500" />
         Model
       </p>
-      <div className="flex gap-2 flex-wrap">
-        <button
-          type="button"
-          onClick={() => setSelectedEngine("auto")}
-          className={`relative rounded-md border px-3 py-1.5 text-[11px] font-medium transition-all ${
-            selectedEngine === "auto"
-              ? "border-primary/50 bg-primary/10 text-primary"
-              : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground cursor-pointer"
-          }`}
-          title="Best model for your plan"
-        >
-          <Cpu className="inline h-3 w-3 mr-1" />
-          Auto
-        </button>
+      <select
+        value={selectedEngine}
+        onChange={(e) => setSelectedEngine(e.target.value as EngineKey | "auto")}
+        className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
+      >
+        <option value="auto">Auto — best model for your plan</option>
         {engineOptions.map((opt) => {
           const locked =
             (opt.gate === "premium" && plan !== "premium") ||
             (opt.gate === "pro" && plan === "free");
-          const active = selectedEngine === opt.key;
+          const tags = [
+            opt.quality === "1080p" ? "HD" : null,
+            opt.supportsRefs ? "Refs" : null,
+            locked ? `${opt.gate === "premium" ? "Premium" : "Pro"} only 🔒` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ");
           return (
-            <button
-              key={opt.key}
-              type="button"
-              disabled={locked}
-              onClick={() => setSelectedEngine(opt.key as EngineKey)}
-              className={`relative rounded-md border px-3 py-1.5 text-[11px] font-medium transition-all ${
-                active
-                  ? "border-primary/50 bg-primary/10 text-primary"
-                  : locked
-                  ? "border-border/20 bg-muted/10 text-muted-foreground/40 cursor-not-allowed"
-                  : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground cursor-pointer"
-              }`}
-              title={
-                locked
-                  ? `${opt.gate === "premium" ? "Premium" : "Pro"} only`
-                  : opt.supportsRefs
-                  ? `${opt.desc} · Supports character references`
-                  : `${opt.desc} · Character references not supported`
-              }
-            >
-              <Cpu className="inline h-3 w-3 mr-1" />
+            <option key={opt.key} value={opt.key} disabled={locked}>
               {opt.label}
-              {opt.quality === "1080p" && !locked && (
-                <span className="ml-1 inline-flex rounded-sm bg-blue-500/15 px-1 py-px text-[8px] font-semibold text-blue-400 leading-tight align-middle">
-                  HD
-                </span>
-              )}
-              {!locked && opt.supportsRefs && (
-                <span className="ml-1 inline-flex rounded-sm bg-emerald-500/15 px-1 py-px text-[8px] font-semibold text-emerald-400 leading-tight align-middle">
-                  Refs
-                </span>
-              )}
-              {!locked && engineHealth[opt.key] !== undefined && engineHealth[opt.key] !== -1 && (
-                <span
-                  className={`ml-1 inline-block h-1.5 w-1.5 rounded-full align-middle ${
-                    engineHealth[opt.key] >= 0.9
-                      ? "bg-green-400"
-                      : engineHealth[opt.key] >= 0.6
-                        ? "bg-amber-400"
-                        : "bg-red-400"
-                  }`}
-                  title={`${Math.round(engineHealth[opt.key] * 100)}% success rate (24h)`}
-                />
-              )}
-              {locked && <Lock className="inline h-2.5 w-2.5 ml-1 opacity-50" />}
-            </button>
+              {tags ? ` — ${tags}` : ""}
+            </option>
           );
         })}
-      </div>
+      </select>
+      {/* Health hint for the selected engine */}
+      {selectedEngine !== "auto" &&
+        engineHealth[selectedEngine] !== undefined &&
+        engineHealth[selectedEngine] !== -1 &&
+        engineHealth[selectedEngine] < 0.6 && (
+          <p className="mt-1.5 text-[11px] text-amber-500">
+            ⚠ This model has a low success rate right now ({Math.round(engineHealth[selectedEngine] * 100)}% / 24h) — consider another.
+          </p>
+        )}
       {plan === "free" && (
         <p className="text-xs text-muted-foreground/60 mt-2">
           Advanced models require <Link href="/pricing" className="text-primary font-medium hover:underline">Pro or Premium</Link>
