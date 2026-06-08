@@ -289,6 +289,13 @@ polir l'existant.
 
 
 
+## Push policy - Codex peut pousser
+
+- Decision Paul (2026-06-09) : Codex peut commit + push `main` des qu une tranche est
+  validee (tests/tsc/lint/build selon risque), sans attendre un "push main" explicite.
+- Exceptions : demander validation avant migrations DB, secrets, config critique, changement
+  produit ambigu, ou action potentiellement destructive.
+
 ## Priorites actees Paul - 2026-06-08
 
 1. T-602 - tests d integration API : jobs / byteplus-assets / upload avec Supabase mocke.
@@ -298,3 +305,30 @@ polir l'existant.
 5. Avatar/look duplicate : definir un vrai contrat de reconstruction avant de retirer le 409.
 6. T-301c - retry affordances : verifier/polir retry scene/job sans doublon.
 7. R-006 - mini cleanup provider/help : page d aide interne pour verified face ID.
+
+## Axe 7 - Visible Premium Pass  `status: in_progress`
+
+### [T-701] Schedule double-sidebar fix - `status: done` - `owner: codex`
+- Livre UI-only : `app/(workspace)/schedule/page.tsx` ne rend plus sa propre
+  `Sidebar`; le layout workspace reste la seule source de navigation.
+- Nettoyage : suppression du fetch profil local `plan/email` devenu inutile.
+- Validation : 270 tests, tsc, lint, build OK.
+
+### [T-702] Landing public refresh - `status: todo` - `owner: codex`
+- Objectif : remplacer le positionnement date ("open-source AI models on Modal")
+  par le positionnement actuel AlphoGenAI : Director Console, models premium, assets,
+  social/post-generation studio.
+- Scope : UI/copy only, provider-neutral.
+
+### [T-703] Create flow premium pass - `status: todo` - `owner: codex`
+- Objectif : rendre AI Director plus central et visible, moins cache sous un bouton
+  desactive/formulaire ; clarifier le role de Scene Editor separe.
+- Scope : UI first, pas de backend sauf si decide.
+
+### [T-704] Home dashboard premium pass - `status: todo` - `owner: codex`
+- Objectif : transformer la home template-picker en command center produit premium
+  (recent projects, quick actions, saved looks, references, status).
+
+### [T-705] Library asset studio pass - `status: todo` - `owner: codex`
+- Objectif : rendre Library actionnable (use as reference, duplicate, save look, filters),
+  pas seulement grille de videos.

@@ -456,3 +456,10 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Couverture : prompt min, content policy, reference storage ownership, active generation gate, daily quota free, plan gate moteur Pro.
 - Aucun appel provider reel ; les tests restent sur les early exits/gates avant generation.
 - Validation : `vitest` 270/270, `lint` clean, `build` OK, `tsc` clean (relance seule apres build pour eviter collision .next/types).
+
+
+## 2026-06-09 - Codex - T-701 Schedule double-sidebar fix + visible roadmap
+- Fait : suppression de la sidebar locale dans `app/(workspace)/schedule/page.tsx`; le layout workspace rend maintenant l unique navigation.
+- Nettoyage : retrait du fetch profil local `plan/email` devenu inutile.
+- Coordination : ajout Axe 7 Visible Premium Pass, R-014 (perception visuelle encore insuffisante), R-015 (dettes restantes rappelees par Paul), et push policy autonome.
+- Validation : `vitest` 270/270, `tsc` clean, `lint` clean, `build` OK.

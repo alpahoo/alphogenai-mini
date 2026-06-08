@@ -36,9 +36,7 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { Sidebar } from "@/components/workspace/sidebar";
 import { EditPostModal } from "@/components/schedule/edit-post-modal";
-import { createClient } from "@/lib/supabase/client";
 import type { ScheduledPost, SchedulePlatform } from "@/lib/scheduled-posts";
 import { STATUS_LABELS, STATUS_COLORS } from "@/lib/scheduled-posts";
 
@@ -496,8 +494,6 @@ const PostListCard = memo(function PostListCard({
 export default function SchedulePage() {
   const [posts, setPosts] = useState<ScheduledPost[]>([]);
   const [loading, setLoading] = useState(true);
-  const [plan, setPlan] = useState("free");
-  const [email, setEmail] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   // View mode — Postiz: month | week | list
@@ -532,23 +528,7 @@ export default function SchedulePage() {
   // Post list filter
   const [listFilter, setListFilter] = useState<"all" | "scheduled" | "published" | "failed">("all");
 
-  // Fetch user + posts
-  useEffect(() => {
-    async function init() {
-      const sb = createClient();
-      const {
-        data: { user },
-      } = await sb.auth.getUser();
-      if (user?.email) setEmail(user.email);
-      const { data: profile } = await sb
-        .from("profiles")
-        .select("plan")
-        .eq("id", user?.id ?? "")
-        .single();
-      if (profile?.plan) setPlan(profile.plan);
-    }
-    init();
-  }, []);
+  // Fetch posts
 
   const fetchPosts = useCallback(async () => {
     setLoading(true);
@@ -774,10 +754,8 @@ export default function SchedulePage() {
           : failedPosts;
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar plan={plan} email={email} />
-
-      <main className="flex-1 overflow-y-auto px-8 py-8">
+    <>
+      <main className="min-h-screen overflow-y-auto px-8 py-8">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1128,6 +1106,6 @@ export default function SchedulePage() {
         onOpenChange={setEditOpen}
         onSaved={fetchPosts}
       />
-    </div>
+    </>
   );
 }

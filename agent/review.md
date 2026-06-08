@@ -140,6 +140,24 @@ Format :
 - Risque : un simple lien vers `/create/story` avec une URL video pourrait ne pas etre
   compatible avec le composer/payload attendu, ou creer une UX trompeuse.
 - Resolu T-501d : `docs/product/use-as-reference-decision.md`. Decision V1 = image reference structuree (`outfit_style`) depuis thumbnail/last_frame/image_url, via une future route server-side qui copie dans le bucket prive `references`. Full video reference est deferred V2.
+
+### [R-014] Changements visibles encore insuffisants - `severity: medium` - `status: open`
+- Contexte : Paul a partage des captures du SaaS le 2026-06-09. Une grande partie
+  du travail recent est backend/fondation ou visible uniquement dans certains flows
+  (job termine, Director ouvert, Duplicate/Use as reference), donc le produit global
+  ne donne pas encore un gros saut visuel.
+- Risque : perception utilisateur encore trop "dashboard/formulaire" malgre les
+  fondations premium.
+- Reco : Axe 7 Visible Premium Pass : schedule double-sidebar fix (fait), landing refresh,
+  create flow premium pass, home command center, library asset studio.
+
+### [R-015] Dette qualite restante apres T-602 - `severity: low` - `status: open`
+- Reste confirme par Paul : R-003 migration retrospective Supabase, T-604 retrait
+  `typescript.ignoreBuildErrors`, T-401 Saved Looks spec, contrat Avatar/look duplicate,
+  T-301c retry affordances, R-006 aide interne verified face ID.
+- Reco : ne pas perdre ces items pendant le Visible Premium Pass ; les traiter en
+  tranches dediees, avec validation explicite pour R-003/T-604.
+
 ## Décisions actées
 
 - `HANDOVER.md` = source de vérité courante (prime sur README/CLAUDE si conflit).
