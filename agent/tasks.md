@@ -151,10 +151,13 @@ polir l'existant.
 - Decision : libelle prudent `Duplicate job` (pas `Create variation`) tant que la route
   duplique et relance directement sans editeur de variation complet (voir R-012).
 
-### [T-501c] Social Pack consolidation — `status: todo` · `owner: codex|claude`
-- Objectif : rendre `components/job/social-export-panel.tsx` plus premium et lisible
-  sans changer ses routes : formats/export, thumbnail, AI copy, schedule/publish.
-- Scope : UI-only ; conserver gates plan/social connections ; provider names interdits.
+### [T-501c] Social Pack consolidation - `status: done` - `owner: codex`
+- Livre UI-only : header du `SocialExportPanel` transforme en module studio avec
+  resume compact : Formats, Thumbnail, Copy, Channels.
+- Routes/state conserves : export-social, thumbnail, generate-metadata, publish,
+  scheduled-posts. Gates plan/social connections inchanges ; aucun provider visible.
+- Fichier : `components/job/social-export-panel.tsx`. Validation : 240 tests,
+  tsc, lint, build OK.
 
 ### [T-501d] Use as reference decision — `status: todo` · `owner: chatgpt(spec)→claude(impl)`
 - Objectif : definir comment un job termine devient reference du prochain create flow.

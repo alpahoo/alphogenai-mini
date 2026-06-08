@@ -401,20 +401,57 @@ export function SocialExportPanel({
   }
 
   const hasExports = exports.tiktok && exports.instagram && exports.youtube;
+  const connectedCount = [ytConnected, ttConnected, igConnected].filter(Boolean).length;
 
   return (
     <div className="rounded-xl border border-border/40 bg-card/60 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-border/30">
-        <div className="flex items-center gap-2">
-          <Package className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold">Social Media Pack</h3>
+      <div className="border-b border-border/30 px-5 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-primary/10 p-2">
+              <Package className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">Social Media Pack</h3>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Export, caption, thumbnail, publish, and schedule from one place.
+              </p>
+            </div>
+          </div>
+          {loadingMeta && (
+            <span className="flex shrink-0 items-center gap-1 rounded-full border border-border/30 bg-background/40 px-2 py-1 text-[10px] text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" /> Loading AI copy
+            </span>
+          )}
         </div>
-        {loadingMeta && (
-          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" /> Loading AI copy...
-          </span>
-        )}
+
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StudioStatusPill
+            icon={Download}
+            label="Formats"
+            value={hasExports ? "Ready" : exporting ? "Exporting" : "Export first"}
+            tone={hasExports ? "ready" : exporting ? "active" : "idle"}
+          />
+          <StudioStatusPill
+            icon={ImageIcon}
+            label="Thumbnail"
+            value={thumbnailUrl ? "Set" : "Pick"}
+            tone={thumbnailUrl ? "ready" : "idle"}
+          />
+          <StudioStatusPill
+            icon={Sparkles}
+            label="Copy"
+            value={metadata ? "Ready" : loadingMeta ? "Writing" : "Generate"}
+            tone={metadata ? "ready" : loadingMeta ? "active" : "idle"}
+          />
+          <StudioStatusPill
+            icon={CalendarClock}
+            label="Channels"
+            value={connectedCount > 0 ? `${connectedCount}/3 connected` : "Connect"}
+            tone={connectedCount > 0 ? "ready" : "idle"}
+          />
+        </div>
       </div>
 
       {/* ── Section: Formats ──────────────────────────────── */}
@@ -569,7 +606,7 @@ export function SocialExportPanel({
         onToggle={() => setShowPublish((p) => !p)}
         trailing={
           <span className="text-[10px] text-muted-foreground">
-            {[ytConnected, ttConnected, igConnected].filter(Boolean).length}/3 connected
+            {connectedCount}/3 connected
           </span>
         }
       >
@@ -870,6 +907,39 @@ export function SocialExportPanel({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Studio status summary
+// ---------------------------------------------------------------------------
+
+function StudioStatusPill({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: typeof Download;
+  label: string;
+  value: string;
+  tone: "ready" | "active" | "idle";
+}) {
+  const toneClasses = {
+    ready: "border-green-500/25 bg-green-500/10 text-green-400",
+    active: "border-primary/30 bg-primary/10 text-primary",
+    idle: "border-border/30 bg-background/35 text-muted-foreground",
+  }[tone];
+
+  return (
+    <div className={["min-w-0 rounded-lg border px-3 py-2", toneClasses].join(" ")}>
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider opacity-80">
+        <Icon className="h-3 w-3 shrink-0" />
+        <span className="truncate">{label}</span>
+      </div>
+      <p className="mt-1 truncate text-xs font-semibold text-foreground">{value}</p>
+    </div>
+  );
+}
+
 
 // ---------------------------------------------------------------------------
 // Collapsible section wrapper

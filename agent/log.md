@@ -377,3 +377,9 @@ findings level block/warn + message), `byteplus-cost.ts`
   assets/options (R-012).
 - Scope : UI-only (`app/jobs/[id]/page.tsx`) ; handlers/routes existants inchanges ; aucune route/API/DB/state machine.
 - Validation : `vitest` 240/240 · `tsc` clean · `lint` clean · `build` OK.
+
+## 2026-06-08 - Codex - T-501c Social Pack consolidation
+- Fait : `components/job/social-export-panel.tsx` a maintenant un header plus studio et un resume compact des etats : Formats, Thumbnail, Copy, Channels.
+- Comportement conserve : aucun changement de route/API/state ; export-social, thumbnail, generate-metadata, publish direct et scheduled-posts restent les chemins existants.
+- Scope : UI-only ; gates free/pro/social connections conserves ; aucun provider visible.
+- Validation : `vitest` 240/240 - `tsc` clean - `lint` clean - `build` OK.
