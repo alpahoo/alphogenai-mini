@@ -12,8 +12,6 @@ import {
   Clock,
   ChevronDown,
   Monitor,
-  Smartphone,
-  Square,
   Type,
   Music,
   Mic,
@@ -1067,63 +1065,79 @@ export default function CreateModePage({
             )}
 
             {/* ── Duration ───────────────────────────────────────── */}
-            <div>
-              <div className="flex items-center justify-between mb-2.5">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-amber-500" />
-                  <span className="text-sm font-semibold text-foreground">Duration</span>
-                </div>
-                {plan !== "premium" && (
-                  <Link
-                    href="/pricing"
-                    className="flex items-center gap-1.5 text-xs font-medium text-primary/80 transition-colors hover:text-primary"
+            {/* ── Compact controls: Duration · Format · Scenes ──────── */}
+            <div className="grid gap-3 sm:grid-cols-3">
+              {/* Duration */}
+              <div>
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                  <Clock className="h-3.5 w-3.5 text-amber-500" /> Duration
+                </label>
+                <select
+                  value={duration}
+                  onChange={(e) => setDuration(e.target.value)}
+                  disabled={!planLoaded}
+                  className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
+                >
+                  {durationOptions.map((o) => (
+                    <option key={o.value} value={o.value} disabled={o.disabled}>
+                      {o.label}
+                      {o.locked ? " 🔒" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Format */}
+              <div>
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                  <Monitor className="h-3.5 w-3.5 text-blue-500" /> Format
+                </label>
+                <select
+                  value={aspectRatio}
+                  onChange={(e) => setAspectRatio(e.target.value as "16:9" | "9:16" | "1:1")}
+                  className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
+                >
+                  <option value="16:9">Landscape (16:9)</option>
+                  <option value="9:16">Portrait (9:16)</option>
+                  <option value="1:1">Square (1:1)</option>
+                </select>
+              </div>
+
+              {/* Scenes */}
+              <div>
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                  <Film className="h-3.5 w-3.5 text-purple-500" /> Scenes
+                </label>
+                {plan !== "free" && planLoaded && sceneCountChoices.length > 0 ? (
+                  <select
+                    value={numScenes === "auto" ? "auto" : String(sceneCount)}
+                    onChange={(e) =>
+                      setNumScenes(e.target.value === "auto" ? "auto" : parseInt(e.target.value, 10))
+                    }
+                    className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
                   >
-                    <Lock className="h-3.5 w-3.5" />
-                    {plan === "free" ? "Unlock longer videos" : "Get up to 120s"}
-                  </Link>
+                    <option value="auto">Auto ({autoSceneCount})</option>
+                    {sceneCountChoices.map((n) => (
+                      <option key={n} value={String(n)}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-sm text-muted-foreground/60">
+                    1 (Auto)
+                  </div>
                 )}
               </div>
-              {planLoaded && (
-                <SegmentedControl
-                  options={durationOptions}
-                  value={duration}
-                  onChange={setDuration}
-                  className="w-full"
-                />
-              )}
-              {plan !== "free" && (
-                <p className="text-xs text-muted-foreground/60 mt-2">
-                  Your {plan} plan supports up to {planMaxDuration}s ({Math.min(Math.ceil(planMaxDuration / 5), planMaxScenes)} scenes of 5s each).
-                </p>
-              )}
             </div>
-
-            {/* ── Scenes (scene-count control) ───────────────────── */}
-            {plan !== "free" && planLoaded && sceneCountChoices.length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 mb-2.5">
-                  <Film className="h-4 w-4 text-purple-500" />
-                  <span className="text-sm font-semibold text-foreground">Scenes</span>
-                </div>
-                <SegmentedControl
-                  options={[
-                    { value: "auto", label: `Auto (${autoSceneCount})` },
-                    ...sceneCountChoices.map((n) => ({
-                      value: String(n),
-                      label: String(n),
-                    })),
-                  ]}
-                  value={numScenes === "auto" ? "auto" : String(sceneCount)}
-                  onChange={(v) =>
-                    setNumScenes(v === "auto" ? "auto" : parseInt(v, 10))
-                  }
-                  className="w-full"
-                />
-                <p className="text-xs text-muted-foreground/60 mt-2">
-                  Auto splits by duration. Pick <strong>1</strong> to keep a
-                  single continuous shot — no repeated near-identical cuts.
-                </p>
-              </div>
+            {plan !== "premium" && (
+              <Link
+                href="/pricing"
+                className="flex items-center gap-1.5 text-xs font-medium text-primary/80 transition-colors hover:text-primary"
+              >
+                <Lock className="h-3.5 w-3.5" />
+                {plan === "free" ? "Unlock longer videos" : "Get up to 120s"}
+              </Link>
             )}
 
             {/* ── Use my voice (cloned HeyGen voice) ─────────────── */}
@@ -1284,43 +1298,6 @@ export default function CreateModePage({
 
               {showAdvanced && (
                 <div className="border-t border-border/40 px-5 py-5 space-y-5">
-                  {/* Format (aspect ratio) */}
-                  <div>
-                    <p className="text-sm font-semibold text-foreground mb-2.5 flex items-center gap-2">
-                      <Monitor className="h-4 w-4 text-blue-500" />
-                      Format
-                    </p>
-                    <div className="flex gap-2">
-                      {(
-                        [
-                          { value: "16:9" as const, icon: Monitor, label: "Landscape", desc: "16:9 — YouTube, desktop" },
-                          { value: "9:16" as const, icon: Smartphone, label: "Portrait", desc: "9:16 — TikTok, Reels, Shorts" },
-                          { value: "1:1" as const, icon: Square, label: "Square", desc: "1:1 — Instagram, feed" },
-                        ] as const
-                      ).map((f) => (
-                        <button
-                          key={f.value}
-                          type="button"
-                          onClick={() => setAspectRatio(f.value)}
-                          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
-                            aspectRatio === f.value
-                              ? "border-blue-500/50 bg-blue-500/10 text-blue-400"
-                              : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:text-foreground cursor-pointer"
-                          }`}
-                          title={f.desc}
-                        >
-                          <f.icon className="h-4 w-4" />
-                          {f.label}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground/50 mt-1.5">
-                      {aspectRatio === "16:9" && "Best for YouTube and desktop viewing."}
-                      {aspectRatio === "9:16" && "Optimized for TikTok, Instagram Reels and YouTube Shorts."}
-                      {aspectRatio === "1:1" && "Ideal for Instagram feed posts and social media ads."}
-                    </p>
-                  </div>
-
                   {/* Captions */}
                   <div>
                     <p className="text-sm font-semibold text-foreground mb-2.5 flex items-center gap-2">
