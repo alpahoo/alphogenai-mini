@@ -390,3 +390,11 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Decision : V1 = `Use as image reference`, pas full video reference. Utiliser thumbnail/last_frame/image_url, role `outfit_style`, jamais `character_face` automatique.
 - Livre docs-only : `docs/product/use-as-reference-decision.md` + backlog decoupe T-501d1/d2/d3. R-013 resolved.
 - Scope : docs-only ; aucune route/API/DB/runtime.
+
+
+## 2026-06-08 - Codex - T-501d1 Backend reference-image route
+- Fait : nouvelle route `POST /api/jobs/[id]/reference-image` (auth + ownership + job done) qui prepare une image de reference depuis thumbnail/last_frame/image_url/R2 frame candidate.
+- Stockage : copie server-side dans le bucket prive `references` sous `{user_id}/job-refs/...`, puis signed URL 6h pour preview. Retourne un `ReferenceItem` role `outfit_style`, jamais `character_face` automatique.
+- Helper pur : `lib/job-reference-image.ts` (`pickJobReferenceImageSource`, path builder, item builder) + tests unitaires.
+- Scope : backend additive route + helper ; aucune migration, aucune UI encore. Prochaine suite : T-501d2 create prefill.
+- Validation : `vitest` 244/244 - `tsc` clean - `lint` clean - `build` OK.

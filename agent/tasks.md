@@ -168,10 +168,13 @@ polir l'existant.
   le bucket prive `references`, image-only aujourd'hui ; video/audio refs restent
   partiellement coming soon.
 
-### [T-501d1] Backend reference-image route - `status: todo` - `owner: codex|claude`
-- Objectif : `POST /api/jobs/[id]/reference-image` choisit une still image du job,
-  la copie dans le bucket prive `references`, retourne un `ReferenceItem` role
-  `outfit_style`. Backend + tests.
+### [T-501d1] Backend reference-image route - `status: done` - `owner: codex`
+- Livre : `POST /api/jobs/[id]/reference-image` choisit la meilleure still image
+  (thumbnail, last_frame, image_url, R2 frame candidate), la telecharge, valide le
+  MIME reel (JPG/PNG/WEBP), la copie dans le bucket prive `references`, puis retourne
+  un `ReferenceItem` role `outfit_style` avec `storage_path` canonique.
+- Helper pur : `lib/job-reference-image.ts` + tests `lib/__tests__/job-reference-image.test.ts`.
+- Validation : 244 tests, tsc clean. Route backend, aucune migration.
 
 ### [T-501d2] Create prefill from reference job - `status: todo` - `owner: codex|claude`
 - Objectif : `/create/story?reference_job_id=<id>` appelle la route T-501d1,
