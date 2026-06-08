@@ -12,6 +12,19 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — T-102b : wording sans provider (review Codex)
+- Fait : badge `BytePlus 2.0 only` → `Seedance 2.0 only` ; `cleanModelName()`
+  retire les noms providers (HeyGen/BytePlus/AtlasCloud/EvoLink/Bailian/Kie.ai) des
+  labels de modèles + caption « Powered by » ; faces-manager : `BytePlus Asset ID`
+  → `Verified Face Asset ID` (+ message d'erreur) ; avertissement create reformulé
+  sans BytePlus/Atlas. Vérif : mentions providers restantes = commentaires uniquement.
+- Créé `[T-605]` (cleanup noms providers ailleurs : HeyGen credits, EvoLink balance,
+  message job, lien console) — non mélangé à T-102b (consigne Codex).
+- **UI-only**, aucune route touchée.
+- Fichiers : `lib/engine-intentions.ts`, `components/create/faces-manager.tsx`,
+  `app/(workspace)/create/[mode]/page.tsx`.
+- Tests : (à lancer ci-dessous).
+
 ## 2026-06-08 — Claude (Opus 4.8) — T-102 labels provider-friendly + badges compat
 - Fait : `lib/engine-intentions.ts` (helper pur, display-only) → intentions produit
   (Realistic character / Fast draft / Avatar / Cinematic HD / General) + statut de

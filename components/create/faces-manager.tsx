@@ -68,7 +68,7 @@ export function FacesManager({ faces, loading, onReload, onInsert, compat }: Fac
   const submitNew = async () => {
     const assetId = newAssetId.trim();
     if (!/^asset-/.test(assetId)) {
-      setErr("Paste a valid BytePlus Asset ID (asset-…).");
+      setErr("Paste a valid verified face ID (asset-…).");
       return;
     }
     setBusy(true);
@@ -285,7 +285,7 @@ export function FacesManager({ faces, loading, onReload, onInsert, compat }: Fac
                 type="text"
                 value={newAssetId}
                 onChange={(e) => setNewAssetId(e.target.value)}
-                placeholder="BytePlus Asset ID (asset-…)"
+                placeholder="Verified Face Asset ID (asset-…)"
                 className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-xs font-mono text-foreground"
               />
             </div>

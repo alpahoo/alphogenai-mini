@@ -41,7 +41,7 @@ import {
 } from "@/components/create/prompt-composer";
 import { FacesManager } from "@/components/create/faces-manager";
 import { AssetPanel } from "@/components/create/asset-panel";
-import { getEngineIntention, faceCompat, type EngineCompatContext } from "@/lib/engine-intentions";
+import { getEngineIntention, cleanModelName, faceCompat, type EngineCompatContext } from "@/lib/engine-intentions";
 import { isAdminEmail } from "@/lib/flags";
 import type { PromptTemplate } from "@/lib/prompt-templates";
 import type { JobPlan, EngineKey, ReferenceItem } from "@/lib/types";
@@ -678,7 +678,7 @@ export default function CreateModePage({
                 .join(" · ");
               return (
                 <option key={opt.key} value={opt.key} disabled={locked}>
-                  {getEngineIntention(opt)} — {opt.label}
+                  {getEngineIntention(opt)} — {cleanModelName(opt.label)}
                   {tags ? ` · ${tags}` : ""}
                 </option>
               );
@@ -686,7 +686,7 @@ export default function CreateModePage({
           </select>
           {selectedEngine !== "auto" && (
             <p className="mt-1 text-[10px] text-muted-foreground/50">
-              Powered by {engineOptions.find((e) => e.key === selectedEngine)?.label ?? selectedEngine}
+              Powered by {cleanModelName(engineOptions.find((e) => e.key === selectedEngine)?.label ?? selectedEngine)}
             </p>
           )}
         </div>
@@ -915,9 +915,9 @@ export default function CreateModePage({
                 <div className="mb-2 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600 dark:text-amber-300/90">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                   <span>
-                    BytePlus (Seedance 2.0) <strong>rejects raw photos of real people</strong>.
+                    Seedance 2.0 <strong>rejects raw photos of real people</strong>.
                     For a person, insert your <strong>verified face</strong> (@) instead — or
-                    switch to Kling O3 / Atlas to use an uploaded photo.
+                    switch to a model that accepts uploaded face photos.
                   </span>
                 </div>
               )}

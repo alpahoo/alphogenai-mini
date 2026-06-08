@@ -30,7 +30,12 @@ Format d'une tâche :
   `components/create/faces-manager.tsx`, `app/(workspace)/create/[mode]/page.tsx`.
 - UI-only : aucune route jobs/providers touchée ; valeur d'engine envoyée à l'API
   inchangée (display-only). tsc · build · lint · 220 tests verts.
-- Suite Codex : review UX + risque de régression.
+- **T-102b (review Codex, confidentialité)** : `status: done` — wording sans
+  provider. Badge `BytePlus 2.0 only` → `Seedance 2.0 only` ; `cleanModelName()`
+  retire HeyGen/BytePlus/AtlasCloud/EvoLink/Bailian/Kie.ai des labels/captions ;
+  faces-manager : `BytePlus Asset ID` → `Verified Face Asset ID`, erreur idem ;
+  avertissement create reformulé (sans BytePlus/Atlas). Mentions providers
+  restantes = commentaires de code uniquement.
 
 ## Axe 2 — AI Director visible  `status: todo`
 
@@ -85,6 +90,18 @@ Format d'une tâche :
 
 ### [T-604] Retirer `typescript.ignoreBuildErrors` — `status: blocked` · `owner: claude`
 - `tsc` est clean ; mais fichier config critique → validation requise. (R-004.)
+
+### [T-605] Cleanup provider names in public create flow — `status: todo` · `owner: codex|claude`
+- Objectif : retirer/neutraliser les noms de providers/agrégateurs encore visibles
+  dans le create flow + pages liées (hors T-102, déjà traité).
+- Repérés (review Codex) :
+  - `HeyGen credits · ~60× cheaper` (avatar picker, `create/[mode]/page.tsx`).
+  - `EvoLink balance` / `Top up on EvoLink` (panneau crédits, page job `app/jobs/[id]/page.tsx`).
+  - Message d'erreur job mentionnant « BytePlus » (`app/jobs/[id]/page.tsx`, `friendlyError`).
+  - Lien « Where's my Asset ID? » → href `console.byteplus.com` (texte OK, URL provider).
+- Règle : modèles OK (Seedance, Wan, Avatar…), providers non OK.
+- Risques : faible (wording) ; ne pas toucher la logique crédits/routes.
+- Validation : tests + build + lint ; grep provider names = 0 en user-facing.
 
 ## Terminé (résumé — détails dans agent/log.md)
 

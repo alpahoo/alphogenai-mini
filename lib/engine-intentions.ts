@@ -19,6 +19,23 @@ export interface EngineLike {
   quality: string;
 }
 
+/**
+ * Strip provider / aggregator names from a display label, keep the model name.
+ * Public UI must show models (Seedance 2.0, Wan, Avatar…), never providers
+ * (BytePlus, AtlasCloud, EvoLink, HeyGen, Bailian, Kie.ai).
+ */
+export function cleanModelName(label: string): string {
+  return (label || "")
+    .replace(
+      /\s*\((?:heygen|byteplus|atlascloud|atlas|evolink|kie\.?ai|bailian)\)/gi,
+      "",
+    )
+    .replace(/\b(?:byteplus|atlascloud|evolink|bailian|kie\.?ai|heygen)\b/gi, "")
+    .replace(/\(\s*\)/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 /** Lead the model option with an outcome ("Realistic character") then the
  *  clean model name as a differentiator. Never exposes scary internals. */
 export function getEngineIntention(opt: EngineLike): string {
@@ -52,11 +69,12 @@ export interface EngineCompatContext {
   supportsRefs: boolean;
 }
 
-/** Status for a verified BytePlus face (asset://). It only works on BytePlus 2.0. */
+/** Status for a verified face asset. It only works on the verified-face model. */
 export function faceCompat(ctx: EngineCompatContext): AssetCompat {
   if (ctx.isAuto) return { label: "Ready", tone: "ok" };
   if (ctx.isBytePlus2) return { label: "Ready", tone: "ok" };
-  return { label: "BytePlus 2.0 only", tone: "muted" };
+  // Provider-neutral wording (no aggregator names in public UI).
+  return { label: "Seedance 2.0 only", tone: "muted" };
 }
 
 /** Status for an uploaded raw image (not a verified face). */
