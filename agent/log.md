@@ -359,3 +359,11 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Fait : `lib/scene-status.ts` (helper pur client-safe : `sceneStatusMeta`, `supportsSingleSceneRegen`) + test ; `SceneTimeline` reutilise `sceneStatusMeta` pour ses labels ; `ScenePanel` affiche `Model` avec `cleanModelName(getEngineDisplayName(...))`, recoit `jobEngine` mobile+desktop, et masque `Regenerate` hors moteurs supportes (EvoLink/Bailian only, R-010).
 - Scope : UI-only/helper pur ; aucune route/API/DB/state machine.
 - Validation : `vitest` 240/240 · `tsc` clean · `lint` clean · `build` OK.
+
+## 2026-06-08 — Codex — T-501a Post-generation Studio spec/audit
+- Contexte : Claude Code indisponible ~48h (limite credit). Codex continue avec coordination explicite pour eviter les doublons.
+- Audit read-only : la page job possede deja les actions principales (Download, Share, Copy link/prompt, Duplicate, Save as Look selon moteur, retry scenes) et rend `SocialExportPanel` sur les jobs done.
+- Audit routes/components : `SocialExportPanel` couvre deja exports formats, thumbnail picker, AI copy, publish direct et schedule ; routes existantes : duplicate, export-social, social-pack, thumbnail, generate-metadata, looks, scheduled-posts. `upscale` est un stub 501 -> ne pas le mettre en action primaire.
+- Livre docs-only : `docs/product/post-generation-studio-spec.md` avec decoupage T-501b/c/d/e et prompt de reprise pour Claude Code.
+- Coordination : `agent/tasks.md` Axe 5 recadre (ne pas creer de doublon, reutiliser SocialExportPanel/ThumbnailPicker/routes existantes). `agent/review.md` ajoute R-012 duplicate fidelity et R-013 Use as reference decision.
+- Scope : docs-only, aucun runtime/route/API/DB.

@@ -117,8 +117,27 @@ Format :
   `cleanModelName(getEngineDisplayName(jobEngine ?? scene.engine))`; `jobEngine` est
   cable depuis la page job pour les panneaux mobile + desktop.
 
+### [R-012] Duplicate job ne duplique pas encore toute la configuration — `severity: low` · `status: open`
+- Contexte : `POST /api/jobs/[id]/duplicate` copie prompt, plan, duration, engine,
+  image URL et references payload, puis relance `/api/jobs`.
+- Risque : l'intitule "Duplicate with same assets" peut etre percu comme plus fort
+  que le comportement actuel si certains champs ne sont pas repris (aspect ratio,
+  caption/audio modes, verified face asset IDs, scenes/Director plan, multi-scene chain).
+- Reco : T-501b peut garder un libelle prudent (`Duplicate`/`Duplicate job`). Pour
+  un vrai "Create variation" ou "Duplicate with same assets", faire T-501e : audit
+  backend + tests avant changement.
+
+### [R-013] Use as reference doit etre decide avant implementation — `severity: low` · `status: open`
+- Contexte : la page job devrait idealement proposer `Use as reference`, mais le
+  create flow attend des references structurees et `reference-upload.tsx` marque encore
+  certains slots video/audio comme coming soon.
+- Risque : un simple lien vers `/create/story` avec une URL video pourrait ne pas etre
+  compatible avec le composer/payload attendu, ou creer une UX trompeuse.
+- Reco : ecrire une mini decision T-501d avant code : query param job id, asset
+  reference server-side, ou version simple open-create/copy URL. Ne pas coder a l'aveugle.
 ## Décisions actées
 
 - `HANDOVER.md` = source de vérité courante (prime sur README/CLAUDE si conflit).
 - Build local doit passer **sans secrets** (`/gallery` dégrade proprement) — acquis.
 - Lint doit rester « no warnings or errors » — acquis.
+

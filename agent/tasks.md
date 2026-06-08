@@ -130,14 +130,40 @@ de migration ni de modif state machine**.
 - Briques : `cinematic_looks`/HeyGen look reuse, lipsync/voiceover existants.
 - Note : nouvelle table probable → migration additive (R-003 process).
 
-## Axe 5 — Post-generation studio  `status: todo`
+## Axe 5 — Post-generation studio  `status: in_progress`
 
-### [T-501] Page résultat premium + actions — `status: todo` · `owner: claude`
-- Objectif : `Create variation`, `Retry failed scenes`, `Use as reference`,
-  `Save as Look`, `Generate caption pack`, `Schedule post`, `Export TikTok/Reels/
-  Shorts`, `Duplicate with same assets` — rendre visibles les routes existantes.
-- Fichiers : `app/jobs/[id]/page.tsx`, routes social/export/scheduled.
+Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio
+post-generation existe deja en grande partie (`SocialExportPanel`, `ThumbnailPicker`,
+routes export/social/schedule/looks). **Ne pas creer de doublon** ; consolider et
+polir l'existant.
 
+### [T-501a] Spec/audit Post-generation Studio — `status: done` · `owner: codex`
+- Livre docs-only : audit des actions job existantes, routes social/thumbnail/metadata/
+  schedule/looks/duplicate, limites connues, decoupage T-501b/c/d/e.
+- Decision : T-501 est surtout une consolidation UX. `SocialExportPanel` gere deja
+  exports TikTok/Reels/Instagram/YouTube, thumbnail, AI copy, publish et schedule.
+
+### [T-501b] Job action bar premium — `status: todo` · `owner: codex|claude`
+- Objectif : regrouper/polir les actions visibles sur un job termine : Download,
+  Share, Copy link, Copy prompt, Duplicate/Create variation, Save as Look si supporte.
+- Scope : UI-only, reutiliser les handlers/routes existants dans `app/jobs/[id]/page.tsx`.
+- Attention : ne pas renommer `Duplicate` en `Create variation` si le flux genere
+  directement un nouveau job sans passage par un editeur de variation.
+
+### [T-501c] Social Pack consolidation — `status: todo` · `owner: codex|claude`
+- Objectif : rendre `components/job/social-export-panel.tsx` plus premium et lisible
+  sans changer ses routes : formats/export, thumbnail, AI copy, schedule/publish.
+- Scope : UI-only ; conserver gates plan/social connections ; provider names interdits.
+
+### [T-501d] Use as reference decision — `status: todo` · `owner: chatgpt(spec)→claude(impl)`
+- Objectif : definir comment un job termine devient reference du prochain create flow.
+- Decision requise avant code : query param job id vs asset reference server-side vs
+  version simple open-create/copy URL. Le composer attend des references structurees.
+
+### [T-501e] Duplicate fidelity audit — `status: todo` · `owner: codex|claude`
+- Objectif : verifier puis ameliorer `POST /api/jobs/[id]/duplicate` pour vraiment
+  dupliquer les assets/options (aspect ratio, audio/caption modes, verified faces,
+  scenes/Director plan). Backend + tests, pas UI-only.
 ## Axe 6 — Nettoyage docs / lint / tests  `status: in_progress`
 
 ### [T-601] Refresh README.md + CLAUDE.md + HANDOVER status — `status: done` · `owner: claude`
@@ -200,3 +226,4 @@ de migration ni de modif state machine**.
 - [DONE] Model selector → dropdown compact ; Duration/Format/Scenes compacts.
 - [DONE] Fix build local `/gallery` sans secrets ; `HANDOVER.md` ; bandeau README.
 - [DONE] Lint 100 % clean (CTO list).
+
