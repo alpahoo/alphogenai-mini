@@ -10,6 +10,7 @@ import {
   Film,
 } from "lucide-react";
 import type { JobScene } from "@/lib/types";
+import { sceneStatusMeta } from "@/lib/scene-status";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,22 +50,7 @@ function statusIndicator(status: string) {
 }
 
 function statusLabel(status: string): string {
-  switch (status) {
-    case "done":
-      return "Complete";
-    case "failed":
-      return "Failed";
-    case "generating":
-      return "Generating...";
-    case "encoding":
-      return "Encoding...";
-    case "uploading":
-      return "Uploading...";
-    case "skipped":
-      return "Skipped";
-    default:
-      return "Queued";
-  }
+  return sceneStatusMeta(status).label;
 }
 
 // ---------------------------------------------------------------------------

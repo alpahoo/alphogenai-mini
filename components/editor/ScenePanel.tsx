@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import type { JobScene } from "@/lib/types";
 import { getEngineDisplayName } from "@/lib/types";
+import { cleanModelName } from "@/lib/engine-intentions";
+import { supportsSingleSceneRegen } from "@/lib/scene-status";
 
 interface ScenePanelProps {
   scene: JobScene;
@@ -86,6 +88,8 @@ export function ScenePanel({
   }, [scene.id, scene.prompt]);
 
   const isDirty = prompt.trim() !== scene.prompt;
+  // Single-scene regenerate is only supported by some engines (R-010).
+  const canRegen = supportsSingleSceneRegen(jobEngine ?? scene.engine);
 
   const handleSave = async () => {
     if (!isDirty || saving) return;
@@ -224,9 +228,9 @@ export function ScenePanel({
           </div>
           <div className="flex items-center justify-between text-[11px]">
             <span className="text-muted-foreground flex items-center gap-1">
-              <Cpu className="h-3 w-3" /> Engine
+              <Cpu className="h-3 w-3" /> Model
             </span>
-            <span className="font-medium">{getEngineDisplayName(jobEngine ?? scene.engine)}</span>
+            <span className="font-medium">{cleanModelName(getEngineDisplayName(jobEngine ?? scene.engine))}</span>
           </div>
         </div>
 
@@ -249,34 +253,43 @@ export function ScenePanel({
 
         {/* Actions */}
         {editable && (
-          <div className="flex gap-2">
-            <button
-              onClick={handleSave}
-              disabled={!isDirty || saving}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              {saving ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : saveStatus === "saved" ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-green-300" />
-              ) : (
-                <Save className="h-3.5 w-3.5" />
-              )}
-              {saving ? "Saving..." : saveStatus === "saved" ? "Saved!" : "Save"}
-            </button>
+          <div className="space-y-1.5">
+            <div className="flex gap-2">
+              <button
+                onClick={handleSave}
+                disabled={!isDirty || saving}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                {saving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : saveStatus === "saved" ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-300" />
+                ) : (
+                  <Save className="h-3.5 w-3.5" />
+                )}
+                {saving ? "Saving..." : saveStatus === "saved" ? "Saved!" : "Save"}
+              </button>
 
-            <button
-              onClick={handleRegenerate}
-              disabled={regenerating}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-card/50 px-3 py-2 text-xs font-medium hover:bg-muted/40 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              {regenerating ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RotateCcw className="h-3.5 w-3.5" />
+              {canRegen && (
+                <button
+                  onClick={handleRegenerate}
+                  disabled={regenerating}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border bg-card/50 px-3 py-2 text-xs font-medium hover:bg-muted/40 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                >
+                  {regenerating ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  )}
+                  {regenerating ? "Firing..." : "Regenerate"}
+                </button>
               )}
-              {regenerating ? "Firing..." : "Regenerate"}
-            </button>
+            </div>
+            {!canRegen && (
+              <p className="text-[10px] text-muted-foreground/60">
+                Single-scene regeneration isn&apos;t available for this model — edit the prompt and save, or retry from the project.
+              </p>
+            )}
           </div>
         )}
       </motion.div>

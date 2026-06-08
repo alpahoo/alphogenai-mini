@@ -1,4 +1,4 @@
-# agent/tasks.md — Backlog partagé
+﻿# agent/tasks.md — Backlog partagé
 
 Format d'une tâche :
 - **[ID] Titre** — `status: todo|in_progress|blocked|done` · `owner: claude|codex|chatgpt|—`
@@ -105,15 +105,16 @@ de migration ni de modif state machine**.
   créer, endpoints dispo (retry-scenes / PATCH prompt / POST regen single-scene),
   risques (R-010), tests, découpage T-301a/b/c (+ V2 d).
 
-### [T-301b] Réutiliser SceneTimeline/ScenePanel (pas de doublon) — `status: todo` · `owner: claude`
-- **Addendum spec (2026-06-08)** : la page job utilise DÉJÀ
-  `components/editor/SceneTimeline.tsx` (= board read-only complet) + `ScenePanel.tsx`
-  (détail + Save/Regenerate). **Ne pas créer `scene-board.tsx`.**
-- À faire (UI-only, petit diff) : (a) `ScenePanel` libellé « Engine » → « Model » +
-  `cleanModelName(getEngineDisplayName(...))` ; (b) **gater Regenerate** (EvoLink/
-  Bailian only, R-010) ; (c) optionnel `lib/scene-status.ts` pur + test, adopté par
-  les 2 composants. `SceneTimeline` quasi inchangé.
-
+### [T-301b] Reutiliser SceneTimeline/ScenePanel (pas de doublon) — `status: done` · `owner: codex`
+- Livre UI-only : pas de nouveau `scene-board.tsx`. `SceneTimeline` reste le board
+  read-only existant ; il utilise desormais `sceneStatusMeta()` pour les labels.
+- `ScenePanel` : libelle `Engine` -> `Model` +
+  `cleanModelName(getEngineDisplayName(jobEngine ?? scene.engine))` ; `jobEngine`
+  est passe aux panneaux mobile + desktop.
+- `Regenerate` est gate via `supportsSingleSceneRegen()` (EvoLink/Bailian only,
+  R-010) ; les autres modeles voient un texte discret au lieu d'un bouton qui echoue.
+- Nouveau helper pur `lib/scene-status.ts` + test `lib/__tests__/scene-status.test.ts`
+  (statuts provider-neutres + gating regen). 240 tests au total.
 ### [T-301c] Retry affordances — `status: todo` · `owner: claude`
 - Retry job-level (`retry-scenes`, job failed) déjà présent sur la page ; regen
   single-scene via `ScenePanel` **gaté** (R-010). Pas de modif route.

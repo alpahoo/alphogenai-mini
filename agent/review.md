@@ -1,4 +1,4 @@
-# agent/review.md — Points de review, risques, décisions ouvertes
+﻿# agent/review.md — Points de review, risques, décisions ouvertes
 
 Format :
 - **[ID] Sujet** — `severity: info|low|medium|high` · `status: open|resolved`
@@ -107,14 +107,15 @@ Format :
   lorsque le moteur est supporté ; sinon le masquer.
 - Reco : si on veut le regen single-scene multi-provider, c'est une évolution
   **backend** (hors scope T-301 UI-only) — à arbitrer plus tard.
-- Constat T-301 audit : `ScenePanel.tsx` affiche le bouton **Regenerate sans gating**
-  moteur → il échoue pour BytePlus/Atlas/HeyGen. T-301b doit le **gater**.
+- Constat T-301 audit : `ScenePanel.tsx` affichait le bouton **Regenerate sans gating**
+  moteur -> il echouait pour BytePlus/Atlas/HeyGen. **Fait T-301b** : bouton gate
+  via `supportsSingleSceneRegen()` (EvoLink/Bailian only). R-010 reste ouvert
+  pour une eventuelle evolution backend multi-provider.
 
-### [R-011] `ScenePanel` libellé « Engine » + clé non nettoyée — `severity: low` · `status: open`
-- `components/editor/ScenePanel.tsx:227-229` : libellé public « Engine » + valeur
-  `getEngineDisplayName(jobEngine ?? scene.engine)` **sans** `cleanModelName` (fuite
-  possible si la clé n'est pas dans la map, ex. `*_byteplus`). T-301b : « Engine »→
-  « Model » + wrapper `cleanModelName(...)`.
+### [R-011] `ScenePanel` libelle `Engine` + cle non nettoyee — `severity: low` · `status: resolved`
+- Resolu T-301b : `ScenePanel` affiche `Model` et passe par
+  `cleanModelName(getEngineDisplayName(jobEngine ?? scene.engine))`; `jobEngine` est
+  cable depuis la page job pour les panneaux mobile + desktop.
 
 ## Décisions actées
 

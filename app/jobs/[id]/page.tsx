@@ -890,6 +890,7 @@ export default function JobPage() {
                   onClose={handleClosePanel}
                   onPromptSaved={handlePromptSaved}
                   onRegenerate={handleSceneRegenerate}
+                  jobEngine={job?.engine_used}
                 />
               )}
             <InfoCards job={job} isActive={isActive} isDone={isDone} isFailed={isFailed} stageLabel={stageLabel} elapsed={elapsed} sceneCount={sceneCount} isAdmin={isAdmin} adminCredits={adminCredits} youtubeConnected={youtubeConnected} tiktokConnected={tiktokConnected} instagramConnected={instagramConnected} channelNames={channelNames} scenes={scenes} />

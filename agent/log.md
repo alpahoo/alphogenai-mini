@@ -353,3 +353,9 @@ findings level block/warn + message), `byteplus-cost.ts`
   `components/create/prompt-composer.tsx`.
 - Tests : `build` OK ; `tsc` clean ; `vitest` 220/220.
 - Commits : `da38afc`, `4dbda8a`, `098b707`, `03eaffe`, `fc14560`, `8e702da`, `7ac7380`.
+
+## 2026-06-08 — Codex — T-301b ScenePanel polish + regen gating
+- Reprise apres limite de credit Claude : travail non committe finalise sans creer de nouveau SceneBoard.
+- Fait : `lib/scene-status.ts` (helper pur client-safe : `sceneStatusMeta`, `supportsSingleSceneRegen`) + test ; `SceneTimeline` reutilise `sceneStatusMeta` pour ses labels ; `ScenePanel` affiche `Model` avec `cleanModelName(getEngineDisplayName(...))`, recoit `jobEngine` mobile+desktop, et masque `Regenerate` hors moteurs supportes (EvoLink/Bailian only, R-010).
+- Scope : UI-only/helper pur ; aucune route/API/DB/state machine.
+- Validation : `vitest` 240/240 · `tsc` clean · `lint` clean · `build` OK.
