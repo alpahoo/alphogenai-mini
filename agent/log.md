@@ -12,6 +12,17 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — T-202 fix P2 : risk sur les prompts de scènes
+- Bug Codex (P2) : `computeDirectorQuality` n'analysait que `input.prompt`, alors que
+  depuis T-201c les prompts envoyés sont `directorScenes[].prompt` → une scène éditée
+  bloquée/warn pouvait rester « Good ».
+- Fix : `DirectorQualityInput.scenes` porte maintenant `prompt?` ; le screening utilise
+  `scenes.map(s=>s.prompt).filter(...).join("\n")` quand présent, sinon fallback
+  `input.prompt`. (Cost/social/time inchangés.)
+- Test (+1) : prompt original clean + scène bloquée → `risky` ; scène avec age-word →
+  `medium` ; fallback original sans prompt de scène. Anti provider-leak toujours vert.
+- **UI-only / helper pur** ; aucune route/API/DB. tsc · build · lint · **235 tests** verts.
+
 ## 2026-06-08 — Claude (Opus 4.8) — T-202 : quality/cost score réel (helper pur + réactif)
 - Fait : `lib/director-quality.ts` (`computeDirectorQuality`, pur) — `QualityReadout`/
   `QualityTone` déplacés ici, le panel les ré-exporte. Branché : `screenPrompt`

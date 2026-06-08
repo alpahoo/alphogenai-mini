@@ -34,6 +34,32 @@ describe("computeDirectorQuality", () => {
     expect(computeDirectorQuality(input({ prompt: "hi" })).prompt.tone).toBe("risky");
   });
 
+  it("prompt: screens the EDITED scene prompts, not just the original", () => {
+    // Original is clean, but an edited scene introduces blocked / warn content.
+    const blocked = computeDirectorQuality(
+      input({
+        prompt: "A calm city skyline at sunset",
+        scenes: [{ durationSec: 5, prompt: "wide shot of a city" }, { durationSec: 5, prompt: "Spider-Man swings by" }],
+      }),
+    );
+    expect(blocked.prompt.tone).toBe("risky");
+    expect(blocked.prompt.label).toBe("Review prompt");
+
+    const warned = computeDirectorQuality(
+      input({
+        prompt: "A calm city skyline at sunset",
+        scenes: [{ durationSec: 5, prompt: "a child running across the street, wide shot" }],
+      }),
+    );
+    expect(warned.prompt.tone).toBe("medium");
+    expect(warned.prompt.label).toBe("Caution");
+
+    // Falls back to the original prompt when scenes carry no prompt.
+    expect(
+      computeDirectorQuality(input({ prompt: "Spider-Man in a Disney castle", scenes: [{ durationSec: 5 }] })).prompt.tone,
+    ).toBe("risky");
+  });
+
   it("cost: Seedance model → token-based estimate; otherwise deferred", () => {
     expect(computeDirectorQuality(input({ selectedEngineKey: "seedance2_fast_byteplus" })).costLabel).toMatch(/^~\$\d/);
     expect(computeDirectorQuality(input({ selectedEngineKey: "wan_i2v" })).costLabel).toBe("Estimated after plan");

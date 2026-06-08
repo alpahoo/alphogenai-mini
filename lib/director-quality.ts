@@ -39,9 +39,11 @@ export interface QualityReadout {
 }
 
 export interface DirectorQualityInput {
+  /** Original composer prompt — fallback for risk screening only. */
   prompt: string;
-  /** Edited scenes — only the duration is needed for cost/time/social. */
-  scenes: { durationSec: number }[];
+  /** Edited scenes. `prompt` (when present) is what's actually sent for that
+   *  scene, so risk screening must use it; `durationSec` drives cost/time/social. */
+  scenes: { durationSec: number; prompt?: string }[];
   hasFace: boolean;
   hasRawImage: boolean;
   engineCompat: EngineCompatContext;
@@ -112,6 +114,13 @@ export function computeDirectorQuality(input: DirectorQualityInput): QualityRead
   const n = Math.max(1, scenes.length);
   const totalDur = scenes.reduce((s, sc) => s + (sc.durationSec || 0), 0);
 
+  // Risk screening must run on the text actually sent: the edited scene prompts
+  // when present, otherwise the original composer prompt.
+  const scenePrompts = scenes
+    .map((sc) => sc.prompt?.trim())
+    .filter((p): p is string => !!p);
+  const screenText = scenePrompts.length > 0 ? scenePrompts.join("\n") : prompt;
+
   const character: QualityItem = hasFace
     ? { label: "High", tone: "good" }
     : hasRawImage
@@ -120,7 +129,7 @@ export function computeDirectorQuality(input: DirectorQualityInput): QualityRead
 
   return {
     character,
-    prompt: promptItem(prompt),
+    prompt: promptItem(screenText),
     model: modelItem(input),
     social: socialItem(aspectRatio, totalDur),
     costLabel: costLabelFor(selectedEngineKey, totalDur),
