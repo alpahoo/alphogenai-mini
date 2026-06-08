@@ -10,17 +10,9 @@
  */
 
 import { Sparkles, Wand2, Clapperboard, X, Loader2 } from "lucide-react";
+import type { QualityReadout, QualityTone } from "@/lib/director-quality";
 
-export type QualityTone = "good" | "medium" | "risky";
-
-export interface QualityReadout {
-  character: { label: string; tone: QualityTone };
-  prompt: { label: string; tone: QualityTone };
-  model: { label: string; tone: QualityTone };
-  social: { label: string; tone: QualityTone };
-  costLabel: string;
-  timeLabel: string;
-}
+export type { QualityReadout, QualityTone };
 
 export interface DirectorSceneVM {
   index: number;

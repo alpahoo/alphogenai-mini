@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use, useRef } from "react";
+import { useState, useEffect, use, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -46,9 +46,9 @@ import { getEngineIntention, cleanModelName, faceCompat, type EngineCompatContex
 import {
   AIDirectorPanel,
   type DirectorSceneVM,
-  type QualityReadout,
   type DirectorAction,
 } from "@/components/create/ai-director-panel";
+import { computeDirectorQuality } from "@/lib/director-quality";
 import { isAdminEmail } from "@/lib/flags";
 import type { PromptTemplate } from "@/lib/prompt-templates";
 import type { JobPlan, EngineKey, ReferenceItem } from "@/lib/types";
@@ -206,7 +206,6 @@ export default function CreateModePage({
   // AI Director — editable pre-generation plan (submit wired in submitJob)
   const [directorOpen, setDirectorOpen] = useState(false);
   const [directorScenes, setDirectorScenes] = useState<DirectorSceneVM[]>([]);
-  const [directorQuality, setDirectorQuality] = useState<QualityReadout | null>(null);
 
   // Format & captions
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16" | "1:1">("16:9");
@@ -671,18 +670,21 @@ export default function CreateModePage({
   // in Advanced). Selecting the model first makes the contextual sections
   // (references, faces, cost) appear logically below.
   // Selected-engine capabilities → asset compatibility badges (display-only).
-  const engineCompat: EngineCompatContext = {
-    isAuto: selectedEngine === "auto",
-    isBytePlus2: isBytePlus2Selected,
-    supportsRefs:
-      selectedEngine === "auto" ||
-      engineOptions.some((e) => e.key === selectedEngine && e.supportsRefs),
-  };
+  const engineCompat: EngineCompatContext = useMemo(
+    () => ({
+      isAuto: selectedEngine === "auto",
+      isBytePlus2: isBytePlus2Selected,
+      supportsRefs:
+        selectedEngine === "auto" ||
+        engineOptions.some((e) => e.key === selectedEngine && e.supportsRefs),
+    }),
+    [selectedEngine, isBytePlus2Selected, engineOptions],
+  );
 
   // ── AI Director — derive a readable, editable plan + quality read-out from
   //    the current inputs. Pure/local; the plan is sent on "Generate now" via
   //    submitJob({ directorScenes }). No provider names surface here.
-  const buildDirectorPlan = (): { scenes: DirectorSceneVM[]; quality: QualityReadout } => {
+  const buildDirectorPlan = (): DirectorSceneVM[] => {
     const n = Math.max(1, sceneCount || 1);
     const total = Math.max(1, parseInt(duration, 10) || 5);
     const per = Math.max(3, Math.min(10, Math.round(total / n)));
@@ -711,49 +713,29 @@ export default function CreateModePage({
       notes: !hasFace && engineCompat.isBytePlus2 ? ["character consistency: add a verified face"] : undefined,
     }));
 
-    const character: QualityReadout["character"] = hasFace
-      ? { label: "High", tone: "good" }
-      : composerRefs.some((r) => r.refType === "image" && r.url)
-        ? { label: "Medium", tone: "medium" }
-        : { label: "None", tone: "medium" };
-    const promptQ: QualityReadout["prompt"] =
-      base.length > 60 ? { label: "Good", tone: "good" } : base.length > 20 ? { label: "Okay", tone: "medium" } : { label: "Thin", tone: "risky" };
-    const modelQ: QualityReadout["model"] = engineCompat.isAuto
-      ? { label: "Auto OK", tone: "good" }
-      : hasFace
-        ? engineCompat.isBytePlus2
-          ? { label: "OK", tone: "good" }
-          : { label: "Use verified-face model", tone: "medium" }
-        : engineCompat.supportsRefs
-          ? { label: "OK", tone: "good" }
-          : { label: "No references", tone: "medium" };
-    const social: QualityReadout["social"] =
-      aspectRatio === "9:16"
-        ? { label: "TikTok 9:16 OK", tone: "good" }
-        : aspectRatio === "1:1"
-          ? { label: "Square 1:1", tone: "good" }
-          : { label: "Landscape 16:9", tone: "good" };
-
-    let costLabel = "Estimated after plan";
-    const isSeedanceCost =
-      selectedEngine.includes("seedance") || selectedEngine.includes("byteplus") || selectedEngine.includes("atlas");
-    if (isSeedanceCost) {
-      const res = selectedEngine.includes("720") || selectedEngine.includes("fast") ? "720p" : "1080p";
-      const usd = SEEDANCE_USD_PER_MTOKEN[selectedEngine] ?? 2.4;
-      const est = estimateBytePlusCost(res, total, { usdPerMToken: usd });
-      costLabel = `~$${est.costUsd.toFixed(2)}`;
-    }
-    const timeLabel = `~${n}–${n * 2} min`;
-
-    return { scenes, quality: { character, prompt: promptQ, model: modelQ, social, costLabel, timeLabel } };
+    return scenes;
   };
 
   const openDirector = () => {
-    const plan = buildDirectorPlan();
-    setDirectorScenes(plan.scenes);
-    setDirectorQuality(plan.quality);
+    setDirectorScenes(buildDirectorPlan());
     setDirectorOpen(true);
   };
+
+  // Reactive quality read-out — recomputed whenever the edited scenes or inputs
+  // change (real helpers, provider-neutral; see lib/director-quality.ts).
+  const directorQuality = useMemo(
+    () =>
+      computeDirectorQuality({
+        prompt,
+        scenes: directorScenes,
+        hasFace: composerRefs.some((r) => r.refType === "face"),
+        hasRawImage: composerRefs.some((r) => r.refType === "image" && !!r.url),
+        engineCompat,
+        selectedEngineKey: selectedEngine,
+        aspectRatio,
+      }),
+    [prompt, directorScenes, composerRefs, engineCompat, selectedEngine, aspectRatio],
+  );
 
   const applyDirectorAction = (action: DirectorAction) => {
     setDirectorScenes((prev) =>
@@ -1822,7 +1804,7 @@ export default function CreateModePage({
             })()}
 
             {/* ── AI Director (edited plan) ──────────────────────── */}
-            {directorOpen && directorQuality && (
+            {directorOpen && (
               <AIDirectorPanel
                 scenes={directorScenes}
                 quality={directorQuality}

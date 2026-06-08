@@ -12,6 +12,20 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — T-202 : quality/cost score réel (helper pur + réactif)
+- Fait : `lib/director-quality.ts` (`computeDirectorQuality`, pur) — `QualityReadout`/
+  `QualityTone` déplacés ici, le panel les ré-exporte. Branché : `screenPrompt`
+  (prompt risk), `estimateBytePlusCost`+`SEEDANCE_USD_PER_MTOKEN` (cost sur somme des
+  durées éditées), `faceCompat`/`uploadCompat` (model compat), aspect+durée (social).
+- Page : `directorQuality` = `useMemo` (recalcul à chaque édition de scène) ;
+  `buildDirectorPlan` ne renvoie que les scènes ; `engineCompat` wrappé en `useMemo`
+  (corrige le warning exhaustive-deps).
+- Test : `lib/__tests__/director-quality.test.ts` (+8) incl. cas **anti provider-leak**.
+- **UI-only / helper pur** ; aucune route/API/DB/state machine. R-009 non traité.
+- Fichiers : `lib/director-quality.ts`, `lib/__tests__/director-quality.test.ts`,
+  `components/create/ai-director-panel.tsx`, `app/(workspace)/create/[mode]/page.tsx`.
+- Tests : `tsc` clean · `vitest` **234/234** · `lint` clean · `build` OK.
+
 ## 2026-06-08 — Claude (Opus 4.8) — T-605b : provider-leak cleanup page job (review OK)
 - Contexte : review visuelle utilisateur **OK** (flux Director → job créé/terminé). Capture
   montrait « Provider Credits / EvoLink balance / Top up on EvoLink » + clé brute

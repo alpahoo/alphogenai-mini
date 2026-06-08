@@ -79,10 +79,19 @@ score, contraintes techniques, découpage). Le Director est une couche **avant**
   est construit côté client via `buildDirectorPlan`. À garder seulement si on veut
   un plan serveur enrichi plus tard.)
 
-### [T-202] Quality score + cost/time estimate — `status: todo` · `owner: claude`
-- Diagnostic pré-génération (character consistency, prompt clarity, model compat,
-  social fit, cost, durée). Briques : `lib/byteplus-cost.ts`, `lib/content-policy.ts`,
-  `lib/engine-intentions.ts`. Confidentialité providers respectée.
+### [T-202] Quality score + cost/time estimate — `status: done` · `owner: claude`
+- Livré : helper pur `lib/director-quality.ts` (`computeDirectorQuality`) — types
+  `QualityReadout`/`QualityTone` déplacés ici (panel les ré-exporte). Branché sur les
+  vrais helpers : prompt risk ← `screenPrompt` ; cost ← `estimateBytePlusCost` +
+  `SEEDANCE_USD_PER_MTOKEN` (somme des durées éditées) ; model compat ← `faceCompat`/
+  `uploadCompat` ; social fit ← aspect + durée totale ; character + time.
+- Page : `directorQuality` devient **dérivé (`useMemo`)** → recalcul à chaque édition de
+  scène ; `buildDirectorPlan` ne renvoie plus que les scènes ; `engineCompat` wrappé
+  en `useMemo` (lint clean).
+- Test : `lib/__tests__/director-quality.test.ts` (prompt risk, cost Seedance/deferred,
+  social fit, character, model compat, **anti provider-leak**). 234 tests au total.
+- UI-only ; aucune route/API/DB/state machine. R-009 non traité (hors scope).
+  tsc · build · lint · 234 tests verts.
 
 ## Axe 3 — Scene Board éditable  `status: todo`
 
