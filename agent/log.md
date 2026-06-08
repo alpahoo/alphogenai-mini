@@ -449,3 +449,10 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Mocks : `createClient`, `uuid.v4`, `file-type/fromBuffer`; aucun appel Supabase/R2/provider reel.
 - Couverture : auth 401, fichier requis, magic bytes absents, MIME mismatch, upload user-scoped `user_id/uuid.ext`, signed URL 6h, erreur storage.
 - Validation : `vitest` 264/264, `tsc` clean, `lint` clean, `build` OK.
+
+
+## 2026-06-09 - Codex - T-602c POST /api/jobs route tests
+- Fait : ajout de `app/api/jobs/route.test.ts`, tests route-level de `POST /api/jobs` avec Supabase service/auth et providers mockes.
+- Couverture : prompt min, content policy, reference storage ownership, active generation gate, daily quota free, plan gate moteur Pro.
+- Aucun appel provider reel ; les tests restent sur les early exits/gates avant generation.
+- Validation : `vitest` 270/270, `lint` clean, `build` OK, `tsc` clean (relance seule apres build pour eviter collision .next/types).

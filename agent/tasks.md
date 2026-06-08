@@ -228,7 +228,7 @@ polir l'existant.
   d'intégration), compteur tests → **226**, snapshot lint ajouté.
 - Docs-only ; tsc · build · lint · 226 tests verts. R-001 résolu.
 
-### [T-602] Tests d'int?gration API + guards - `status: in_progress` - `owner: codex|claude`
+### [T-602] Tests d'int?gration API + guards - `status: done` - `owner: codex|claude`
 - **Fait** : guard anti-leak provider `lib/__tests__/provider-leak-guard.test.ts`
   (ENGINE_DISPLAY_NAMES + getEngineDisplayName + cleanModelName ; 6 cas). Verrouille
   T-102/T-605.
@@ -238,9 +238,11 @@ polir l'existant.
 - **Fait T-602b (Codex)** : tests route-level mockes
   `app/api/upload/route.test.ts` pour `?bucket=references` : auth 401, fichier requis,
   magic bytes absents, MIME mismatch, upload user-scoped + signed URL, erreur storage.
-- Etat validation : **264 tests** au total, tsc/lint/build clean au dernier passage.
-- **Reste** : tests d integration `POST /api/jobs` (routing/plan gate/content policy).
-  Mock Supabase/providers ; pas de vrais providers. (R-005.)
+- **Fait T-602c (Codex)** : tests route-level mockes
+  `app/api/jobs/route.test.ts` pour `POST /api/jobs` : prompt min, content policy,
+  ownership references, active generation gate, daily quota free, plan gate moteur Pro.
+- Etat validation : **270 tests** au total, tsc/lint/build clean au dernier passage.
+- Aucun appel Supabase/provider reel dans ces tests ; providers critiques sont mockes.
 
 ### [T-603] Lint 100 % clean — `status: done` · `owner: claude`
 - `next lint` → no warnings/errors. (Fait.)
