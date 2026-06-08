@@ -232,14 +232,12 @@ export default function CreateModePage({
   const [voiceMode, setVoiceMode] = useState<"lipsync" | "voiceover">("lipsync");
   const [voiceLipsyncMode, setVoiceLipsyncMode] = useState<"speed" | "precision">("speed");
 
-  // HeyGen avatars (used when an Avatar Shots / Avatar IV model is selected —
-  // billed on HeyGen credits, ~60x cheaper than EvoLink Seedance)
+  // Avatar library used when an avatar model is selected.
   const [heygenAvatars, setHeygenAvatars] = useState<HeyGenAvatar[]>([]);
   const [heygenAvatarsLoading, setHeygenAvatarsLoading] = useState(false);
   const [selectedAvatarId, setSelectedAvatarId] = useState("");
 
-  // True when a HeyGen avatar model is selected (needs an avatar + voice;
-  // billed on HeyGen credits instead of EvoLink).
+  // True when an avatar model is selected (needs an avatar + voice).
   const isHeyGenEngineSelected =
     selectedEngine === "heygen_avatar_iv" || selectedEngine === "heygen_avatar_shots";
 
@@ -639,7 +637,7 @@ export default function CreateModePage({
             voice_mode: voiceMode,
             lipsync_mode: voiceLipsyncMode,
           }),
-          // HeyGen avatar models → route to the avatar pipeline (HeyGen credits)
+          // Avatar models route to the avatar pipeline.
           ...(isHeyGenEngineSelected && selectedAvatarId && {
             avatar_id: selectedAvatarId,
           }),
@@ -782,6 +780,70 @@ export default function CreateModePage({
         aspectRatio,
       }),
     [prompt, directorScenes, composerRefs, engineCompat, directorEngineKey, aspectRatio],
+  );
+
+  const hasPrompt = prompt.trim().length > 0;
+  const directorSceneLabel = `${sceneCount} scene${sceneCount > 1 ? "s" : ""}`;
+  const directorModelLabel =
+    selectedEngine === "auto"
+      ? "Auto -> Seedance 2.0 Fast"
+      : cleanModelName(engineOptions.find((e) => e.key === selectedEngine)?.label ?? selectedEngine);
+  const directorConsole = (
+    <div className="rounded-2xl border border-primary/25 bg-card px-4 py-4 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase text-primary">
+            <Sparkles className="h-3.5 w-3.5" />
+            Director Console
+          </div>
+          <div>
+            <h2 className="text-lg font-bold tracking-tight text-foreground">
+              Turn the prompt into an editable shot plan
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Review scene prompts, duration, model fit and cost before generation. The classic Generate Video path stays available.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid min-w-0 gap-2 text-xs sm:grid-cols-3 lg:w-[420px]">
+          <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+            <span className="block text-muted-foreground/60">Plan</span>
+            <span className="mt-0.5 block truncate font-semibold text-foreground">{directorSceneLabel}</span>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+            <span className="block text-muted-foreground/60">Model</span>
+            <span className="mt-0.5 block truncate font-semibold text-foreground">{directorModelLabel}</span>
+          </div>
+          <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
+            <span className="block text-muted-foreground/60">Readiness</span>
+            <span className={`mt-0.5 block font-semibold ${hasPrompt ? "text-emerald-500" : "text-amber-500"}`}>
+              {hasPrompt ? "Ready to plan" : "Prompt needed"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <button
+          type="button"
+          onClick={openDirector}
+          disabled={loading || !hasPrompt}
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Clapperboard className="h-4 w-4" />
+          {directorOpen ? "Refresh Director plan" : "Plan with AI Director"}
+        </button>
+        <button
+          type="submit"
+          disabled={loading || !hasPrompt}
+          className="flex items-center justify-center gap-2 rounded-xl border border-border/60 bg-background px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-44"
+        >
+          <Wand2 className="h-4 w-4" />
+          Generate now
+        </button>
+      </div>
+    </div>
   );
 
   const applyDirectorAction = (action: DirectorAction) => {
@@ -1138,6 +1200,26 @@ export default function CreateModePage({
 
             {/* ── Model (promoted out of Advanced) ───────────────── */}
             {planLoaded && modelBlock}
+
+            {/* AI Director Console */}
+            {directorConsole}
+
+            {directorOpen && (
+              <AIDirectorPanel
+                scenes={directorScenes}
+                quality={directorQuality}
+                generating={loading}
+                onSceneChange={(index, patch) =>
+                  setDirectorScenes((prev) => prev.map((s) => (s.index === index ? { ...s, ...patch } : s)))
+                }
+                onAction={applyDirectorAction}
+                onClose={() => setDirectorOpen(false)}
+                onGenerate={() => {
+                  setDirectorOpen(false);
+                  submitJob({ directorScenes });
+                }}
+              />
+            )}
 
             {/* ── References (collapsed by default; advanced inputs) ──── */}
             <div className="rounded-xl border border-border/40">
@@ -1720,18 +1802,17 @@ export default function CreateModePage({
               const engineKey = selectedEngine === "auto" ? "evolink_fast" : selectedEngine;
               const isBailianEngine = engineKey.includes("bailian");
 
-              // HeyGen avatar models — billed on HeyGen credits (not EvoLink)
+              // Avatar models use the connected avatar wallet.
               if (isHeyGenEngineSelected) {
                 return (
                   <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 flex items-start gap-3">
                     <Wallet className="h-5 w-5 shrink-0 mt-0.5 text-emerald-400" />
                     <div className="flex-1">
                       <p className="text-sm font-medium text-emerald-500">
-                        HeyGen credits — Avatar Shots (~$0.008/s)
+                        Avatar credits - low-cost scene mode
                       </p>
                       <p className="text-xs text-muted-foreground/70 mt-0.5">
-                        ~60× cheaper than EvoLink Seedance for the same scene.
-                        Billed on your HeyGen wallet, not EvoLink.
+                        Optimized for talking avatar scenes. Billed against the connected avatar wallet.
                       </p>
                     </div>
                   </div>
@@ -1753,15 +1834,12 @@ export default function CreateModePage({
                   selectedEngine.includes("720") || isFast ? "720p" : "1080p";
                 const usdPerMToken = SEEDANCE_USD_PER_MTOKEN[selectedEngine] ?? 2.4;
                 const est = estimateBytePlusCost(resolution, dur, { usdPerMToken });
-                const provider = isByteplusSel
-                  ? "BytePlus (token)"
-                  : "AtlasCloud (pay-as-you-go)";
                 return (
                   <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 px-4 py-3 flex items-start gap-3">
                     <Wallet className="h-5 w-5 shrink-0 mt-0.5 text-violet-400" />
                     <div className="flex-1">
                       <p className="text-sm font-medium text-violet-500">
-                        Seedance 2.0 — coût estimé · {provider}
+                        Seedance 2.0 - estimated generation cost
                       </p>
                       <ul className="text-xs text-muted-foreground/80 mt-1.5 space-y-0.5">
                         <li>
@@ -1792,11 +1870,11 @@ export default function CreateModePage({
                     <Wallet className="h-5 w-5 shrink-0 mt-0.5 text-blue-400" />
                     <div className="flex-1">
                       <p className="text-sm font-medium text-blue-400">
-                        Bailian credits (Alibaba Cloud)
+                        External generation credits
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        No automatic balance check available for Bailian.
-                        Verify your credits on the Alibaba Cloud console before launching.
+                        No automatic balance check is available for this model.
+                        Verify the connected wallet before launching.
                       </p>
                       <a
                         href="https://bailian.console.alibabacloud.com/"
@@ -1804,7 +1882,7 @@ export default function CreateModePage({
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-2"
                       >
-                        <ExternalLink className="h-3 w-3" /> Open Alibaba Cloud Console
+                        <ExternalLink className="h-3 w-3" /> Open credit console
                       </a>
                     </div>
                   </div>
@@ -1849,7 +1927,7 @@ export default function CreateModePage({
                       <>
                         <p className="text-sm font-medium text-amber-400">
                           <Wallet className="h-3.5 w-3.5 inline mr-1" />
-                          EvoLink credits running low: {adminCredits.remaining.toFixed(1)} remaining
+                          Generation credits running low: {adminCredits.remaining.toFixed(1)} remaining
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
                           Estimated cost for this job: ~{estimatedCost} credits ({sceneCount} scene{sceneCount > 1 ? "s" : ""}).
@@ -1863,42 +1941,12 @@ export default function CreateModePage({
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-2"
                     >
-                      <ExternalLink className="h-3 w-3" /> Top up on EvoLink
+                      <ExternalLink className="h-3 w-3" /> Top up credits
                     </a>
                   </div>
                 </div>
               );
             })()}
-
-            {/* ── AI Director (edited plan) ──────────────────────── */}
-            {directorOpen && (
-              <AIDirectorPanel
-                scenes={directorScenes}
-                quality={directorQuality}
-                generating={loading}
-                onSceneChange={(index, patch) =>
-                  setDirectorScenes((prev) => prev.map((s) => (s.index === index ? { ...s, ...patch } : s)))
-                }
-                onAction={applyDirectorAction}
-                onClose={() => setDirectorOpen(false)}
-                onGenerate={() => {
-                  setDirectorOpen(false);
-                  submitJob({ directorScenes });
-                }}
-              />
-            )}
-
-            {!directorOpen && (
-              <button
-                type="button"
-                onClick={openDirector}
-                disabled={loading || !prompt.trim()}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/5 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Clapperboard className="h-4 w-4" />
-                Plan with AI Director
-              </button>
-            )}
 
             {/* ── Generate CTA (skip path) ───────────────────────── */}
             <button

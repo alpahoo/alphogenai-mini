@@ -321,10 +321,17 @@ polir l'existant.
 - Provider-neutral ; aucun backend/route/DB. Validation : 270 tests, tsc, lint, build OK.
 - Note verification : dev server HTTP 200 ; Browser plugin indisponible dans cet environnement au moment du check.
 
-### [T-703] Create flow premium pass - `status: todo` - `owner: codex`
-- Objectif : rendre AI Director plus central et visible, moins cache sous un bouton
-  desactive/formulaire ; clarifier le role de Scene Editor separe.
-- Scope : UI first, pas de backend sauf si decide.
+### [T-703] Create flow premium pass - `status: done` - `owner: codex`
+- Livre UI-only : ajout d'une `Director Console` dans le create flow, juste apres
+  les controles principaux. Le Director devient un chemin central visible avec
+  resume Plan / Model / Readiness, CTA `Plan with AI Director`, et skip path
+  `Generate now`.
+- Nettoyage : retrait de l'ancien bouton Director cache en bas du formulaire ;
+  libelles visibles de credits admin rendus provider-neutral dans le create flow.
+- Scope : aucune route/API/DB/state machine ; generation Director et Generate Video
+  conservent les chemins existants.
+- Validation : 270 tests, tsc, lint, build OK ; dev server local `/create/story`
+  -> HTTP 307 (auth gate, pas de 500).
 
 ### [T-704] Home dashboard premium pass - `status: todo` - `owner: codex`
 - Objectif : transformer la home template-picker en command center produit premium

@@ -470,3 +470,11 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Nouveau positionnement : AI video direction workspace, Director plan, assets, post-generation studio, CTA "Create with Director".
 - Scope : UI/copy-only, provider-neutral ; aucune route/API/DB.
 - Validation : `vitest` 270/270, `tsc` clean, `lint` clean, `build` OK. Dev server local a repondu HTTP 200 ; Browser plugin indisponible pendant le check.
+
+
+## 2026-06-09 - Codex - T-703 Create flow premium pass
+- Fait : ajout d'une `Director Console` visible dans `app/(workspace)/create/[mode]/page.tsx`, juste apres les controles Model/Duration/Format/Scenes.
+- UX : le Director n'est plus un bouton secondaire en bas ; la console montre Plan, Model, Readiness, propose `Plan with AI Director` et garde un skip path `Generate now`.
+- Nettoyage : suppression du doublon bas du Director ; textes visibles de credits admin rendus provider-neutral dans le create flow.
+- Scope : UI-only ; aucune route/API/DB/state machine.
+- Validation : `vitest` 270/270, `tsc` clean, `lint` clean, `build` OK. Dev server local : `/create/story` -> HTTP 307 (auth gate, pas de 500). Browser plugin toujours indisponible dans cet environnement.
