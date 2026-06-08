@@ -43,8 +43,6 @@ interface AIDirectorPanelProps {
   scenes: DirectorSceneVM[];
   quality: QualityReadout;
   generating?: boolean;
-  /** True until backend wiring (T-201c): plan edits are preview-only. */
-  previewOnly?: boolean;
   onSceneChange: (index: number, patch: Partial<DirectorSceneVM>) => void;
   onGenerate: () => void;
   onAction: (action: DirectorAction) => void;
@@ -90,7 +88,6 @@ export function AIDirectorPanel({
   scenes,
   quality,
   generating,
-  previewOnly,
   onSceneChange,
   onGenerate,
   onAction,
@@ -142,10 +139,13 @@ export function AIDirectorPanel({
                 <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
                   <input
                     type="number"
-                    min={1}
+                    min={3}
+                    max={10}
                     value={s.durationSec}
                     onChange={(e) =>
-                      onSceneChange(s.index, { durationSec: Math.max(1, parseInt(e.target.value, 10) || 1) })
+                      onSceneChange(s.index, {
+                        durationSec: Math.max(3, Math.min(10, parseInt(e.target.value, 10) || 3)),
+                      })
                     }
                     className="w-12 rounded border border-border/40 bg-background px-1.5 py-0.5 text-right text-[11px]"
                   />
@@ -196,12 +196,10 @@ export function AIDirectorPanel({
           ))}
         </div>
 
-        {previewOnly && (
-          <p className="text-[11px] text-muted-foreground/50">
-            This is a preview of your direction. Editing scenes will steer generation in a
-            coming update; <span className="font-medium text-foreground/70">Generate now</span> uses your current prompt.
-          </p>
-        )}
+        <p className="text-[11px] text-muted-foreground/50">
+          Your scene edits are sent when you press{" "}
+          <span className="font-medium text-foreground/70">Generate now</span>.
+        </p>
 
         {/* Generate */}
         <button

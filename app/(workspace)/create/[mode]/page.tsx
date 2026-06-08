@@ -512,8 +512,10 @@ export default function CreateModePage({
     return { ...opt, disabled: locked, locked, hint };
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Core submit. When called from the AI Director, `opts.directorScenes` are
+  // mapped to the backend's already-supported `scenes[]` (clientScenes path) —
+  // no backend/state-machine change. Normal "Generate Video" passes nothing.
+  const submitJob = async (opts?: { directorScenes?: DirectorSceneVM[] }) => {
     const trimmed = prompt.trim();
     if (!trimmed || trimmed.length < 3) {
       setError("Prompt must be at least 3 characters");
@@ -574,6 +576,16 @@ export default function CreateModePage({
           ...(multiSceneChain && { chain_strategy: chainStrategy }),
           // Forced scene count — omit for "auto" (duration-based split)
           ...(numScenes !== "auto" && { num_scenes: sceneCount }),
+          // AI Director: edited plan → backend's clientScenes path (validated
+          // server-side: cap MAX_SCENES, duration clamp [3,10], prompt ≤2000).
+          ...(opts?.directorScenes &&
+            opts.directorScenes.length > 0 && {
+              scenes: opts.directorScenes.map((s) => ({
+                prompt: s.prompt,
+                duration_sec: Math.max(3, Math.min(10, s.durationSec)),
+                ...(selectedEngine !== "auto" && { engine: selectedEngine }),
+              })),
+            }),
           // "Use my voice" — cloned HeyGen voice (lipsync or voice-over)
           ...(useMyVoice && myVoiceId && voiceScript.trim().length > 1 && {
             voice_id: myVoiceId,
@@ -612,6 +624,12 @@ export default function CreateModePage({
       setError(err instanceof Error ? err.message : "Something went wrong");
       setLoading(false);
     }
+  };
+
+  // Form submit (normal "Generate Video" path — no director scenes).
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitJob();
   };
 
   // Scene count estimate — matches backend logic in lib/storyboard.ts
@@ -666,7 +684,7 @@ export default function CreateModePage({
   const buildDirectorPlan = (): { scenes: DirectorSceneVM[]; quality: QualityReadout } => {
     const n = Math.max(1, sceneCount || 1);
     const total = Math.max(1, parseInt(duration, 10) || 5);
-    const per = Math.max(1, Math.round(total / n));
+    const per = Math.max(3, Math.min(10, Math.round(total / n)));
     const TITLES = ["Establishing shot", "Reaction", "Detail / insert", "Wide shot", "Close-up", "Transition"];
     const CAMERAS = ["slow dolly-in", "handheld", "static", "slow pan", "tracking"];
     const base = prompt.trim() || config.placeholder;
@@ -1808,7 +1826,6 @@ export default function CreateModePage({
                 scenes={directorScenes}
                 quality={directorQuality}
                 generating={loading}
-                previewOnly
                 onSceneChange={(index, patch) =>
                   setDirectorScenes((prev) => prev.map((s) => (s.index === index ? { ...s, ...patch } : s)))
                 }
@@ -1816,7 +1833,7 @@ export default function CreateModePage({
                 onClose={() => setDirectorOpen(false)}
                 onGenerate={() => {
                   setDirectorOpen(false);
-                  handleSubmit({ preventDefault() {} } as React.FormEvent);
+                  submitJob({ directorScenes });
                 }}
               />
             )}

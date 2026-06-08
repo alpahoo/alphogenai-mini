@@ -58,7 +58,16 @@ score, contraintes techniques, découpage). Le Director est une couche **avant**
 - UI-only ; aucune route/DB/state machine touchée. tsc · build · lint · 226 tests verts.
 - Compromis : plan édité = preview-only (R-008) → câblage en T-201c.
 
-### [T-201c] Wire edited plan → generation — `status: todo` · `owner: claude`
+### [T-201c] Wire edited plan → generation — `status: done` · `owner: claude`
+- Livré (UI-only) : `submitJob({ directorScenes? })` extrait de `handleSubmit` (form
+  `Generate Video` = `submitJob()` sans scènes, inchangé). « Generate now » du Director
+  → `submitJob({ directorScenes })` qui ajoute `scenes:[{prompt, duration_sec(clamp 3..10),
+  ...(selectedEngine!=="auto" && {engine})}]`. **Jamais `engine:"auto"`.**
+- Panel : durée min=3/max=10 + clamp [3,10] ; `buildDirectorPlan` initialise les durées
+  dans [3,10] ; texte preview-only retiré (les éditions sont réellement envoyées).
+- **Aucune modif** `app/api/jobs/route.ts`/DB/migration/state machine/Modal/Stripe/auth.
+  Providers confidentiels inchangés. tsc · build · lint · 226 tests verts.
+- Voir R-009 (auto + Director → fallback engine backend).
 - **Décision** (`docs/product/director-plan-mapping-decision.md`) : **Option B** —
   envoyer les scènes éditées via le tableau `scenes[]` **déjà supporté** par
   `app/api/jobs/route.ts:681-692` (« Phase C: editor-provided scenes »). **Aucune

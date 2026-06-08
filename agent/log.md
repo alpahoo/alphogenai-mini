@@ -12,6 +12,18 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — T-201c : plan Director → génération (scenes[])
+- Fait (UI-only) : `submitJob({ directorScenes? })` extrait de `handleSubmit`. Form
+  `Generate Video` inchangé (`submitJob()` sans scènes). « Generate now » du Director →
+  `submitJob({ directorScenes })` → body `scenes:[{prompt, duration_sec clamp[3,10],
+  ...(selectedEngine!=="auto" && {engine})}]` (jamais `engine:"auto"`). Panel durée
+  min3/max10 + clamp ; durées initiales clampées ; texte preview-only retiré/reformulé.
+- **Aucune modif** route jobs/DB/migration/state machine/Modal/Stripe/auth. Providers
+  confidentiels OK. Backend clientScenes (`:681-692`) consommé tel quel.
+- Note R-009 : auto + Director → fallback engine `wan_i2v` côté backend (faible).
+- Fichiers : `app/(workspace)/create/[mode]/page.tsx`, `components/create/ai-director-panel.tsx`.
+- Tests : `tsc` clean · `vitest` 226/226 · `build` OK · `lint` clean.
+
 ## 2026-06-08 — Claude (Opus 4.8) — Déblocage dev local (review visuelle Codex)
 - Symptôme : `/create/story` → 500 en dev (`lib/supabase/middleware.ts` : « URL and
   Key are required »). Cause : le `.env.local` réel (gitignored) ne contenait que les
