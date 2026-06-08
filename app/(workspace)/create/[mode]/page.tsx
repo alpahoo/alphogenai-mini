@@ -194,6 +194,7 @@ export default function CreateModePage({
   const [error, setError] = useState<string | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showReferences, setShowReferences] = useState(false);
 
   // Format & captions
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16" | "1:1">("16:9");
@@ -639,50 +640,123 @@ export default function CreateModePage({
   // Model selector — defined once, rendered prominently at the top (was buried
   // in Advanced). Selecting the model first makes the contextual sections
   // (references, faces, cost) appear logically below.
+  // Unified control row: Model · Duration · Format · Scenes (CTO mockup).
   const modelBlock = (
-    <div>
-      <p className="text-sm font-semibold text-foreground mb-2.5 flex items-center gap-2">
-        <Cpu className="h-4 w-4 text-indigo-500" />
-        Model
-      </p>
-      <select
-        value={selectedEngine}
-        onChange={(e) => setSelectedEngine(e.target.value as EngineKey | "auto")}
-        className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
-      >
-        <option value="auto">Auto — best model for your plan</option>
-        {engineOptions.map((opt) => {
-          const locked =
-            (opt.gate === "premium" && plan !== "premium") ||
-            (opt.gate === "pro" && plan === "free");
-          const tags = [
-            opt.quality === "1080p" ? "HD" : null,
-            opt.supportsRefs ? "Refs" : null,
-            locked ? `${opt.gate === "premium" ? "Premium" : "Pro"} only 🔒` : null,
-          ]
-            .filter(Boolean)
-            .join(" · ");
-          return (
-            <option key={opt.key} value={opt.key} disabled={locked}>
-              {opt.label}
-              {tags ? ` — ${tags}` : ""}
-            </option>
-          );
-        })}
-      </select>
-      {/* Health hint for the selected engine */}
+    <div className="space-y-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Model */}
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <Cpu className="h-3.5 w-3.5 text-indigo-500" /> Model
+          </label>
+          <select
+            value={selectedEngine}
+            onChange={(e) => setSelectedEngine(e.target.value as EngineKey | "auto")}
+            className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
+          >
+            <option value="auto">Auto — best for your plan</option>
+            {engineOptions.map((opt) => {
+              const locked =
+                (opt.gate === "premium" && plan !== "premium") ||
+                (opt.gate === "pro" && plan === "free");
+              const tags = [
+                opt.quality === "1080p" ? "HD" : null,
+                opt.supportsRefs ? "Refs" : null,
+                locked ? `${opt.gate === "premium" ? "Premium" : "Pro"} only 🔒` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <option key={opt.key} value={opt.key} disabled={locked}>
+                  {opt.label}
+                  {tags ? ` — ${tags}` : ""}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+
+        {/* Duration */}
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <Clock className="h-3.5 w-3.5 text-amber-500" /> Duration
+          </label>
+          <select
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            disabled={!planLoaded}
+            className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
+          >
+            {durationOptions.map((o) => (
+              <option key={o.value} value={o.value} disabled={o.disabled}>
+                {o.label}
+                {o.locked ? " 🔒" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Format */}
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <Monitor className="h-3.5 w-3.5 text-blue-500" /> Format
+          </label>
+          <select
+            value={aspectRatio}
+            onChange={(e) => setAspectRatio(e.target.value as "16:9" | "9:16" | "1:1")}
+            className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
+          >
+            <option value="16:9">Landscape (16:9)</option>
+            <option value="9:16">Portrait (9:16)</option>
+            <option value="1:1">Square (1:1)</option>
+          </select>
+        </div>
+
+        {/* Scenes */}
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <Film className="h-3.5 w-3.5 text-purple-500" /> Scenes
+          </label>
+          {plan !== "free" && planLoaded && sceneCountChoices.length > 0 ? (
+            <select
+              value={numScenes === "auto" ? "auto" : String(sceneCount)}
+              onChange={(e) =>
+                setNumScenes(e.target.value === "auto" ? "auto" : parseInt(e.target.value, 10))
+              }
+              className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
+            >
+              <option value="auto">Auto ({autoSceneCount})</option>
+              {sceneCountChoices.map((n) => (
+                <option key={n} value={String(n)}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-sm text-muted-foreground/60">
+              1 (Auto)
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Hints under the control row */}
       {selectedEngine !== "auto" &&
         engineHealth[selectedEngine] !== undefined &&
         engineHealth[selectedEngine] !== -1 &&
         engineHealth[selectedEngine] < 0.6 && (
-          <p className="mt-1.5 text-[11px] text-amber-500">
+          <p className="text-[11px] text-amber-500">
             ⚠ This model has a low success rate right now ({Math.round(engineHealth[selectedEngine] * 100)}% / 24h) — consider another.
           </p>
         )}
-      {plan === "free" && (
-        <p className="text-xs text-muted-foreground/60 mt-2">
-          Advanced models require <Link href="/pricing" className="text-primary font-medium hover:underline">Pro or Premium</Link>
-        </p>
+      {plan !== "premium" && (
+        <Link
+          href="/pricing"
+          className="flex items-center gap-1.5 text-xs font-medium text-primary/80 transition-colors hover:text-primary"
+        >
+          <Lock className="h-3.5 w-3.5" />
+          {plan === "free" ? "Unlock longer videos & advanced models" : "Get up to 120s"}
+        </Link>
       )}
     </div>
   );
@@ -877,6 +951,22 @@ export default function CreateModePage({
             {/* ── Model (promoted out of Advanced) ───────────────── */}
             {planLoaded && modelBlock}
 
+            {/* ── References (collapsed by default; advanced inputs) ──── */}
+            <div className="rounded-xl border border-border/40">
+              <button
+                type="button"
+                onClick={() => setShowReferences((v) => !v)}
+                className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold text-foreground"
+              >
+                <span className="flex items-center gap-2">
+                  <ImagePlus className="h-4 w-4 text-violet-500" />
+                  Reference image &amp; style
+                  <span className="text-muted-foreground/50 font-normal text-xs">(optional)</span>
+                </span>
+                <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${showReferences ? "rotate-180" : ""}`} />
+              </button>
+              {showReferences && (
+                <div className="space-y-5 border-t border-border/40 px-4 py-4">
             {/* ── Reference Image (I2V) ──────────────────────────── */}
             <div>
               <p className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
@@ -929,6 +1019,9 @@ export default function CreateModePage({
               locked={plan === "free"}
               engineSupportsRefs={selectedEngine === "auto" || engineOptions.some((e) => e.key === selectedEngine && e.supportsRefs)}
             />
+                </div>
+              )}
+            </div>
 
             {/* ── Avatar picker (HeyGen models only) ───────────────── */}
             {isHeyGenEngineSelected && (
@@ -1030,80 +1123,7 @@ export default function CreateModePage({
             )}
 
             {/* ── Duration ───────────────────────────────────────── */}
-            {/* ── Compact controls: Duration · Format · Scenes ──────── */}
-            <div className="grid gap-3 sm:grid-cols-3">
-              {/* Duration */}
-              <div>
-                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                  <Clock className="h-3.5 w-3.5 text-amber-500" /> Duration
-                </label>
-                <select
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  disabled={!planLoaded}
-                  className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
-                >
-                  {durationOptions.map((o) => (
-                    <option key={o.value} value={o.value} disabled={o.disabled}>
-                      {o.label}
-                      {o.locked ? " 🔒" : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Format */}
-              <div>
-                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                  <Monitor className="h-3.5 w-3.5 text-blue-500" /> Format
-                </label>
-                <select
-                  value={aspectRatio}
-                  onChange={(e) => setAspectRatio(e.target.value as "16:9" | "9:16" | "1:1")}
-                  className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
-                >
-                  <option value="16:9">Landscape (16:9)</option>
-                  <option value="9:16">Portrait (9:16)</option>
-                  <option value="1:1">Square (1:1)</option>
-                </select>
-              </div>
-
-              {/* Scenes */}
-              <div>
-                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                  <Film className="h-3.5 w-3.5 text-purple-500" /> Scenes
-                </label>
-                {plan !== "free" && planLoaded && sceneCountChoices.length > 0 ? (
-                  <select
-                    value={numScenes === "auto" ? "auto" : String(sceneCount)}
-                    onChange={(e) =>
-                      setNumScenes(e.target.value === "auto" ? "auto" : parseInt(e.target.value, 10))
-                    }
-                    className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
-                  >
-                    <option value="auto">Auto ({autoSceneCount})</option>
-                    {sceneCountChoices.map((n) => (
-                      <option key={n} value={String(n)}>
-                        {n}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-sm text-muted-foreground/60">
-                    1 (Auto)
-                  </div>
-                )}
-              </div>
-            </div>
-            {plan !== "premium" && (
-              <Link
-                href="/pricing"
-                className="flex items-center gap-1.5 text-xs font-medium text-primary/80 transition-colors hover:text-primary"
-              >
-                <Lock className="h-3.5 w-3.5" />
-                {plan === "free" ? "Unlock longer videos" : "Get up to 120s"}
-              </Link>
-            )}
+            {/* (Duration · Format · Scenes moved into the unified control row at the top) */}
 
             {/* ── Use my voice (cloned HeyGen voice) ─────────────── */}
             {plan !== "free" && (

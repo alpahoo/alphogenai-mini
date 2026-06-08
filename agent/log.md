@@ -12,6 +12,22 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — T-001 Director Console (layout-only) + migration rétro
+- Fait :
+  - Rangée de contrôles unifiée **Model · Duration · Format · Scenes** en haut
+    (dropdowns), suppression de l'ancienne grille Duration/Format/Scenes dupliquée.
+  - Sections « Reference image » + « References » repliées dans un collapsible
+    (fermé par défaut) → page nettement plus courte. Toujours accessibles pour
+    les moteurs non-BytePlus.
+  - Migration rétroactive `supabase/migrations/20260608_byteplus_assets_thumb_and_update_policy.sql`
+    (additive, idempotente ; trace la colonne `thumb_path` + policy UPDATE déjà en
+    prod). Non ré-appliquée (déjà présente). R-003 → résolu côté traçabilité.
+- Fichiers : `app/(workspace)/create/[mode]/page.tsx`,
+  `supabase/migrations/20260608_byteplus_assets_thumb_and_update_policy.sql`.
+- Tests : `tsc` clean · `build` OK · `lint` clean · `vitest` 220/220.
+- Prochaine étape : T-002 (labels provider-friendly + badges statut assets) — sur
+  décision R-002 (Paul a choisi « layout only » pour cette itération).
+
 ## 2026-06-08 — Claude (Opus 4.8) — Mise en place coordination multi-agents
 - Fait : lecture `HANDOVER.md` + `CLAUDE.md` + `future-proof-notes.md` ; création
   des fichiers de coordination `AGENTS.md`, `agent/tasks.md`, `agent/log.md`,

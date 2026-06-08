@@ -14,16 +14,14 @@ Format d'une tâche :
 
 ## En cours / prochaines
 
-### [T-001] Director Console — Phase 1 (ex « B »)  — `status: todo`
-- Objectif : finir la consolidation du create flow vers la « Director Console »
-  du CTO : replier les sections « Reference image » + « References »
-  (Character Face / Style / Camera / Mood) et réunir
-  **Model · Duration · Format · Scenes · Advanced** sur une rangée compacte.
-- Fichiers probables : `app/(workspace)/create/[mode]/page.tsx`,
-  potentiellement `components/create/asset-panel.tsx`.
-- Risques : page longue et stateful ; ne pas casser le flux refs non-BytePlus
-  (Kling/Atlas/Wan uploadent des visages bruts via `references`).
-- Validation : `npm test` + `tsc` + `build` verts ; lint clean ; génération test OK.
+### [T-001] Director Console — Phase 1 (ex « B »)  — `status: done (layout-only)`
+- Livré : rangée unifiée Model·Duration·Format·Scenes en haut ; sections
+  Reference image + References repliées dans un collapsible (fermé par défaut).
+  Labels techniques conservés (choix « layout only », R-002).
+- Fichiers : `app/(workspace)/create/[mode]/page.tsx`.
+- Validation : tsc · build · lint · 220 tests → verts.
+- Reste pour la suite : labels provider-friendly + badges compat (T-002),
+  intégrer Advanced dans la même rangée si souhaité.
 
 ### [T-002] Labels « provider-friendly » + statut compatibilité assets — `status: todo`
 - Objectif : masquer les noms techniques (ex. « Seedance 2.0 r2v ») derrière des
