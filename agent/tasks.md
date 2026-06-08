@@ -78,8 +78,12 @@ Format d'une tâche :
 
 ## Axe 6 — Nettoyage docs / lint / tests  `status: in_progress`
 
-### [T-601] Refresh README.md + CLAUDE.md — `status: todo` · `owner: codex|claude`
-- Aligner sur la stack réelle ; `HANDOVER.md` reste la source courte. (R-001.)
+### [T-601] Refresh README.md + CLAUDE.md — `status: in_progress` · `owner: claude`
+- **Fait** : `CLAUDE.md` — addendum daté 2026-06-08 en tête (pipeline multi-provider,
+  Director Console, composer/assets/verified faces, règle confidentialité providers
+  T-102/T-605 + guard test, état validations 226 tests). Corps historique conservé ;
+  bandeau « HANDOVER.md gagne ». Mise à jour ciblée (pas de réécriture massive).
+- **Reste** : corps README (bandeau déjà en place, corps encore historique). (R-001.)
 
 ### [T-602] Tests d'intégration API + guards — `status: in_progress` · `owner: codex|claude`
 - **Fait** : guard anti-leak provider `lib/__tests__/provider-leak-guard.test.ts`

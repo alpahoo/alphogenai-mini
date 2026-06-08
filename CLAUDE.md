@@ -1,9 +1,46 @@
 # CLAUDE.md — AlphoGenAI
 
 Guide de développement pour les agents IA (Claude Code, etc.) travaillant sur ce repo.
-Document à jour le **2026-05-11**. Toute info ici doit refléter l'état réel du repo — si tu remarques une divergence, **arrête et signale-la** plutôt que de coder par-dessus.
+Corps historique daté du **2026-05-11** + **addendum 2026-06-08** ci-dessous. Toute info ici doit refléter l'état réel du repo — si tu remarques une divergence, **arrête et signale-la** plutôt que de coder par-dessus.
 
-> 📌 **Pour les décisions architecturales et les garde-fous "NE PAS faire", lire `docs/architecture/future-proof-notes.md`.**
+> 🟢 **Source de vérité courte : [`HANDOVER.md`](./HANDOVER.md).** En cas de
+> contradiction entre le corps historique de ce fichier et `HANDOVER.md` ou le
+> code, **`HANDOVER.md` gagne**. Coordination multi-agents : voir [`AGENTS.md`](./AGENTS.md).
+> 📌 **Garde-fous "NE PAS faire" : `docs/architecture/future-proof-notes.md`.**
+
+---
+
+## ⏩ Addendum 2026-06-08 — état actuel (lire en priorité)
+
+Le corps ci-dessous (2026-05-11) est **EvoLink/Modal-centré** et **antérieur** aux
+shifts récents. Ce qui a changé depuis :
+
+- **Pipeline multi-provider** : EvoLink n'est plus l'unique voie. En prod : **BytePlus
+  Seedance 2.0 / 1.5 Pro** (accès direct, références visage vérifiées via `asset://`),
+  **AtlasCloud**, **EvoLink** (gateway), **HeyGen** (avatars + voix clonée + lipsync),
+  **Wan** (Modal GPU). Clients : `lib/byteplus-client.ts`, `lib/atlascloud-client.ts`,
+  `lib/heygen-client.ts`. Coût : `lib/byteplus-cost.ts`.
+- **UI « Director Console »** (en cours) sur `app/(workspace)/create/[mode]/page.tsx` :
+  composer multimodal **TipTap** (`components/create/prompt-composer.tsx`) avec chips
+  `@face`/`@image`, **panneau Assets** à droite (`components/create/asset-panel.tsx`),
+  **gestionnaire de visages vérifiés self-service** (`components/create/faces-manager.tsx`),
+  rangée de contrôles unifiée Model·Duration·Format·Scenes.
+- **Visages vérifiés** : table `byteplus_assets` (RLS, colonne `thumb_path`), API
+  `app/api/byteplus-assets/route.ts` (GET/POST/PATCH/DELETE, thumbs signés depuis le
+  bucket privé `references`). BytePlus bloque les **photos brutes de personnes réelles**
+  → un vrai visage doit être **vérifié** (console) puis référencé par `asset://`.
+- **Règle confidentialité UI publique (T-102 / T-605)** : l'UTILISATEUR voit des
+  **modèles + capacités** (Seedance 2.0, Wan, Avatar, « Realistic character »…), **jamais
+  les providers/agrégateurs** (BytePlus, AtlasCloud, EvoLink, Bailian, Kie.ai, HeyGen).
+  Ces noms restent OK en **commentaires, logs, admin, routes, helpers**. Helper
+  `lib/engine-intentions.ts` (`getEngineIntention`, `cleanModelName`, badges de compat).
+  **Garde-fou** : `lib/__tests__/provider-leak-guard.test.ts` fait échouer le build si
+  un label public réintroduit un nom provider.
+- **Validations à jour** : **226 tests Vitest** verts ; `tsc --noEmit`, `next build`
+  (passe sans secrets — `/gallery` dégrade proprement) et `next lint` (no warnings) clean.
+
+> Le reste du document (stack EvoLink/Modal, pipeline, recettes) garde sa valeur
+> **historique + garde-fous**, mais pour l'état courant se référer à `HANDOVER.md`.
 
 ---
 

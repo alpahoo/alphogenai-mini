@@ -12,6 +12,17 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — T-601 : refresh CLAUDE.md (ciblé)
+- Fait : addendum daté 2026-06-08 en tête de `CLAUDE.md` (pipeline multi-provider
+  BytePlus/Atlas/EvoLink/HeyGen/Wan ; Director Console ; composer TipTap + Assets
+  panel + verified faces ; règle confidentialité providers T-102/T-605 + guard test ;
+  226 tests + tsc/build/lint clean). Bandeau « HANDOVER.md = source de vérité ».
+  Corps historique 2026-05-11 conservé (garde-fous). Pas de réécriture massive.
+- **Docs-only** ; aucun code applicatif.
+- Fichiers : `CLAUDE.md`, `agent/tasks.md`, `agent/log.md`.
+- Tests : vitest 226 · tsc clean · lint clean · build OK.
+- Reste : corps README (T-601 partiel).
+
 ## 2026-06-08 — Claude (Opus 4.8) — Guard test anti provider-leak (T-602)
 - Fait : `lib/__tests__/provider-leak-guard.test.ts` — assure qu'aucun label public
   ne contient BytePlus/AtlasCloud/EvoLink/Bailian/Kie.ai/HeyGen (ENGINE_DISPLAY_NAMES,
