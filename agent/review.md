@@ -87,16 +87,14 @@ Format :
   L'ancienne question « prompt unique vs prompts par scène » est tranchée : prompts
   par scène, voie déjà supportée et validée serveur (cap/clamp/troncature).
 
-### [R-009] AI Director + moteur « Auto » → fallback engine backend — `severity: low` · `status: open`
-- Contexte : en mode « Auto », « Generate now » du Director envoie des scènes **sans**
-  `engine` (conforme à la consigne : jamais `engine:"auto"`). Le chemin clientScenes du
-  backend (`app/api/jobs/route.ts:690`) applique alors `s.engine || preferred || "wan_i2v"`
-  → comme `preferred_engine` est aussi omis en auto, les scènes Director tombent sur
-  `wan_i2v`, là où le chemin normal « auto » laisserait le backend choisir le meilleur moteur.
-- Risque : faible. La plupart des utilisateurs du Director choisissent un modèle explicite.
-- Reco : pour faire résoudre « auto » au mieux côté clientScenes, il faudrait soit
-  envoyer un engine résolu côté client, soit ajuster le backend (hors scope UI-only).
-  À arbitrer si on veut un vrai « Auto » dans le Director.
+### [R-009] AI Director + moteur Auto - `severity: low` - `status: resolved`
+- Decision Paul (2026-06-08) : dans AI Director, `Auto` signifie le modele rapide
+  Seedance 2.0 Fast (cle interne `seedance2_fast_byteplus`).
+- Resolu : `lib/director-engine.ts` expose `AI_DIRECTOR_AUTO_ENGINE` et
+  `resolveDirectorEngineKey()`. Le create flow envoie cette cle dans `scenes[].engine`
+  quand `Generate now` est lance depuis le Director avec le selecteur sur Auto.
+- Le label public reste `Auto`/provider-neutral ; le quality/cost read-out utilise
+  la meme resolution, donc le cout n est plus differe dans ce cas.
 
 ### [R-010] Régénération single-scene limitée à certains moteurs — `severity: low` · `status: open`
 - Contexte : `POST /api/jobs/[id]/scenes/[sceneIndex]` (régénère **une** scène)

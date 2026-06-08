@@ -50,6 +50,7 @@ import {
   type DirectorAction,
 } from "@/components/create/ai-director-panel";
 import { computeDirectorQuality } from "@/lib/director-quality";
+import { resolveDirectorEngineKey } from "@/lib/director-engine";
 import { isAdminEmail } from "@/lib/flags";
 import type { PromptTemplate } from "@/lib/prompt-templates";
 import type { JobPlan, EngineKey, ReferenceItem } from "@/lib/types";
@@ -210,6 +211,7 @@ export default function CreateModePage({
   // AI Director — editable pre-generation plan (submit wired in submitJob)
   const [directorOpen, setDirectorOpen] = useState(false);
   const [directorScenes, setDirectorScenes] = useState<DirectorSceneVM[]>([]);
+  const directorEngineKey = resolveDirectorEngineKey(selectedEngine);
 
   // Format & captions
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16" | "1:1">("16:9");
@@ -627,7 +629,7 @@ export default function CreateModePage({
               scenes: opts.directorScenes.map((s) => ({
                 prompt: s.prompt,
                 duration_sec: Math.max(3, Math.min(10, s.durationSec)),
-                ...(selectedEngine !== "auto" && { engine: selectedEngine }),
+                engine: directorEngineKey,
               })),
             }),
           // "Use my voice" — cloned HeyGen voice (lipsync or voice-over)
@@ -776,10 +778,10 @@ export default function CreateModePage({
         hasFace: composerRefs.some((r) => r.refType === "face"),
         hasRawImage: composerRefs.some((r) => r.refType === "image" && !!r.url),
         engineCompat,
-        selectedEngineKey: selectedEngine,
+        selectedEngineKey: directorEngineKey,
         aspectRatio,
       }),
-    [prompt, directorScenes, composerRefs, engineCompat, selectedEngine, aspectRatio],
+    [prompt, directorScenes, composerRefs, engineCompat, directorEngineKey, aspectRatio],
   );
 
   const applyDirectorAction = (action: DirectorAction) => {

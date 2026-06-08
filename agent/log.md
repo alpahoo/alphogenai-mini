@@ -428,3 +428,10 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Fidelite : storyboard persiste -> `scenes[]` pour conserver les plans Director ; aspect ratio, captions/audio, chain settings, references/image_url et verified faces repris.
 - Avatar/look jobs : blocage explicite 409 provider-neutral (pas de duplication trompeuse tant que les champs source dedies ne sont pas persistables/reconstructibles).
 - Tests : `lib/__tests__/job-duplicate-payload.test.ts` couvre copie moderne, invalid optionals, non-copie plan/outputs, avatar block, prompt manquant.
+
+
+## 2026-06-08 - Codex - R-009 AI Director Auto decision
+- Decision Paul : Auto dans AI Director = Seedance 2.0 Fast, cle interne `seedance2_fast_byteplus`.
+- Fait : nouveau helper pur `lib/director-engine.ts` + test ; `/create/[mode]` resout `selectedEngine === "auto"` vers cette cle pour `scenes[].engine` quand le Director genere.
+- Le quality/cost read-out utilise la meme cle resolue ; labels publics restent provider-neutral.
+- Priorites suivantes consignees : T-602, R-003, T-604, T-401, avatar/look duplicate, T-301c, R-006.

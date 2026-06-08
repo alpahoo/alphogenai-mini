@@ -90,8 +90,15 @@ score, contraintes techniques, découpage). Le Director est une couche **avant**
   en `useMemo` (lint clean).
 - Test : `lib/__tests__/director-quality.test.ts` (prompt risk, cost Seedance/deferred,
   social fit, character, model compat, **anti provider-leak**). 234 tests au total.
-- UI-only ; aucune route/API/DB/state machine. R-009 non traité (hors scope).
-  tsc · build · lint · 234 tests verts.
+- UI-only ; aucune route/API/DB/state machine. R-009 resolu ensuite : Auto Director
+  utilise Seedance 2.0 Fast via `lib/director-engine.ts`. tsc/build/lint/tests verts.
+
+### [T-203] AI Director Auto engine resolution - `status: done` - `owner: codex`
+- Decision produit : `Auto` dans AI Director = Seedance 2.0 Fast (cle interne
+  `seedance2_fast_byteplus`), sans exposer le provider en UI.
+- Livre : helper pur `lib/director-engine.ts` + test ; create flow utilise
+  `resolveDirectorEngineKey(selectedEngine)` pour `scenes[].engine` et le score cout.
+- Scope : UI/create-flow only ; pas de route/API/DB/state machine.
 
 ## Axe 3 — Scene Board runtime  `status: in_progress`
 
@@ -272,3 +279,13 @@ polir l'existant.
 - [DONE] Lint 100 % clean (CTO list).
 
 
+
+## Priorites actees Paul - 2026-06-08
+
+1. T-602 - tests d integration API : jobs / byteplus-assets / upload avec Supabase mocke.
+2. R-003 - migration retrospective Supabase pour byteplus_assets.thumb_path + policy UPDATE, sans donnees user.
+3. T-604 - retirer typescript.ignoreBuildErrors dans un commit config dedie.
+4. T-401 - Saved Looks : spec d abord, car probable migration / contrat produit.
+5. Avatar/look duplicate : definir un vrai contrat de reconstruction avant de retirer le 409.
+6. T-301c - retry affordances : verifier/polir retry scene/job sans doublon.
+7. R-006 - mini cleanup provider/help : page d aide interne pour verified face ID.
