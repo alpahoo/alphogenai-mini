@@ -10,6 +10,12 @@ import { useMemo, useState } from "react";
 import { ImagePlus, Loader2, Search, Sparkles, Film, Palette } from "lucide-react";
 import { FacesManager, type FaceAsset } from "@/components/create/faces-manager";
 import type { MediaRefData } from "@/components/create/prompt-composer";
+import {
+  type EngineCompatContext,
+  faceCompat,
+  uploadCompat,
+  compatToneClass,
+} from "@/lib/engine-intentions";
 
 type Tab = "faces" | "uploads";
 
@@ -21,6 +27,8 @@ interface AssetPanelProps {
   onUploadImage: (file: File) => void;
   uploading?: boolean;
   onInsert: (m: MediaRefData) => void;
+  /** Selected-engine capabilities → drives asset compatibility badges. */
+  engineCompat: EngineCompatContext;
 }
 
 export function AssetPanel({
@@ -31,9 +39,13 @@ export function AssetPanel({
   onUploadImage,
   uploading,
   onInsert,
+  engineCompat,
 }: AssetPanelProps) {
   const [tab, setTab] = useState<Tab>("faces");
   const [query, setQuery] = useState("");
+
+  const faceStatus = faceCompat(engineCompat);
+  const uploadStatus = uploadCompat(engineCompat);
 
   const q = query.trim().toLowerCase();
   const filteredFaces = useMemo(
@@ -95,6 +107,7 @@ export function AssetPanel({
             faces={filteredFaces}
             loading={facesLoading}
             onReload={onReloadFaces}
+            compat={faceStatus}
             onInsert={(f) =>
               onInsert({
                 refType: "face",
@@ -144,8 +157,8 @@ export function AssetPanel({
                       key={`${u.label}-${i}`}
                       type="button"
                       onClick={() => onInsert(u)}
-                      className="aspect-square overflow-hidden rounded-lg border border-border/40 bg-muted/30 hover:border-primary/40"
-                      title={`Insert ${u.label}`}
+                      className="relative aspect-square overflow-hidden rounded-lg border border-border/40 bg-muted/30 hover:border-primary/40"
+                      title={`Insert ${u.label} — ${uploadStatus.label}`}
                     >
                       {u.thumb || u.url ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -155,6 +168,13 @@ export function AssetPanel({
                           <ImagePlus className="h-4 w-4" />
                         </span>
                       )}
+                      <span
+                        className={`pointer-events-none absolute inset-x-1 bottom-1 truncate rounded px-1 py-0.5 text-center text-[9px] font-medium ${compatToneClass(
+                          uploadStatus.tone,
+                        )}`}
+                      >
+                        {uploadStatus.label}
+                      </span>
                     </button>
                   ))}
                 </div>

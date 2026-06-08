@@ -21,15 +21,16 @@ Format d'une tâche :
   Reference image + References dans un collapsible fermé par défaut.
 - Fichier : `app/(workspace)/create/[mode]/page.tsx`. Validé (tsc/build/lint/tests).
 
-### [T-102] Labels « provider-friendly » + statut compatibilité assets — `status: todo` · `owner: claude`
-- Objectif : masquer les noms techniques (« Seedance 2.0 r2v ») derrière des
-  intentions (« Realistic character », « Fast draft », « Avatar »…) ; statut par
-  asset (`Ready` / `Needs verification` / `Works with BytePlus asset://` /
-  `Works with Kling/Atlas` / `Not compatible with this model`).
-- Fichiers : `asset-panel.tsx`, `faces-manager.tsx`, `create/[mode]/page.tsx`,
-  mapping engine→intention dans `lib/`.
-- Risques : ne pas changer la valeur d'engine envoyée à l'API.
-- Validation : tests + build ; `byteplus_asset_ids` part toujours. (Décision R-002.)
+### [T-102] Labels « provider-friendly » + statut compatibilité assets — `status: done` · `owner: claude`
+- Livré : helper pur `lib/engine-intentions.ts` (intentions produit + compat) ;
+  dropdown Model mène par l'intention (« Realistic character — Seedance 2.0 · HD ·
+  Refs ») + caption « Powered by » ; badges de compat sur les vignettes (faces +
+  uploads) dans AssetPanel et FacesManager mobile, relatifs au moteur sélectionné.
+- Fichiers : `lib/engine-intentions.ts`, `components/create/asset-panel.tsx`,
+  `components/create/faces-manager.tsx`, `app/(workspace)/create/[mode]/page.tsx`.
+- UI-only : aucune route jobs/providers touchée ; valeur d'engine envoyée à l'API
+  inchangée (display-only). tsc · build · lint · 220 tests verts.
+- Suite Codex : review UX + risque de régression.
 
 ## Axe 2 — AI Director visible  `status: todo`
 

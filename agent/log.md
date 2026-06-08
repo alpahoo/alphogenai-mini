@@ -12,6 +12,20 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — T-102 labels provider-friendly + badges compat
+- Fait : `lib/engine-intentions.ts` (helper pur, display-only) → intentions produit
+  (Realistic character / Fast draft / Avatar / Cinematic HD / General) + statut de
+  compatibilité asset relatif au moteur. Dropdown Model mène par l'intention +
+  caption « Powered by ». Badges de compat sur vignettes faces (AssetPanel +
+  FacesManager mobile) et uploads (AssetPanel).
+- **UI-only** : aucune route `jobs`/providers modifiée ; la valeur d'engine envoyée
+  à l'API reste inchangée (le label est cosmétique). Donc rien à valider côté
+  `review.md` au titre du protocole #4.
+- Fichiers : `lib/engine-intentions.ts`, `components/create/asset-panel.tsx`,
+  `components/create/faces-manager.tsx`, `app/(workspace)/create/[mode]/page.tsx`.
+- Tests : `vitest` 220/220 · `tsc` clean · `build` OK · `lint` clean.
+- Prochaine étape : review ciblée Codex (UX + régression), puis T-201/T-301 selon Paul.
+
 ## 2026-06-08 — Claude (Opus 4.8) — Protocole multi-agents : rôles + backlog 6 axes
 - Fait : ajout de la section « Rôles des agents » dans `AGENTS.md` (Claude Code /
   Codex local / ChatGPT : périmètres, droits, règle de non-collision avec owner) ;

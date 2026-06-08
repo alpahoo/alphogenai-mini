@@ -19,7 +19,11 @@ Format :
 - Reco : `HANDOVER.md` reste la source de vérité ; rafraîchir CLAUDE.md/README
   (tâche T-003). Ne pas supprimer l'historique (garder le « pourquoi »).
 
-### [R-002] Décision produit : niveau de la « Director Console » — `severity: medium` · `status: open`
+### [R-002] Décision produit : niveau de la « Director Console » — `severity: medium` · `status: resolved`
+- Résolu : T-001 = layout-only (validé) ; T-102 = labels provider-friendly +
+  badges de compatibilité (livré, UI-only, valeur d'engine inchangée). Codex fait
+  la review UX. Suite : axes 2→5 selon priorité Paul.
+- (historique ci-dessous)
 - Contexte : le CTO veut remplacer les noms techniques de modèles par des
   intentions de direction (« Best for realistic character video ») et exposer un
   statut de compatibilité par asset.

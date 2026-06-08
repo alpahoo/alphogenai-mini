@@ -13,6 +13,7 @@
 
 import { useRef, useState } from "react";
 import { Plus, X, Camera, Loader2, Check } from "lucide-react";
+import { type AssetCompat, compatToneClass } from "@/lib/engine-intentions";
 
 export interface FaceAsset {
   id: string;
@@ -26,6 +27,8 @@ interface FacesManagerProps {
   loading?: boolean;
   onReload: () => void;
   onInsert: (f: FaceAsset) => void;
+  /** Compatibility of a verified face with the currently selected engine. */
+  compat?: AssetCompat | null;
 }
 
 /** Upload an image to the private references bucket → returns its storage_path. */
@@ -39,7 +42,7 @@ async function uploadPhoto(file: File): Promise<string | null> {
   return typeof data.storage_path === "string" ? data.storage_path : null;
 }
 
-export function FacesManager({ faces, loading, onReload, onInsert }: FacesManagerProps) {
+export function FacesManager({ faces, loading, onReload, onInsert, compat }: FacesManagerProps) {
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -203,6 +206,17 @@ export function FacesManager({ faces, loading, onReload, onInsert }: FacesManage
               >
                 <X className="h-3 w-3" />
               </button>
+
+              {/* Compatibility badge (relative to selected engine) */}
+              {compat && (
+                <span
+                  className={`pointer-events-none absolute inset-x-1 bottom-1 truncate rounded px-1 py-0.5 text-center text-[9px] font-medium ${compatToneClass(
+                    compat.tone,
+                  )}`}
+                >
+                  {compat.label}
+                </span>
+              )}
             </div>
           ))
         )}

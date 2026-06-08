@@ -41,6 +41,7 @@ import {
 } from "@/components/create/prompt-composer";
 import { FacesManager } from "@/components/create/faces-manager";
 import { AssetPanel } from "@/components/create/asset-panel";
+import { getEngineIntention, faceCompat, type EngineCompatContext } from "@/lib/engine-intentions";
 import { isAdminEmail } from "@/lib/flags";
 import type { PromptTemplate } from "@/lib/prompt-templates";
 import type { JobPlan, EngineKey, ReferenceItem } from "@/lib/types";
@@ -640,6 +641,15 @@ export default function CreateModePage({
   // Model selector — defined once, rendered prominently at the top (was buried
   // in Advanced). Selecting the model first makes the contextual sections
   // (references, faces, cost) appear logically below.
+  // Selected-engine capabilities → asset compatibility badges (display-only).
+  const engineCompat: EngineCompatContext = {
+    isAuto: selectedEngine === "auto",
+    isBytePlus2: isBytePlus2Selected,
+    supportsRefs:
+      selectedEngine === "auto" ||
+      engineOptions.some((e) => e.key === selectedEngine && e.supportsRefs),
+  };
+
   // Unified control row: Model · Duration · Format · Scenes (CTO mockup).
   const modelBlock = (
     <div className="space-y-2">
@@ -668,12 +678,17 @@ export default function CreateModePage({
                 .join(" · ");
               return (
                 <option key={opt.key} value={opt.key} disabled={locked}>
-                  {opt.label}
-                  {tags ? ` — ${tags}` : ""}
+                  {getEngineIntention(opt)} — {opt.label}
+                  {tags ? ` · ${tags}` : ""}
                 </option>
               );
             })}
           </select>
+          {selectedEngine !== "auto" && (
+            <p className="mt-1 text-[10px] text-muted-foreground/50">
+              Powered by {engineOptions.find((e) => e.key === selectedEngine)?.label ?? selectedEngine}
+            </p>
+          )}
         </div>
 
         {/* Duration */}
@@ -1109,6 +1124,7 @@ export default function CreateModePage({
                   faces={byteplusAssets}
                   loading={byteplusAssetsLoading}
                   onReload={loadByteplusAssets}
+                  compat={faceCompat(engineCompat)}
                   onInsert={(f) =>
                     composerRef.current?.insertRef({
                       refType: "face",
@@ -1720,6 +1736,7 @@ export default function CreateModePage({
             uploads={composerUploads}
             onUploadImage={handleComposerUpload}
             uploading={composerUploading}
+            engineCompat={engineCompat}
             onInsert={(m) => composerRef.current?.insertRef(m)}
           />
         </motion.div>
