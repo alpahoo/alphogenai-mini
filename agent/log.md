@@ -12,6 +12,18 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — T-201a : spec AI Director (+ fix compteur HANDOVER)
+- Fait : `docs/product/ai-director-spec.md` (spec-only) — UX flow (Plan with AI
+  Director, storyboard éditable, actions Generate/Improve/Cinematic/Realistic/
+  TikTok/Keep character), data par scène, quality score (réutilise content-policy/
+  byteplus-cost/engine-intentions), contraintes (pas de state machine, pas de DB,
+  providers confidentiels), découpage T-201a/b/c + T-202 + T-301, non-goals.
+- Fix mini-suivi Codex : HANDOVER Quick start `220+ tests` → `226 tests`.
+- **Docs-only** ; aucun code/route/DB.
+- Fichiers : `docs/product/ai-director-spec.md`, `HANDOVER.md`, `agent/tasks.md`, `agent/log.md`.
+- Tests : (validation ci-dessous).
+- Prochaine étape : sur validation de la spec → T-201b (UI mock/static).
+
 ## 2026-06-08 — Claude (Opus 4.8) — T-601 fin : README court + HANDOVER status
 - Fait : `README.md` remplacé par une version courte/actuelle (renvoi `HANDOVER.md`,
   stack réelle, commandes, coordonnées, checks) — plus de Runpod/SVI/AudioLDM2/

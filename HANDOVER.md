@@ -63,7 +63,7 @@ npm install
 cp .env.local.example .env.local   # if present; otherwise create .env.local
 npm run dev        # next dev --turbopack
 npm run build      # production build (now passes without secrets)
-npm run test       # vitest (220+ tests)
+npm run test       # vitest (226 tests)
 npx tsc --noEmit   # typecheck
 ```
 

@@ -37,19 +37,27 @@ Format d'une tâche :
   avertissement create reformulé (sans BytePlus/Atlas). Mentions providers
   restantes = commentaires de code uniquement.
 
-## Axe 2 — AI Director visible  `status: todo`
+## Axe 2 — AI Director visible  `status: in_progress`
 
-### [T-201] Storyboard éditable avant génération — `status: todo` · `owner: chatgpt(spec)→claude(impl)`
-- Objectif : étape visible/éditable (scène, caméra, personnage, style, modèle
-  recommandé, risque) + boutons « Generate now / Improve / More cinematic /
-  More realistic / Shorter for TikTok / Keep same character ».
-- Briques : `lib/storyboard.ts`, `lib/prompt-enhancer.ts`, `references_payload`.
-- Risques : ne pas dupliquer la logique de génération ; rester additif.
+Spec : **`docs/product/ai-director-spec.md`** (UX flow, data par scène, quality
+score, contraintes techniques, découpage). Le Director est une couche **avant**
+`POST /api/jobs` — la state machine jobs/scenes n'est PAS touchée.
+
+### [T-201a] Spec AI Director — `status: done` · `owner: claude`
+- `docs/product/ai-director-spec.md` rédigée (spec-only, providers confidentiels,
+  réutilise storyboard/prompt-enhancer/content-policy/byteplus-cost/engine-intentions).
+
+### [T-201b] Director UI (mock/static state) — `status: todo` · `owner: claude`
+- Cartes scène + quality read-out, **sans backend** (valide l'UX). UI-only, low risk.
+
+### [T-201c] Connect storyboard generation — `status: todo` · `owner: claude`
+- Route `POST /api/director/plan` (pure) → storyboard + enhancer + content-policy.
+  Plan en lecture seule ; pas de DB ; pas d'appel provider. Risque moyen (nouvelle route).
 
 ### [T-202] Quality score + cost/time estimate — `status: todo` · `owner: claude`
-- Objectif : diagnostic pré-génération (character consistency, prompt clarity,
-  provider compat, social fit, cost, durée estimée).
-- Briques : `lib/byteplus-cost.ts`, `lib/content-policy.ts`.
+- Diagnostic pré-génération (character consistency, prompt clarity, model compat,
+  social fit, cost, durée). Briques : `lib/byteplus-cost.ts`, `lib/content-policy.ts`,
+  `lib/engine-intentions.ts`. Confidentialité providers respectée.
 
 ## Axe 3 — Scene Board éditable  `status: todo`
 
