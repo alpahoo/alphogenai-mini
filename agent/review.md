@@ -117,15 +117,19 @@ Format :
   `cleanModelName(getEngineDisplayName(jobEngine ?? scene.engine))`; `jobEngine` est
   cable depuis la page job pour les panneaux mobile + desktop.
 
-### [R-012] Duplicate job ne duplique pas encore toute la configuration — `severity: low` · `status: open`
-- Contexte : `POST /api/jobs/[id]/duplicate` copie prompt, plan, duration, engine,
-  image URL et references payload, puis relance `/api/jobs`.
-- Risque : l'intitule "Duplicate with same assets" peut etre percu comme plus fort
-  que le comportement actuel si certains champs ne sont pas repris (aspect ratio,
-  caption/audio modes, verified face asset IDs, scenes/Director plan, multi-scene chain).
-- Reco : T-501b peut garder un libelle prudent (`Duplicate`/`Duplicate job`). Pour
-  un vrai "Create variation" ou "Duplicate with same assets", faire T-501e : audit
-  backend + tests avant changement.
+### [R-012] Duplicate job ne duplique pas encore toute la configuration - `severity: medium` - `status: open`
+- Contexte : `POST /api/jobs/[id]/duplicate` forward bien vers `POST /api/jobs` (bon
+  choix d architecture), mais ne copie aujourd hui que prompt, duration, engine,
+  image URL et references payload.
+- Audit T-501e : `docs/product/duplicate-fidelity-audit.md` documente les gaps :
+  aspect ratio perdu, verified face IDs perdus, scenes Director/storyboard non
+  preservees, chain settings et audio/captions non repris.
+- Risque : un duplicate de job moderne peut produire un format, un personnage, une
+  scene ou un habillage social differents du job original.
+- Reco : garder le label prudent `Duplicate job` jusqu a T-501e1. Implementation
+  recommandee : expand select + payload builder teste ; convertir `storyboard` en
+  `scenes[]` ; traiter avatar/look jobs explicitement car ils ne sont pas encore
+  reconstructibles fidelement depuis la row generique.
 
 ### [R-013] Use as reference doit etre decide avant implementation - `severity: low` - `status: resolved`
 - Contexte : la page job devrait idealement proposer `Use as reference`, mais le

@@ -189,10 +189,23 @@ polir l'existant.
   Il pointe vers `/create/story?reference_job_id=<job_id>` et reutilise le prefill
   T-501d2 ; aucune generation directe, aucun provider visible.
 - Fichier : `app/jobs/[id]/page.tsx`. Validation : 244 tests, tsc, lint, build OK.
-### [T-501e] Duplicate fidelity audit — `status: todo` · `owner: codex|claude`
-- Objectif : verifier puis ameliorer `POST /api/jobs/[id]/duplicate` pour vraiment
-  dupliquer les assets/options (aspect ratio, audio/caption modes, verified faces,
-  scenes/Director plan). Backend + tests, pas UI-only.
+### [T-501e] Duplicate fidelity audit - `status: done` - `owner: codex`
+- Livre docs-only : `docs/product/duplicate-fidelity-audit.md`.
+- Constat : la route duplicate garde la bonne architecture (forward vers `POST /api/jobs`),
+  mais copie trop peu de champs pour les jobs modernes : aspect ratio, verified faces,
+  Director scenes/storyboard, chain settings, audio/captions.
+- Decision : garder le label prudent `Duplicate job` tant que T-501e1 n est pas livre.
+
+### [T-501e1] Duplicate route fidelity implementation - `status: todo` - `owner: codex|claude`
+- Objectif : ameliorer `POST /api/jobs/[id]/duplicate` selon l audit T-501e : copier
+  aspect ratio, captions/audio, chain settings, verified face IDs, et convertir le
+  storyboard persiste en `scenes[]` pour preserver les plans Director.
+- Fichiers probables : `app/api/jobs/[id]/duplicate/route.ts`, helper pur optionnel
+  `lib/job-duplicate-payload.ts`, tests `lib/__tests__/job-duplicate-payload.test.ts`.
+- Risques : avatar/look jobs ne sont pas reconstructibles fidelement aujourd hui ; les
+  bloquer explicitement ou les laisser hors scope avec erreur claire, sans provider visible.
+- Validation : tests unitaires du builder + `vitest`/`tsc`/`lint`/`build`.
+
 ## Axe 6 — Nettoyage docs / lint / tests  `status: in_progress`
 
 ### [T-601] Refresh README.md + CLAUDE.md + HANDOVER status — `status: done` · `owner: claude`

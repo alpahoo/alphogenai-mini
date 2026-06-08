@@ -412,3 +412,11 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Le bouton est un lien vers `/create/story?reference_job_id=<job_id>` ; il ne genere rien directement et s appuie sur T-501d1/T-501d2 pour preparer et attacher la reference.
 - Scope : UI-only ; aucun nouveau endpoint, aucune DB/migration, aucun provider visible.
 - Validation : `vitest` 244/244 - `tsc` clean - `lint` clean - `build` OK.
+
+
+## 2026-06-08 - Codex - T-501e Duplicate fidelity audit
+- Audit read-only : `app/api/jobs/[id]/duplicate/route.ts` forward vers `POST /api/jobs` mais ne copie que prompt, duration, engine, image_url et references_payload.
+- Compare avec le contrat `POST /api/jobs` : manquent aspect_ratio, caption/audio fields, byteplus_asset_ids, multi_scene_chain, chain_strategy, et les scenes Director/storyboard.
+- Livre docs-only : `docs/product/duplicate-fidelity-audit.md` avec gaps P1/P2/P3, recommendation T-501e1, test plan et copy guidance.
+- Coordination : T-501e done ; T-501e1 ajoute comme implementation backend + tests ; R-012 reste open et passe medium jusqu a correction route.
+- Scope : docs-only ; aucun runtime/route/API/DB modifie.
