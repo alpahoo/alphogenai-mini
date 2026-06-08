@@ -12,6 +12,20 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-08 — Claude (Opus 4.8) — T-605 : remove public provider names
+- Fait (UI-only ; aucune route/DB/Stripe/Modal) :
+  - Avatar picker badge `HeyGen credits · ~60× cheaper` → `Avatar mode · lower cost`.
+  - `friendlyError` page job (public) sans BytePlus/Kling O3/Atlas.
+  - `lib/types.ts ENGINE_DISPLAY_NAMES` : retrait `(Kie.ai)/(Bailian)/(HeyGen)/(Atlas)`
+    → corrige aussi `/gallery` + page job (getEngineDisplayName). `(Direct)` gardé.
+  - faces-manager : texte du lien d'aide neutralisé.
+- Audit : panneaux coût/crédits create + « EvoLink balance »/« Top up » + JobCostBadge
+  sont **admin-gated** → laissés (conforme consigne). Avatar studio : 0 provider visible.
+- Ouvert : R-006 (href console provider sur le lien d'aide, faible).
+- Fichiers : `app/(workspace)/create/[mode]/page.tsx`, `app/jobs/[id]/page.tsx`,
+  `lib/types.ts`, `components/create/faces-manager.tsx`.
+- Tests : `vitest` 220/220 · `tsc` clean · `build` OK · `lint` clean.
+
 ## 2026-06-08 — Claude (Opus 4.8) — T-102b : wording sans provider (review Codex)
 - Fait : badge `BytePlus 2.0 only` → `Seedance 2.0 only` ; `cleanModelName()`
   retire les noms providers (HeyGen/BytePlus/AtlasCloud/EvoLink/Bailian/Kie.ai) des

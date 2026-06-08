@@ -1047,7 +1047,7 @@ export default function CreateModePage({
                     Avatar <span className="text-rose-500">*</span>
                   </span>
                   <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                    HeyGen credits · ~60× cheaper
+                    Avatar mode · lower cost
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground/60 mb-3">

@@ -61,6 +61,20 @@ Format :
   `jobs` / `byteplus-assets` / `upload` (flux récents les plus actifs).
 - Reco : T-004.
 
+### [R-006] Lien « verified face ID » pointe vers la console provider — `severity: low` · `status: open`
+- Contexte : dans `faces-manager.tsx`, le lien « Need help finding your verified face
+  ID? » a un `href` vers `console.byteplus.com` (le **texte** est provider-neutre,
+  seule l'URL révèle le provider à qui inspecte / au survol).
+- Risque : faible (pas de texte visible ; mais l'URL expose le provider).
+- Reco : à terme, page d'aide interne AlphoGen (« comment obtenir un verified face
+  ID ») qui masque la console réelle. UI-only quand on la fera.
+
+### [R-007] `ENGINE_DISPLAY_NAMES` — collisions de noms volontaires — `severity: info` · `status: resolved`
+- Plusieurs clés mappent au même nom public (ex. `evolink`/`seedance` → « Seedance
+  2.0 » ; `wan_26`/`wan_26_bailian` → « WAN 2.6 » ; atlas/byteplus → « Seedance 2.0
+  (Direct) »). C'est **voulu** : on cache le provider, l'utilisateur voit le modèle.
+  La clé technique (`engine_used`) reste distincte côté data/admin.
+
 ## Décisions actées
 
 - `HANDOVER.md` = source de vérité courante (prime sur README/CLAUDE si conflit).

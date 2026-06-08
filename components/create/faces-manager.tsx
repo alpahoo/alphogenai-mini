@@ -298,7 +298,7 @@ export function FacesManager({ faces, loading, onReload, onInsert, compat }: Fac
               rel="noreferrer"
               className="text-[11px] text-primary/80 hover:underline"
             >
-              Where&apos;s my Asset ID? ↗
+              Need help finding your verified face ID? ↗
             </a>
             <button
               type="button"

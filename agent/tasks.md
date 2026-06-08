@@ -91,17 +91,20 @@ Format d'une tâche :
 ### [T-604] Retirer `typescript.ignoreBuildErrors` — `status: blocked` · `owner: claude`
 - `tsc` est clean ; mais fichier config critique → validation requise. (R-004.)
 
-### [T-605] Cleanup provider names in public create flow — `status: todo` · `owner: codex|claude`
-- Objectif : retirer/neutraliser les noms de providers/agrégateurs encore visibles
-  dans le create flow + pages liées (hors T-102, déjà traité).
-- Repérés (review Codex) :
-  - `HeyGen credits · ~60× cheaper` (avatar picker, `create/[mode]/page.tsx`).
-  - `EvoLink balance` / `Top up on EvoLink` (panneau crédits, page job `app/jobs/[id]/page.tsx`).
-  - Message d'erreur job mentionnant « BytePlus » (`app/jobs/[id]/page.tsx`, `friendlyError`).
-  - Lien « Where's my Asset ID? » → href `console.byteplus.com` (texte OK, URL provider).
-- Règle : modèles OK (Seedance, Wan, Avatar…), providers non OK.
-- Risques : faible (wording) ; ne pas toucher la logique crédits/routes.
-- Validation : tests + build + lint ; grep provider names = 0 en user-facing.
+### [T-605] Cleanup provider names in public create flow — `status: done` · `owner: claude`
+- Livré (UI-only, aucune route/DB/Stripe/Modal touchée) :
+  - Avatar picker badge `HeyGen credits · ~60× cheaper` → `Avatar mode · lower cost`.
+  - `friendlyError` (page job, **public**) reformulé sans « BytePlus / Kling O3 / Atlas »
+    → « Seedance 2.0 … or switch to a model that accepts uploaded face photos ».
+  - `lib/types.ts ENGINE_DISPLAY_NAMES` : retrait des suffixes providers
+    `(Kie.ai)` / `(Bailian)` / `(HeyGen)` / `(Atlas)` → noms modèles publics propres
+    (corrige aussi `/gallery` et la page job qui utilisent `getEngineDisplayName`).
+    `(Direct)` / `(Seedance 2)` conservés (termes produit).
+  - faces-manager : lien « Where's my Asset ID? » → « Need help finding your verified
+    face ID? » (href console provider conservé — voir R-006).
+- Hors périmètre (admin-only, conforme à la consigne) : panneau coût/crédits create
+  (`isAdminEmail`), « EvoLink balance »/« Top up » + `JobCostBadge` (`isAdmin`).
+- Validé : tsc · build · lint · 220 tests verts.
 
 ## Terminé (résumé — détails dans agent/log.md)
 
