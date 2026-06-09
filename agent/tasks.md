@@ -326,9 +326,22 @@ les gates existants (plan/quota/content-policy/ownership/confidentialité provid
   (R-019) : migration future `mcp_tokens` + activation du flag = go Paul.
 - Validé : 355 tests · tsc 0 · lint 0 · build OK (`/api/mcp` enregistrée).
 
-### [T-901d] Outils plan/validate (purs) — `status: todo` · `owner: claude/codex`
-- `validate_job_payload`, `create_director_plan`, `create_ugc_plan` ; réutilise les
-  helpers purs (`validate-references`, `director-quality`, `ugc-director`, `ugc-social-pack`).
+### [T-901d] Outils plan/validate (purs) — `status: done` · `owner: claude`
+- `validate_job_payload` (livré en T-901c), `create_director_plan`, `create_ugc_plan`.
+- Livré : deux planners purs ajoutés au registre MCP (`lib/mcp/tools.ts`), scope `plan`,
+  cost `none`, aucun insert / aucune dépense.
+  - `create_director_plan({prompt, target_duration_seconds?, scenes?})` → réutilise
+    `generateStoryboard` (pur). Résout le plan réel via `resolveUserPlan` (extrait de
+    `lib/jobs/guard.ts` — 1 source de vérité, le gate l'utilise aussi) pour que le cap de
+    scènes corresponde au plan. Sortie `{ plan, scene_count, total_duration_seconds, scenes }` ;
+    la clé engine brute n'est PAS exposée.
+  - `create_ugc_plan({product, outfit?, angle, platform, creator, ...})` → réutilise
+    `buildUGCDirectorPlan` (pur, `ugc-director` + `ugc-social-pack`). Valide les enums
+    (angle/platform/creator) → 400 sinon. Sortie provider-neutral (prompt global, beats de
+    scènes, aspect ratio, social pack).
+- Refactor : `resolveUserPlan(supabase, userId)` extrait de la résolution de plan inline du
+  gate ; `assertCanCreateJob` l'appelle désormais (comportement identique, tests verts).
+- Validé : 363 tests · tsc 0 · lint 0 · build OK. Toujours derrière `MCP_ENABLED` (off).
 
 ### [T-901e] `create_video` derrière confirmation — `status: todo` · `owner: claude/codex`
 - Action coûteuse : quota/plan + **preview-first** + confirmation explicite. Puis

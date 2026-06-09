@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { assertCanCreateJob, MAX_ACTIVE_JOBS } from "@/lib/jobs/guard";
+import { assertCanCreateJob, resolveUserPlan, MAX_ACTIVE_JOBS } from "@/lib/jobs/guard";
 
 // Pure gate logic — no provider should ever be reached from here. We mock the
 // engine clients defensively (the guard only touches their pure predicates,
@@ -59,6 +59,27 @@ function mockService({ plan = "free", activeCount = 0, recentCount = 0 }: Servic
   const service = { from };
   return service as unknown as SupabaseClient & { from: typeof from };
 }
+
+describe("resolveUserPlan", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns 'free' for an anonymous user without touching the DB", async () => {
+    const service = mockService();
+    expect(await resolveUserPlan(service, null)).toBe("free");
+    expect(await resolveUserPlan(service, undefined)).toBe("free");
+    expect(service.from).not.toHaveBeenCalled();
+  });
+
+  it("resolves a paid plan from profiles", async () => {
+    expect(await resolveUserPlan(mockService({ plan: "pro" }), USER)).toBe("pro");
+    expect(await resolveUserPlan(mockService({ plan: "premium" }), USER)).toBe("premium");
+  });
+
+  it("falls back to 'free' for an unknown/garbage plan value", async () => {
+    const service = mockService({ plan: "enterprise" as never });
+    expect(await resolveUserPlan(service, USER)).toBe("free");
+  });
+});
 
 describe("assertCanCreateJob (shared create-job gate)", () => {
   beforeEach(() => {

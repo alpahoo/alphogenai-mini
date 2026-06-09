@@ -10,13 +10,16 @@ Format :
 
 ## Risques & dette
 
-### [R-019] MCP skeleton `/api/mcp` (T-901c) — surface inerte par défaut — `severity: low` · `status: open`
-- Contexte (2026-06-09, Claude) : premier squelette MCP read-only/no-cost livré —
+### [R-019] MCP skeleton `/api/mcp` (T-901c/d) — surface inerte par défaut — `severity: low` · `status: open`
+- Contexte (2026-06-09, Claude) : surface MCP read-only / no-cost livrée —
   `app/api/mcp/route.ts` (dispatcher) + `lib/mcp/{auth,serialize,tools,types}.ts`.
-  Outils : `get_job`, `list_recent_jobs` (read-only, scoping par `userId`),
-  `validate_job_payload` (preview, **réutilise `assertCanCreateJob`**, aucun insert).
-  Sortie provider-neutral (`getEngineDisplayName`/`cleanModelName`, scrub des erreurs).
-  **Aucun `create_video` payant.** Aucune exposition Supabase directe au MCP.
+  Outils (tous scope `read`/`plan`, cost `none`) : `get_job`, `list_recent_jobs`
+  (read-only, scoping par `userId`), `validate_job_payload` (preview, **réutilise
+  `assertCanCreateJob`**, aucun insert), `create_director_plan` (réutilise
+  `generateStoryboard` + `resolveUserPlan`), `create_ugc_plan` (réutilise
+  `buildUGCDirectorPlan`). Sortie provider-neutral (`getEngineDisplayName`/`cleanModelName`,
+  scrub des erreurs ; clé engine brute jamais exposée). **Aucun `create_video` payant.**
+  Aucune exposition Supabase directe au MCP.
 - Garde-fous : route 404 sauf `MCP_ENABLED=true` ; auth **fail-closed** (401 si
   `MCP_TOKEN_PEPPER`/token de test non configurés) ; PAT vérifié par HMAC-SHA256+pepper
   en temps constant ; service-role utilisé **uniquement server-side**, jamais renvoyé.

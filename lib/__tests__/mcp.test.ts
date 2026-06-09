@@ -25,12 +25,14 @@ vi.mock("@/lib/heygen-client", async (importOriginal) => {
   return { ...actual, createAvatarVideo: vi.fn(), createAvatarShotsVideo: vi.fn() };
 });
 
-// validate_job_payload reuses the shared gate. The gate has its own 18 tests
-// (lib/__tests__/jobs-guard.test.ts); here we only assert the tool's mapping.
-vi.mock("@/lib/jobs/guard", () => ({
-  MAX_ACTIVE_JOBS: 1,
-  assertCanCreateJob: vi.fn(),
-}));
+// validate_job_payload reuses the shared gate. The gate has its own tests
+// (lib/__tests__/jobs-guard.test.ts); here we only assert the tool's mapping, so
+// we stub assertCanCreateJob but keep the real resolveUserPlan (create_director_plan
+// depends on it reading the mock client).
+vi.mock("@/lib/jobs/guard", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/jobs/guard")>();
+  return { ...actual, assertCanCreateJob: vi.fn() };
+});
 import { assertCanCreateJob } from "@/lib/jobs/guard";
 
 // ---------------------------------------------------------------------------
@@ -177,20 +179,23 @@ describe("mcp/serialize — toPublicJob", () => {
 // ---------------------------------------------------------------------------
 // tools (read-only) — mock supabase chain
 // ---------------------------------------------------------------------------
-function makeClient(opts: { single?: unknown; list?: unknown }) {
+function makeClient(opts: { single?: unknown; list?: unknown; profilePlan?: string }) {
   const maybeSingle = vi.fn().mockResolvedValue(opts.single ?? { data: null, error: null });
   const limit = vi.fn().mockResolvedValue(opts.list ?? { data: [], error: null });
   const order = vi.fn(() => ({ limit }));
+  // resolveUserPlan reads profiles.select("plan").eq().single()
+  const single = vi.fn().mockResolvedValue({ data: opts.profilePlan ? { plan: opts.profilePlan } : null, error: null });
   const select = vi.fn(() => {
     const chain: Record<string, unknown> = {};
     chain.eq = vi.fn(() => chain);
     chain.maybeSingle = maybeSingle;
+    chain.single = single;
     chain.order = order;
     chain.limit = limit;
     return chain;
   });
   const from = vi.fn(() => ({ select }));
-  return { client: { from } as unknown as SupabaseClient, from, select, maybeSingle, limit, order };
+  return { client: { from } as unknown as SupabaseClient, from, select, maybeSingle, single, limit, order };
 }
 
 const ACTOR: McpActor = { userId: "user-test", scopes: ["read", "plan"] };
@@ -281,12 +286,85 @@ describe("mcp/tools — validate_job_payload (reuses assertCanCreateJob, no inse
   });
 });
 
+describe("mcp/tools — create_director_plan (pure planner)", () => {
+  it("requires a prompt", async () => {
+    const { client } = makeClient({ profilePlan: "pro" });
+    const res = await MCP_TOOLS.create_director_plan.run(ACTOR, { prompt: "x" }, { supabase: client });
+    expect(res).toMatchObject({ ok: false, status: 400, code: "INVALID_INPUT" });
+  });
+
+  it("caps a free user to a single scene", async () => {
+    const { client } = makeClient({ profilePlan: undefined }); // no profile → free
+    const res = await MCP_TOOLS.create_director_plan.run(
+      ACTOR,
+      { prompt: "A cinematic city skyline at sunset", target_duration_seconds: 15 },
+      { supabase: client },
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const data = res.data as { plan: string; scene_count: number };
+    expect(data.plan).toBe("free");
+    expect(data.scene_count).toBe(1);
+  });
+
+  it("splits into multiple scenes for a pro user and respects the plan cap", async () => {
+    const { client } = makeClient({ profilePlan: "pro" });
+    const res = await MCP_TOOLS.create_director_plan.run(
+      ACTOR,
+      { prompt: "A cinematic city skyline at sunset", target_duration_seconds: 15 },
+      { supabase: client },
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const data = res.data as { plan: string; scene_count: number; scenes: { scene_index: number }[] };
+    expect(data.plan).toBe("pro");
+    expect(data.scene_count).toBeGreaterThan(1);
+    expect(data.scene_count).toBeLessThanOrEqual(3); // MAX_SCENES.pro
+    // never exposes a raw engine key in the scene projection
+    expect(JSON.stringify(data.scenes).toLowerCase()).not.toContain("wan_i2v");
+  });
+});
+
+describe("mcp/tools — create_ugc_plan (pure planner)", () => {
+  const { client } = makeClient({});
+
+  it("rejects an invalid angle/platform/creator", async () => {
+    const bad = await MCP_TOOLS.create_ugc_plan.run(ACTOR, { angle: "nope", platform: "tiktok_reels", creator: "none" }, { supabase: client });
+    expect(bad).toMatchObject({ ok: false, status: 400, code: "INVALID_INPUT" });
+  });
+
+  it("builds a provider-neutral UGC plan", async () => {
+    const res = await MCP_TOOLS.create_ugc_plan.run(
+      ACTOR,
+      {
+        angle: "try_on",
+        platform: "tiktok_reels",
+        creator: "verified_face",
+        product: { placeholder: "image 1" },
+        product_name: "travel jacket",
+        key_benefit: "packs flat",
+      },
+      { supabase: client },
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const data = res.data as { prompt: string; aspect_ratio: string; scenes: unknown[]; social: { platform: string } };
+    expect(data.aspect_ratio).toBe("9:16");
+    expect(data.scenes.length).toBeGreaterThan(0);
+    expect(data.social.platform).toBe("tiktok_reels");
+    // confidentiality: no provider/aggregator name anywhere in the output
+    expect(JSON.stringify(data).toLowerCase()).not.toMatch(/byteplus|atlascloud|evolink|bailian|heygen|kie\.?ai/);
+  });
+});
+
 describe("mcp/tools — catalog & cost guarantees", () => {
   it("exposes only no-cost tools and no create_video", () => {
     const names = toolCatalog().map((t) => t.name);
     expect(names).toContain("get_job");
     expect(names).toContain("list_recent_jobs");
     expect(names).toContain("validate_job_payload");
+    expect(names).toContain("create_director_plan");
+    expect(names).toContain("create_ugc_plan");
     expect(names).not.toContain("create_video");
     expect(toolCatalog().every((t) => t.cost === "none")).toBe(true);
   });

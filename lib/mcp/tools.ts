@@ -11,7 +11,15 @@
  * other cost-incurring tools are intentionally NOT here.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { assertCanCreateJob } from "@/lib/jobs/guard";
+import { assertCanCreateJob, resolveUserPlan } from "@/lib/jobs/guard";
+import { generateStoryboard } from "@/lib/storyboard";
+import {
+  buildUGCDirectorPlan,
+  type UGCAngle,
+  type UGCCreator,
+  type UGCPlatform,
+  type UGCReferenceInput,
+} from "@/lib/ugc-director";
 import { PUBLIC_JOB_COLUMNS, toPublicJob, type JobRow } from "@/lib/mcp/serialize";
 import type { McpActor, McpResult, McpToolInfo, PublicJob } from "@/lib/mcp/types";
 
@@ -115,6 +123,109 @@ async function validateJobPayload(
   };
 }
 
+// --- create_director_plan (pure planner: scenes from prompt + duration) -----
+interface DirectorPlanResult {
+  plan: string;
+  scene_count: number;
+  total_duration_seconds: number;
+  scenes: { scene_index: number; prompt: string; duration_sec: number }[];
+}
+
+async function createDirectorPlan(
+  actor: McpActor,
+  input: Record<string, unknown>,
+  { supabase }: ToolDeps,
+): Promise<McpResult<DirectorPlanResult>> {
+  const prompt = typeof input.prompt === "string" ? input.prompt.trim() : "";
+  if (prompt.length < 3) {
+    return { ok: false, status: 400, error: "prompt is required (min 3 characters)", code: "INVALID_INPUT" };
+  }
+  const dur = Number(input.target_duration_seconds);
+  const safeDuration = Number.isFinite(dur) && dur > 0 ? Math.round(dur) : 5;
+  const forced = Number(input.scenes);
+  const opts = Number.isFinite(forced) && forced >= 1 ? { forcedScenes: Math.round(forced) } : {};
+
+  // Resolve the actor's real plan so the scene cap matches what they could
+  // actually generate (read-only; same source of truth as the create gate).
+  const plan = await resolveUserPlan(supabase, actor.userId);
+  const storyboard = generateStoryboard(prompt, safeDuration, plan, opts);
+  const scenes = storyboard.map((s) => ({
+    scene_index: s.scene_index,
+    prompt: s.prompt,
+    duration_sec: s.duration_sec,
+  }));
+  const total = scenes.reduce((sum, s) => sum + s.duration_sec, 0);
+  return {
+    ok: true,
+    data: { plan, scene_count: scenes.length, total_duration_seconds: Math.round(total * 10) / 10, scenes },
+  };
+}
+
+// --- create_ugc_plan (pure planner: buildUGCDirectorPlan) --------------------
+const UGC_ANGLES: readonly UGCAngle[] = ["testimonial", "unboxing", "try_on", "product_demo", "before_after", "founder_pitch"];
+const UGC_PLATFORMS: readonly UGCPlatform[] = ["tiktok_reels", "square_feed", "landscape_ad"];
+const UGC_CREATORS: readonly UGCCreator[] = ["verified_face", "saved_look", "avatar", "none"];
+
+/** Accept a reference as `{label?,placeholder?}` or a bare string. */
+function refInput(v: unknown): UGCReferenceInput | undefined {
+  if (typeof v === "string") return { placeholder: v };
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    return {
+      label: typeof o.label === "string" ? o.label : undefined,
+      placeholder: typeof o.placeholder === "string" ? o.placeholder : undefined,
+    };
+  }
+  return undefined;
+}
+
+async function createUgcPlan(
+  _actor: McpActor,
+  input: Record<string, unknown>,
+): Promise<McpResult<unknown>> {
+  const angle = String(input.angle ?? "");
+  const platform = String(input.platform ?? "");
+  const creator = String(input.creator ?? "");
+  if (!(UGC_ANGLES as readonly string[]).includes(angle)) {
+    return { ok: false, status: 400, error: `angle must be one of: ${UGC_ANGLES.join(", ")}`, code: "INVALID_INPUT" };
+  }
+  if (!(UGC_PLATFORMS as readonly string[]).includes(platform)) {
+    return { ok: false, status: 400, error: `platform must be one of: ${UGC_PLATFORMS.join(", ")}`, code: "INVALID_INPUT" };
+  }
+  if (!(UGC_CREATORS as readonly string[]).includes(creator)) {
+    return { ok: false, status: 400, error: `creator must be one of: ${UGC_CREATORS.join(", ")}`, code: "INVALID_INPUT" };
+  }
+
+  const plan = buildUGCDirectorPlan({
+    product: refInput(input.product) ?? {},
+    outfit: refInput(input.outfit) ?? null,
+    angle: angle as UGCAngle,
+    platform: platform as UGCPlatform,
+    creator: creator as UGCCreator,
+    creatorLabel: typeof input.creator_label === "string" ? input.creator_label : undefined,
+    productName: typeof input.product_name === "string" ? input.product_name : undefined,
+    keyBenefit: typeof input.key_benefit === "string" ? input.key_benefit : undefined,
+    tone: typeof input.tone === "string" ? input.tone : undefined,
+  });
+
+  return {
+    ok: true,
+    data: {
+      prompt: plan.prompt,
+      aspect_ratio: plan.aspectRatio,
+      recommended_scene_count: plan.recommendedSceneCount,
+      scenes: plan.scenes.map((s) => ({
+        title: s.title,
+        role: s.role,
+        prompt: s.prompt,
+        duration_sec: s.durationSec,
+        asset_chips: s.assetChips,
+      })),
+      social: plan.social,
+    },
+  };
+}
+
 // --- registry ---------------------------------------------------------------
 export const MCP_TOOLS: Record<string, McpTool> = {
   get_job: {
@@ -144,6 +255,26 @@ export const MCP_TOOLS: Record<string, McpTool> = {
         "Check whether a generation payload would be accepted (plan/quota/policy/references) WITHOUT creating it.",
     },
     run: validateJobPayload,
+  },
+  create_director_plan: {
+    info: {
+      name: "create_director_plan",
+      scope: "plan",
+      cost: "none",
+      description:
+        "Build an editable scene breakdown from a prompt + duration (respects your plan's scene cap). Pure — no generation.",
+    },
+    run: createDirectorPlan,
+  },
+  create_ugc_plan: {
+    info: {
+      name: "create_ugc_plan",
+      scope: "plan",
+      cost: "none",
+      description:
+        "Build a UGC plan (global prompt, scene beats, aspect ratio, social pack) from product/angle/platform/creator. Pure — no generation.",
+    },
+    run: createUgcPlan,
   },
 };
 

@@ -11,6 +11,27 @@ import { PLAN_DAILY_QUOTA } from "@/lib/types";
 export const MAX_ACTIVE_JOBS = 1;
 
 /**
+ * Resolve a user's plan from `profiles` (never trust client input). Anonymous or
+ * unknown → "free". Single source of truth, reused by the create gate and by
+ * read-only planners (e.g. MCP). `supabase` must be a service-role client.
+ */
+export async function resolveUserPlan(
+  supabase: SupabaseClient,
+  userId: string | null | undefined,
+): Promise<JobPlan> {
+  if (!userId) return "free";
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("plan")
+    .eq("id", userId)
+    .single();
+  if (profile?.plan === "pro" || profile?.plan === "premium") {
+    return profile.plan as JobPlan;
+  }
+  return "free";
+}
+
+/**
  * Everything the create-job gate needs to decide. This is the *intent* of a
  * generation — NOT the full provider payload. The caller (session route or a
  * future `/api/mcp/*` route) resolves `userId` from its own auth, never trusts
@@ -127,17 +148,7 @@ export async function assertCanCreateJob(
   }
 
   // --- resolve plan from profiles (never trust client input) --------------
-  let plan: JobPlan = "free";
-  if (userId) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("plan")
-      .eq("id", userId)
-      .single();
-    if (profile?.plan === "pro" || profile?.plan === "premium") {
-      plan = profile.plan as JobPlan;
-    }
-  }
+  const plan: JobPlan = await resolveUserPlan(supabase, userId);
 
   // --- quota check (authenticated users only) -----------------------------
   if (userId) {

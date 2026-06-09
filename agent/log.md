@@ -12,6 +12,28 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-09 — Claude (Opus 4.8) — T-901d : planners purs MCP (`create_director_plan`, `create_ugc_plan`)
+- Fait : ajouté deux outils planner **purs / no-cost** au registre MCP (`lib/mcp/tools.ts`),
+  scope `plan`, aucun insert, aucune dépense — toujours derrière `MCP_ENABLED` (off) + auth.
+  - `create_director_plan({prompt, target_duration_seconds?, scenes?})` : réutilise
+    `generateStoryboard` (pur) ; résout le plan réel de l'acteur via `resolveUserPlan` pour
+    que le cap de scènes (MAX_SCENES) soit exact. Sortie `{ plan, scene_count,
+    total_duration_seconds, scenes:[{scene_index,prompt,duration_sec}] }` — **pas de clé
+    engine brute exposée**.
+  - `create_ugc_plan({product, outfit?, angle, platform, creator, creator_label?,
+    product_name?, key_benefit?, tone?})` : réutilise `buildUGCDirectorPlan` (pur) ; valide
+    les enums (angle/platform/creator) → 400 sinon. Sortie provider-neutral (prompt global,
+    beats de scènes hook/problem/demo/…, aspect ratio, social pack TikTok/Reels/Feed/YT).
+- Refactor 1-source-de-vérité : extrait `resolveUserPlan(supabase, userId)` de la résolution
+  de plan inline de `assertCanCreateJob` (`lib/jobs/guard.ts`) ; le gate l'appelle désormais.
+  Comportement **identique** (les 7 tests route + 18 tests guard restent verts).
+- Fichiers : `lib/mcp/tools.ts`, `lib/jobs/guard.ts` (resolveUserPlan), tests
+  `lib/__tests__/mcp.test.ts` (+7) et `lib/__tests__/jobs-guard.test.ts` (+3 resolveUserPlan).
+- Tests : npm test → **363 passed** (355 + 8) · tsc 0 · lint 0 · build OK (`/api/mcp` ok).
+- Prochaine étape : T-901e (`create_video` derrière confirmation/preview-first) — **bloqué**
+  tant que rate-limit + audit + activation `MCP_ENABLED`/`mcp_tokens` ne sont pas validés
+  par Paul (R-019). Rien de payant livré.
+
 ## 2026-06-09 — Claude (Opus 4.8) — T-901c : squelette MCP read-only `/api/mcp`
 - Fait : premier squelette de la surface MCP AlphoGen-side, read-only / no-cost, qui
   **réutilise** les helpers existants sans nouvelle logique de gate.
