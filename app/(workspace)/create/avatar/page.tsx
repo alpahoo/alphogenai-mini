@@ -128,6 +128,8 @@ export default function CreateAvatarPage() {
 
   // ── Fetch plan & voices on mount ───────────────────────────────────────
   useEffect(() => {
+    const initialLookId = new URLSearchParams(window.location.search).get("look_id");
+
     async function init() {
       try {
         const supabase = createClient();
@@ -160,7 +162,14 @@ export default function CreateAvatarPage() {
     // Fetch saved cinematic Looks
     fetch("/api/looks")
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((d) => { if (Array.isArray(d.looks)) setLooks(d.looks); })
+      .then((d) => {
+        if (!Array.isArray(d.looks)) return;
+        setLooks(d.looks);
+        if (initialLookId && d.looks.some((look: CinematicLook) => look.id === initialLookId)) {
+          setMode("cinematic");
+          setSelectedLookId(initialLookId);
+        }
+      })
       .catch(() => { /* silent */ });
 
     // Stop any preview audio when leaving the page

@@ -502,3 +502,13 @@ findings level block/warn + message), `byteplus-cost.ts`
 - T-301c : retry affordances cloturees via l'existant (`retry-scenes`) + gating single-scene regen deja livre par `supportsSingleSceneRegen()`.
 - R-003 : migration retrospective deja presente et verifiee (`20260608_byteplus_assets_thumb_and_update_policy.sql`), sans donnees user ; aucune operation prod nouvelle.
 - T-604/R-004 : `next.config.ts` ne contient plus `typescript.ignoreBuildErrors`; tsc/lint/build restent clean.
+
+
+## 2026-06-09 - Codex - T-401a/T-401b Saved Looks first surface
+- Audit livre : `docs/product/saved-looks-audit.md`.
+- Constat : l'existant Saved Looks est `cinematic_looks` + `/api/looks`, limite aux jobs `heygen_avatar_shots`; aucune migration locale ne cree la table.
+- Implementation safe slice : `/library` affiche les Saved Looks et propose `Create with look`.
+- `/create/avatar?look_id=<id>` preselectionne le look et bascule en mode cinematic apres chargement des looks.
+- Scope : aucune route/API/DB/migration/provider modifiee.
+- Validation : `tsc` clean, `vitest` 270/270, `lint` clean, `build` OK, `test:e2e` 3/3.
+- Browser plugin : KO dans cette session avec `windows sandbox failed: spawn setup refresh`; fallback Playwright utilise.

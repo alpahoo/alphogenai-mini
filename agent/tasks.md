@@ -140,6 +140,17 @@ de migration ni de modif state machine**.
 - Decoupage restant : T-401a audit route/schema existants ; T-401b UI Saved Looks ;
   T-401c helper payload ; T-401d migration seulement si necessaire ; T-401e tests.
 
+### [T-401a] Audit existing looks route/schema - `status: done` - `owner: codex`
+- Livre : `docs/product/saved-looks-audit.md`.
+- Conclusion : implementation actuelle = `cinematic_looks` pour avatar/cinematic shots ;
+  aucune migration locale ne cree la table, donc pas d'extension schema avant audit Supabase.
+
+### [T-401b] Saved Looks Library surface - `status: done` - `owner: codex`
+- `/library` affiche les Saved Looks comme assets reutilisables.
+- Action `Create with look` -> `/create/avatar?look_id=<id>`.
+- `/create/avatar` preselectionne le look via query param et passe en mode cinematic.
+- Aucun changement DB/API/provider.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio

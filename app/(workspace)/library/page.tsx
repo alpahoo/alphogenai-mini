@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import {
   ArrowRight,
   CheckCircle2,
+  Clapperboard,
   Download,
   Film,
   Image as ImageIcon,
@@ -25,6 +26,15 @@ interface VideoAsset {
   created_at: string;
   target_duration_seconds: number | null;
   social_exports: Record<string, string> | null;
+}
+
+interface SavedLook {
+  id: string;
+  name: string;
+  video_url: string;
+  thumbnail_url: string | null;
+  duration_sec: number | null;
+  created_at: string;
 }
 
 type FilterKey = "all" | "reference" | "social";
@@ -47,6 +57,7 @@ function hasSocialPack(asset: VideoAsset) {
 
 export default function LibraryPage() {
   const [videos, setVideos] = useState<VideoAsset[]>([]);
+  const [looks, setLooks] = useState<SavedLook[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
@@ -70,6 +81,12 @@ export default function LibraryPage() {
           .limit(48);
 
         if (data) setVideos(data as VideoAsset[]);
+
+        const looksRes = await fetch("/api/looks");
+        if (looksRes.ok) {
+          const looksData = await looksRes.json();
+          if (Array.isArray(looksData.looks)) setLooks(looksData.looks as SavedLook[]);
+        }
       } catch {
         // Keep the asset studio usable even when the library query fails.
       } finally {
@@ -95,10 +112,11 @@ export default function LibraryPage() {
   const stats = useMemo(
     () => [
       { label: "Videos", value: videos.length.toString() },
+      { label: "Saved Looks", value: looks.length.toString() },
       { label: "Reference-ready", value: videos.length.toString() },
       { label: "Social packs", value: videos.filter(hasSocialPack).length.toString() },
     ],
-    [videos],
+    [videos, looks],
   );
 
   return (
@@ -131,7 +149,7 @@ export default function LibraryPage() {
           </Link>
         </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {stats.map((item) => (
             <div key={item.label} className="rounded-xl border border-border/60 bg-background px-4 py-3">
               <span className="text-[11px] uppercase text-muted-foreground/60">{item.label}</span>
@@ -140,6 +158,90 @@ export default function LibraryPage() {
           ))}
         </div>
       </motion.section>
+
+      <section className="mt-8 rounded-2xl border border-border bg-card p-5 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-primary">
+              <Clapperboard className="h-3.5 w-3.5" />
+              Saved Looks
+            </div>
+            <h2 className="mt-1 text-lg font-bold text-foreground">Reusable shots</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+              Keep a shot you already like, then apply a fresh script and voice without rebuilding the visual from scratch.
+            </p>
+          </div>
+          <Link
+            href="/create/avatar"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-primary/35 hover:bg-primary/5"
+          >
+            Open avatar studio
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+
+        {loading ? (
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="aspect-video animate-pulse rounded-xl bg-muted/30" />
+            ))}
+          </div>
+        ) : looks.length === 0 ? (
+          <div className="mt-5 rounded-xl border border-dashed border-border/50 bg-background px-5 py-6">
+            <p className="text-sm font-semibold text-foreground">No saved looks yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Save a completed cinematic avatar shot as a Look, then it will appear here for fast reuse.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {looks.map((look) => (
+              <article
+                key={look.id}
+                className="overflow-hidden rounded-xl border border-border bg-background shadow-sm transition-all hover:border-primary/35 hover:shadow-md"
+              >
+                <div className="relative aspect-video overflow-hidden bg-muted/30">
+                  {look.thumbnail_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={look.thumbnail_url} alt={look.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <video
+                      src={look.video_url}
+                      className="h-full w-full object-cover"
+                      preload="metadata"
+                      muted
+                      playsInline
+                    />
+                  )}
+                  <span className="absolute left-2 top-2 rounded-full bg-cyan-500/90 px-2 py-1 text-[10px] font-bold text-white">
+                    Look
+                  </span>
+                  {look.duration_sec && (
+                    <span className="absolute bottom-2 right-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      {look.duration_sec}s
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-3 p-3">
+                  <div>
+                    <p className="line-clamp-2 min-h-10 text-sm font-semibold leading-5 text-foreground">
+                      {look.name}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">{timeAgo(look.created_at)}</p>
+                  </div>
+                  <Link
+                    href={`/create/avatar?look_id=${look.id}`}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground transition hover:brightness-110"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Create with look
+                  </Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
 
       <section className="mt-8">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
