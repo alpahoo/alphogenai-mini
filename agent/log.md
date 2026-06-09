@@ -879,3 +879,10 @@ findings level block/warn + message), `byteplus-cost.ts`
   placeholders privacy-first si aucun item n'est publié.
 - Garanties : aucune lecture directe de `jobs`, aucune route admin, aucun service-role
   côté galerie publique ; le manager admin T-1003 reste la seule source de publication.
+
+## 2026-06-09 - Codex - T-1005/1006 gallery lightbox/filter QA
+- Finalise la tranche lightbox/create-similar/QA côté galerie publique.
+- Le CTA `Create similar` reste sûr : il utilise `reference_job_id` seulement si
+  l'item public curaté possède un `source_job_id`, sinon il démarre un create flow vierge.
+- Les filtres de catégories sont maintenant fonctionnels côté client.
+- QA réalisée sur `/gallery` : HTTP 200, capture Playwright OK, e2e 3/3.

@@ -16,6 +16,7 @@ import {
   getFeaturedGalleryItem,
   getVisibleGalleryCategories,
   type GalleryAccent,
+  type GalleryCategory,
   type GalleryItemRow,
   type GalleryShowcaseItem,
 } from "@/lib/gallery-showcase";
@@ -141,7 +142,12 @@ export function GalleryShowcasePage({ rows }: { rows?: GalleryItemRow[] | null }
   const featuredItem = getFeaturedGalleryItem(showcaseItems);
   const categories = getVisibleGalleryCategories(showcaseItems);
   const hasPublishedItems = Boolean(rows?.some((row) => row.status === "published"));
+  const [activeCategory, setActiveCategory] = useState<GalleryCategory>("All");
   const [previewItem, setPreviewItem] = useState<GalleryShowcaseItem | null>(null);
+  const visibleItems =
+    activeCategory === "All"
+      ? showcaseItems
+      : showcaseItems.filter((item) => item.category === activeCategory);
 
   return (
     <div className="min-h-screen bg-[#f6f6f2] text-neutral-950">
@@ -252,14 +258,16 @@ export function GalleryShowcasePage({ rows }: { rows?: GalleryItemRow[] | null }
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {categories.map((category, index) => (
+              {categories.map((category) => (
                 <button
                   key={category}
                   type="button"
+                  onClick={() => setActiveCategory(category)}
+                  aria-pressed={activeCategory === category}
                   className={
-                    index === 0
+                    activeCategory === category
                       ? "rounded-full bg-neutral-950 px-4 py-2 text-xs font-semibold text-white"
-                      : "rounded-full border border-neutral-200 bg-white px-4 py-2 text-xs font-semibold text-neutral-600"
+                      : "rounded-full border border-neutral-200 bg-white px-4 py-2 text-xs font-semibold text-neutral-600 transition hover:border-neutral-400 hover:text-neutral-950"
                   }
                 >
                   {category}
@@ -287,7 +295,7 @@ export function GalleryShowcasePage({ rows }: { rows?: GalleryItemRow[] | null }
           </div>
 
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {showcaseItems.map((slot) => (
+            {visibleItems.map((slot) => (
               <button
                 key={slot.id}
                 type="button"

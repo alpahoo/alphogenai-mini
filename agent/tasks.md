@@ -402,7 +402,13 @@ n'infère JAMAIS la publiabilité depuis le statut d'un job. Pas de lecture dire
   `GalleryShowcasePage`. Fallback placeholders privacy-first si zero item publie ou
   erreur. Aucune lecture directe de `jobs`, aucune route admin/service-role.
 
-### [T-1005/1006] Lightbox + Create similar / Visual QA — `status: todo`
+### [T-1005/1006] Lightbox + Create similar / Visual QA — `status: done` · `owner: codex`
+- Lightbox statique publique deja presente dans `GalleryShowcasePage` : preview media,
+  metadata provider-neutral, CTA `Create similar`.
+- `Create similar` utilise `source_job_id` uniquement quand un item curaté en expose un,
+  sinon fallback sûr `/create/story`.
+- Polish : filtres catégorie fonctionnels côté client (`All`, `Cinematic`, `UGC`, etc.).
+- QA : `/gallery` HTTP 200, capture Playwright OK, `test:e2e` 3/3.
 
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
