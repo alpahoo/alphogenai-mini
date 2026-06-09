@@ -33,6 +33,9 @@ describe("buildUGCDirectorPlan", () => {
     ]);
     expect(plan.prompt).toContain("Product reference: image 1");
     expect(plan.prompt).toContain("Outfit/style reference: image 2");
+    expect(plan.prompt).toContain("Social Pack target: TikTok / Reels launch");
+    expect(plan.social.primaryFormats).toEqual(["TikTok", "Instagram Reels"]);
+    expect(plan.scenes[0].prompt).toContain("first second");
     expect(plan.scenes[3].prompt).toContain("not an exact try-on guarantee");
   });
 
@@ -44,16 +47,23 @@ describe("buildUGCDirectorPlan", () => {
     expect(plan.prompt).not.toContain("Outfit/style reference");
   });
 
-  it("maps platforms to the create-flow aspect ratio contract", () => {
-    expect(buildUGCDirectorPlan(input({ platform: "tiktok_reels" })).aspectRatio).toBe("9:16");
-    expect(buildUGCDirectorPlan(input({ platform: "square_feed" })).aspectRatio).toBe("1:1");
-    expect(buildUGCDirectorPlan(input({ platform: "landscape_ad" })).aspectRatio).toBe("16:9");
+  it("maps platforms to the create-flow and Social Pack preset contract", () => {
+    const vertical = buildUGCDirectorPlan(input({ platform: "tiktok_reels" }));
+    const square = buildUGCDirectorPlan(input({ platform: "square_feed" }));
+    const landscape = buildUGCDirectorPlan(input({ platform: "landscape_ad" }));
+
+    expect(vertical.aspectRatio).toBe("9:16");
+    expect(square.aspectRatio).toBe("1:1");
+    expect(landscape.aspectRatio).toBe("16:9");
+    expect(square.social.label).toBe("Instagram feed proof");
+    expect(landscape.social.primaryFormats).toContain("YouTube");
   });
 
   it("adapts copy by angle and creator mode", () => {
-    const founder = buildUGCDirectorPlan(input({ angle: "founder_pitch", creator: "saved_look" }));
+    const founder = buildUGCDirectorPlan(input({ angle: "founder_pitch", creator: "saved_look", creatorLabel: "Paris founder look" }));
     expect(founder.scenes[0].prompt).toContain("founder-style");
-    expect(founder.scenes[0].prompt).toContain("Reuse the selected saved Look");
+    expect(founder.scenes[0].prompt).toContain("Reuse saved Look Paris founder look");
+    expect(founder.prompt).toContain("Creator: saved look (Paris founder look)");
 
     const tryOn = buildUGCDirectorPlan(input({ angle: "try_on", creator: "none" }));
     expect(tryOn.scenes[0].prompt).toContain("outfit reveal");
@@ -80,6 +90,7 @@ describe("buildUGCDirectorPlan", () => {
     const avatar = buildUGCDirectorPlan(input({ creator: "avatar", creatorLabel: "Studio avatar" }));
     expect(avatar.scenes[0].prompt).toContain("Use avatar Studio avatar");
   });
+
   it("keeps all public labels provider-neutral", () => {
     const variants = [
       input(),
@@ -93,10 +104,13 @@ describe("buildUGCDirectorPlan", () => {
       const publicText = [
         plan.prompt,
         plan.aspectRatio,
+        plan.social.label,
+        plan.social.metadataBrief,
+        ...plan.social.primaryFormats,
+        ...plan.social.hashtagHints,
         ...plan.scenes.flatMap((scene) => [scene.title, scene.role, scene.prompt, ...scene.assetChips]),
       ].join("\n");
       expect(FORBIDDEN_RE.test(publicText), publicText).toBe(false);
     }
   });
 });
-

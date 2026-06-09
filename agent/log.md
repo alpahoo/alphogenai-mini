@@ -569,3 +569,11 @@ findings level block/warn + message), `byteplus-cost.ts`
 - `lib/ugc-director.ts` accepte `creatorLabel` et injecte le nom de l'identite choisie dans les prompts/scenes Director ; tests ajoutes.
 - Scope : UI/helper/test only ; aucun changement route/API/DB/migration/provider/state machine.
 - Validation : `tsc` clean, `vitest` 282/282, `lint` clean, `build` OK, `test:e2e` 3/3.
+
+## 2026-06-09 - Codex - T-801f UGC Social Pack presets
+- Ajout `lib/ugc-social-pack.ts` : presets TikTok/Reels, Instagram feed et Landscape ad avec aspect ratio, formats cibles, brief metadata, hook/CTA et hashtags.
+- `buildUGCDirectorPlan()` integre le preset social dans le prompt global, les scenes hook/CTA et expose `plan.social`.
+- UGC Studio affiche un encart `Social Pack preset` sur `/create/product` et `/create/social` ; le build UGC passe `caption_mode` a `auto`.
+- Tests ajoutes/etendus : `ugc-social-pack.test.ts` + contrat Social Pack dans `ugc-director.test.ts`.
+- Scope : UI/helper/test only ; aucune route/API/DB/migration/provider/state machine.
+- Validation : `tsc` clean, `vitest` 286/286, `lint` clean, `build` OK, `test:e2e` 3/3.

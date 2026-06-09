@@ -1,4 +1,6 @@
-export type UGCPlatform = "tiktok_reels" | "square_feed" | "landscape_ad";
+import { getUGCSocialPreset, type UGCSocialPreset, type UGCSocialPlatform } from "@/lib/ugc-social-pack";
+
+export type UGCPlatform = UGCSocialPlatform;
 export type UGCAngle =
   | "testimonial"
   | "unboxing"
@@ -26,6 +28,7 @@ export type UGCPlan = {
   scenes: UGCScene[];
   aspectRatio: "9:16" | "1:1" | "16:9";
   recommendedSceneCount: number;
+  social: UGCSocialPreset;
 };
 
 export type BuildUGCPlanInput = {
@@ -38,12 +41,6 @@ export type BuildUGCPlanInput = {
   productName?: string;
   keyBenefit?: string;
   tone?: string;
-};
-
-const PLATFORM_ASPECT: Record<UGCPlatform, UGCPlan["aspectRatio"]> = {
-  tiktok_reels: "9:16",
-  square_feed: "1:1",
-  landscape_ad: "16:9",
 };
 
 const ANGLE_COPY: Record<UGCAngle, { hook: string; demo: string; cta: string }> = {
@@ -79,6 +76,11 @@ const ANGLE_COPY: Record<UGCAngle, { hook: string; demo: string; cta: string }> 
   },
 };
 
+function clean(value: string | undefined, fallback: string, max = 120): string {
+  const text = value?.trim();
+  return text ? text.slice(0, max) : fallback;
+}
+
 function creatorCopy(creator: UGCCreator, label?: string): string {
   const name = clean(label, "", 80);
   if (creator === "verified_face") {
@@ -99,11 +101,6 @@ function creatorCopy(creator: UGCCreator, label?: string): string {
   return "No fixed creator identity; focus on hands, product, and natural lifestyle framing.";
 }
 
-function clean(value: string | undefined, fallback: string, max = 120): string {
-  const text = value?.trim();
-  return text ? text.slice(0, max) : fallback;
-}
-
 function chip(ref: UGCReferenceInput | undefined | null, fallback: string): string {
   return clean(ref?.placeholder ?? ref?.label, fallback, 60);
 }
@@ -119,6 +116,7 @@ export function buildUGCDirectorPlan(input: BuildUGCPlanInput): UGCPlan {
   const keyBenefit = clean(input.keyBenefit, "the main benefit");
   const tone = clean(input.tone, "natural, social, premium");
   const angle = ANGLE_COPY[input.angle];
+  const social = getUGCSocialPreset(input.platform);
   const creatorDirection = creatorCopy(input.creator, input.creatorLabel);
   const assetBase = [productChip, ...(outfitChip ? [outfitChip] : [])];
 
@@ -132,6 +130,7 @@ export function buildUGCDirectorPlan(input: BuildUGCPlanInput): UGCPlan {
         `Open with ${angle.hook}.`,
         `Keep ${productName} visible using ${productChip} as the product reference.`,
         creatorDirection,
+        social.hookGuidance,
         `Tone: ${tone}.`,
       ]),
     },
@@ -192,6 +191,7 @@ export function buildUGCDirectorPlan(input: BuildUGCPlanInput): UGCPlan {
       assetChips: [productChip],
       prompt: sentence([
         `${angle.cta}.`,
+        social.ctaGuidance,
         "End with a clean product shot and a natural pause for captions.",
       ]),
     },
@@ -202,7 +202,9 @@ export function buildUGCDirectorPlan(input: BuildUGCPlanInput): UGCPlan {
     `Product reference: ${productChip}.`,
     outfitChip ? `Outfit/style reference: ${outfitChip}.` : "",
     `Angle: ${input.angle.replace(/_/g, " ")}.`,
-    `Platform: ${input.platform.replace(/_/g, " ")}.`,
+    `Social Pack target: ${social.label}; formats: ${social.primaryFormats.join(", ")}.`,
+    `Social metadata brief: ${social.metadataBrief}.`,
+    `Hashtag hints: ${social.hashtagHints.join(" ")}.`,
     `Creator: ${input.creator.replace(/_/g, " ")}${input.creatorLabel ? ` (${clean(input.creatorLabel, "", 80)})` : ""}.`,
     `Benefit: ${keyBenefit}.`,
     `Tone: ${tone}.`,
@@ -211,8 +213,8 @@ export function buildUGCDirectorPlan(input: BuildUGCPlanInput): UGCPlan {
   return {
     prompt,
     scenes,
-    aspectRatio: PLATFORM_ASPECT[input.platform],
+    aspectRatio: social.aspectRatio,
     recommendedSceneCount: scenes.length,
+    social,
   };
 }
-

@@ -204,6 +204,15 @@ de migration ni de modif state machine**.
   dans les scenes Director, sans nouveau payload backend.
 - Scope : UI/helper/test only ; aucune route/API/DB/migration/provider/state machine.
 
+### [T-801f] UGC Social Pack presets - `status: done` - `owner: codex`
+- Ajout `lib/ugc-social-pack.ts` : presets TikTok/Reels, Instagram feed et
+  Landscape ad (aspect ratio, formats cibles, brief metadata, CTA, hashtags).
+- `buildUGCDirectorPlan()` integre le preset social dans le prompt global, les
+  scenes hook/CTA et expose `plan.social`.
+- UGC Studio affiche un encart `Social Pack preset` et active `caption_mode=auto`
+  quand le plan UGC est construit.
+- Scope : UI/helper/test only ; aucune route/API/DB/migration/provider/state machine.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio

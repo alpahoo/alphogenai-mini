@@ -59,6 +59,7 @@ import {
   type UGCCreator,
   type UGCPlatform,
 } from "@/lib/ugc-director";
+import { getUGCSocialPreset } from "@/lib/ugc-social-pack";
 import { isAdminEmail } from "@/lib/flags";
 import type { PromptTemplate } from "@/lib/prompt-templates";
 import type { JobPlan, EngineKey, ReferenceItem, ReferenceRole } from "@/lib/types";
@@ -934,6 +935,7 @@ export default function CreateModePage({
     imageComposerRefs[1];
   const ugcPlatformLabel =
     ugcPlatform === "tiktok_reels" ? "TikTok / Reels" : ugcPlatform === "square_feed" ? "Square feed" : "Landscape ad";
+  const ugcSocialPreset = getUGCSocialPreset(ugcPlatform);
   const selectedUGCFace =
     byteplusAssets.find((asset) => asset.asset_id === selectedUGCFaceAssetId) ?? byteplusAssets[0];
   const selectedUGCLook = ugcLooks.find((look) => look.id === selectedUGCLookId) ?? ugcLooks[0];
@@ -1185,6 +1187,7 @@ export default function CreateModePage({
     ];
 
     setAspectRatio(plan.aspectRatio);
+    setCaptionMode(plan.social.captionMode);
     setDuration(String(Math.min(planMaxDuration, cappedScenes.reduce((sum, s) => sum + s.durationSec, 0))));
     setNumScenes(cappedScenes.length);
     setPrompt(plan.prompt);
@@ -1253,6 +1256,38 @@ export default function CreateModePage({
       </div>
 
       {ugcIdentityPanel}
+
+      <div className="mt-3 rounded-xl border border-violet-500/25 bg-violet-500/5 p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="flex items-center gap-2 text-xs font-bold text-foreground">
+              <Share2 className="h-3.5 w-3.5 text-violet-500" />
+              Social Pack preset
+            </p>
+            <p className="mt-1 text-sm font-semibold text-violet-600 dark:text-violet-300">
+              {ugcSocialPreset.label}
+            </p>
+            <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-muted-foreground/70">
+              {ugcSocialPreset.metadataBrief}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5 md:justify-end">
+            {ugcSocialPreset.primaryFormats.map((format) => (
+              <span key={format} className="rounded-full border border-violet-500/25 bg-background px-2 py-1 text-[10px] font-semibold text-violet-600">
+                {format}
+              </span>
+            ))}
+            <span className="rounded-full border border-emerald-500/25 bg-emerald-500/5 px-2 py-1 text-[10px] font-semibold text-emerald-600">
+              Captions auto
+            </span>
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {ugcSocialPreset.hashtagHints.map((tag) => (
+            <span key={tag} className="text-[10px] font-medium text-muted-foreground/60">{tag}</span>
+          ))}
+        </div>
+      </div>
 
       <div className="mt-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-wrap gap-2">
