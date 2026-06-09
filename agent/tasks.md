@@ -249,6 +249,16 @@ de migration ni de modif state machine**.
   contrat backend impossible a exprimer via `POST /api/jobs`.
 - Scope : aucun runtime, aucune route/API/DB/migration/provider/state machine.
 
+### [T-803a] Exact try-on / product grounding spec - `status: done` - `owner: codex`
+- Livre docs-only : `docs/product/ugc-exact-tryon-grounding-spec.md`.
+- Definit les tiers futurs : grounded product UGC, logo/text preservation,
+  outfit style transfer, exact try-on, avec copy autorisee/interdite.
+- Cadre les requirements data/payload, safety/consent, evaluation harness et
+  decoupage T-803b/c/d/e.
+- Decision : ne pas creer de backend dedie sans preuve qu'un modele valide exige
+  un contrat impossible via `POST /api/jobs`.
+- Scope : aucun runtime, aucune route/API/DB/migration/provider/state machine.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio
