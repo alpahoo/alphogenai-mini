@@ -34,6 +34,7 @@ export type BuildUGCPlanInput = {
   angle: UGCAngle;
   platform: UGCPlatform;
   creator: UGCCreator;
+  creatorLabel?: string;
   productName?: string;
   keyBenefit?: string;
   tone?: string;
@@ -78,12 +79,25 @@ const ANGLE_COPY: Record<UGCAngle, { hook: string; demo: string; cta: string }> 
   },
 };
 
-const CREATOR_COPY: Record<UGCCreator, string> = {
-  verified_face: "Use the selected verified creator consistently across all scenes.",
-  saved_look: "Reuse the selected saved Look as the visual identity for the creator shot.",
-  avatar: "Use the selected avatar as the presenter when the workflow supports it.",
-  none: "No fixed creator identity; focus on hands, product, and natural lifestyle framing.",
-};
+function creatorCopy(creator: UGCCreator, label?: string): string {
+  const name = clean(label, "", 80);
+  if (creator === "verified_face") {
+    return name
+      ? `Use verified creator ${name} consistently across all scenes.`
+      : "Use the selected verified creator consistently across all scenes.";
+  }
+  if (creator === "saved_look") {
+    return name
+      ? `Reuse saved Look ${name} as the visual identity for the creator shot.`
+      : "Reuse the selected saved Look as the visual identity for the creator shot.";
+  }
+  if (creator === "avatar") {
+    return name
+      ? `Use avatar ${name} as the presenter when the workflow supports it.`
+      : "Use the selected avatar as the presenter when the workflow supports it.";
+  }
+  return "No fixed creator identity; focus on hands, product, and natural lifestyle framing.";
+}
 
 function clean(value: string | undefined, fallback: string, max = 120): string {
   const text = value?.trim();
@@ -105,6 +119,7 @@ export function buildUGCDirectorPlan(input: BuildUGCPlanInput): UGCPlan {
   const keyBenefit = clean(input.keyBenefit, "the main benefit");
   const tone = clean(input.tone, "natural, social, premium");
   const angle = ANGLE_COPY[input.angle];
+  const creatorDirection = creatorCopy(input.creator, input.creatorLabel);
   const assetBase = [productChip, ...(outfitChip ? [outfitChip] : [])];
 
   const scenes: UGCScene[] = [
@@ -116,7 +131,7 @@ export function buildUGCDirectorPlan(input: BuildUGCPlanInput): UGCPlan {
       prompt: sentence([
         `Open with ${angle.hook}.`,
         `Keep ${productName} visible using ${productChip} as the product reference.`,
-        CREATOR_COPY[input.creator],
+        creatorDirection,
         `Tone: ${tone}.`,
       ]),
     },
@@ -188,7 +203,7 @@ export function buildUGCDirectorPlan(input: BuildUGCPlanInput): UGCPlan {
     outfitChip ? `Outfit/style reference: ${outfitChip}.` : "",
     `Angle: ${input.angle.replace(/_/g, " ")}.`,
     `Platform: ${input.platform.replace(/_/g, " ")}.`,
-    `Creator: ${input.creator.replace(/_/g, " ")}.`,
+    `Creator: ${input.creator.replace(/_/g, " ")}${input.creatorLabel ? ` (${clean(input.creatorLabel, "", 80)})` : ""}.`,
     `Benefit: ${keyBenefit}.`,
     `Tone: ${tone}.`,
   ]);

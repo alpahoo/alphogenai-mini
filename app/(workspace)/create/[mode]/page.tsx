@@ -153,6 +153,14 @@ interface BytePlusAsset {
   thumb_url?: string | null;
 }
 
+interface CinematicLook {
+  id: string;
+  name: string;
+  video_url: string;
+  thumbnail_url: string | null;
+  duration_sec: number | null;
+}
+
 /** Hardcoded fallback if /api/engines fails or hasn't loaded yet. */
 const FALLBACK_ENGINES: EngineOption[] = [
   { key: "wan_i2v",        label: "Wan 2.2 I2V",       desc: "GPU - up to 60s",                    gate: null,      supportsRefs: false, supportsI2v: true,  maxDuration: 60, minDuration: null, quality: "720p" },
@@ -223,6 +231,11 @@ export default function CreateModePage({
   const [ugcAngle, setUgcAngle] = useState<UGCAngle>("product_demo");
   const [ugcPlatform, setUgcPlatform] = useState<UGCPlatform>("tiktok_reels");
   const [ugcCreator, setUgcCreator] = useState<UGCCreator>("none");
+  const [selectedUGCFaceAssetId, setSelectedUGCFaceAssetId] = useState("");
+  const [selectedUGCLookId, setSelectedUGCLookId] = useState("");
+  const [selectedUGCAvatarId, setSelectedUGCAvatarId] = useState("");
+  const [ugcLooks, setUgcLooks] = useState<CinematicLook[]>([]);
+  const [ugcLooksLoading, setUgcLooksLoading] = useState(false);
   const [ugcProductName, setUgcProductName] = useState("");
   const [ugcBenefit, setUgcBenefit] = useState("");
   const [ugcTone, setUgcTone] = useState("natural, premium, creator-led");
@@ -512,7 +525,7 @@ export default function CreateModePage({
   // Lazy-load the user's HeyGen avatars + cloned voices the first time they're
   // needed ("Use my voice" enabled, or a HeyGen avatar model selected).
   useEffect(() => {
-    const needed = useMyVoice || isHeyGenEngineSelected;
+    const needed = useMyVoice || isHeyGenEngineSelected || ((mode === "product" || mode === "social") && ugcCreator === "avatar");
     if (!needed) return;
     if (clonedVoices.length > 0 || heygenAvatars.length > 0) return;
     if (clonedVoicesLoading || heygenAvatarsLoading) return;
@@ -536,6 +549,8 @@ export default function CreateModePage({
   }, [
     useMyVoice,
     isHeyGenEngineSelected,
+    mode,
+    ugcCreator,
     clonedVoices.length,
     heygenAvatars.length,
     clonedVoicesLoading,
@@ -570,6 +585,20 @@ export default function CreateModePage({
   useEffect(() => {
     loadByteplusAssets();
   }, []);
+  useEffect(() => {
+    if (mode !== "product" && mode !== "social") return;
+    if (ugcLooks.length > 0 || ugcLooksLoading) return;
+    setUgcLooksLoading(true);
+    fetch("/api/looks")
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((data) => {
+        const looks: CinematicLook[] = Array.isArray(data.looks) ? data.looks : [];
+        setUgcLooks(looks);
+        if (looks.length > 0 && !selectedUGCLookId) setSelectedUGCLookId(looks[0].id);
+      })
+      .catch(() => {})
+      .finally(() => setUgcLooksLoading(false));
+  }, [mode, selectedUGCLookId, ugcLooks.length, ugcLooksLoading]);
 
   const planMaxDuration = PLAN_MAX_DURATION[plan] ?? 5;
   const durationOptions = DURATION_OPTIONS.map((opt) => {
@@ -905,6 +934,166 @@ export default function CreateModePage({
     imageComposerRefs[1];
   const ugcPlatformLabel =
     ugcPlatform === "tiktok_reels" ? "TikTok / Reels" : ugcPlatform === "square_feed" ? "Square feed" : "Landscape ad";
+  const selectedUGCFace =
+    byteplusAssets.find((asset) => asset.asset_id === selectedUGCFaceAssetId) ?? byteplusAssets[0];
+  const selectedUGCLook = ugcLooks.find((look) => look.id === selectedUGCLookId) ?? ugcLooks[0];
+  const selectedUGCAvatar =
+    heygenAvatars.find((avatar) => avatar.avatarId === selectedUGCAvatarId) ?? heygenAvatars[0];
+  const ugcCreatorLabel =
+    ugcCreator === "verified_face"
+      ? selectedUGCFace?.name || selectedUGCFace?.asset_id
+      : ugcCreator === "saved_look"
+        ? selectedUGCLook?.name
+        : ugcCreator === "avatar"
+          ? selectedUGCAvatar?.name
+          : undefined;
+  const ugcCreatorSummary =
+    ugcCreator === "verified_face"
+      ? selectedUGCFace
+        ? `Verified face: ${selectedUGCFace.name || "Ready"}`
+        : "Add a verified face for identity continuity"
+      : ugcCreator === "saved_look"
+        ? selectedUGCLook
+          ? `Saved Look: ${selectedUGCLook.name}`
+          : "Save a Look from an avatar shot first"
+        : ugcCreator === "avatar"
+          ? selectedUGCAvatar
+            ? `Avatar: ${selectedUGCAvatar.name}`
+            : heygenAvatarsLoading
+              ? "Loading avatars..."
+              : "Create an avatar first"
+          : "No fixed creator; product-first framing";
+
+  const renderUGCIdentityCard = ({
+    creator,
+    title,
+    desc,
+    detail,
+    thumb,
+    Icon,
+    disabled = false,
+  }: {
+    creator: UGCCreator;
+    title: string;
+    desc: string;
+    detail: string;
+    thumb?: string | null;
+    Icon: typeof User;
+    disabled?: boolean;
+  }) => {
+    const active = ugcCreator === creator;
+    return (
+      <button
+        type="button"
+        onClick={() => !disabled && setUgcCreator(creator)}
+        disabled={disabled}
+        className={`flex min-h-[92px] items-start gap-3 rounded-xl border px-3 py-3 text-left transition-all ${
+          active
+            ? "border-emerald-500/45 bg-emerald-500/10 shadow-sm"
+            : "border-border/50 bg-background hover:border-emerald-500/30 hover:bg-emerald-500/5"
+        } ${disabled ? "cursor-not-allowed opacity-55" : ""}`}
+      >
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/40 bg-muted/30">
+          {thumb ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={thumb} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <Icon className="h-4 w-4 text-emerald-500" />
+          )}
+        </span>
+        <span className="min-w-0">
+          <span className="block text-xs font-bold text-foreground">{title}</span>
+          <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground/70">{desc}</span>
+          <span className={`mt-1 block truncate text-[10px] font-semibold ${active ? "text-emerald-600" : "text-muted-foreground/55"}`}>
+            {detail}
+          </span>
+        </span>
+      </button>
+    );
+  };
+
+  const ugcIdentityPanel = (
+    <div className="mt-4 rounded-xl border border-border/45 bg-muted/10 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold text-foreground">Creator identity</p>
+          <p className="text-[11px] text-muted-foreground/60">Choose who carries the product story.</p>
+        </div>
+        <span className="max-w-[260px] truncate rounded-full border border-emerald-500/25 bg-emerald-500/5 px-2.5 py-1 text-[10px] font-semibold text-emerald-600">
+          {ugcCreatorSummary}
+        </span>
+      </div>
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        {renderUGCIdentityCard({
+          creator: "none",
+          title: "Product-first",
+          desc: "Hands, lifestyle shots, and natural product framing.",
+          detail: "Always available",
+          Icon: Sparkles,
+        })}
+        {renderUGCIdentityCard({
+          creator: "verified_face",
+          title: "Verified face",
+          desc: "Use a verified creator face for continuity.",
+          detail: selectedUGCFace ? selectedUGCFace.name || "Ready" : "No face yet",
+          thumb: selectedUGCFace?.thumb_url ?? null,
+          Icon: User,
+          disabled: byteplusAssets.length === 0,
+        })}
+        {renderUGCIdentityCard({
+          creator: "saved_look",
+          title: "Saved Look",
+          desc: "Reuse a saved cinematic identity as direction.",
+          detail: ugcLooksLoading ? "Loading..." : selectedUGCLook ? selectedUGCLook.name : "No Look yet",
+          thumb: selectedUGCLook?.thumbnail_url ?? null,
+          Icon: Clapperboard,
+          disabled: ugcLooks.length === 0,
+        })}
+        {renderUGCIdentityCard({
+          creator: "avatar",
+          title: "Avatar",
+          desc: "Presenter-style UGC direction with an avatar identity.",
+          detail: heygenAvatarsLoading ? "Loading..." : selectedUGCAvatar ? selectedUGCAvatar.name : "No avatar yet",
+          thumb: selectedUGCAvatar?.previewUrl ?? null,
+          Icon: User,
+          disabled: false,
+        })}
+      </div>
+      {ugcCreator === "verified_face" && byteplusAssets.length > 1 && (
+        <select
+          value={selectedUGCFace?.asset_id ?? ""}
+          onChange={(event) => setSelectedUGCFaceAssetId(event.target.value)}
+          className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-emerald-500/40"
+        >
+          {byteplusAssets.map((asset) => (
+            <option key={asset.asset_id} value={asset.asset_id}>{asset.name || asset.asset_id}</option>
+          ))}
+        </select>
+      )}
+      {ugcCreator === "saved_look" && ugcLooks.length > 1 && (
+        <select
+          value={selectedUGCLook?.id ?? ""}
+          onChange={(event) => setSelectedUGCLookId(event.target.value)}
+          className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-emerald-500/40"
+        >
+          {ugcLooks.map((look) => (
+            <option key={look.id} value={look.id}>{look.name}</option>
+          ))}
+        </select>
+      )}
+      {ugcCreator === "avatar" && heygenAvatars.length > 1 && (
+        <select
+          value={selectedUGCAvatar?.avatarId ?? ""}
+          onChange={(event) => setSelectedUGCAvatarId(event.target.value)}
+          className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-emerald-500/40"
+        >
+          {heygenAvatars.map((avatar) => (
+            <option key={avatar.avatarId} value={avatar.avatarId}>{avatar.name}</option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
 
   const renderUGCComposerReferenceSlot = (
     role: Extract<ReferenceRole, "product_reference" | "outfit_reference">,
@@ -972,6 +1161,7 @@ export default function CreateModePage({
       angle: ugcAngle,
       platform: ugcPlatform,
       creator: ugcCreator,
+      creatorLabel: ugcCreatorLabel,
       productName: ugcProductName,
       keyBenefit: ugcBenefit,
       tone: ugcTone,
@@ -1062,6 +1252,8 @@ export default function CreateModePage({
         />
       </div>
 
+      {ugcIdentityPanel}
+
       <div className="mt-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-wrap gap-2">
           <select
@@ -1085,16 +1277,7 @@ export default function CreateModePage({
             <option value="square_feed">Square feed</option>
             <option value="landscape_ad">Landscape ad</option>
           </select>
-          <select
-            value={ugcCreator}
-            onChange={(e) => setUgcCreator(e.target.value as UGCCreator)}
-            className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-emerald-500/40"
-          >
-            <option value="none">No fixed creator</option>
-            <option value="verified_face">Verified face</option>
-            <option value="saved_look">Saved Look</option>
-            <option value="avatar">Avatar</option>
-          </select>
+
         </div>
         <button
           type="button"

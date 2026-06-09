@@ -561,3 +561,11 @@ findings level block/warn + message), `byteplus-cost.ts`
 - `ReferenceUpload` expose aussi Product + Outfit/Style comme slots images explicites.
 - Scope : aucune DB/migration/route/provider/state machine.
 - Validation : `tsc` clean, `vitest` 281/281, `lint` clean, `build` OK, `test:e2e` 3/3. Browser plugin KO connu (`windows sandbox failed: spawn setup refresh`), fallback Playwright utilise.
+
+## 2026-06-09 - Codex - T-801e UGC creator identity polish
+- Ajout d'un panneau `Creator identity` dans UGC Studio (`/create/product`, `/create/social`) : Product-first, Verified face, Saved Look, Avatar.
+- Les cartes affichent disponibilite, miniatures quand disponibles et selecteurs si plusieurs assets existent.
+- Chargement paresseux de `/api/looks` pour Saved Looks ; `/api/heygen` se charge aussi quand l'identite Avatar est choisie.
+- `lib/ugc-director.ts` accepte `creatorLabel` et injecte le nom de l'identite choisie dans les prompts/scenes Director ; tests ajoutes.
+- Scope : UI/helper/test only ; aucun changement route/API/DB/migration/provider/state machine.
+- Validation : `tsc` clean, `vitest` 282/282, `lint` clean, `build` OK, `test:e2e` 3/3.

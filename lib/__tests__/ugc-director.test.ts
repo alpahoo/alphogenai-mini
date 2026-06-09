@@ -73,6 +73,13 @@ describe("buildUGCDirectorPlan", () => {
     expect(plan.scenes[0].prompt).toContain("Use the selected avatar");
   });
 
+  it("names selected creator assets when provided", () => {
+    const face = buildUGCDirectorPlan(input({ creator: "verified_face", creatorLabel: "Paul creator face" }));
+    expect(face.scenes[0].prompt).toContain("Use verified creator Paul creator face");
+
+    const avatar = buildUGCDirectorPlan(input({ creator: "avatar", creatorLabel: "Studio avatar" }));
+    expect(avatar.scenes[0].prompt).toContain("Use avatar Studio avatar");
+  });
   it("keeps all public labels provider-neutral", () => {
     const variants = [
       input(),

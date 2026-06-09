@@ -194,6 +194,16 @@ de migration ni de modif state machine**.
   Director, tout en envoyant des roles explicites dans `references_payload`.
 - Aucun changement DB/migration/provider/state machine.
 
+### [T-801e] UGC creator identity polish - `status: done` - `owner: codex`
+- Panneau `Creator identity` dans UGC Studio : Product-first, Verified face,
+  Saved Look, Avatar, avec disponibilite, miniatures et selecteurs quand plusieurs
+  assets existent.
+- Chargement paresseux des Saved Looks sur `/create/product` et `/create/social` ;
+  avatars charges quand l'identite Avatar est choisie.
+- `buildUGCDirectorPlan()` accepte `creatorLabel` pour nommer l'identite choisie
+  dans les scenes Director, sans nouveau payload backend.
+- Scope : UI/helper/test only ; aucune route/API/DB/migration/provider/state machine.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio
