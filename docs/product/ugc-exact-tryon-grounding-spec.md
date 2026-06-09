@@ -274,6 +274,11 @@ try-on-unavailable states without changing the backend.
 Add a manual/test fixture document and optional scripted payload generation for a small
 sample set. No real generation automation until costs and model choice are approved.
 
+Delivered with `lib/ugc-qa-harness.ts`, `lib/__tests__/ugc-qa-harness.test.ts`, and
+`docs/product/ugc-qa-harness.md`. The harness builds deterministic product-grounded,
+style-direction, missing-product, identity, and avatar/presenter cases from pure
+helpers without launching paid generations.
+
 ### T-803e Exact Try-on Decision
 
 After validation, decide whether to:
