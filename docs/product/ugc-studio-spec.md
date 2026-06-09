@@ -159,6 +159,6 @@ No marketing explanations in-app; controls should feel like a studio.
 
 1. **T-801a UGC spec**: this document.
 2. **T-801b Prompt builder helper**: pure helper that turns product/outfit/script angle into Director scenes. Done in `lib/ugc-director.ts`.
-3. **T-801c UI panel**: Product/Outfit/Angle controls in create flow, UI-only over existing references.
+3. **T-801c UI panel**: Product/Outfit/Angle controls in create flow, UI-only over existing references. Done in `/create/product` and `/create/social`.
 4. **T-801d Reference role expansion**: optional `product_reference` migration-free type/payload update, with validation tests.
 5. **T-801e End-to-end polish**: saved Look / verified face integration and Social Pack CTA.

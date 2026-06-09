@@ -178,6 +178,13 @@ de migration ni de modif state machine**.
 - Tests : scenes avec/sans outfit, aspect ratio, angle/creator copy, fallbacks,
   anti provider-leak.
 
+### [T-801c] UGC panel in create flow - `status: done` - `owner: codex`
+- Panneau UI-only dans `/create/product` et `/create/social`.
+- Champs : product name, main benefit, tone, angle, platform, creator.
+- Bouton `Build UGC Director plan` utilise `buildUGCDirectorPlan()` et ouvre
+  le Director avec scenes locales, aspect ratio et duree plafonnes par le plan.
+- Aucun changement backend/API/DB/payload submit.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio

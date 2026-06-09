@@ -543,3 +543,13 @@ findings level block/warn + message), `byteplus-cost.ts`
   mapping aspect ratio, variantes angle/creator, fallbacks, anti provider-leak.
 - Scope : helper/test/docs only ; aucune UI, route, API, DB, migration ou provider.
 - Validation : `tsc` clean, `vitest` 280/280, `lint` clean, `build` OK.
+
+
+## 2026-06-09 - Codex - T-801c UGC panel in create flow
+- Ajout d'un panneau UGC Studio UI-only sur `/create/product` et `/create/social`.
+- Le panneau lit les images deja inserees dans le composer : premiere image = product,
+  deuxieme image = outfit/style, sans nouveau role de reference.
+- `Build UGC Director plan` appelle `buildUGCDirectorPlan()`, applique l'aspect ratio,
+  plafonne scenes/duree selon le plan et ouvre le AI Director avec scenes locales.
+- Scope : aucune route/API/DB/migration/provider ; `Generate Video` classique inchange.
+- Validation : `tsc` clean, `vitest` 280/280, `lint` clean, `build` OK, `test:e2e` 3/3.

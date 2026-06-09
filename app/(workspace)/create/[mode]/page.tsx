@@ -51,6 +51,12 @@ import {
 } from "@/components/create/ai-director-panel";
 import { computeDirectorQuality } from "@/lib/director-quality";
 import { resolveDirectorEngineKey } from "@/lib/director-engine";
+import {
+  buildUGCDirectorPlan,
+  type UGCAngle,
+  type UGCCreator,
+  type UGCPlatform,
+} from "@/lib/ugc-director";
 import { isAdminEmail } from "@/lib/flags";
 import type { PromptTemplate } from "@/lib/prompt-templates";
 import type { JobPlan, EngineKey, ReferenceItem } from "@/lib/types";
@@ -212,6 +218,12 @@ export default function CreateModePage({
   const [directorOpen, setDirectorOpen] = useState(false);
   const [directorScenes, setDirectorScenes] = useState<DirectorSceneVM[]>([]);
   const directorEngineKey = resolveDirectorEngineKey(selectedEngine);
+  const [ugcAngle, setUgcAngle] = useState<UGCAngle>("product_demo");
+  const [ugcPlatform, setUgcPlatform] = useState<UGCPlatform>("tiktok_reels");
+  const [ugcCreator, setUgcCreator] = useState<UGCCreator>("none");
+  const [ugcProductName, setUgcProductName] = useState("");
+  const [ugcBenefit, setUgcBenefit] = useState("");
+  const [ugcTone, setUgcTone] = useState("natural, premium, creator-led");
 
   // Format & captions
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16" | "1:1">("16:9");
@@ -865,6 +877,163 @@ export default function CreateModePage({
     );
   };
 
+  const imageComposerRefs = composerRefs.filter((r) => r.refType === "image" && r.url);
+  const productReference = imageComposerRefs[0];
+  const outfitReference = imageComposerRefs[1];
+  const ugcPanelVisible = mode === "product" || mode === "social";
+  const ugcPlatformLabel =
+    ugcPlatform === "tiktok_reels" ? "TikTok / Reels" : ugcPlatform === "square_feed" ? "Square feed" : "Landscape ad";
+
+  const buildUGCPlan = () => {
+    const productLabel = productReference?.label ?? "image 1";
+    const outfitLabel = outfitReference?.label ?? "image 2";
+    const plan = buildUGCDirectorPlan({
+      product: { label: productLabel, placeholder: productLabel },
+      outfit: outfitReference ? { label: outfitLabel, placeholder: outfitLabel } : null,
+      angle: ugcAngle,
+      platform: ugcPlatform,
+      creator: ugcCreator,
+      productName: ugcProductName,
+      keyBenefit: ugcBenefit,
+      tone: ugcTone,
+    });
+    const maxDirectorScenes = Math.max(1, Math.min(planMaxScenes, Math.floor(planMaxDuration / 3) || 1));
+    const cappedScenes = plan.scenes.slice(0, maxDirectorScenes);
+    const modelName =
+      selectedEngine === "auto"
+        ? "Auto"
+        : cleanModelName(engineOptions.find((e) => e.key === selectedEngine)?.label ?? selectedEngine);
+    const assets = [
+      ...(productReference
+        ? [{ kind: "image" as const, label: productReference.label, thumb: productReference.thumb ?? null }]
+        : []),
+      ...(outfitReference
+        ? [{ kind: "style" as const, label: outfitReference.label, thumb: outfitReference.thumb ?? null }]
+        : []),
+      ...composerRefs
+        .filter((r) => r.refType === "face")
+        .map((r) => ({ kind: "face" as const, label: r.label, thumb: r.thumb ?? null })),
+    ];
+
+    setAspectRatio(plan.aspectRatio);
+    setDuration(String(Math.min(planMaxDuration, cappedScenes.reduce((sum, s) => sum + s.durationSec, 0))));
+    setNumScenes(cappedScenes.length);
+    setPrompt(plan.prompt);
+    setDirectorScenes(
+      cappedScenes.map((scene, index) => ({
+        index,
+        title: scene.title,
+        prompt: scene.prompt,
+        durationSec: scene.durationSec,
+        camera: scene.role === "demo" ? "close-up demo" : scene.role === "hook" ? "fast hook" : undefined,
+        assets: assets.filter((asset) => scene.assetChips.includes(asset.label) || asset.kind === "face"),
+        recommendedModel: modelName,
+        notes:
+          !productReference
+            ? ["add a product image for stronger visual grounding"]
+            : scene.role === "style"
+              ? ["outfit is a style reference, not exact try-on"]
+              : undefined,
+      })),
+    );
+    setDirectorOpen(true);
+  };
+
+  const ugcPanel = ugcPanelVisible ? (
+    <div className="rounded-2xl border border-emerald-500/25 bg-card px-4 py-4 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-3 py-1 text-[11px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">
+            <ShoppingBag className="h-3.5 w-3.5" />
+            UGC Studio
+          </div>
+          <h2 className="mt-2 text-lg font-bold tracking-tight text-foreground">
+            Build a creator-style product plan
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Uses your first image as the product reference and the second image as outfit/style.
+          </p>
+        </div>
+        <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-xs lg:w-56">
+          <span className="block text-muted-foreground/60">References</span>
+          <span className={`mt-0.5 block font-semibold ${productReference ? "text-emerald-500" : "text-amber-500"}`}>
+            {productReference ? `${productReference.label}${outfitReference ? ` + ${outfitReference.label}` : ""}` : "Product image needed"}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        <input
+          value={ugcProductName}
+          onChange={(e) => setUgcProductName(e.target.value)}
+          placeholder="Product name"
+          className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-emerald-500/40"
+        />
+        <input
+          value={ugcBenefit}
+          onChange={(e) => setUgcBenefit(e.target.value)}
+          placeholder="Main benefit"
+          className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-emerald-500/40"
+        />
+        <input
+          value={ugcTone}
+          onChange={(e) => setUgcTone(e.target.value)}
+          placeholder="Tone"
+          className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-emerald-500/40"
+        />
+      </div>
+
+      <div className="mt-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={ugcAngle}
+            onChange={(e) => setUgcAngle(e.target.value as UGCAngle)}
+            className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-emerald-500/40"
+          >
+            <option value="product_demo">Product demo</option>
+            <option value="testimonial">Testimonial</option>
+            <option value="unboxing">Unboxing</option>
+            <option value="try_on">Try-on / outfit</option>
+            <option value="before_after">Before / after</option>
+            <option value="founder_pitch">Founder pitch</option>
+          </select>
+          <select
+            value={ugcPlatform}
+            onChange={(e) => setUgcPlatform(e.target.value as UGCPlatform)}
+            className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-emerald-500/40"
+          >
+            <option value="tiktok_reels">TikTok / Reels</option>
+            <option value="square_feed">Square feed</option>
+            <option value="landscape_ad">Landscape ad</option>
+          </select>
+          <select
+            value={ugcCreator}
+            onChange={(e) => setUgcCreator(e.target.value as UGCCreator)}
+            className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-emerald-500/40"
+          >
+            <option value="none">No fixed creator</option>
+            <option value="verified_face">Verified face</option>
+            <option value="saved_look">Saved Look</option>
+            <option value="avatar">Avatar</option>
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={buildUGCPlan}
+          disabled={loading}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-600/15 transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Clapperboard className="h-4 w-4" />
+          Build UGC Director plan
+        </button>
+      </div>
+
+      <p className="mt-3 text-[11px] text-muted-foreground/55">
+        Plan target: {ugcPlatformLabel}. Product/outfit references stay attached through the existing image chips.
+      </p>
+    </div>
+  ) : null;
+
   // Unified control row: Model · Duration · Format · Scenes (CTO mockup).
   const modelBlock = (
     <div className="space-y-2">
@@ -1197,6 +1366,8 @@ export default function CreateModePage({
                 ))}
               </div>
             </div>
+
+            {ugcPanel}
 
             {/* ── Model (promoted out of Advanced) ───────────────── */}
             {planLoaded && modelBlock}
