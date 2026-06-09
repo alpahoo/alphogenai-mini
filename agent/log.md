@@ -12,6 +12,33 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-09 — Claude (Opus 4.8) — T-901c : squelette MCP read-only `/api/mcp`
+- Fait : premier squelette de la surface MCP AlphoGen-side, read-only / no-cost, qui
+  **réutilise** les helpers existants sans nouvelle logique de gate.
+  - `app/api/mcp/route.ts` : dispatcher `POST {tool,input}` + `GET` (catalogue
+    provider-neutral). Flag `MCP_ENABLED` → 404 par défaut (inerte). Auth fail-closed.
+    Le service-role reste server-side, scoping par `actor.userId`, jamais renvoyé.
+  - `lib/mcp/auth.ts` : PAT `agk_<id>_<secret>` (auth-design) — parse + vérif
+    HMAC-SHA256+`MCP_TOKEN_PEPPER` en temps constant (`timingSafeEqual`). Résolution via
+    token de test env (`MCP_TEST_TOKEN_*`), **aucun store DB** (le store `mcp_tokens` =
+    migration future, go Paul). Fail-closed : pepper/token absent → 401.
+  - `lib/mcp/serialize.ts` : `toPublicJob` provider-neutral (`getEngineDisplayName` +
+    `cleanModelName`) ; jamais de clé engine brute / nom de provider ; scrub des
+    `error_message`. `PUBLIC_JOB_COLUMNS` = projection sûre.
+  - `lib/mcp/tools.ts` : `get_job`, `list_recent_jobs` (scope `read`, scoping `userId`,
+    cap 20) ; `validate_job_payload` (scope `plan`, **preview** — appelle
+    `assertCanCreateJob`, renvoie accepted/plan ou rejected/reason, **aucun insert**).
+    **Aucun `create_video` payant.**
+  - `lib/mcp/types.ts` ; docs : auth-design §12 (config env + garde-fous).
+- Fichiers : `app/api/mcp/route.ts`, `lib/mcp/{auth,serialize,tools,types}.ts` (nouveaux),
+  `lib/__tests__/mcp.test.ts` (24 tests) + `app/api/mcp/route.test.ts` (8 tests) (nouveaux),
+  `docs/product/alphogen-mcp-auth-design.md` (§12), `agent/{tasks,review,log}.md`.
+- Tests : npm test → **355 passed** (326 + 29) · `tsc --noEmit` → 0 · lint (fichiers
+  touchés) → 0 · `next build` → OK (`/api/mcp` enregistrée comme route dynamique).
+- Prochaine étape : T-901d (outils plan/validate purs `create_director_plan`/`create_ugc_plan`)
+  puis activation derrière review — migration `mcp_tokens` + `MCP_ENABLED` sur compte de
+  test = go Paul (R-019). Pas de `create_video` tant que rate-limit/audit absents.
+
 ## 2026-06-09 — Claude (Opus 4.8) — T-901b-impl : helper partagé `assertCanCreateJob`
 - Fait : extrait la séquence de gate de `POST /api/jobs` (prompt → content-policy →
   references ownership → résolution plan depuis `profiles` → limite génération active →

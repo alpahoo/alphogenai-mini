@@ -309,8 +309,22 @@ les gates existants (plan/quota/content-policy/ownership/confidentialité provid
   régression et passe inchangé. Validé : 326 tests · tsc 0 · lint 0 · build OK.
 - Source de vérité unique pour le futur `/api/mcp/*` (voir auth-design §5).
 
-### [T-901c] Outils read-only sur compte de test — `status: todo` · `owner: claude/codex`
+### [T-901c] Outils read-only sur compte de test (squelette) — `status: done` · `owner: claude`
 - `get_job`, `list_recent_jobs` ; prouve la frontière auth + confidentialité providers.
+- Livré : premier squelette `/api/mcp` (surface AlphoGen-side).
+  - `app/api/mcp/route.ts` : dispatcher `POST {tool,input}` + `GET` catalogue ; flag
+    `MCP_ENABLED` (404 sauf `"true"`) ; auth fail-closed ; service-role server-side only.
+  - `lib/mcp/auth.ts` : PAT `agk_<id>_<secret>` parsé + vérifié HMAC-SHA256+pepper en
+    temps constant ; résolution via token de test env (pas de DB) ; fail-closed.
+  - `lib/mcp/serialize.ts` : `toPublicJob` provider-neutral (jamais de clé engine brute /
+    nom de provider ; scrub des messages d'erreur).
+  - `lib/mcp/tools.ts` : `get_job` + `list_recent_jobs` (read, scoping `userId`, cap 20) +
+    `validate_job_payload` (scope plan, preview — **réutilise `assertCanCreateJob`, aucun
+    insert, aucune nouvelle logique de gate**). Aucun `create_video` payant.
+  - `lib/mcp/types.ts` ; tests `lib/__tests__/mcp.test.ts` (24) + `app/api/mcp/route.test.ts` (8).
+- Config/garde-fous documentés : `docs/product/alphogen-mcp-auth-design.md` §12. Ouvert
+  (R-019) : migration future `mcp_tokens` + activation du flag = go Paul.
+- Validé : 355 tests · tsc 0 · lint 0 · build OK (`/api/mcp` enregistrée).
 
 ### [T-901d] Outils plan/validate (purs) — `status: todo` · `owner: claude/codex`
 - `validate_job_payload`, `create_director_plan`, `create_ugc_plan` ; réutilise les

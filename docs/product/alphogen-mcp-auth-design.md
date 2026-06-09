@@ -150,3 +150,27 @@ Structured JSON per call (reuse the existing logging pattern):
 - No implementation, no route, no migration, no secret created here.
 - No new provider integration; no RLS bypass; no service-role to the MCP server.
 - No bespoke crypto — HMAC-SHA256 (Node `crypto`) only; no external lib.
+
+## 12. Skeleton config (T-901c — implemented)
+
+The first `/api/mcp` skeleton ships the read-only + validate tools (`get_job`,
+`list_recent_jobs`, `validate_job_payload`) with this auth wired **fail-closed**.
+Until the `mcp_tokens` migration (§2) lands, resolution uses a single
+**env-configured test token** — no DB, no service-role exposed to the MCP.
+
+| Env var | Role | Default |
+|---|---|---|
+| `MCP_ENABLED` | Master switch; anything but `"true"` → `/api/mcp` returns 404. | off |
+| `MCP_TOKEN_PEPPER` | HMAC pepper (server-only). Unset → every request 401. | unset |
+| `MCP_TEST_TOKEN_ID` | Public id of the test PAT (`agk_<id>_<secret>`). | unset |
+| `MCP_TEST_TOKEN_SECRET_HASH` | `HMAC_SHA256(pepper, secret)` hex of the test PAT secret. | unset |
+| `MCP_TEST_USER_ID` | The user the test token acts as (test account). | unset |
+| `MCP_TEST_TOKEN_SCOPES` | CSV scopes for the test token. | `read,plan` |
+
+- **Fail-closed**: any missing var → 401 (surface inert). The route is also 404
+  unless `MCP_ENABLED=true`. Nothing is exposed by default.
+- The secret is **never** stored in clear — only its HMAC hash. Mint a test token
+  with `hashTokenSecret(secret, pepper)` (exported from `lib/mcp/auth.ts`).
+- This env path is a **bridge for the test-account phase only**; the production
+  path is the `mcp_tokens` lookup (§2/§3), added when its migration is approved.
+- No `create_video` / cost-incurring tool is part of this skeleton.

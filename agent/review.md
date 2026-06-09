@@ -10,6 +10,22 @@ Format :
 
 ## Risques & dette
 
+### [R-019] MCP skeleton `/api/mcp` (T-901c) — surface inerte par défaut — `severity: low` · `status: open`
+- Contexte (2026-06-09, Claude) : premier squelette MCP read-only/no-cost livré —
+  `app/api/mcp/route.ts` (dispatcher) + `lib/mcp/{auth,serialize,tools,types}.ts`.
+  Outils : `get_job`, `list_recent_jobs` (read-only, scoping par `userId`),
+  `validate_job_payload` (preview, **réutilise `assertCanCreateJob`**, aucun insert).
+  Sortie provider-neutral (`getEngineDisplayName`/`cleanModelName`, scrub des erreurs).
+  **Aucun `create_video` payant.** Aucune exposition Supabase directe au MCP.
+- Garde-fous : route 404 sauf `MCP_ENABLED=true` ; auth **fail-closed** (401 si
+  `MCP_TOKEN_PEPPER`/token de test non configurés) ; PAT vérifié par HMAC-SHA256+pepper
+  en temps constant ; service-role utilisé **uniquement server-side**, jamais renvoyé.
+  Config détaillée : `docs/product/alphogen-mcp-auth-design.md` §12.
+- Décision ouverte (Paul) : (1) quand créer la migration `mcp_tokens` (R-003, additive)
+  pour passer du token de test env → store DB owner-scoped ; (2) quand activer
+  `MCP_ENABLED` (compte de test d'abord, jamais prod tant que rate-limit/audit absents).
+- Validé : 355 tests · tsc 0 · lint 0 · build OK (route `/api/mcp` enregistrée).
+
 ### [R-001] Dette documentaire : CLAUDE.md / future-proof-notes périmés — `severity: medium` · `status: resolved`
 - Résolu (2026-06-08) : `CLAUDE.md` a un addendum daté à jour ; `README.md` est court
   et pointe vers `HANDOVER.md` ; `HANDOVER.md` à jour (226 tests). `future-proof-notes`
