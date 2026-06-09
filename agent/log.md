@@ -12,6 +12,22 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-09 — Claude (Opus 4.8) — SÉCU R-018c : audit lecture jobs (AUDIT ONLY)
+- `git pull` (à `87bd83d`). **Aucune migration / aucun changement de policy** (audit only).
+- Audit read-only des 33 fichiers lisant `public.jobs` + chemins demandés :
+  - `/v/[id]` (partage public) → `createServiceClient` (bypass RLS).
+  - `/gallery` → `createServiceClient` (bypass).
+  - `/jobs/[id]` via `app/api/jobs/[id]/route.ts` → `createServiceClient` (bypass) + ownership code.
+  - `/library`, `/home`, `/projects`, `/create` → client navigateur (RLS) **et déjà
+    `.eq("user_id", user.id)`**.
+  - APIs social/thumbnail/duplicate/publish/export/metadata → service-role + auth check.
+- **Conclusion** : aucun read d'un job d'autrui via client user/anon dépendant de
+  `USING (true)`. Partage public/gallery en service-role → pas de policy partage requise.
+  `users_select_own_jobs` (`auth.uid()=user_id`) existe déjà.
+- **Fix proposé (NON appliqué, attente go)** :
+  `drop policy if exists "Users can view own jobs" on public.jobs;`
+- Consigné dans `agent/review.md` R-018c (tableau + réponses + SQL). Aucun code/migration.
+
 ## 2026-06-09 — Claude (Opus 4.8) — SÉCU R-018b : jobs INSERT policies cleanup
 - `git pull` (déjà à `79e91c7`, Codex T-802c readiness par-dessus mon fix RLS).
 - Audit (read-only) policies `public.jobs` : 3 INSERT permissives `WITH CHECK (true)`
@@ -652,4 +668,13 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Raison : T-802b prouve que les champs UGC V1 sont preserves et que le chemin jobs
   garde validation references, quota, plan gates, content policy, routing et state
   machine centralises.
+- Scope : docs/coordination only ; aucun runtime/route/API/DB/migration/provider.
+
+## 2026-06-09 - Codex - T-803a exact try-on / product grounding spec
+- Livre `docs/product/ugc-exact-tryon-grounding-spec.md`.
+- Specifie les tiers de capacite futurs : product-grounded UGC, logo/text
+  preservation, outfit style transfer, exact try-on.
+- Cadre la copy autorisee/interdite, les besoins data/payload, consent/safety,
+  evaluation harness et les tranches T-803b/c/d/e.
+- Decision : ne pas ajouter de backend dedie sans validation modele/payload concrete.
 - Scope : docs/coordination only ; aucun runtime/route/API/DB/migration/provider.

@@ -223,6 +223,32 @@ Format :
   dépendre de cette policy, ou lire un job d'autrui (partage). Stop & document
   (consigne Paul). Reco : audit lecture → remplacer `USING (true)` par
   `auth.uid()=user_id` (+ éventuelle policy dédiée au partage public si nécessaire).
+
+- **AUDIT LECTURE (2026-06-09, read-only) — correctif jugé SÛR :**
+  | Chemin | Client | RLS ? | Scoping |
+  |---|---|---|---|
+  | `/v/[id]` (partage public) | `createServiceClient` | non (bypass) | lit par `id`+`status=done` |
+  | `/gallery` | `createServiceClient` | non (bypass) | — |
+  | `/jobs/[id]` via `app/api/jobs/[id]/route.ts` | `createServiceClient` | non | ownership en code |
+  | `/library`, `/home`, `/projects`, `/create` | `lib/supabase/client` (navigateur, auth) | **oui** | **déjà `.eq("user_id", user.id)`** |
+  | APIs social/thumbnail/duplicate/publish/export/metadata | `createServiceClient` (+ `createClient` pour `getUser`) | non | ownership en code |
+  - **Aucun chemin** ne lit un job d'autrui via le client user/anon en s'appuyant
+    sur `USING (true)`. Le **partage public `/v/[id]` et `/gallery` sont en
+    service-role** (bypass) → **pas besoin de policy RLS dédiée au partage**.
+  - La policy correcte **`users_select_own_jobs` (`auth.uid()=user_id`) existe déjà** ;
+    `Users can view own jobs (USING true)` n'est qu'un doublon permissif qui annule
+    le scoping (OR permissif → effectif `true`).
+  - **Réponses aux questions** :
+    1. Remplacer `USING (true)` par `auth.uid()=user_id` ? → **OUI, sûr.** Plus propre
+       encore : **dropper** `Users can view own jobs` (la correcte existe déjà).
+    2. Policy séparée pour vidéos publiques/partagées ? → **NON** (service-role).
+    3. `/v/[id]` ou `/gallery` dépendent du read public via RLS ? → **NON** (service-role).
+  - **SQL proposé (minimal, miroir de R-018b — en attente du go avant application)** :
+    ```sql
+    drop policy if exists "Users can view own jobs" on public.jobs;
+    -- reste : users_select_own_jobs (auth.uid()=user_id) + service_role_all_jobs
+    ```
+  - Statut : **audit done, fix proposé, attente go Paul** (aucune migration appliquée).
 - Diagnostic (2026-06-09, MCP `74b88f17…`, projet `qbrpzmuedfugbhoeytdj`, read-only).
 - **CRITIQUE (ERROR)** — `public.app_settings` a **RLS désactivé** alors qu'elle est
   exposée à PostgREST → lecture/écriture possibles via la clé anon. Contenu :
