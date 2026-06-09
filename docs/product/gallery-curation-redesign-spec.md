@@ -273,6 +273,10 @@ Admin-only CRUD for gallery items and publish/unpublish actions from existing jo
 Refactor `/gallery` to read only `gallery_items.status = published` and render the
 premium showcase.
 
+T-1004a delivered a privacy-first premium shell before the schema exists: `/gallery`
+no longer reads from `jobs` automatically and instead shows curated showcase slots
+that can later be backed by `gallery_items`.
+
 ### T-1005 Lightbox And Create Similar
 
 Add detail/lightbox UX and safe `Create similar` behavior.
