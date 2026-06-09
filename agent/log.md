@@ -12,6 +12,23 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-09 — Claude (Opus 4.8) — SÉCU R-018 : RLS app_settings (email Supabase)
+- Retour, `git pull` (déjà à `8ee53df`), lecture tasks/log/review + contrat/audit UGC.
+- Diagnostic Supabase (MCP `74b88f17…`, projet `qbrpzmuedfugbhoeytdj`, read-only) :
+  advisor **ERROR `rls_disabled_in_public`** sur `public.app_settings` (= l'email).
+  Audit code : tous les accès passent par service-role → activer RLS sans policy = sûr.
+  Autres alertes (jobs INSERT permissif, RPC admin gardées, search_path, leaked-pwd) =
+  non urgentes (R-018).
+- **Fix appliqué (go explicite Paul)** : `apply_migration enable_rls_app_settings`
+  (`ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;`). Vérifié :
+  `rowsecurity=true` ; advisor ERROR → INFO `rls_enabled_no_policy` (sûr). Tracé dans
+  `supabase/migrations/20260609_enable_rls_app_settings.sql`.
+- Aucun code applicatif modifié ; aucune fonctionnalité cassée (service-role bypasse RLS).
+- Reste R-018 (durcissement) : policies jobs INSERT, revoke anon RPC, search_path,
+  leaked-password — tranche dédiée sur validation.
+- Note état repo : T-301b/c finalisés par Codex pendant l'absence ; mon travail T-301b
+  local non commité a été repris/incorporé (working tree propre à `8ee53df`).
+
 ## 2026-06-08 — Claude (Opus 4.8) — T-301a addendum : réutiliser SceneTimeline/ScenePanel
 - Audit (read-only, correction de cadrage Codex) : la page job utilise DÉJÀ
   `components/editor/SceneTimeline.tsx` (board read-only complet : strip, thumbs,

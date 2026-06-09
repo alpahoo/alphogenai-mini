@@ -189,6 +189,49 @@ Format :
   Toute evolution exact try-on/product grounding devient T-803+ avec validation
   capacites modele/provider, tests et wording dedie.
 
+### [R-018] Audit sécurité Supabase (email « RLS disabled ») — `severity: high` · `status: resolved (critique) / open (durcissement)`
+- **RÉSOLU (2026-06-09, go Paul)** : `ALTER TABLE public.app_settings ENABLE ROW LEVEL
+  SECURITY;` appliqué via MCP (`apply_migration enable_rls_app_settings`) + tracé dans
+  `supabase/migrations/20260609_enable_rls_app_settings.sql`. Vérifié : `rowsecurity=true` ;
+  l'advisor est passé de **ERROR `rls_disabled_in_public`** → **INFO `rls_enabled_no_policy`**
+  (état attendu/sûr, deny-par-défaut, service-role bypasse). Plus aucun advisor ERROR.
+  Aucune fonctionnalité cassée (tous les accès sont en service-role).
+- **Reste ouvert (durcissement, non urgent, tranche dédiée + go)** :
+  policies `jobs` INSERT `WITH CHECK (true)` (3 doublons) à resserrer/dédupliquer ;
+  `music_cache`/`video_cache` idem ; `REVOKE EXECUTE … FROM anon/authenticated` sur les
+  RPC admin (déjà gardées en interne) ; `search_path` des fonctions ; activer
+  leaked-password protection (Auth).
+- Diagnostic (2026-06-09, MCP `74b88f17…`, projet `qbrpzmuedfugbhoeytdj`, read-only).
+- **CRITIQUE (ERROR)** — `public.app_settings` a **RLS désactivé** alors qu'elle est
+  exposée à PostgREST → lecture/écriture possibles via la clé anon. Contenu :
+  `key='providers'` (flags d'activation providers). Risque : fuite (noms providers +
+  états) et surtout **écriture anon** (un attaquant pourrait désactiver tous les
+  providers → DoS génération).
+  - **Vérifié** : tous les accès code passent par le **service-role**
+    (`/api/engines`, `/api/admin/providers`, Modal). Donc **activer RLS sans policy
+    ne casse RIEN** (service-role bypasse RLS ; anon/authenticated = deny par défaut).
+  - **Fix proposé (sûr, réversible)** :
+    `ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;`
+    (pas de policy nécessaire — aucun lecteur anon). À tracer en migration.
+  - ⚠️ Modif sécurité/DB → **attend le go explicite de Paul** (protocole #4 + règles
+    sécurité). Je peux l'appliquer via MCP sur confirmation, ou Paul l'exécute.
+- **WARN mitigés (pas urgents)** :
+  - `admin_delete_user` / `admin_read_user` (SECURITY DEFINER, advisor « anon
+    executable ») → **gardés en interne** (`auth.jwt()->>'role'='admin'`) ; anon =
+    permission denied / résultat vide. Best-practice : `REVOKE EXECUTE ... FROM anon`,
+    non urgent.
+  - `stripe_events` : RLS activé **sans** policy = deny par défaut (sûr, service-role
+    OK). INFO.
+  - `jobs` : 3 policies INSERT `WITH CHECK (true)` (doublons « All users can create
+    jobs » / « Allow authenticated… » / « Allow insert on jobs ») → permissif ;
+    inserts réels passent en service-role. À nettoyer (resserrer/dédupliquer).
+  - `music_cache` / `video_cache` INSERT `WITH CHECK (true)` ; ~15 fonctions
+    `search_path` mutable ; `auth_leaked_password_protection` désactivé (activer
+    HaveIBeenPwned). Durcissement, non urgent.
+- Reco priorité : (1) `app_settings` RLS **maintenant** (sur go) ; (2) nettoyer les
+  policies `jobs` INSERT permissives ; (3) durcissement (revoke anon RPC, search_path,
+  leaked-password) en tranche dédiée.
+
 ## Décisions actées
 
 - `HANDOVER.md` = source de vérité courante (prime sur README/CLAUDE si conflit).

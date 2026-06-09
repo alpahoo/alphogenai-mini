@@ -1,0 +1,11 @@
+-- Security fix (R-018) — applied to prod 2026-06-09 (Supabase advisor ERROR
+-- `rls_disabled_in_public`: public.app_settings was exposed to PostgREST with
+-- RLS disabled → anon could read/write the provider toggle config).
+--
+-- All application access to app_settings goes through the service role
+-- (`/api/engines`, `/api/admin/providers`, Modal pipeline), which BYPASSES RLS.
+-- Enabling RLS with NO policy therefore closes anon/authenticated access
+-- (default-deny) without breaking any app functionality.
+--
+-- Idempotent: enabling RLS when already enabled is a no-op.
+alter table public.app_settings enable row level security;
