@@ -213,6 +213,16 @@ de migration ni de modif state machine**.
   quand le plan UGC est construit.
 - Scope : UI/helper/test only ; aucune route/API/DB/migration/provider/state machine.
 
+### [T-802] UGC generation contract - `status: done` - `owner: codex`
+- Livre docs-only : `docs/product/ugc-generation-contract.md`.
+- Definit la promesse V1 exacte : product/outfit references + creator identity +
+  AI Director + Social Pack sur le payload jobs existant, sans promettre exact
+  try-on, product geometry/logo preservation, native lip-sync ou consistence longue
+  garantie.
+- Cadrage suite : T-802b payload audit, T-802c readiness score, T-802d decision
+  dedicated backend seulement si le payload jobs actuel ne suffit pas.
+- Scope : aucun runtime, aucune route/API/DB/migration/provider/state machine.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio

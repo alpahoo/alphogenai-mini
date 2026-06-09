@@ -577,3 +577,15 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Tests ajoutes/etendus : `ugc-social-pack.test.ts` + contrat Social Pack dans `ugc-director.test.ts`.
 - Scope : UI/helper/test only ; aucune route/API/DB/migration/provider/state machine.
 - Validation : `tsc` clean, `vitest` 286/286, `lint` clean, `build` OK, `test:e2e` 3/3.
+
+## 2026-06-09 - Codex - T-802 UGC generation contract
+- Livre `docs/product/ugc-generation-contract.md` : contrat produit/technique de la
+  generation UGC V1.
+- Clarifie la baseline actuelle : UGC Studio = references product/outfit + creator
+  identity + AI Director + Social Pack sur le payload jobs existant.
+- Verrouille les non-promesses V1 : pas de try-on exact garanti, pas de preservation
+  parfaite produit/logo, pas de lipsync natif voix importee, pas de consistence 120s
+  garantie sur tous les chemins modele.
+- Ajoute R-017 pour garder ce risque visible avant tout futur T-803 exact try-on /
+  product grounding.
+- Scope : docs/coordination only ; aucune route/API/DB/migration/runtime/provider.

@@ -178,6 +178,17 @@ Format :
 - Reco : ne pas perdre ces items pendant le Visible Premium Pass ; les traiter en
   tranches dediees, avec validation explicite pour R-003/T-604.
 
+### [R-017] UGC exact try-on / product grounding is not guaranteed in V1 - `severity: medium` - `status: open`
+- Contexte : T-801 livre un UGC Studio premium base sur references, AI Director,
+  creator identity et Social Pack. Le pipeline actuel reste le `POST /api/jobs`
+  standard ; il ne garantit pas un vrai try-on physique, la preservation parfaite
+  du logo/geometrie produit, ni un lipsync natif voix importee.
+- Risque : une future UI ou spec pourrait sur-promettre "swap clothes" ou "exact
+  product preservation" alors que le modele selectionne reste best-effort.
+- Decision T-802 : `docs/product/ugc-generation-contract.md` fixe la promesse V1.
+  Toute evolution exact try-on/product grounding devient T-803+ avec validation
+  capacites modele/provider, tests et wording dedie.
+
 ## Décisions actées
 
 - `HANDOVER.md` = source de vérité courante (prime sur README/CLAUDE si conflit).
