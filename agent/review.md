@@ -288,6 +288,38 @@ Format :
   policies `jobs` INSERT permissives ; (3) durcissement (revoke anon RPC, search_path,
   leaked-password) en tranche dédiée.
 
+### [R-018d] Durcissement sécurité Supabase (suite) — `severity: low` · `status: partiel`
+Audit + actions 2026-06-09 (go Paul) sur les 4 items de durcissement restants :
+- **#1 cache INSERT permissifs — ✅ RÉSOLU.** `music_cache`/`video_cache` avaient
+  INSERT `WITH CHECK (true)` (authenticated). Audit code : écrits **uniquement** par
+  les workers Python en **service-role** (`workers/music_selector.py`,
+  `workers/supabase_client.py`) ; l'app TS n'y touche pas. Drop des 2 policies via
+  `apply_migration cache_drop_permissive_insert_policies` +
+  `supabase/migrations/20260609_cache_drop_permissive_insert_policies.sql`. Advisor :
+  catégorie `rls_policy_always_true` désormais **vide**. Aucune donnée user.
+- **#2 REVOKE EXECUTE sur RPC admin — ⛔ NON FAIT (documenté).** `is_admin()` est
+  utilisé dans des **policies RLS** (`projects`, `project_scenes`, `daily_themes`,
+  `music_tracks`, `video_jobs_log`) → révoquer `EXECUTE` casserait l'évaluation de ces
+  policies pour les rôles concernés. Les fonctions admin (`admin_delete_user`,
+  `admin_read_user`) sont **déjà gardées en interne** (`auth.jwt()->>'role'='admin'`),
+  donc le risque réel est faible (advisor WARN mitigé). Triggers
+  (`handle_new_user`, `ingest_provider_webhook`, `generic_broadcast_trigger`) : un
+  revoke ne change rien (les triggers s'exécutent indépendamment des grants). **Reco :
+  laisser tel quel**, ou faire une révocation **anon-only très ciblée** sur
+  `admin_delete_user`/`admin_read_user` dans une tranche séparée après vérif que
+  l'app appelle ces RPC en service-role.
+- **#3 `search_path` des fonctions — ⛔ NON FAIT (documenté, risqué).** Fixer
+  `search_path` à l'aveugle peut **casser** des fonctions qui appellent des objets
+  d'`extensions` non qualifiés (ex. `gen_random_uuid()` dans `ingest_provider_webhook`).
+  Exploit réel très faible (nécessite CREATE sur un schéma du path, que anon/auth n'ont
+  pas). **Reco : tranche dédiée** — relire chaque corps puis
+  `ALTER FUNCTION … SET search_path = public, extensions, pg_temp` (ou qualifier les
+  appels), avec validation.
+- **#4 leaked-password protection — ➡️ ACTION PAUL.** C'est un **toggle Auth GoTrue**
+  (dashboard), pas du SQL → non applicable via MCP `execute_sql`. À activer :
+  **Dashboard → Authentication → Sign In/Providers → Password → « Leaked password
+  protection » (HaveIBeenPwned)**.
+
 ## Décisions actées
 
 - `HANDOVER.md` = source de vérité courante (prime sur README/CLAUDE si conflit).

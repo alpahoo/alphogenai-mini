@@ -12,6 +12,21 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-09 — Claude (Opus 4.8) — SÉCU R-018d : durcissement (cache #1 + audit #2/#3/#4)
+- **#1 ✅** : drop des INSERT permissifs `music_cache_insert`/`video_cache_insert`
+  (WITH CHECK true, authenticated). Audit : caches écrits uniquement par workers Python
+  en service-role ; app TS n'y touche pas. `apply_migration
+  cache_drop_permissive_insert_policies` + migration tracée. Advisor :
+  `rls_policy_always_true` désormais **vide**.
+- **#2 ⛔** : ne pas révoquer EXECUTE sur RPC admin — `is_admin()` est utilisé dans des
+  policies RLS (projects/project_scenes/daily_themes/music_tracks/video_jobs_log) →
+  casserait. Fonctions déjà gardées en interne (risque faible). Documenté.
+- **#3 ⛔** : `search_path` non fixé à l'aveugle (risque casse via `gen_random_uuid()`
+  etc. du schéma `extensions` non qualifié). Tranche dédiée recommandée. Documenté.
+- **#4 ➡️ Paul** : leaked-password protection = toggle Auth dashboard, pas faisable via
+  MCP SQL.
+- Détails dans `agent/review.md` R-018d. Aucun code applicatif ; aucune donnée user.
+
 ## 2026-06-09 — Claude (Opus 4.8) — SÉCU R-018c : drop SELECT permissif jobs (go Paul)
 - **Fix appliqué (go Paul)** : `apply_migration jobs_drop_permissive_select_policy`
   → `drop policy "Users can view own jobs"` (SELECT `USING (true)`). Vérifié : policies
