@@ -60,6 +60,7 @@ import {
   type UGCPlatform,
 } from "@/lib/ugc-director";
 import { getUGCSocialPreset } from "@/lib/ugc-social-pack";
+import { computeUGCReadiness } from "@/lib/ugc-readiness";
 import { isAdminEmail } from "@/lib/flags";
 import type { PromptTemplate } from "@/lib/prompt-templates";
 import type { JobPlan, EngineKey, ReferenceItem, ReferenceRole } from "@/lib/types";
@@ -965,6 +966,21 @@ export default function CreateModePage({
               ? "Loading avatars..."
               : "Create an avatar first"
           : "No fixed creator; product-first framing";
+  const ugcReadiness = computeUGCReadiness({
+    hasProductReference: Boolean(productReference),
+    hasOutfitReference: Boolean(outfitReference),
+    angle: ugcAngle,
+    creator: ugcCreator,
+    hasVerifiedFace: Boolean(selectedUGCFace),
+    hasSavedLook: Boolean(selectedUGCLook),
+    hasAvatar: Boolean(selectedUGCAvatar),
+  });
+  const ugcReadinessToneClass =
+    ugcReadiness.tone === "good"
+      ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-600"
+      : ugcReadiness.tone === "medium"
+        ? "border-amber-500/35 bg-amber-500/5 text-amber-600"
+        : "border-red-500/35 bg-red-500/5 text-red-600";
 
   const renderUGCIdentityCard = ({
     creator,
@@ -1231,6 +1247,39 @@ export default function CreateModePage({
           <span className={`mt-0.5 block font-semibold ${productReference ? "text-emerald-500" : "text-amber-500"}`}>
             {productReference ? `${productReference.label}${outfitReference ? ` + ${outfitReference.label}` : ""}` : "Product image needed"}
           </span>
+        </div>
+      </div>
+
+      <div className={`mt-4 rounded-xl border px-3 py-3 ${ugcReadinessToneClass}`}>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-xs font-bold text-foreground">
+              {ugcReadiness.tone === "risky" ? (
+                <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+              ) : (
+                <Check className="h-3.5 w-3.5" />
+              )}
+              UGC readiness
+            </p>
+            <p className="mt-1 text-sm font-semibold">{ugcReadiness.label}</p>
+            <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-muted-foreground/70">
+              {ugcReadiness.detail}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5 md:justify-end">
+            {ugcReadiness.checks.map((check) => (
+              <span
+                key={check.label}
+                className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${
+                  check.ok
+                    ? "border-emerald-500/25 bg-background text-emerald-600"
+                    : "border-border/50 bg-background text-muted-foreground/55"
+                }`}
+              >
+                {check.label}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 

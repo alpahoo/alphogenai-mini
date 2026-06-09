@@ -617,3 +617,12 @@ findings level block/warn + message), `byteplus-cost.ts`
   format 9:16 et deux scenes Director clampées.
 - Decision : pas de route dediee `/api/ugc/jobs` en V1 ; le contrat jobs existant
   suffit tant qu'on reste sur UGC planning/generation best-effort.
+
+## 2026-06-09 - Codex - T-802c UGC readiness score
+- Ajout `lib/ugc-readiness.ts` : helper pur qui classe le plan UGC en Ready,
+  Missing product, Style-only, Needs identity ou Best effort.
+- Panneau UGC (`/create/product` et `/create/social`) : nouvel encart readiness
+  reactif avec checks Product / Style / Identity. Il informe sans bloquer le flow.
+- Tests `lib/__tests__/ugc-readiness.test.ts` : statuts, identites indisponibles,
+  copy best-effort pour outfit/try-on et guard anti provider-leak.
+- Scope : UI/helper/test only ; aucune route/API/DB/migration/provider/state machine.

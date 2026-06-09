@@ -231,6 +231,15 @@ de migration ni de modif state machine**.
 - Decision : pas de route dediee `/api/ugc/jobs` en V1 ; le payload jobs existant
   suffit tant qu'on ne promet pas exact try-on/product grounding.
 
+### [T-802c] UGC readiness score - `status: done` - `owner: codex`
+- Ajout helper pur `lib/ugc-readiness.ts` : statuts `Ready`, `Missing product`,
+  `Style-only`, `Needs identity`, `Best effort` + checks Product/Style/Identity.
+- Create flow : le panneau UGC affiche un encart readiness reactif sur
+  `/create/product` et `/create/social`, sans bloquer la generation.
+- Tests `lib/__tests__/ugc-readiness.test.ts` : statuts, copy exact try-on
+  best-effort, identites indisponibles, anti provider-leak.
+- Scope : UI/helper/test only ; aucune route/API/DB/migration/provider/state machine.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio
