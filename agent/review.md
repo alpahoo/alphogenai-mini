@@ -212,7 +212,15 @@ Format :
   `service_role_all_jobs`. Advisor : les 3 `rls_policy_always_true` sur `jobs` ont
   disparu. Aucune donnée user modifiée ; création de jobs/quotas intacts.
 
-### [R-018c] Jobs SELECT policy `USING (true)` — fuite de lecture — `severity: medium` · `status: open`
+### [R-018c] Jobs SELECT policy `USING (true)` — fuite de lecture — `severity: medium` · `status: resolved`
+- **RÉSOLU (2026-06-09, go Paul)** : `drop policy "Users can view own jobs"` (la
+  permissive `USING (true)`) via MCP `apply_migration jobs_drop_permissive_select_policy`
+  + `supabase/migrations/20260609_jobs_drop_permissive_select_policy.sql`. Vérifié :
+  policies `jobs` finales = `service_role_all_jobs` (ALL) + `users_insert_own_jobs`
+  (`auth.uid()=user_id`) + `users_select_own_jobs` (`auth.uid()=user_id`). Fuite fermée.
+  Audit lecture ci-dessous prouvant l'absence de casse (partage public/gallery en
+  service-role ; pages « my » déjà scoping user_id). Aucune donnée user modifiée.
+- (audit détaillé ci-dessous)
 - Constat (audit R-018b) : `public.jobs` a une policy SELECT `Users can view own jobs`
   en **`USING (true)`** pour le rôle `authenticated` → un utilisateur connecté peut
   lire **tous** les jobs (tous users) directement via PostgREST. L'advisor Supabase

@@ -1,0 +1,19 @@
+-- Security fix (R-018c) — applied to prod 2026-06-09 (Paul's go).
+-- public.jobs had a permissive SELECT policy "Users can view own jobs"
+-- USING (true) for the authenticated role → any signed-in user could read
+-- EVERY job via PostgREST (read leak). A correct owner-scoped SELECT policy
+-- (users_select_own_jobs, USING auth.uid() = user_id) already existed, so this
+-- removes the leaky duplicate only.
+--
+-- Verified safe by a read-path audit (agent/review.md R-018c):
+--   * /v/[id] (public share) and /gallery read via the service role (bypass RLS);
+--   * /jobs/[id] reads via the service role;
+--   * the "my" pages (library/home/projects/create) read via the browser client
+--     and already filter .eq("user_id", user.id);
+--   * social/thumbnail/duplicate/publish/export/metadata APIs use the service role
+--     plus code-level ownership checks.
+-- No path relied on USING(true). No user data changed. Idempotent.
+--
+-- End state of public.jobs RLS: authenticated users can read/insert only their
+-- own rows; the service role has full access; anon has none.
+drop policy if exists "Users can view own jobs" on public.jobs;

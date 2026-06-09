@@ -12,6 +12,15 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-09 — Claude (Opus 4.8) — SÉCU R-018c : drop SELECT permissif jobs (go Paul)
+- **Fix appliqué (go Paul)** : `apply_migration jobs_drop_permissive_select_policy`
+  → `drop policy "Users can view own jobs"` (SELECT `USING (true)`). Vérifié : policies
+  `jobs` finales = `service_role_all_jobs` + `users_insert_own_jobs` (auth.uid()=user_id)
+  + `users_select_own_jobs` (auth.uid()=user_id). Fuite lecture fermée.
+- Tracé `supabase/migrations/20260609_jobs_drop_permissive_select_policy.sql`.
+- Sûr (audit ci-dessous) ; aucune donnée user ; partage public/gallery/app intacts
+  (service-role). R-018c → resolved.
+
 ## 2026-06-09 — Claude (Opus 4.8) — SÉCU R-018c : audit lecture jobs (AUDIT ONLY)
 - `git pull` (à `87bd83d`). **Aucune migration / aucun changement de policy** (audit only).
 - Audit read-only des 33 fichiers lisant `public.jobs` + chemins demandés :
