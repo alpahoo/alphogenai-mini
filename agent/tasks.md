@@ -223,6 +223,14 @@ de migration ni de modif state machine**.
   dedicated backend seulement si le payload jobs actuel ne suffit pas.
 - Scope : aucun runtime, aucune route/API/DB/migration/provider/state machine.
 
+### [T-802b] UGC payload audit - `status: done` - `owner: codex`
+- Livre : `docs/product/ugc-payload-audit.md`.
+- Ajout d'un test route-level `POST /api/jobs` qui prouve la preservation de
+  `references_payload`, `byteplus_asset_ids`, `aspect_ratio`, `caption_mode` et
+  `scenes[]` pour un payload UGC.
+- Decision : pas de route dediee `/api/ugc/jobs` en V1 ; le payload jobs existant
+  suffit tant qu'on ne promet pas exact try-on/product grounding.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio

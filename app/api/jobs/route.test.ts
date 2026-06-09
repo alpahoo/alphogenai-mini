@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createBytePlusTask } from "@/lib/byteplus-client";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { POST } from "./route";
@@ -87,6 +88,24 @@ type ServiceOptions = {
 };
 
 function mockService({ plan = "free", activeCount = 0, recentCount = 0 }: ServiceOptions = {}) {
+  const jobsInsert = vi.fn((row: Record<string, unknown>) => ({
+    select: vi.fn(() => ({
+      single: vi.fn().mockResolvedValue({
+        data: { id: "job-1", ...row },
+        error: null,
+      }),
+    })),
+  }));
+  const jobsUpdate = vi.fn(() => ({
+    eq: vi.fn(() => queryResult({ data: null, error: null })),
+  }));
+  const jobScenesInsert = vi.fn(() => queryResult({ data: null, error: null }));
+  const jobScenesUpdate = vi.fn(() => ({
+    eq: vi.fn(() => ({
+      eq: vi.fn(() => queryResult({ data: null, error: null })),
+    })),
+  }));
+
   const from = vi.fn((table: string) => {
     if (table === "profiles") {
       const single = vi.fn().mockResolvedValue({ data: { plan }, error: null });
@@ -106,13 +125,17 @@ function mockService({ plan = "free", activeCount = 0, recentCount = 0 }: Servic
         }
         return { single: vi.fn() };
       });
-      return { select };
+      return { insert: jobsInsert, select, update: jobsUpdate };
+    }
+
+    if (table === "job_scenes") {
+      return { insert: jobScenesInsert, update: jobScenesUpdate };
     }
 
     return {};
   });
 
-  const service = { from };
+  const service = { from, jobsInsert, jobsUpdate, jobScenesInsert, jobScenesUpdate };
   vi.mocked(createServiceClient).mockReturnValue(service as unknown as ReturnType<typeof createServiceClient>);
   return service;
 }
@@ -196,5 +219,98 @@ describe("POST /api/jobs validation and gates", () => {
       error: "This model requires a higher plan. Upgrade to Pro or Premium.",
       upgrade: true,
     });
+  });
+
+  it("preserves the UGC payload through job and scene inserts", async () => {
+    const service = mockService({ plan: "premium", activeCount: 0, recentCount: 0 });
+    vi.mocked(createBytePlusTask).mockResolvedValue("task-ugc-1");
+
+    const references = {
+      images: [
+        {
+          role: "product_reference",
+          storage_path: "user-1/product.png",
+          url: "https://signed.example.com/product.png",
+          filename: "product.png",
+        },
+        {
+          role: "outfit_reference",
+          storage_path: "user-1/outfit.png",
+          url: "https://signed.example.com/outfit.png",
+          filename: "outfit.png",
+        },
+      ],
+    };
+
+    const res = await POST(jobsRequest({
+      prompt: "UGC creator video for a travel jacket",
+      preferred_engine: "seedance2_fast_byteplus",
+      references,
+      byteplus_asset_ids: [" asset-creator-1 ", "bad-id", "asset-creator-2"],
+      aspect_ratio: "9:16",
+      caption_mode: "auto",
+      scenes: [
+        { prompt: "Hook with product visible", duration_sec: 2, engine: "seedance2_fast_byteplus" },
+        { prompt: "Demo the jacket pockets", duration_sec: 12, engine: "seedance2_fast_byteplus" },
+      ],
+    }));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+
+    expect(service.jobsInsert).toHaveBeenCalledTimes(1);
+    const insertedJob = service.jobsInsert.mock.calls[0][0];
+    expect(insertedJob).toMatchObject({
+      prompt: "UGC creator video for a travel jacket",
+      engine_used: "seedance2_fast_byteplus",
+      references_payload: references,
+      byteplus_asset_ids: ["asset-creator-1", "asset-creator-2"],
+      aspect_ratio: "9:16",
+      caption_mode: "auto",
+      user_id: "user-1",
+    });
+    expect(insertedJob.storyboard).toEqual([
+      {
+        scene_index: 0,
+        prompt: "Hook with product visible",
+        engine: "seedance2_fast_byteplus",
+        duration_sec: 3,
+      },
+      {
+        scene_index: 1,
+        prompt: "Demo the jacket pockets",
+        engine: "seedance2_fast_byteplus",
+        duration_sec: 10,
+      },
+    ]);
+
+    expect(service.jobScenesInsert).toHaveBeenCalledWith([
+      {
+        job_id: "job-1",
+        scene_index: 0,
+        prompt: "Hook with product visible",
+        engine: "seedance2_fast_byteplus",
+        duration_sec: 3,
+        status: "pending",
+      },
+      {
+        job_id: "job-1",
+        scene_index: 1,
+        prompt: "Demo the jacket pockets",
+        engine: "seedance2_fast_byteplus",
+        duration_sec: 10,
+        status: "pending",
+      },
+    ]);
+
+    expect(createBytePlusTask).toHaveBeenCalledWith(expect.objectContaining({
+      engineKey: "seedance2_fast_byteplus",
+      references,
+      assetIds: ["asset-creator-1", "asset-creator-2"],
+      aspectRatio: "9:16",
+      prompt: "Hook with product visible",
+      duration: 3,
+    }));
   });
 });

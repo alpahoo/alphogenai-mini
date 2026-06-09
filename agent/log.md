@@ -589,3 +589,14 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Ajoute R-017 pour garder ce risque visible avant tout futur T-803 exact try-on /
   product grounding.
 - Scope : docs/coordination only ; aucune route/API/DB/migration/runtime/provider.
+
+## 2026-06-09 - Codex - T-802b UGC payload audit
+- Audit livre : `docs/product/ugc-payload-audit.md`.
+- Conclusion : le `POST /api/jobs` existant preserve les champs UGC V1 importants :
+  `references_payload`, `byteplus_asset_ids`, `aspect_ratio`, `caption_mode` et
+  `scenes[]` -> `storyboard`/`job_scenes`.
+- Ajout d'un test route-level dans `app/api/jobs/route.test.ts` pour verrouiller un
+  payload UGC complet avec product/outfit refs, verified face assets, captions auto,
+  format 9:16 et deux scenes Director clampées.
+- Decision : pas de route dediee `/api/ugc/jobs` en V1 ; le contrat jobs existant
+  suffit tant qu'on reste sur UGC planning/generation best-effort.
