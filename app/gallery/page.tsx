@@ -8,54 +8,32 @@ import {
   Sparkles,
   WandSparkles,
 } from "lucide-react";
+import {
+  buildGalleryShowcase,
+  getFeaturedGalleryItem,
+  getVisibleGalleryCategories,
+  type GalleryAccent,
+} from "@/lib/gallery-showcase";
 
 export const metadata: Metadata = {
   title: "Gallery",
   description: "A curated showcase of AI videos made with AlphoGen.",
 };
 
-const categories = ["All", "Cinematic", "UGC", "Product", "Avatar", "Story"];
-
-const showcaseSlots = [
-  {
-    title: "Cinematic story",
-    category: "Story",
-    detail: "Character-led scenes with directed camera motion.",
-    accent: "from-zinc-950 via-slate-700 to-amber-200",
-  },
-  {
-    title: "Product demo",
-    category: "Product",
-    detail: "Reference-led product shots built for social launch.",
-    accent: "from-stone-900 via-emerald-900 to-cyan-200",
-  },
-  {
-    title: "UGC creator ad",
-    category: "UGC",
-    detail: "Creator-style hooks, demos, and CTA-ready cuts.",
-    accent: "from-neutral-950 via-rose-900 to-orange-200",
-  },
-  {
-    title: "Avatar presenter",
-    category: "Avatar",
-    detail: "Presenter workflows for scripted launches.",
-    accent: "from-slate-950 via-indigo-900 to-violet-200",
-  },
-  {
-    title: "Social cutdown",
-    category: "Social",
-    detail: "Vertical formats prepared for TikTok and Reels.",
-    accent: "from-zinc-950 via-lime-950 to-lime-200",
-  },
-  {
-    title: "Director concept",
-    category: "Cinematic",
-    detail: "Multi-scene planning before generation.",
-    accent: "from-neutral-950 via-sky-950 to-slate-200",
-  },
-];
+const accentClasses: Record<GalleryAccent, string> = {
+  avatar: "from-slate-950 via-indigo-900 to-violet-200",
+  director: "from-neutral-950 via-sky-950 to-slate-200",
+  product: "from-stone-900 via-emerald-900 to-cyan-200",
+  social: "from-zinc-950 via-lime-950 to-lime-200",
+  story: "from-zinc-950 via-slate-700 to-amber-200",
+  ugc: "from-neutral-950 via-rose-900 to-orange-200",
+};
 
 export default async function GalleryPage() {
+  const showcaseItems = buildGalleryShowcase(null);
+  const featuredItem = getFeaturedGalleryItem(showcaseItems);
+  const categories = getVisibleGalleryCategories(showcaseItems);
+
   return (
     <div className="min-h-screen bg-[#f6f6f2] text-neutral-950">
       <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
@@ -132,11 +110,10 @@ export default async function GalleryPage() {
                       Showcase pending
                     </div>
                     <h2 className="max-w-[16rem] text-3xl font-semibold tracking-tight sm:max-w-md">
-                      Your public hero media will live here.
+                      {featuredItem.title}
                     </h2>
                     <p className="mt-2 max-w-[15rem] text-sm leading-6 text-white/72 sm:max-w-sm">
-                      A large editorial feature selected from the admin gallery, never from
-                      raw job history.
+                      {featuredItem.detail}
                     </p>
                   </div>
                   <button
@@ -197,13 +174,13 @@ export default async function GalleryPage() {
           </div>
 
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {showcaseSlots.map((slot) => (
+            {showcaseItems.map((slot) => (
               <article
-                key={slot.title}
+                key={slot.id}
                 className="group overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-neutral-950/10"
               >
                 <div className="relative aspect-video overflow-hidden bg-neutral-950">
-                  <div className={`absolute inset-0 bg-gradient-to-br ${slot.accent}`} />
+                  <div className={`absolute inset-0 bg-gradient-to-br ${accentClasses[slot.accent]}`} />
                   <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(0deg,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:42px_42px] opacity-25" />
                   <div className="absolute left-4 top-4 rounded-full bg-white/14 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur">
                     {slot.category}

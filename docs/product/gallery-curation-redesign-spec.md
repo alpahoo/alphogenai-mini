@@ -277,6 +277,10 @@ T-1004a delivered a privacy-first premium shell before the schema exists: `/gall
 no longer reads from `jobs` automatically and instead shows curated showcase slots
 that can later be backed by `gallery_items`.
 
+T-1004b added `lib/gallery-showcase.ts` as the shared public projection contract:
+published-only rows can be normalized into provider-neutral showcase items, while
+the public page keeps privacy-first placeholders until `gallery_items` exists.
+
 ### T-1005 Lightbox And Create Similar
 
 Add detail/lightbox UX and safe `Create similar` behavior.
