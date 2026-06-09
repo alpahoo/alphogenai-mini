@@ -265,6 +265,10 @@ Extend UGC readiness to distinguish:
 - Try-on unavailable,
 - Exact mode unavailable.
 
+Delivered in `lib/ugc-readiness.ts` by combining the existing readiness checks with
+`lib/ugc-capabilities.ts`. The UI can now surface product-grounded models and exact
+try-on-unavailable states without changing the backend.
+
 ### T-803d QA Harness
 
 Add a manual/test fixture document and optional scripted payload generation for a small

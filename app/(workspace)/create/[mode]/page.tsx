@@ -974,6 +974,7 @@ export default function CreateModePage({
     hasVerifiedFace: Boolean(selectedUGCFace),
     hasSavedLook: Boolean(selectedUGCLook),
     hasAvatar: Boolean(selectedUGCAvatar),
+    selectedEngine,
   });
   const ugcReadinessToneClass =
     ugcReadiness.tone === "good"

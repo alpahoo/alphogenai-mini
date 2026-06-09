@@ -59,6 +59,30 @@ describe("computeUGCReadiness", () => {
     expect(outfit.detail).toContain("exact try-on is not guaranteed");
   });
 
+  it("marks reference-capable models as product-grounded", () => {
+    const readiness = computeUGCReadiness(input({ selectedEngine: "seedance2_fast_byteplus" }));
+
+    expect(readiness.status).toBe("product_grounded");
+    expect(readiness.label).toBe("Product-grounded");
+    expect(readiness.checks).toContainEqual({ label: "Grounding", ok: true });
+  });
+
+  it("uses exact try-on unavailable when outfit workflows lack validated try-on", () => {
+    const outfit = computeUGCReadiness(input({
+      hasOutfitReference: true,
+      selectedEngine: "seedance2_fast_byteplus",
+    }));
+    const tryOn = computeUGCReadiness(input({
+      angle: "try_on",
+      selectedEngine: "kling_o3",
+    }));
+
+    expect(outfit.status).toBe("exact_tryon_unavailable");
+    expect(tryOn.status).toBe("exact_tryon_unavailable");
+    expect(outfit.detail).toContain("exact try-on is not validated yet");
+    expect(outfit.checks).toContainEqual({ label: "Exact try-on", ok: false });
+  });
+
   it("keeps public readiness copy provider-neutral", () => {
     const variants = [
       input(),
@@ -66,6 +90,9 @@ describe("computeUGCReadiness", () => {
       input({ hasProductReference: false, hasOutfitReference: true }),
       input({ creator: "verified_face", hasVerifiedFace: false }),
       input({ angle: "try_on", hasOutfitReference: true }),
+      input({ selectedEngine: "seedance2_fast_byteplus" }),
+      input({ selectedEngine: "seedance2_atlas" }),
+      input({ angle: "try_on", selectedEngine: "kling_o3" }),
     ];
 
     for (const variant of variants) {
