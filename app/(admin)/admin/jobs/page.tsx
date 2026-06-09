@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, ImagePlus } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PlanBadge } from "@/components/admin/plan-badge";
 import { getEngineDisplayName } from "@/lib/types";
 
@@ -33,6 +34,7 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default function AdminJobsPage() {
+  const router = useRouter();
   const [jobs, setJobs] = useState<AdminJob[]>([]);
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
@@ -41,6 +43,8 @@ export default function AdminJobsPage() {
     totalPages: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [addingJobId, setAddingJobId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [engineFilter, setEngineFilter] = useState("");
 
@@ -81,6 +85,30 @@ export default function AdminJobsPage() {
     return Number.isFinite(n) ? `$${n.toFixed(4)}` : "—";
   };
 
+  const addToGallery = async (jobId: string) => {
+    setAddingJobId(jobId);
+    setActionError(null);
+
+    try {
+      const response = await fetch("/api/admin/gallery/from-job", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_id: jobId }),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not create gallery draft");
+      }
+
+      router.push("/admin/gallery");
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Could not create gallery draft");
+    } finally {
+      setAddingJobId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -89,6 +117,12 @@ export default function AdminJobsPage() {
           Browse all generation jobs across all users
         </p>
       </div>
+
+      {actionError ? (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {actionError}
+        </div>
+      ) : null}
 
       {/* Filters */}
       <div className="flex gap-3">
@@ -132,6 +166,7 @@ export default function AdminJobsPage() {
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Plan</th>
                   <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3 text-right">Gallery</th>
                 </tr>
               </thead>
               <tbody>
@@ -175,12 +210,31 @@ export default function AdminJobsPage() {
                     <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
                       {formatDate(job.created_at)}
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      {job.status === "done" ? (
+                        <button
+                          type="button"
+                          onClick={() => addToGallery(job.id)}
+                          disabled={addingJobId === job.id}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition hover:border-primary/60 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {addingJobId === job.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <ImagePlus className="h-3.5 w-3.5" />
+                          )}
+                          Add
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/50">-</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {jobs.length === 0 && (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-4 py-12 text-center text-muted-foreground"
                     >
                       No jobs found

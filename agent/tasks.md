@@ -390,8 +390,9 @@ n'infère JAMAIS la publiabilité depuis le statut d'un job. Pas de lecture dire
     de route admin du repo). 394 tests · tsc 0 · lint 0 · build OK.
 - **UI livree** : page `/admin/gallery` (list/filtre, create draft, create from job id,
   edit title/subtitle/public prompt, publish/unpublish/hide/delete, toggle featured,
-  preview media) + entree sidebar admin. Le bouton direct `Add to gallery` depuis
-  `/admin/jobs` reste optionnel polish futur, pas bloquant.
+  preview media) + entree sidebar admin. `/admin/jobs` expose aussi une action
+  `Add` sur les jobs termines : elle cree un draft via `/api/admin/gallery/from-job`
+  puis redirige vers `/admin/gallery` pour edition/publication explicite.
 
 ### [T-1004] Refonte page publique `/gallery` — `status: done` · `owner: codex`
 - Lire **uniquement** `gallery_items.status='published'` (via projection `gallery-showcase`)

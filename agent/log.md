@@ -886,3 +886,10 @@ findings level block/warn + message), `byteplus-cost.ts`
   l'item public curaté possède un `source_job_id`, sinon il démarre un create flow vierge.
 - Les filtres de catégories sont maintenant fonctionnels côté client.
 - QA réalisée sur `/gallery` : HTTP 200, capture Playwright OK, e2e 3/3.
+
+## 2026-06-10 - Codex - T-1003 admin jobs Add to gallery
+- Ajout d'une action `Add` dans `/admin/jobs` pour les jobs `done`.
+- L'action appelle `POST /api/admin/gallery/from-job`, cree uniquement un brouillon
+  galerie, puis redirige vers `/admin/gallery` pour edition/publication manuelle.
+- Confidentialite conservee : aucun item n'est publie automatiquement et le prompt
+  prive brut reste protege par `galleryDraftFromJob`.
