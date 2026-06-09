@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildGalleryShowcase,
   getFeaturedGalleryItem,
+  getGalleryCreateHref,
   getVisibleGalleryCategories,
   normalizeGalleryCategory,
   PLACEHOLDER_SHOWCASE_ITEMS,
@@ -42,8 +43,23 @@ describe("gallery showcase helpers", () => {
       id: "published-1",
       title: "Paris product demo",
       category: "Product",
+      createHref: "/create/story",
       featured: true,
     });
+  });
+
+  it("builds safe create-similar links only when a public source job is attached", () => {
+    expect(getGalleryCreateHref(null)).toBe("/create/story");
+    expect(getGalleryCreateHref("job 123")).toBe("/create/story?reference_job_id=job%20123");
+
+    const item = toGalleryShowcaseItem({
+      id: "with-source",
+      source_job_id: "550e8400-e29b-41d4-a716-446655440000",
+      status: "published",
+      title: "Public source",
+    });
+
+    expect(item?.createHref).toBe("/create/story?reference_job_id=550e8400-e29b-41d4-a716-446655440000");
   });
 
   it("normalizes unknown categories to a safe cinematic category", () => {

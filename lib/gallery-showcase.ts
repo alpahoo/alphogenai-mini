@@ -17,6 +17,7 @@ export type GalleryShowcaseItem = {
   category: Exclude<GalleryCategory, "All">;
   detail: string;
   accent: GalleryAccent;
+  createHref: string;
   featured?: boolean;
   mediaUrl?: string | null;
   thumbnailUrl?: string | null;
@@ -26,6 +27,7 @@ export type GalleryShowcaseItem = {
 
 export type GalleryItemRow = {
   id: string;
+  source_job_id?: string | null;
   status?: "draft" | "published" | "hidden" | string | null;
   title?: string | null;
   subtitle?: string | null;
@@ -47,6 +49,8 @@ export const GALLERY_CATEGORIES: GalleryCategory[] = [
   "Story",
 ];
 
+const CREATE_FALLBACK_HREF = "/create/story";
+
 export const PLACEHOLDER_SHOWCASE_ITEMS: GalleryShowcaseItem[] = [
   {
     id: "story-placeholder",
@@ -54,6 +58,7 @@ export const PLACEHOLDER_SHOWCASE_ITEMS: GalleryShowcaseItem[] = [
     category: "Story",
     detail: "Character-led scenes with directed camera motion.",
     accent: "story",
+    createHref: CREATE_FALLBACK_HREF,
     featured: true,
   },
   {
@@ -62,6 +67,7 @@ export const PLACEHOLDER_SHOWCASE_ITEMS: GalleryShowcaseItem[] = [
     category: "Product",
     detail: "Reference-led product shots built for social launch.",
     accent: "product",
+    createHref: CREATE_FALLBACK_HREF,
   },
   {
     id: "ugc-placeholder",
@@ -69,6 +75,7 @@ export const PLACEHOLDER_SHOWCASE_ITEMS: GalleryShowcaseItem[] = [
     category: "UGC",
     detail: "Creator-style hooks, demos, and CTA-ready cuts.",
     accent: "ugc",
+    createHref: CREATE_FALLBACK_HREF,
   },
   {
     id: "avatar-placeholder",
@@ -76,6 +83,7 @@ export const PLACEHOLDER_SHOWCASE_ITEMS: GalleryShowcaseItem[] = [
     category: "Avatar",
     detail: "Presenter workflows for scripted launches.",
     accent: "avatar",
+    createHref: CREATE_FALLBACK_HREF,
   },
   {
     id: "social-placeholder",
@@ -83,6 +91,7 @@ export const PLACEHOLDER_SHOWCASE_ITEMS: GalleryShowcaseItem[] = [
     category: "Social",
     detail: "Vertical formats prepared for TikTok and Reels.",
     accent: "social",
+    createHref: CREATE_FALLBACK_HREF,
   },
   {
     id: "director-placeholder",
@@ -90,6 +99,7 @@ export const PLACEHOLDER_SHOWCASE_ITEMS: GalleryShowcaseItem[] = [
     category: "Cinematic",
     detail: "Multi-scene planning before generation.",
     accent: "director",
+    createHref: CREATE_FALLBACK_HREF,
   },
 ];
 
@@ -116,6 +126,10 @@ function cleanText(value: string | null | undefined, fallback: string, max = 120
   return trimmed ? trimmed.slice(0, max) : fallback;
 }
 
+export function getGalleryCreateHref(sourceJobId?: string | null): string {
+  return sourceJobId ? `/create/story?reference_job_id=${encodeURIComponent(sourceJobId)}` : CREATE_FALLBACK_HREF;
+}
+
 export function normalizeGalleryCategory(value: string | null | undefined): GalleryShowcaseItem["category"] {
   const key = value?.trim().toLowerCase();
   return key && CATEGORY_ALIASES[key] ? CATEGORY_ALIASES[key] : "Cinematic";
@@ -134,6 +148,7 @@ export function toGalleryShowcaseItem(row: GalleryItemRow): GalleryShowcaseItem 
     category,
     detail: cleanText(row.subtitle, "A curated generation selected for the public showcase.", 140),
     accent: CATEGORY_ACCENTS[category],
+    createHref: getGalleryCreateHref(row.source_job_id),
     featured: Boolean(row.featured),
     mediaUrl: row.media_url ?? null,
     thumbnailUrl: row.thumbnail_url ?? null,

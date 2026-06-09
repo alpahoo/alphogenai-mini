@@ -285,6 +285,10 @@ the public page keeps privacy-first placeholders until `gallery_items` exists.
 
 Add detail/lightbox UX and safe `Create similar` behavior.
 
+T-1005a delivered a static/no-DB lightbox on the privacy-first showcase. `Create
+similar` uses `source_job_id` only when the future curated row provides one; otherwise
+it safely falls back to `/create/story` without reusing private job data.
+
 ### T-1006 Visual QA
 
 Use Browser/Playwright screenshots for:
