@@ -158,6 +158,19 @@ de migration ni de modif state machine**.
 - Tests unitaires : validation champs requis, trim/cap script, default `speed`,
   anti provider-leak.
 
+### [T-401d] Supabase live schema audit - `status: blocked` - `owner: codex`
+- Livre : `docs/product/saved-looks-supabase-audit.md`.
+- Blocage : Supabase MCP `list_tables` et `execute_sql` refusent l'accès ; `.env.local`
+  n'a pas de service-role/DB URL. Aucune migration avant audit live privilegie.
+
+## Axe 8 - UGC Studio  `status: in_progress`
+
+### [T-801a] UGC Studio spec - `status: done` - `owner: codex`
+- Livre : `docs/product/ugc-studio-spec.md`.
+- V1 propose un mode Product/UGC base sur les references existantes (`outfit_style`),
+  Verified Faces, Saved Looks, AI Director et Social Pack.
+- Aucun changement runtime/DB.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio

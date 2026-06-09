@@ -166,6 +166,15 @@ Format :
 - Reste confirme par Paul : R-003 migration retrospective Supabase, T-604 retrait
   `typescript.ignoreBuildErrors`, T-401 Saved Looks spec, contrat Avatar/look duplicate,
   T-301c retry affordances, R-006 aide interne verified face ID.
+
+### [R-016] Live `cinematic_looks` schema audit blocked - `severity: medium` - `status: open`
+- Contexte : T-401 doit rester sur le contrat existant tant que le schema live
+  `cinematic_looks` n'est pas verifie.
+- Tentative 2026-06-09 : Supabase MCP `list_tables` et `execute_sql` refusent
+  l'acces ; `.env.local` ne contient pas de service-role/DB URL.
+- Mitigation : `docs/product/saved-looks-supabase-audit.md` contient les requetes
+  lecture seule a executer dans Supabase SQL Editor / connexion privilegiee.
+- Ne pas creer de migration Saved Looks generale tant que ce risque est ouvert.
 - Reco : ne pas perdre ces items pendant le Visible Premium Pass ; les traiter en
   tranches dediees, avec validation explicite pour R-003/T-604.
 

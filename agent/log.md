@@ -522,3 +522,14 @@ findings level block/warn + message), `byteplus-cost.ts`
   default `speed`, anti provider-leak.
 - Scope : pas de route/API/DB/migration/provider.
 - Validation : `tsc` clean, `vitest` 274/274, `lint` clean, `build` OK, `test:e2e` 3/3.
+
+
+## 2026-06-09 - Codex - T-401d blocked audit + T-801a UGC Studio spec
+- Supabase live audit tente en lecture seule : `list_tables` et `execute_sql` bloques
+  par access-control ; `.env.local` sans service-role/DB URL.
+- Livre `docs/product/saved-looks-supabase-audit.md` avec constat, evidence locale,
+  requetes SQL lecture seule et recommandation de ne pas migrer avant audit privilegie.
+- Livre `docs/product/ugc-studio-spec.md` : Product/UGC flow, references V1 via
+  `outfit_style`, Verified Faces/Saved Looks/AI Director/Social Pack, slices T-801.
+- Scope : docs/coordination only ; aucune route/API/DB/migration/runtime.
+- Validation : `tsc` clean, `vitest` 274/274, `lint` clean, `build` OK.
