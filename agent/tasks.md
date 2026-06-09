@@ -171,6 +171,13 @@ de migration ni de modif state machine**.
   Verified Faces, Saved Looks, AI Director et Social Pack.
 - Aucun changement runtime/DB.
 
+### [T-801b] UGC Director prompt helper - `status: done` - `owner: codex`
+- Nouveau helper pur `lib/ugc-director.ts`.
+- Transforme product + outfit + angle + platform + creator en prompt global,
+  aspect ratio et 5/6 scenes Director.
+- Tests : scenes avec/sans outfit, aspect ratio, angle/creator copy, fallbacks,
+  anti provider-leak.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio

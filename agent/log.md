@@ -533,3 +533,13 @@ findings level block/warn + message), `byteplus-cost.ts`
   `outfit_style`, Verified Faces/Saved Looks/AI Director/Social Pack, slices T-801.
 - Scope : docs/coordination only ; aucune route/API/DB/migration/runtime.
 - Validation : `tsc` clean, `vitest` 274/274, `lint` clean, `build` OK.
+
+
+## 2026-06-09 - Codex - T-801b UGC Director helper
+- Ajout `lib/ugc-director.ts` : helper pur product/outfit/angle/platform/creator
+  -> prompt global + aspect ratio + scenes Director.
+- V1 utilise les labels de references compatibles (`image 1`, `image 2`) sans nouveau role DB.
+- Tests `lib/__tests__/ugc-director.test.ts` : 6 scenes avec outfit, 5 sans outfit,
+  mapping aspect ratio, variantes angle/creator, fallbacks, anti provider-leak.
+- Scope : helper/test/docs only ; aucune UI, route, API, DB, migration ou provider.
+- Validation : `tsc` clean, `vitest` 280/280, `lint` clean, `build` OK.
