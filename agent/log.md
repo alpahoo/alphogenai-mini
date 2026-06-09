@@ -910,3 +910,12 @@ findings level block/warn + message), `byteplus-cost.ts`
   panel AI Director ouvert harmonisé au nouveau langage visuel.
 - Aucun changement de submit, payload `POST /api/jobs`, routes, DB, provider routing ou
   state machine.
+
+## 2026-06-10 - Codex - T-1106 job studio premium polish
+- Polish UI-only de `/jobs/[id]` : fond warm-neutral, video principale en surface
+  media-led sombre, bloc `Post-generation studio`, actions download/share/reference
+  harmonisees et rail desktop plus editorial.
+- Cartes Status/Production nettoyees ; labels modeles passes par
+  `cleanModelName(getEngineDisplayName(...))` pour rester provider-neutral.
+- Aucun changement handler, route, API, DB, retry, duplicate, save-look, scene panel ou
+  Social Pack.

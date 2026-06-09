@@ -443,8 +443,13 @@ Spec : `docs/product/premium-product-experience-spec.md`.
   media-led, rail assets harmonisé et panel AI Director ouvert aligné au nouveau style.
   Aucun changement submit/payload/route/API/DB.
 
-### [T-1106] Job studio polish — `status: todo` · `owner: codex`
-- Polir `/jobs/[id]` comme studio post-generation.
+### [T-1106] Job studio polish — `status: done` · `owner: codex`
+- Livre UI-only : `/jobs/[id]` adopte le langage premium Axe 11 (fond warm-neutral,
+  vidéo média-led, bloc "Post-generation studio", actions principales harmonisées,
+  rail desktop blanc/translucide, cartes Status/Production plus sobres).
+- Confidentialité : labels modèle passés par `cleanModelName(getEngineDisplayName(...))`.
+- Aucun changement handler, route, API, DB, retry, duplicate, save-look, scene panel ou
+  Social Pack.
 
 ### [T-1107/T-1108] Secondary pages + visual QA — `status: todo` · `owner: codex`
 - Library/Projects/Analytics/Schedule consistency + captures desktop/mobile.

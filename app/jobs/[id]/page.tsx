@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Download,
   Copy,
@@ -37,6 +37,7 @@ import { SHOW_COST_TRACKING_UI, isAdminEmail } from "@/lib/flags";
 import { useJobRealtime } from "@/lib/use-job-realtime";
 import type { Job, JobScene } from "@/lib/types";
 import { buildStageOrder, getEngineDisplayName } from "@/lib/types";
+import { cleanModelName } from "@/lib/engine-intentions";
 import { SceneTimeline, ScenePanel } from "@/components/editor";
 
 // Reduced from 5s → 15s now that Realtime handles UI freshness.
@@ -171,8 +172,10 @@ export default function JobPage() {
   const [copiedShare, setCopiedShare] = useState(false);
   const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
   const [voiceoverEnabled, setVoiceoverEnabled] = useState(true);
+  const [videoModalOpen, setVideoModalOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const voiceoverRef = useRef<HTMLAudioElement>(null);
+  const modalVideoRef = useRef<HTMLVideoElement>(null);
 
   // Admin credit balance
   const [adminCredits, setAdminCredits] = useState<{ remaining: number; status: string } | null>(null);
@@ -573,12 +576,12 @@ export default function JobPage() {
         </motion.div>
       )}
 
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex overflow-hidden bg-[#f5f3ee]">
         {/* ═══ LEFT: Main content ═══════════════════════════════ */}
-        <div className="flex-1 overflow-y-auto px-8 py-8">
+        <div className="flex-1 overflow-y-auto px-6 py-7 lg:px-10">
           <Link
             href="/projects"
-            className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            className="mb-6 inline-flex items-center gap-2 text-sm text-neutral-500 transition-colors hover:text-neutral-950"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to projects
@@ -601,7 +604,7 @@ export default function JobPage() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
-              className="space-y-6"
+              className="mx-auto max-w-7xl space-y-6"
             >
               {/* ── ACTIVE ──────────────────────────────────── */}
               {isActive && (
@@ -745,78 +748,151 @@ export default function JobPage() {
               {/* ── DONE ────────────────────────────────────── */}
               {isDone && videoUrl && (
                 <>
-                  <div className="rounded-2xl border border-border/50 bg-card/80 overflow-hidden backdrop-blur-sm relative">
-                    <video ref={videoRef} controls autoPlay className="w-full" src={videoUrl}>
-                      Your browser does not support video playback.
-                    </video>
+                  {/* Video thumbnail (reduced size, clickable) */}
+                  <motion.button
+                    onClick={() => setVideoModalOpen(true)}
+                    className="group relative w-full overflow-hidden rounded-[1.35rem] border border-neutral-950/10 bg-neutral-950 shadow-2xl shadow-neutral-950/15 transition-all hover:shadow-3xl hover:shadow-neutral-950/25"
+                  >
+                    <div className="relative aspect-video w-full">
+                      <video
+                        ref={videoRef}
+                        className="h-full w-full object-cover bg-neutral-950"
+                        src={videoUrl}
+                        preload="metadata"
+                      >
+                        Your browser does not support video playback.
+                      </video>
+                      <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/35 to-transparent" />
+                      {/* Hover overlay with zoom icon */}
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
+                        <div className="flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 backdrop-blur-sm">
+                          <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
+                          </svg>
+                          <span className="text-sm font-medium text-white">Click to expand</span>
+                        </div>
+                      </div>
+                    </div>
                     {/* Hidden audio element for voice-over sync */}
                     {job.voiceover_url && (
                       <audio ref={voiceoverRef} src={job.voiceover_url} preload="auto" />
                     )}
-                    {/* Voice-over toggle */}
-                    {job.voiceover_url && (
-                      <button
-                        onClick={() => {
-                          setVoiceoverEnabled((v) => {
-                            const next = !v;
-                            if (!next && voiceoverRef.current) voiceoverRef.current.pause();
-                            if (next && voiceoverRef.current && videoRef.current && !videoRef.current.paused) {
-                              voiceoverRef.current.currentTime = videoRef.current.currentTime;
-                              voiceoverRef.current.play().catch(() => {});
-                            }
-                            return next;
-                          });
-                        }}
-                        className={`absolute top-3 right-3 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium backdrop-blur-sm transition-colors ${
-                          voiceoverEnabled
-                            ? "bg-primary/90 text-primary-foreground"
-                            : "bg-black/50 text-white/70 hover:text-white"
-                        }`}
-                      >
-                        <Volume2 className="h-3.5 w-3.5" />
-                        {voiceoverEnabled ? "Voice-over ON" : "Voice-over OFF"}
-                      </button>
-                    )}
-                  </div>
+                  </motion.button>
 
-                  <div>
-                    <h1 className="text-lg font-semibold leading-snug mb-2">
+                  {/* Video modal (fullscreen view) */}
+                  <AnimatePresence>
+                    {videoModalOpen && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-sm"
+                        onClick={() => setVideoModalOpen(false)}
+                      >
+                        <motion.div
+                          initial={{ scale: 0.95 }}
+                          animate={{ scale: 1 }}
+                          exit={{ scale: 0.95 }}
+                          transition={{ duration: 0.2 }}
+                          className="relative h-screen w-screen flex items-center justify-center px-4 py-4"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {/* Close button */}
+                          <button
+                            onClick={() => setVideoModalOpen(false)}
+                            className="absolute top-4 right-4 z-10 flex h-10 w-10 items-center justify-center rounded-lg bg-black/50 text-white transition hover:bg-black/70"
+                          >
+                            <X className="h-5 w-5" />
+                          </button>
+
+                          {/* Modal video player */}
+                          <div className="relative h-full w-full max-h-[90vh] max-w-[90vw] overflow-hidden rounded-xl bg-neutral-950">
+                            <video
+                              ref={modalVideoRef}
+                              controls
+                              autoPlay
+                              className="h-full w-full object-contain bg-neutral-950"
+                              src={videoUrl}
+                            >
+                              Your browser does not support video playback.
+                            </video>
+                            {/* Voice-over toggle (modal version) */}
+                            {job.voiceover_url && (
+                              <button
+                                onClick={() => {
+                                  setVoiceoverEnabled((v) => {
+                                    const next = !v;
+                                    if (!next && voiceoverRef.current) voiceoverRef.current.pause();
+                                    if (next && voiceoverRef.current && modalVideoRef.current && !modalVideoRef.current.paused) {
+                                      voiceoverRef.current.currentTime = modalVideoRef.current.currentTime;
+                                      voiceoverRef.current.play().catch(() => {});
+                                    }
+                                    return next;
+                                  });
+                                }}
+                                className={`absolute top-3 right-3 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium backdrop-blur-sm transition-colors z-10 ${
+                                  voiceoverEnabled
+                                    ? "bg-primary/90 text-primary-foreground"
+                                    : "bg-black/50 text-white/70 hover:text-white"
+                                }`}
+                              >
+                                <Volume2 className="h-3.5 w-3.5" />
+                                {voiceoverEnabled ? "Voice-over ON" : "Voice-over OFF"}
+                              </button>
+                            )}
+                          </div>
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center rounded-full bg-neutral-950 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
+                        Post-generation studio
+                      </span>
+                      <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                        {job.status}
+                      </span>
+                    </div>
+                    <h1 className="mb-3 text-2xl font-semibold leading-tight tracking-tight text-neutral-950">
                       {job.prompt.length > 80 ? job.prompt.slice(0, 80) + "..." : job.prompt}
                     </h1>
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{job.target_duration_seconds}s</span>
-                      <span className="flex items-center gap-1"><Layers className="h-3 w-3" />{sceneCount} scene{sceneCount > 1 ? "s" : ""}</span>
-                      <span className="flex items-center gap-1"><Cpu className="h-3 w-3" />{getEngineDisplayName(job.engine_used)}</span>
-                      <span className="uppercase text-[10px] font-medium">{job.plan}</span>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-600">
+                      <span className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1"><Clock className="h-3 w-3" />{job.target_duration_seconds}s</span>
+                      <span className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1"><Layers className="h-3 w-3" />{sceneCount} scene{sceneCount > 1 ? "s" : ""}</span>
+                      <span className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1"><Cpu className="h-3 w-3" />{cleanModelName(getEngineDisplayName(job.engine_used))}</span>
+                      <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-700">{job.plan}</span>
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-border/40 bg-card/55 p-3 shadow-sm">
+                  <div className="rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm">
                     <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                       <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                         <a
                           href={videoUrl}
                           download
-                          className="col-span-2 flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-110 sm:col-span-1"
+                          className="col-span-2 flex min-h-11 items-center justify-center gap-2 rounded-xl bg-neutral-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-neutral-800 sm:col-span-1"
                         >
                           <Download className="h-4 w-4" />
                           Download
                         </a>
                         <button
                           onClick={shareVideo}
-                          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background/40 px-4 py-2.5 text-sm font-medium transition hover:bg-muted"
+                          className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-sm font-medium text-neutral-800 transition hover:bg-neutral-100"
                         >
                           {copiedShare ? <><Check className="h-4 w-4 text-green-400" /> Link copied</> : <><Share2 className="h-4 w-4" /> Share</>}
                         </button>
                         <button
                           onClick={() => copyLink(videoUrl)}
-                          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background/40 px-4 py-2.5 text-sm font-medium transition hover:bg-muted"
+                          className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-sm font-medium text-neutral-800 transition hover:bg-neutral-100"
                         >
                           {copied ? <><Check className="h-4 w-4 text-green-400" /> Copied</> : <><Copy className="h-4 w-4" /> Copy link</>}
                         </button>
                         <button
                           onClick={() => copyPrompt(job.prompt)}
-                          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background/40 px-4 py-2.5 text-sm font-medium transition hover:bg-muted"
+                          className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-sm font-medium text-neutral-800 transition hover:bg-neutral-100"
                         >
                           {copiedPrompt ? <><Check className="h-4 w-4 text-green-400" /> Copied</> : <><ClipboardCopy className="h-4 w-4" /> Copy prompt</>}
                         </button>
@@ -826,14 +902,14 @@ export default function JobPage() {
                         <button
                           onClick={handleDuplicate}
                           disabled={duplicating}
-                          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border bg-background/40 px-4 py-2.5 text-sm font-medium transition hover:bg-muted disabled:opacity-50"
+                          className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-sm font-medium text-neutral-800 transition hover:bg-neutral-100 disabled:opacity-50"
                         >
                           {duplicating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CopyPlus className="h-4 w-4" />}
                           {duplicating ? "Creating..." : "Duplicate job"}
                         </button>
                         <Link
                           href={`/create/story?reference_job_id=${params.id}`}
-                          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-violet-500/35 bg-violet-500/10 px-4 py-2.5 text-sm font-medium text-violet-500 transition hover:bg-violet-500/15"
+                          className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm font-semibold text-violet-700 transition hover:bg-violet-100"
                         >
                           <Link2 className="h-4 w-4" />
                           Use as reference
@@ -842,7 +918,7 @@ export default function JobPage() {
                           <button
                             onClick={handleSaveLook}
                             disabled={savingLook || lookSaved}
-                            className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-medium text-cyan-400 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2.5 text-sm font-semibold text-cyan-700 transition hover:bg-cyan-100 disabled:opacity-50"
                             title="Save this cinematic shot to reuse with new scripts"
                           >
                             {savingLook ? <Loader2 className="h-4 w-4 animate-spin" /> : lookSaved ? <Check className="h-4 w-4" /> : <Clapperboard className="h-4 w-4" />}
@@ -857,7 +933,7 @@ export default function JobPage() {
 
               {/* ── Prompt (during generation) ──────────────── */}
               {!isDone && job && (
-                <div className="rounded-xl border border-border/40 bg-card/50 p-4">
+                <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
                   <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1">Prompt</p>
                   <p className="text-sm">{job.prompt}</p>
                 </div>
@@ -879,7 +955,7 @@ export default function JobPage() {
                 selectedSceneIndex >= 0 &&
                 selectedSceneIndex < scenes.length &&
                 (isDone || isFailed) && (
-                  <div className="lg:hidden rounded-xl border border-border/40 bg-card/60 p-5">
+                  <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm lg:hidden">
                     <ScenePanel
                       scene={scenes[selectedSceneIndex]}
                       sceneIndex={selectedSceneIndex}
@@ -905,7 +981,7 @@ export default function JobPage() {
 
         {/* ═══ RIGHT: Info sidebar (desktop only) ══════════════ */}
         {job && (
-          <div className="hidden lg:flex w-72 flex-col border-l border-border/40 bg-muted/20 p-6 gap-5 overflow-y-auto">
+          <div className="hidden w-80 flex-col gap-5 overflow-y-auto border-l border-neutral-200 bg-white/75 p-6 backdrop-blur lg:flex">
             {/* Scene edit panel — shown when a scene is selected on terminal jobs */}
             {scenes.length > 1 &&
               selectedSceneIndex >= 0 &&
@@ -967,11 +1043,11 @@ function InfoCards({
   return (
     <>
       {/* Status */}
-      <div className="rounded-xl border border-border/40 bg-card/60 p-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">Status</h3>
+      <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Status</h3>
         <div className="space-y-2.5 text-xs">
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Status</span>
+            <span className="text-neutral-500">Status</span>
             <span className="font-medium flex items-center gap-1.5 capitalize">
               {isDone && <CheckCircle2 className="h-3 w-3 text-green-400" />}
               {isFailed && <XCircle className="h-3 w-3 text-destructive" />}
@@ -981,37 +1057,37 @@ function InfoCards({
           </div>
           {isActive && (
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Stage</span>
+              <span className="text-neutral-500">Stage</span>
               <span className="font-medium text-primary text-[11px]">{stageLabel}</span>
             </div>
           )}
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">{isActive ? "Elapsed" : "Generation time"}</span>
+            <span className="text-neutral-500">{isActive ? "Elapsed" : "Generation time"}</span>
             <span className="font-medium tabular-nums">{formatTime(elapsed)}</span>
           </div>
         </div>
       </div>
 
       {/* Details */}
-      <div className="rounded-xl border border-border/40 bg-card/60 p-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">Details</h3>
+      <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Production</h3>
         <div className="space-y-2.5 text-xs">
-          <div className="flex justify-between"><span className="text-muted-foreground">Model</span><span className="font-medium">{getEngineDisplayName(job.engine_used)}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Video duration</span><span className="font-medium">{job.target_duration_seconds}s</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Scenes</span><span className="font-medium">{sceneCount}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Format</span><span className="font-medium">{job.aspect_ratio || "16:9"}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Captions</span><span className="font-medium capitalize">{job.caption_mode || "none"}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Plan</span><span className="font-medium capitalize">{job.plan}</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Audio</span><span className="font-medium capitalize">{job.audio_mode || "auto"}</span></div>
+          <div className="flex justify-between gap-3"><span className="text-neutral-500">Model</span><span className="text-right font-medium">{cleanModelName(getEngineDisplayName(job.engine_used))}</span></div>
+          <div className="flex justify-between"><span className="text-neutral-500">Video duration</span><span className="font-medium">{job.target_duration_seconds}s</span></div>
+          <div className="flex justify-between"><span className="text-neutral-500">Scenes</span><span className="font-medium">{sceneCount}</span></div>
+          <div className="flex justify-between"><span className="text-neutral-500">Format</span><span className="font-medium">{job.aspect_ratio || "16:9"}</span></div>
+          <div className="flex justify-between"><span className="text-neutral-500">Captions</span><span className="font-medium capitalize">{job.caption_mode || "none"}</span></div>
+          <div className="flex justify-between"><span className="text-neutral-500">Plan</span><span className="font-medium capitalize">{job.plan}</span></div>
+          <div className="flex justify-between"><span className="text-neutral-500">Audio</span><span className="font-medium capitalize">{job.audio_mode || "auto"}</span></div>
           {job.voiceover_text && (
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Voice-over</span>
+              <span className="text-neutral-500">Voice-over</span>
               <span className={`font-medium ${job.voiceover_url ? "text-green-500" : "text-amber-400"}`}>
                 {job.voiceover_url ? "Ready" : "Generating..."}
               </span>
             </div>
           )}
-          <div className="flex justify-between"><span className="text-muted-foreground">Created</span><span className="font-medium text-[10px]">{formatDate(job.created_at)}</span></div>
+          <div className="flex justify-between"><span className="text-neutral-500">Created</span><span className="font-medium text-[10px]">{formatDate(job.created_at)}</span></div>
         </div>
         {/* Admin-only cost tracking */}
         {isAdmin && SHOW_COST_TRACKING_UI && (
@@ -1026,15 +1102,15 @@ function InfoCards({
             ? "border-red-500/40 bg-red-500/5"
             : adminCredits.status === "low"
               ? "border-amber-500/40 bg-amber-500/5"
-              : "border-border/40 bg-card/60"
+            : "border-neutral-200 bg-white shadow-sm"
         }`}>
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+          <h3 className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
             <Wallet className="h-3 w-3" />
             Generation Credits
           </h3>
           <div className="space-y-2 text-xs">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Credit balance</span>
+              <span className="text-neutral-500">Credit balance</span>
               <span className={`font-semibold tabular-nums ${
                 adminCredits.status === "critical"
                   ? "text-red-400"
@@ -1072,8 +1148,8 @@ function InfoCards({
 
       {/* Audio player (when separate audio track exists) */}
       {isDone && job.audio_url && (
-        <div className="rounded-xl border border-border/40 bg-card/60 p-4">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+        <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">
             <Volume2 className="h-3 w-3" />
             Audio Track
           </h3>
@@ -1093,7 +1169,7 @@ function InfoCards({
 
       {/* Upgrade */}
       {job.plan === "free" && (
-        <Link href="/pricing" className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 px-4 py-3 text-xs font-semibold text-white hover:brightness-110">
+        <Link href="/pricing" className="flex items-center gap-2 rounded-2xl bg-neutral-950 px-4 py-3 text-xs font-semibold text-white shadow-sm hover:bg-neutral-800">
           <Crown className="h-4 w-4" />
           <div><p>Unlock longer videos</p><p className="font-normal opacity-80">Up to 60s, 3 scenes</p></div>
         </Link>
@@ -1116,10 +1192,10 @@ function InfoCards({
 
       {/* Quick actions */}
       <div className="space-y-2">
-        <Link href="/create" className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:brightness-110">
+        <Link href="/create" className="flex w-full items-center justify-center gap-2 rounded-xl bg-neutral-950 px-4 py-2.5 text-xs font-semibold text-white hover:bg-neutral-800">
           <Plus className="h-3.5 w-3.5" /> New video
         </Link>
-        <Link href="/projects" className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-4 py-2 text-xs font-medium hover:bg-muted">
+        <Link href="/projects" className="flex w-full items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-xs font-medium text-neutral-800 hover:bg-neutral-50">
           All projects
         </Link>
       </div>
