@@ -12,6 +12,21 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-09 — Claude (Opus 4.8) — T-901a : spec MCP AlphoGen (docs-only)
+- `git pull` (à `451debb`). Rédigé `docs/product/alphogen-mcp-spec.md` (spec-only) après
+  discussion d'avis avec Paul/Codex sur un MCP « studio API pour agents ».
+- Contenu : objectif (MCP = client mince sur l'API interne, **jamais Supabase direct**),
+  cas d'usage (dev QA Claude/Codex, agent réalisateur ChatGPT, preview payload, plan
+  Director, suivi jobs), archi (serveur MCP externe + futur `/api/mcp/*` + PAT scoping,
+  pas de service-role), outils V1 read-only/no-cost + V2 side-effect, règles sécu
+  (confidentialité providers, réutiliser plan/quota/content-policy, audit, rate limit,
+  actions coûteuses preview-first/confirmées), phasing T-901a→e, non-goals.
+- Divergences vs proposition Codex notées dans la spec : auth = vrai chantier (PAT) ;
+  `create_video` séquencé en DERNIER (coûte de l'argent) ; dev-tooling MCP avant le
+  produit. Aucune route/API/DB/secret touché.
+- Axe 9 ajouté à `agent/tasks.md` (T-901a done, T-901b→e todo).
+- Fichiers : `docs/product/alphogen-mcp-spec.md`, `agent/tasks.md`, `agent/log.md`.
+
 ## 2026-06-09 — Claude (Opus 4.8) — SÉCU R-018d #3 : harden function search_path (go Paul)
 - Relu les 14 corps de fonctions flaggées : refs non qualifiées = uniquement tables
   `public` (jobs/job_scenes watchdogs) ; reste qualifié + built-ins pg_catalog

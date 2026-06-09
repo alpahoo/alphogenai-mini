@@ -269,6 +269,36 @@ de migration ni de modif state machine**.
   grounding fort, avatar vs product grounding, defaults prudents, anti provider-leak.
 - Scope : helper/test/docs only ; aucune route/API/DB/migration/provider/state machine.
 
+## Axe 9 — AlphoGen MCP (studio API pour agents)  `status: in_progress`
+
+Spec : **`docs/product/alphogen-mcp-spec.md`**. Principe : **MCP → API interne
+AlphoGen uniquement**, jamais MCP → Supabase/secrets/providers directs. Réutilise
+les gates existants (plan/quota/content-policy/ownership/confidentialité providers).
+
+### [T-901a] Spec MCP AlphoGen — `status: done` · `owner: claude`
+- `docs/product/alphogen-mcp-spec.md` : objectif, cas d'usage (dev QA Claude/Codex,
+  agent réalisateur ChatGPT, preview payload, plan Director, suivi jobs), archi
+  (serveur MCP externe + futur `/api/mcp/*` + PAT scoping, pas de service-role),
+  outils V1 read-only/no-cost (`get_job`, `list_recent_jobs`, `validate_job_payload`,
+  `create_director_plan`, `create_ugc_plan`) et V2 side-effect (`create_video`,
+  `use_as_reference`, `duplicate_job`, `export_social_pack`), règles sécurité,
+  phasing T-901a→e, non-goals. Docs-only.
+
+### [T-901b] `/api/mcp` auth design (PAT) — `status: todo` · `owner: chatgpt(spec)→claude/codex`
+- Design doc : émission/hash/révocation/scoping des PAT par user, rate limit, audit.
+  **Pas de service-role exposé.** Implémentation derrière review (nouvelle surface auth).
+
+### [T-901c] Outils read-only sur compte de test — `status: todo` · `owner: claude/codex`
+- `get_job`, `list_recent_jobs` ; prouve la frontière auth + confidentialité providers.
+
+### [T-901d] Outils plan/validate (purs) — `status: todo` · `owner: claude/codex`
+- `validate_job_payload`, `create_director_plan`, `create_ugc_plan` ; réutilise les
+  helpers purs (`validate-references`, `director-quality`, `ugc-director`, `ugc-social-pack`).
+
+### [T-901e] `create_video` derrière confirmation — `status: todo` · `owner: claude/codex`
+- Action coûteuse : quota/plan + **preview-first** + confirmation explicite. Puis
+  `use_as_reference` / `duplicate_job` / `export_social_pack`. Séquencé en dernier.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio
