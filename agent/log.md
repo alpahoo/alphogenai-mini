@@ -12,6 +12,18 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-09 — Claude (Opus 4.8) — SÉCU R-018d #3 : harden function search_path (go Paul)
+- Relu les 14 corps de fonctions flaggées : refs non qualifiées = uniquement tables
+  `public` (jobs/job_scenes watchdogs) ; reste qualifié + built-ins pg_catalog
+  (`gen_random_uuid` = core, pas extensions). → `SET search_path = public, pg_temp`
+  sûr/non cassant pour toutes.
+- `apply_migration harden_function_search_path` (14 ALTER FUNCTION) +
+  `supabase/migrations/20260609_harden_function_search_path.sql`. Vérifié : 14/14
+  proconfig posé ; smoke-test is_admin()/current_user_id() OK ; advisor
+  `function_search_path_mutable` vidé. Aucune donnée user ; aucun code applicatif.
+- État advisor restant : `security_definer_executable` (#2, mitigé) +
+  `leaked_password` (#4, Pro-only) + 2 INFO `rls_enabled_no_policy` (attendu).
+
 ## 2026-06-09 — Claude (Opus 4.8) — SÉCU R-018d : durcissement (cache #1 + audit #2/#3/#4)
 - **#1 ✅** : drop des INSERT permissifs `music_cache_insert`/`video_cache_insert`
   (WITH CHECK true, authenticated). Audit : caches écrits uniquement par workers Python

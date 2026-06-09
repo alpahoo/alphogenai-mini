@@ -308,13 +308,16 @@ Audit + actions 2026-06-09 (go Paul) sur les 4 items de durcissement restants :
   laisser tel quel**, ou faire une révocation **anon-only très ciblée** sur
   `admin_delete_user`/`admin_read_user` dans une tranche séparée après vérif que
   l'app appelle ces RPC en service-role.
-- **#3 `search_path` des fonctions — ⛔ NON FAIT (documenté, risqué).** Fixer
-  `search_path` à l'aveugle peut **casser** des fonctions qui appellent des objets
-  d'`extensions` non qualifiés (ex. `gen_random_uuid()` dans `ingest_provider_webhook`).
-  Exploit réel très faible (nécessite CREATE sur un schéma du path, que anon/auth n'ont
-  pas). **Reco : tranche dédiée** — relire chaque corps puis
-  `ALTER FUNCTION … SET search_path = public, extensions, pg_temp` (ou qualifier les
-  appels), avec validation.
+- **#3 `search_path` des fonctions — ✅ RÉSOLU (2026-06-09, go Paul).** Les 14 corps
+  ont été relus : seules refs **non qualifiées** = tables `public` (`jobs`/`job_scenes`
+  dans les watchdogs) ; tout le reste qualifié (`auth.*`, `realtime.*`,
+  `information_schema.*`, `public.*`) + built-ins via `pg_catalog`. `gen_random_uuid()`
+  = core PG (pg_catalog), pas `extensions` → pas de risque. Donc `SET search_path =
+  public, pg_temp` (immuable, `pg_temp` en dernier) est **sûr et non cassant**.
+  `apply_migration harden_function_search_path` (14 `ALTER FUNCTION`) +
+  `supabase/migrations/20260609_harden_function_search_path.sql`. Vérifié : 14/14
+  `proconfig` posé ; smoke-test `is_admin()`/`current_user_id()` OK ; advisor
+  `function_search_path_mutable` **vidé**.
 - **#4 leaked-password protection — ⛔ BLOQUÉ PAR LE PLAN (Free).** Tenté via le
   dashboard (Auth → Email → « Prevent use of leaked passwords ») le 2026-06-09 : erreur
   Supabase « available on Pro Plans and up ». La feature HaveIBeenPwned est **réservée
