@@ -435,9 +435,13 @@ Spec : `docs/product/premium-product-experience-spec.md`.
 ### [T-1104] Home command center V2 — `status: todo` · `owner: codex`
 - Reprendre `/home` pour harmoniser avec le nouveau langage premium.
 
-### [T-1105] Create flow visual polish — `status: todo` · `owner: codex`
+### [T-1105] Create flow visual polish — `status: done` · `owner: codex`
 - Polir `/create/[mode]` autour de la Director Console existante, sans toucher au
   submit/payload backend.
+- Livre UI-only : fond warm-neutral, header `Production brief` avec métriques plan/
+  format/scènes, formulaire dans un panneau premium, Director Console en surface sombre
+  media-led, rail assets harmonisé et panel AI Director ouvert aligné au nouveau style.
+  Aucun changement submit/payload/route/API/DB.
 
 ### [T-1106] Job studio polish — `status: todo` · `owner: codex`
 - Polir `/jobs/[id]` comme studio post-generation.

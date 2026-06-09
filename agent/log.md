@@ -902,3 +902,11 @@ findings level block/warn + message), `byteplus-cost.ts`
   `components/premium/premium-marketing.tsx`.
 - Rebuild de la landing `/` : hero Director Console, workflows, section UGC/product,
   post-generation studio, curation/privacy copy. Scope public UI-only.
+
+## 2026-06-10 - Codex - T-1105 create flow premium polish
+- Polish UI-only de `/create/[mode]` : fond warm-neutral, header `Production brief`,
+  métriques plan/format/scènes, formulaire encadré premium, rail assets plus clair.
+- Director Console transformée en surface sombre media-led cohérente avec la landing ;
+  panel AI Director ouvert harmonisé au nouveau langage visuel.
+- Aucun changement de submit, payload `POST /api/jobs`, routes, DB, provider routing ou
+  state machine.

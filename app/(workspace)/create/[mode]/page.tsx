@@ -849,47 +849,47 @@ export default function CreateModePage({
       ? "Auto -> Seedance 2.0 Fast"
       : cleanModelName(engineOptions.find((e) => e.key === selectedEngine)?.label ?? selectedEngine);
   const directorConsole = (
-    <div className="rounded-2xl border border-primary/25 bg-card px-4 py-4 shadow-sm">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="overflow-hidden rounded-xl border border-neutral-900/10 bg-neutral-950 text-white shadow-xl shadow-neutral-950/10">
+      <div className="flex flex-col gap-4 border-b border-white/10 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-2">
-          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase text-primary">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
             <Sparkles className="h-3.5 w-3.5" />
             Director Console
           </div>
           <div>
-            <h2 className="text-lg font-bold tracking-tight text-foreground">
+            <h2 className="text-lg font-bold tracking-tight text-white">
               Turn the prompt into an editable shot plan
             </h2>
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-white/58">
               Review scene prompts, duration, model fit and cost before generation. The classic Generate Video path stays available.
             </p>
           </div>
         </div>
 
         <div className="grid min-w-0 gap-2 text-xs sm:grid-cols-3 lg:w-[420px]">
-          <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
-            <span className="block text-muted-foreground/60">Plan</span>
-            <span className="mt-0.5 block truncate font-semibold text-foreground">{directorSceneLabel}</span>
+          <div className="rounded-lg border border-white/10 bg-white/[0.07] px-3 py-2">
+            <span className="block text-white/40">Plan</span>
+            <span className="mt-0.5 block truncate font-semibold text-white">{directorSceneLabel}</span>
           </div>
-          <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
-            <span className="block text-muted-foreground/60">Model</span>
-            <span className="mt-0.5 block truncate font-semibold text-foreground">{directorModelLabel}</span>
+          <div className="rounded-lg border border-white/10 bg-white/[0.07] px-3 py-2">
+            <span className="block text-white/40">Model</span>
+            <span className="mt-0.5 block truncate font-semibold text-white">{directorModelLabel}</span>
           </div>
-          <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2">
-            <span className="block text-muted-foreground/60">Readiness</span>
-            <span className={`mt-0.5 block font-semibold ${hasPrompt ? "text-emerald-500" : "text-amber-500"}`}>
+          <div className="rounded-lg border border-white/10 bg-white/[0.07] px-3 py-2">
+            <span className="block text-white/40">Readiness</span>
+            <span className={`mt-0.5 block font-semibold ${hasPrompt ? "text-emerald-300" : "text-amber-300"}`}>
               {hasPrompt ? "Ready to plan" : "Prompt needed"}
             </span>
           </div>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+      <div className="flex flex-col gap-2 px-4 py-4 sm:flex-row">
         <button
           type="button"
           onClick={openDirector}
           disabled={loading || !hasPrompt}
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex flex-1 items-center justify-center gap-2 rounded-md bg-white px-4 py-3 text-sm font-bold text-neutral-950 shadow-md shadow-white/10 transition-all hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Clapperboard className="h-4 w-4" />
           {directorOpen ? "Refresh Director plan" : "Plan with AI Director"}
@@ -897,7 +897,7 @@ export default function CreateModePage({
         <button
           type="submit"
           disabled={loading || !hasPrompt}
-          className="flex items-center justify-center gap-2 rounded-xl border border-border/60 bg-background px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-44"
+          className="flex items-center justify-center gap-2 rounded-md border border-white/15 bg-white/[0.06] px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-44"
         >
           <Wand2 className="h-4 w-4" />
           Generate now
@@ -1508,7 +1508,7 @@ export default function CreateModePage({
   );
 
   return (
-    <div className="flex h-full relative">
+    <div className="relative flex h-full bg-[#f6f6f2]">
       {/* ── Full-page loading overlay ─────────────────────────────── */}
       {loading && (
         <motion.div
@@ -1565,10 +1565,10 @@ export default function CreateModePage({
       {/* ══════════════════════════════════════════════════════════ */}
       {/* LEFT PANEL — Form                                        */}
       {/* ══════════════════════════════════════════════════════════ */}
-      <div className="flex-1 overflow-y-auto px-8 py-8">
+      <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-8 lg:px-10">
         <Link
           href="/create"
-          className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-neutral-500 transition-colors hover:text-neutral-950"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to workflows
@@ -1579,19 +1579,41 @@ export default function CreateModePage({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <div className="flex items-center gap-3 mb-1">
-            <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${config.iconBg}`}>
-              <config.icon className="h-6 w-6" />
+          <div className="mb-7 grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div className="flex items-start gap-4">
+              <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-lg ${config.iconBg}`}>
+                <config.icon className="h-7 w-7" />
+              </div>
+              <div>
+                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-neutral-300 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-600">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Production brief
+                </div>
+                <h1 className="text-4xl font-semibold leading-tight tracking-tight text-neutral-950 sm:text-5xl">
+                  {config.title}
+                </h1>
+                <p className="mt-2 max-w-2xl text-base leading-7 text-neutral-600">
+                  {config.subtitle}
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">{config.title}</h1>
-              <p className="mt-0.5 text-base text-muted-foreground">
-                {config.subtitle}
-              </p>
+            <div className="grid min-w-0 gap-2 text-xs sm:grid-cols-3 lg:w-[420px]">
+              <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2 shadow-sm">
+                <span className="block text-neutral-500">Plan</span>
+                <span className="mt-0.5 block font-semibold text-neutral-950">{planLoaded ? plan : "Loading"}</span>
+              </div>
+              <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2 shadow-sm">
+                <span className="block text-neutral-500">Format</span>
+                <span className="mt-0.5 block font-semibold text-neutral-950">{aspectRatio}</span>
+              </div>
+              <div className="rounded-lg border border-neutral-200 bg-white px-3 py-2 shadow-sm">
+                <span className="block text-neutral-500">Scenes</span>
+                <span className="mt-0.5 block font-semibold text-neutral-950">{directorSceneLabel}</span>
+              </div>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:p-6">
             {/* ── Prompt ─────────────────────────────────────────── */}
             <div>
               <label
@@ -2492,7 +2514,7 @@ export default function CreateModePage({
       {/* ══════════════════════════════════════════════════════════ */}
       {/* RIGHT PANEL — Preview / Info                             */}
       {/* ══════════════════════════════════════════════════════════ */}
-      <div className="hidden lg:flex w-80 flex-col border-l border-border/40 bg-muted/20 p-6">
+      <div className="hidden w-80 flex-col border-l border-neutral-200 bg-white/70 p-6 lg:flex">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

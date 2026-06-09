@@ -87,9 +87,9 @@ export function AIDirectorPanel({
   onClose,
 }: AIDirectorPanelProps) {
   return (
-    <div className="rounded-xl border border-primary/30 bg-primary/[0.02]">
+    <div className="overflow-hidden rounded-xl border border-neutral-900/10 bg-[#f6f6f2] shadow-sm">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/40 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3">
         <span className="flex items-center gap-2 text-sm font-bold text-foreground">
           <Clapperboard className="h-4 w-4 text-primary" />
           AI Director — review your plan
@@ -118,7 +118,7 @@ export function AIDirectorPanel({
         {/* Scene cards */}
         <div className="space-y-2.5">
           {scenes.map((s) => (
-            <div key={s.index} className="rounded-lg border border-border/40 bg-background px-3 py-2.5">
+            <div key={s.index} className="rounded-lg border border-neutral-200 bg-white px-3 py-2.5 shadow-sm">
               <div className="mb-1.5 flex items-center justify-between gap-2">
                 <span className="flex items-center gap-2 text-xs font-semibold text-foreground">
                   <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
@@ -199,7 +199,7 @@ export function AIDirectorPanel({
           type="button"
           onClick={onGenerate}
           disabled={generating}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-md bg-neutral-950 py-3 text-sm font-bold text-white shadow-md shadow-neutral-950/10 transition-all hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
           Generate now
