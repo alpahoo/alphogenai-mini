@@ -122,20 +122,23 @@ de migration ni de modif state machine**.
   R-010) ; les autres modeles voient un texte discret au lieu d'un bouton qui echoue.
 - Nouveau helper pur `lib/scene-status.ts` + test `lib/__tests__/scene-status.test.ts`
   (statuts provider-neutres + gating regen). 240 tests au total.
-### [T-301c] Retry affordances — `status: todo` · `owner: claude`
-- Retry job-level (`retry-scenes`, job failed) déjà présent sur la page ; regen
-  single-scene via `ScenePanel` **gaté** (R-010). Pas de modif route.
+### [T-301c] Retry affordances - `status: done` - `owner: codex`
+- Retry job-level (`retry-scenes`, job failed) est deja present sur la page job.
+- Regen single-scene via `ScenePanel` est gate par `supportsSingleSceneRegen()`;
+  les modeles non supportes voient un texte discret au lieu d'un bouton qui echoue.
+  Pas de modif route/state machine.
 
 ### [T-301d] (V2) Édition prompt par scène via `PATCH` — `status: blocked` · `owner: claude`
 - Déféré V2 (l'endpoint `PATCH /scenes/[i]` existe déjà).
 
-## Axe 4 — Saved Looks  `status: todo`
+## Axe 4 - Saved Looks  `status: in_progress`
 
-### [T-401] Looks réutilisables — `status: todo` · `owner: chatgpt(spec)→claude(impl)`
-- Objectif : « Create a look once, reuse it forever » — sauvegarder un rendu comme
-  Look, le réutiliser (nouveau script, lipsync voix clonée, déclinaisons social).
-- Briques : `cinematic_looks`/HeyGen look reuse, lipsync/voiceover existants.
-- Note : nouvelle table probable → migration additive (R-003 process).
+### [T-401] Looks reutilisables spec - `status: done` - `owner: codex`
+- Livre docs-only : `docs/product/saved-looks-spec.md`.
+- Definit le contrat V1 : save from completed job, reuse in Create/Library/Job,
+  capabilities provider-neutral, audit schema/API avant migration.
+- Decoupage restant : T-401a audit route/schema existants ; T-401b UI Saved Looks ;
+  T-401c helper payload ; T-401d migration seulement si necessaire ; T-401e tests.
 
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
@@ -215,6 +218,13 @@ polir l'existant.
 - Architecture conservee : forward vers `POST /api/jobs` pour garder quota/policy/routing
   centralises ; aucun output/status/cout/provider task ID n est copie.
 
+### [T-501e2] Avatar/look duplicate contract - `status: done` - `owner: codex`
+- Livre docs-only : `docs/product/avatar-look-duplicate-contract.md`.
+- Decision : conserver le 409 actuel pour avatar/look jobs tant qu'un contrat dedie
+  ne prouve pas la reconstruction fidele (avatar id, voice/script, look payload,
+  references, scenes, aspect/captions/audio).
+- Prochaine implementation seulement apres audit des champs durables avatar/look.
+
 ## Axe 6 — Nettoyage docs / lint / tests  `status: in_progress`
 
 ### [T-601] Refresh README.md + CLAUDE.md + HANDOVER status — `status: done` · `owner: claude`
@@ -247,8 +257,9 @@ polir l'existant.
 ### [T-603] Lint 100 % clean — `status: done` · `owner: claude`
 - `next lint` → no warnings/errors. (Fait.)
 
-### [T-604] Retirer `typescript.ignoreBuildErrors` — `status: blocked` · `owner: claude`
-- `tsc` est clean ; mais fichier config critique → validation requise. (R-004.)
+### [T-604] Retirer `typescript.ignoreBuildErrors` - `status: done` - `owner: codex`
+- Verifie : `next.config.ts` ne contient plus `typescript.ignoreBuildErrors`.
+- `tsc --noEmit`, lint et build sont clean ; R-004 resolu.
 
 ### [T-605b] Cleanup provider names on the job page — `status: done` · `owner: claude`
 - Suite à la review visuelle (job réel). Page `app/jobs/[id]/page.tsx` + `JobCostBadge` :
@@ -272,7 +283,7 @@ polir l'existant.
     (corrige aussi `/gallery` et la page job qui utilisent `getEngineDisplayName`).
     `(Direct)` / `(Seedance 2)` conservés (termes produit).
   - faces-manager : lien « Where's my Asset ID? » → « Need help finding your verified
-    face ID? » (href console provider conservé — voir R-006).
+    face ID? » ; R-006 remplace ensuite l'href fournisseur par une page d'aide interne.
 - Hors périmètre (admin-only, conforme à la consigne) : panneau coût/crédits create
   (`isAdminEmail`), « EvoLink balance »/« Top up » + `JobCostBadge` (`isAdmin`).
 - Validé : tsc · build · lint · 220 tests verts.
@@ -298,13 +309,13 @@ polir l'existant.
 
 ## Priorites actees Paul - 2026-06-08
 
-1. T-602 - tests d integration API : jobs / byteplus-assets / upload avec Supabase mocke.
-2. R-003 - migration retrospective Supabase pour byteplus_assets.thumb_path + policy UPDATE, sans donnees user.
-3. T-604 - retirer typescript.ignoreBuildErrors dans un commit config dedie.
-4. T-401 - Saved Looks : spec d abord, car probable migration / contrat produit.
-5. Avatar/look duplicate : definir un vrai contrat de reconstruction avant de retirer le 409.
-6. T-301c - retry affordances : verifier/polir retry scene/job sans doublon.
-7. R-006 - mini cleanup provider/help : page d aide interne pour verified face ID.
+1. T-602 - tests d integration API : done.
+2. R-003 - migration retrospective Supabase : migration tracee, no user data.
+3. T-604 - retirer typescript.ignoreBuildErrors : done/verifie.
+4. T-401 - Saved Looks : spec done ; implementation future apres audit.
+5. Avatar/look duplicate : contrat done ; 409 conserve jusqu a reconstruction fidele.
+6. T-301c - retry affordances : done.
+7. R-006 - aide interne verified face ID : done.
 
 ## Axe 7 - Visible Premium Pass  `status: in_progress`
 

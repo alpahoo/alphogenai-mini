@@ -493,3 +493,12 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Actions par asset : utiliser comme reference (`/create/story?reference_job_id=<id>`), ouvrir Studio (`/jobs/<id>`), telecharger le master, ouvrir le job pour social pack.
 - Scope : UI-only ; reutilise `jobs` done + `social_exports`, aucune route/API/DB.
 - Validation : `vitest` 270/270, `test:e2e` 3/3, `tsc` clean, `lint` clean, `build` OK.
+
+
+## 2026-06-09 - Codex - Remaining roadmap cleanup
+- R-006 : ajout de la page interne `/help/verified-face-id` et remplacement du lien fournisseur dans `FacesManager`.
+- T-401 : spec Saved Looks livree dans `docs/product/saved-looks-spec.md` (docs-only, audit/migration deferees).
+- Avatar/look duplicate : contrat livre dans `docs/product/avatar-look-duplicate-contract.md`; le 409 actuel reste volontaire tant que la reconstruction fidele n'est pas prouvee.
+- T-301c : retry affordances cloturees via l'existant (`retry-scenes`) + gating single-scene regen deja livre par `supportsSingleSceneRegen()`.
+- R-003 : migration retrospective deja presente et verifiee (`20260608_byteplus_assets_thumb_and_update_policy.sql`), sans donnees user ; aucune operation prod nouvelle.
+- T-604/R-004 : `next.config.ts` ne contient plus `typescript.ignoreBuildErrors`; tsc/lint/build restent clean.

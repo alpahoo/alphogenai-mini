@@ -38,7 +38,10 @@ Format :
 - Impact : (b)/(c) modifient le sélecteur d'engine récemment livré → garder la
   valeur réellement envoyée à l'API inchangée derrière le label.
 
-### [R-003] Opérations DB faites avant ce protocole — `severity: medium` · `status: open (à valider)`
+### [R-003] Opérations DB faites avant ce protocole — `severity: medium` · `status: resolved`
+- Résolu côté traçabilité : `supabase/migrations/20260608_byteplus_assets_thumb_and_update_policy.sql`
+  existe, est additive/idempotente, contient uniquement `thumb_path` + policy UPDATE,
+  et n'insère aucune donnée utilisateur. Aucune opération prod nouvelle effectuée ici.
 - Contexte : effectuées sur Supabase prod (`qbrpzmuedfugbhoeytdj`) **avant** la
   mise en place d'AGENTS.md, donc à acter rétroactivement (protocole #4) :
   1. `ALTER TABLE byteplus_assets ADD COLUMN thumb_path text;` (additif, OK).
@@ -53,7 +56,9 @@ Format :
   pour la traçabilité (colonne + policy), **sans** les INSERT de données user.
   → À valider avant de l'écrire (touche aux migrations DB = protocole #4).
 
-### [R-004] `typescript.ignoreBuildErrors: true` (dette héritée) — `severity: low` · `status: open`
+### [R-004] `typescript.ignoreBuildErrors: true` (dette héritée) — `severity: low` · `status: resolved`
+- Résolu : `next.config.ts` ne contient plus `typescript.ignoreBuildErrors`.
+  `tsc --noEmit`, lint et build sont clean.
 - Contexte : flag dans `next.config.ts` (cf future-proof-notes §1.8). `tsc --noEmit`
   est actuellement **clean**, donc on pourrait retirer le flag — mais c'est un
   fichier de config critique (protocole #4).
@@ -69,7 +74,9 @@ Format :
   references ownership, active generation, daily quota, plan gate).
 - Aucun appel Supabase/provider reel ; suite a 270 tests au dernier passage.
 
-### [R-006] Lien « verified face ID » pointe vers la console provider — `severity: low` · `status: open`
+### [R-006] Lien « verified face ID » pointe vers la console provider — `severity: low` · `status: resolved`
+- Résolu : `components/create/faces-manager.tsx` pointe vers `/help/verified-face-id`.
+  Nouvelle page interne AlphoGen : `app/help/verified-face-id/page.tsx`.
 - Contexte : dans `faces-manager.tsx`, le lien « Need help finding your verified face
   ID? » a un `href` vers `console.byteplus.com` (le **texte** est provider-neutre,
   seule l'URL révèle le provider à qui inspecte / au survol).
@@ -141,7 +148,9 @@ Format :
   compatible avec le composer/payload attendu, ou creer une UX trompeuse.
 - Resolu T-501d : `docs/product/use-as-reference-decision.md`. Decision V1 = image reference structuree (`outfit_style`) depuis thumbnail/last_frame/image_url, via une future route server-side qui copie dans le bucket prive `references`. Full video reference est deferred V2.
 
-### [R-014] Changements visibles encore insuffisants - `severity: medium` - `status: open`
+### [R-014] Changements visibles encore insuffisants - `severity: medium` - `status: resolved`
+- Résolu par Axe 7 : Schedule double-sidebar fix, landing refresh, Create Director
+  Console, Home command center, Library asset studio. Playwright smoke tests ajoutés.
 - Contexte : Paul a partage des captures du SaaS le 2026-06-09. Une grande partie
   du travail recent est backend/fondation ou visible uniquement dans certains flows
   (job termine, Director ouvert, Duplicate/Use as reference), donc le produit global
@@ -151,7 +160,9 @@ Format :
 - Reco : Axe 7 Visible Premium Pass : schedule double-sidebar fix (fait), landing refresh,
   create flow premium pass, home command center, library asset studio.
 
-### [R-015] Dette qualite restante apres T-602 - `severity: low` - `status: open`
+### [R-015] Dette qualite restante apres T-602 - `severity: low` - `status: resolved`
+- Résolu : R-003 tracée, T-604 vérifié/résolu, T-401 spec livrée, contrat
+  Avatar/look duplicate livré, T-301c clôturé, R-006 aide interne livrée.
 - Reste confirme par Paul : R-003 migration retrospective Supabase, T-604 retrait
   `typescript.ignoreBuildErrors`, T-401 Saved Looks spec, contrat Avatar/look duplicate,
   T-301c retry affordances, R-006 aide interne verified face ID.

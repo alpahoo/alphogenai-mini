@@ -293,9 +293,7 @@ export function FacesManager({ faces, loading, onReload, onInsert, compat }: Fac
           {err && <p className="mt-2 text-xs text-destructive">{err}</p>}
           <div className="mt-2 flex items-center justify-between">
             <a
-              href="https://console.byteplus.com/ark/region:ark+ap-southeast-1/openManagement"
-              target="_blank"
-              rel="noreferrer"
+              href="/help/verified-face-id"
               className="text-[11px] text-primary/80 hover:underline"
             >
               Need help finding your verified face ID? ↗
