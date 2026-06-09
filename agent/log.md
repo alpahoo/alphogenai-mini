@@ -12,6 +12,32 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-09 — Claude (Opus 4.8) — T-1003 (API) : Admin Gallery Manager
+- Fait : couche API admin pour la galerie curated (API d'abord, testable, avant l'UI).
+  Toutes les routes sont admin-gated `requireAdmin()` (`isAdminEmail`) + service-role
+  (bypass RLS). Le public `/gallery` n'utilise jamais ces routes (vérifié : il ne lit ni
+  `jobs` ni service-role — posture privacy de Codex intacte).
+  - `lib/gallery-admin.ts` (pur) : `normalizeGalleryWrite(body, mode)` — **whitelist** stricte
+    des champs écrivables (id/created_by/created_at/updated_at jamais acceptés depuis le body) ;
+    enums validés (status/category/media_type) ; `display_model` toujours scrubé
+    (`cleanModelName`) ; `published_at` **dérivé du status**, jamais de l'input. Et
+    `galleryDraftFromJob(job)` : draft sûr depuis un job fini — `status='draft'`,
+    **`public_prompt=null` (le prompt privé brut n'est JAMAIS copié)**, `display_model` neutre.
+  - `GET/POST /api/admin/gallery` (list + filtres status/category ; create avec
+    `created_by`=admin).
+  - `PATCH/DELETE /api/admin/gallery/[id]` (publish/unpublish/hide/edit ; DELETE supprime la
+    ligne galerie **uniquement**, jamais le job source).
+  - `POST /api/admin/gallery/from-job` ({job_id} → draft sûr).
+- Confidentialité : aucun provider/aggregator exposé (scrub `display_model`) ; aucun prompt
+  privé brut publié par défaut ; champs écrivables verrouillés par whitelist.
+- Fichiers : `lib/gallery-admin.ts`, `app/api/admin/gallery/{route,[id]/route,from-job/route}.ts`,
+  tests `lib/__tests__/gallery-admin.test.ts` + `app/api/admin/gallery/route.test.ts`
+  (premier test de route admin du repo), `agent/{tasks,log}.md`.
+- Tests : npm test → **394 passed** (363 + 31) · tsc 0 · lint 0 · build OK (3 routes
+  `/api/admin/gallery*` enregistrées).
+- Prochaine étape : UI `/admin/gallery` (list/edit/publish) + bouton `Add to gallery` depuis
+  `/admin/jobs`. Ne touche pas la refonte publique de Codex (`components/gallery/`).
+
 ## 2026-06-09 — Claude (Opus 4.8) — T-1002 : schéma `gallery_items` + RLS (appliqué prod)
 - Fait : créé la table de curation `public.gallery_items` (spec
   `docs/product/gallery-curation-redesign-spec.md`) — surface publique de la galerie,

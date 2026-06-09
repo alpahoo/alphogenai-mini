@@ -374,11 +374,22 @@ n'infère JAMAIS la publiabilité depuis le statut d'un job. Pas de lecture dire
 - Vérifié : advisors security **0 nouvelle alerte** ; table 0 ligne (aucun backfill) ; 2
   policies + RLS on + trigger présents.
 
-### [T-1003] Admin Gallery Manager — `status: todo` · `owner: claude/codex`
-- CRUD admin-only (service-role + `isAdminEmail`) : list/filtre, preview, edit
-  title/subtitle/public_prompt/category, set draft/published/hidden, toggle featured,
-  sort_order, retirer de la galerie sans supprimer le job. Action `Publish to gallery`
-  depuis `/admin/jobs`. Routes `/admin/gallery` (+ API).
+### [T-1003] Admin Gallery Manager — `status: in_progress` · `owner: claude`
+- **API livrée** (couche testable d'abord) :
+  - `lib/gallery-admin.ts` (pur) : `normalizeGalleryWrite(body, "create"|"update")` (whitelist
+    stricte des champs écrivables — id/created_by/timestamps jamais acceptés ; enums validés ;
+    `display_model` toujours scrubé via `cleanModelName` ; `published_at` dérivé du `status`,
+    jamais de l'input) ; `galleryDraftFromJob(job)` (draft sûr depuis un job fini —
+    `status='draft'`, **`public_prompt=null` : jamais le prompt privé brut**).
+  - `GET/POST /api/admin/gallery` (list+filtres status/category ; create, `created_by`=admin).
+  - `PATCH/DELETE /api/admin/gallery/[id]` (publish/unpublish/hide/edit ; remove = supprime la
+    ligne galerie uniquement, **jamais le job source**).
+  - `POST /api/admin/gallery/from-job` ({job_id} → draft sûr, prompt brut jamais copié).
+  - Toutes admin-gated `requireAdmin()` (`isAdminEmail`) + service-role. Tests : 23
+    (`lib/__tests__/gallery-admin.test.ts` + `app/api/admin/gallery/route.test.ts`, 1er test
+    de route admin du repo). 394 tests · tsc 0 · lint 0 · build OK.
+- **Reste (UI)** : page `/admin/gallery` (list/filtre, edit form, publish/unpublish/hide,
+  toggle featured, sort_order) + bouton `Add to gallery` depuis `/admin/jobs`. Prochaine slice.
 
 ### [T-1004] Refonte page publique `/gallery` — `status: todo` · `owner: codex`
 - Lire **uniquement** `gallery_items.status='published'` (via projection `gallery-showcase`)
