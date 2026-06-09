@@ -12,6 +12,27 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-09 — Claude (Opus 4.8) — T-1002 : schéma `gallery_items` + RLS (appliqué prod)
+- Fait : créé la table de curation `public.gallery_items` (spec
+  `docs/product/gallery-curation-redesign-spec.md`) — surface publique de la galerie,
+  **privacy-first**. Migration appliquée en prod via MCP `apply_migration`
+  (projet `qbrpzmuedfugbhoeytdj`) + tracée : `supabase/migrations/20260609_create_gallery_items.sql`.
+- Modèle : défaut `status='draft'` (privé/non listé). RLS = **public (anon+auth) SELECT
+  uniquement `status='published'`** ; aucune policy write anon/auth → écritures refusées
+  (default-deny) ; policy service-role full access (admin CRUD + SSR drafts, gardé par
+  `isAdminEmail()` au niveau app — les admins ne sont pas identifiés en DB, donc pas de
+  référence `is_admin` dans la RLS). Colonnes alignées sur le contrat `GalleryItemRow`
+  (`lib/gallery-showcase.ts`) → la page publique normalise sans jamais lire `jobs`.
+  `source_job_id ON DELETE SET NULL`. Trigger `updated_at` avec `search_path` épinglé
+  (pas de régression de l'advisor `function_search_path_mutable` fermé en R-018d).
+- Sécurité : `get_advisors(security)` post-migration → **0 nouvelle alerte** (mon table +
+  ma fonction n'apparaissent nulle part ; reste = bruit préexistant documenté R-018).
+  Sanity SQL : table 0 ligne (aucun backfill), RLS on, 2 policies, trigger présent.
+- Ne réintroduit **aucune** lecture directe `jobs` → galerie publique (la règle de Codex).
+- Fichiers : `supabase/migrations/20260609_create_gallery_items.sql`, `agent/{tasks,review,log}.md`.
+- Prochaine étape : T-1003 (Admin Gallery Manager : CRUD service-role gardé `isAdminEmail`,
+  action `Publish to gallery`) puis T-1004 (refonte `/gallery` lisant published-only).
+
 ## 2026-06-09 — Claude (Opus 4.8) — T-901d : planners purs MCP (`create_director_plan`, `create_ugc_plan`)
 - Fait : ajouté deux outils planner **purs / no-cost** au registre MCP (`lib/mcp/tools.ts`),
   scope `plan`, aucun insert, aucune dépense — toujours derrière `MCP_ENABLED` (off) + auth.

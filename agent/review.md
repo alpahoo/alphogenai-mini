@@ -10,6 +10,20 @@ Format :
 
 ## Risques & dette
 
+### [R-020] Table publique `gallery_items` (T-1002) — appliquée prod — `severity: low` · `status: resolved`
+- Contexte (2026-06-09, Claude) : nouvelle table `public.gallery_items` pour la galerie
+  curated (spec gallery-curation-redesign). Appliquée prod via MCP `apply_migration`
+  (`qbrpzmuedfugbhoeytdj`) + tracée `supabase/migrations/20260609_create_gallery_items.sql`.
+- RLS : public SELECT **published-only** ; aucune écriture anon/auth (default-deny) ;
+  service-role full access pour l'admin (gardé `isAdminEmail` côté app — pas d'`is_admin`
+  en RLS, conforme au pattern `/api/admin/*`). Défaut `status='draft'` (privé).
+- Sécurité vérifiée : `get_advisors(security)` post-migration → **0 nouvelle alerte**
+  (table + fonction trigger absentes des lints ; `search_path` épinglé sur le trigger →
+  pas de régression `function_search_path_mutable`). Aucun backfill (0 ligne).
+- Décision ouverte (réponses utiles côté Paul, §Open Questions de la spec) : bucket public
+  dédié vs URLs média existantes ; assets vitrine hors-job ; images dès V1 ou vidéos
+  d'abord ; hero unique vs featured multiple rangé. N'impacte pas le schéma livré (additif).
+
 ### [R-019] MCP skeleton `/api/mcp` (T-901c/d) — surface inerte par défaut — `severity: low` · `status: open`
 - Contexte (2026-06-09, Claude) : surface MCP read-only / no-cost livrée —
   `app/api/mcp/route.ts` (dispatcher) + `lib/mcp/{auth,serialize,tools,types}.ts`.

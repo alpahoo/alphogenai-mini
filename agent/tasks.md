@@ -347,6 +347,46 @@ les gates existants (plan/quota/content-policy/ownership/confidentialité provid
 - Action coûteuse : quota/plan + **preview-first** + confirmation explicite. Puis
   `use_as_reference` / `duplicate_job` / `export_social_pack`. Séquencé en dernier.
 
+## Axe 10 — Gallery curation & premium redesign  `status: in_progress`
+
+Spec : **`docs/product/gallery-curation-redesign-spec.md`**. Règle non négociable :
+**rien n'est public sur `/gallery` sauf si un admin publie explicitement** ; la galerie
+n'infère JAMAIS la publiabilité depuis le statut d'un job. Pas de lecture directe
+`jobs` → galerie publique.
+
+### [T-1001] Spec — `status: done` · `owner: codex`
+- `docs/product/gallery-curation-redesign-spec.md` (modèle de données, RLS, admin UX,
+  public UX, slices T-1002→T-1006). Docs-only.
+
+### [T-1004a/b] Shell premium privacy-first + contrat de projection — `status: done` · `owner: codex`
+- `/gallery` ne lit plus `jobs` automatiquement (shell curated). `lib/gallery-showcase.ts`
+  = contrat public provider-neutral (`GalleryItemRow` → `GalleryShowcaseItem`), placeholders
+  privacy-first tant que `gallery_items` n'existe pas.
+
+### [T-1002] Schéma `gallery_items` + RLS — `status: done` · `owner: claude`
+- Migration `supabase/migrations/20260609_create_gallery_items.sql` **appliquée en prod**
+  (MCP `apply_migration`, projet `qbrpzmuedfugbhoeytdj`) + tracée dans le repo.
+- Table `public.gallery_items` (colonnes alignées sur le contrat `GalleryItemRow`), défaut
+  `status='draft'`. RLS : **public SELECT uniquement `status='published'`** ; aucune policy
+  write anon/auth (default-deny) ; service-role full access (admin CRUD + SSR, gardé par
+  `isAdminEmail` au niveau app — pas d'`is_admin` en RLS). `source_job_id ON DELETE SET NULL`.
+  Trigger `updated_at` avec `search_path` épinglé (pas de régression advisor R-018d).
+- Vérifié : advisors security **0 nouvelle alerte** ; table 0 ligne (aucun backfill) ; 2
+  policies + RLS on + trigger présents.
+
+### [T-1003] Admin Gallery Manager — `status: todo` · `owner: claude/codex`
+- CRUD admin-only (service-role + `isAdminEmail`) : list/filtre, preview, edit
+  title/subtitle/public_prompt/category, set draft/published/hidden, toggle featured,
+  sort_order, retirer de la galerie sans supprimer le job. Action `Publish to gallery`
+  depuis `/admin/jobs`. Routes `/admin/gallery` (+ API).
+
+### [T-1004] Refonte page publique `/gallery` — `status: todo` · `owner: codex`
+- Lire **uniquement** `gallery_items.status='published'` (via projection `gallery-showcase`)
+  + rendu premium (hero featured, filtres catégories, grille curated). Remplace les
+  placeholders quand des items publiés existent.
+
+### [T-1005/1006] Lightbox + Create similar / Visual QA — `status: todo`
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio
