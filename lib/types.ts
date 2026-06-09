@@ -112,7 +112,13 @@ export interface JobScene {
 }
 
 // Multi-Reference types (V1)
-export type ReferenceRole = "character_face" | "outfit_style" | "camera_motion" | "mood";
+export type ReferenceRole =
+  | "character_face"
+  | "product_reference"
+  | "outfit_reference"
+  | "outfit_style" // legacy generic image/style role
+  | "camera_motion"
+  | "mood";
 
 export interface ReferenceItem {
   role: ReferenceRole;
@@ -269,3 +275,4 @@ export const PLAN_DAILY_QUOTA: Record<JobPlan, number> = {
   pro: 50,
   premium: -1, // unlimited
 };
+

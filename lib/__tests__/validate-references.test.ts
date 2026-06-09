@@ -70,6 +70,16 @@ describe("validateReferences — role validation", () => {
     expect(validateReferences(refs, USER_ID)).toBeNull();
   });
 
+  it("accepts explicit UGC product and outfit roles for images", () => {
+    const refs: ReferencePayload = {
+      images: [
+        makeImageRef({ role: "product_reference" }),
+        makeImageRef({ role: "outfit_reference" }),
+      ],
+    };
+    expect(validateReferences(refs, USER_ID)).toBeNull();
+  });
+
   it("rejects camera_motion for images", () => {
     const refs: ReferencePayload = {
       images: [makeImageRef({ role: "camera_motion" })],
@@ -303,3 +313,4 @@ describe("validateReferences — empty and edge cases", () => {
     expect(validateReferences(refs, USER_ID)).toBeNull();
   });
 });
+

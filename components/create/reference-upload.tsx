@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Upload, X, Loader2, Lock, User, Palette, Camera, Music, AlertTriangle, Sparkles } from "lucide-react";
+import { Upload, X, Loader2, Lock, User, Camera, Music, AlertTriangle, Sparkles, Package, Shirt } from "lucide-react";
 import type { ReferenceItem, ReferenceRole } from "@/lib/types";
 
 interface SlotMeta {
@@ -35,7 +35,8 @@ const FACE_META: SlotMeta = {
 
 // Single-instance slots (one each).
 const OTHER_SLOTS: SlotMeta[] = [
-  { role: "outfit_style", label: "Style / Outfit", hint: "Visual style reference image", icon: Palette, accept: "image/*", mediaType: "images" },
+  { role: "product_reference", label: "Product", hint: "Product reference image", icon: Package, accept: "image/*", mediaType: "images" },
+  { role: "outfit_reference", label: "Outfit / Style", hint: "Outfit or styling image", icon: Shirt, accept: "image/*", mediaType: "images" },
   { role: "camera_motion", label: "Camera Motion", hint: "Movement reference video", icon: Camera, accept: "video/*", mediaType: "videos" },
   { role: "mood", label: "Mood / Rhythm", hint: "Audio mood reference", icon: Music, accept: "audio/*", mediaType: "audio" },
 ];
@@ -58,7 +59,7 @@ export function ReferenceUpload({ references, onChange, locked, engineSupportsRe
   // to use any face before uploading a Character Face reference.
   const [faceConsent, setFaceConsent] = useState(false);
   const hasImageRefs = Object.entries(references).some(
-    ([k, v]) => !!v && (k.startsWith("character_face") || k === "outfit_style"),
+    ([k, v]) => !!v && (k.startsWith("character_face") || k === "product_reference" || k === "outfit_reference" || k === "outfit_style"),
   );
 
   const handleUpload = async (key: string, meta: SlotMeta, file: File) => {
@@ -281,3 +282,4 @@ export function buildReferencePayload(refs: Record<string, ReferenceItem>): Reco
   }
   return payload;
 }
+

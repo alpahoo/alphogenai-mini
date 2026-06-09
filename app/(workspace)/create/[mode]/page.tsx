@@ -24,6 +24,8 @@ import {
   ShoppingBag,
   Share2,
   ImagePlus,
+  Package,
+  Shirt,
   AlertTriangle,
   ExternalLink,
   Wallet,
@@ -59,7 +61,7 @@ import {
 } from "@/lib/ugc-director";
 import { isAdminEmail } from "@/lib/flags";
 import type { PromptTemplate } from "@/lib/prompt-templates";
-import type { JobPlan, EngineKey, ReferenceItem } from "@/lib/types";
+import type { JobPlan, EngineKey, ReferenceItem, ReferenceRole } from "@/lib/types";
 import { PLAN_MAX_DURATION, PLAN_MAX_SCENES } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -415,7 +417,21 @@ export default function CreateModePage({
 
   // Upload an image from the composer toolbar → insert an @image chip and
   // register it as a reference (sent to the backend via references_payload).
-  const handleComposerUpload = async (file: File) => {
+  const inferComposerUploadRole = (): ReferenceRole => {
+    if (mode !== "product" && mode !== "social") return "outfit_style";
+    const usedRoles = new Set(Object.values(composerUploadItems).map((item) => item.role));
+    if (!usedRoles.has("product_reference")) return "product_reference";
+    if (!usedRoles.has("outfit_reference")) return "outfit_reference";
+    return "outfit_style";
+  };
+
+  const composerLabelForRole = (role: ReferenceRole) => {
+    if (role === "product_reference") return "product";
+    if (role === "outfit_reference") return "outfit";
+    return `image ${composerUploads.length + 1}`;
+  };
+
+  const handleComposerUpload = async (file: File, roleOverride?: ReferenceRole) => {
     if (file.size > 10 * 1024 * 1024) {
       setError("Image too large (max 10MB)");
       return;
@@ -432,8 +448,9 @@ export default function CreateModePage({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
 
+      const referenceRole = roleOverride ?? inferComposerUploadRole();
       const item: ReferenceItem = {
-        role: "outfit_style", // generic non-face image reference
+        role: referenceRole,
         url: data.url,
         ...(typeof data.storage_path === "string" && { storage_path: data.storage_path }),
         mime_type: file.type,
@@ -446,7 +463,7 @@ export default function CreateModePage({
       // Clean, stable label ("image N") independent of the raw file name.
       const media: MediaRefData = {
         refType: "image",
-        label: `image ${composerUploads.length + 1}`,
+        label: composerLabelForRole(referenceRole),
         url: data.url,
         thumb: data.url,
       };
@@ -878,18 +895,80 @@ export default function CreateModePage({
   };
 
   const imageComposerRefs = composerRefs.filter((r) => r.refType === "image" && r.url);
-  const productReference = imageComposerRefs[0];
-  const outfitReference = imageComposerRefs[1];
   const ugcPanelVisible = mode === "product" || mode === "social";
+  const findImageRefByRole = (role: ReferenceRole) =>
+    imageComposerRefs.find((r) => r.url && composerUploadItems[r.url]?.role === role);
+  const productReference = findImageRefByRole("product_reference") ?? imageComposerRefs[0];
+  const outfitReference =
+    findImageRefByRole("outfit_reference") ??
+    imageComposerRefs.find((r) => r.url && r.url !== productReference?.url) ??
+    imageComposerRefs[1];
   const ugcPlatformLabel =
     ugcPlatform === "tiktok_reels" ? "TikTok / Reels" : ugcPlatform === "square_feed" ? "Square feed" : "Landscape ad";
 
+  const renderUGCComposerReferenceSlot = (
+    role: Extract<ReferenceRole, "product_reference" | "outfit_reference">,
+    title: string,
+    hint: string,
+    ref: ComposerReference | undefined,
+    Icon: typeof Package,
+  ) => (
+    <label
+      className={`group flex min-h-[72px] cursor-pointer items-center gap-3 rounded-xl border border-dashed px-3 py-2 transition-colors ${
+        ref
+          ? "border-emerald-500/35 bg-emerald-500/5"
+          : "border-border/50 bg-muted/20 hover:border-emerald-500/35 hover:bg-emerald-500/5"
+      } ${composerUploading || loading ? "pointer-events-none opacity-70" : ""}`}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        const file = event.dataTransfer.files?.[0];
+        if (file) void handleComposerUpload(file, role);
+      }}
+    >
+      <input
+        type="file"
+        accept="image/*"
+        className="hidden"
+        disabled={composerUploading || loading}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void handleComposerUpload(file, role);
+          event.target.value = "";
+        }}
+      />
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/40 bg-background">
+        {ref?.thumb || ref?.url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={(ref.thumb || ref.url) as string} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <Icon className="h-4 w-4 text-emerald-500" />
+        )}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-xs font-bold text-foreground">{title}</span>
+        <span className="block truncate text-[11px] text-muted-foreground/65">
+          {ref ? `@${ref.label}` : hint}
+        </span>
+      </span>
+    </label>
+  );
+
+  const ugcComposerReferenceSlots = ugcPanelVisible ? (
+    <div className="mb-3 grid gap-2 sm:grid-cols-2">
+      {renderUGCComposerReferenceSlot("product_reference", "Product reference", "Upload or drop product image", productReference, Package)}
+      {renderUGCComposerReferenceSlot("outfit_reference", "Outfit / style", "Upload or drop outfit image", outfitReference, Shirt)}
+    </div>
+  ) : null;
+
   const buildUGCPlan = () => {
-    const productLabel = productReference?.label ?? "image 1";
-    const outfitLabel = outfitReference?.label ?? "image 2";
+    const productLabel = productReference?.label ?? "product";
+    const productPlaceholder = productReference?.placeholder ?? "image 1";
+    const outfitLabel = outfitReference?.label ?? "outfit";
+    const outfitPlaceholder = outfitReference?.placeholder ?? "image 2";
     const plan = buildUGCDirectorPlan({
-      product: { label: productLabel, placeholder: productLabel },
-      outfit: outfitReference ? { label: outfitLabel, placeholder: outfitLabel } : null,
+      product: { label: productLabel, placeholder: productPlaceholder },
+      outfit: outfitReference ? { label: outfitLabel, placeholder: outfitPlaceholder } : null,
       angle: ugcAngle,
       platform: ugcPlatform,
       creator: ugcCreator,
@@ -905,10 +984,10 @@ export default function CreateModePage({
         : cleanModelName(engineOptions.find((e) => e.key === selectedEngine)?.label ?? selectedEngine);
     const assets = [
       ...(productReference
-        ? [{ kind: "image" as const, label: productReference.label, thumb: productReference.thumb ?? null }]
+        ? [{ kind: "image" as const, label: productReference.placeholder, thumb: productReference.thumb ?? null }]
         : []),
       ...(outfitReference
-        ? [{ kind: "style" as const, label: outfitReference.label, thumb: outfitReference.thumb ?? null }]
+        ? [{ kind: "style" as const, label: outfitReference.placeholder, thumb: outfitReference.thumb ?? null }]
         : []),
       ...composerRefs
         .filter((r) => r.refType === "face")
@@ -1295,6 +1374,7 @@ export default function CreateModePage({
                   or type <span className="font-medium text-foreground/70">@</span> to insert a saved face / image
                 </span>
               </div>
+              {ugcComposerReferenceSlots}
               {referencePrefillStatus !== "idle" && (
                 <div className={`mb-2 flex items-start gap-2 rounded-lg border px-3 py-2 text-xs ${
                   referencePrefillStatus === "error"
@@ -2173,3 +2253,4 @@ export default function CreateModePage({
     </div>
   );
 }
+

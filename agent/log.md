@@ -553,3 +553,11 @@ findings level block/warn + message), `byteplus-cost.ts`
   plafonne scenes/duree selon le plan et ouvre le AI Director avec scenes locales.
 - Scope : aucune route/API/DB/migration/provider ; `Generate Video` classique inchange.
 - Validation : `tsc` clean, `vitest` 280/280, `lint` clean, `build` OK, `test:e2e` 3/3.
+
+## 2026-06-09 - Codex - T-801d explicit UGC reference roles
+- Ajout des roles image `product_reference` et `outfit_reference` au contrat `ReferenceRole` et a `validateReferences()` ; `outfit_style` reste accepte pour compat legacy.
+- `/create/product` et `/create/social` affichent deux slots pres du composer : Product reference et Outfit/style, avec upload fichier ou drag/drop.
+- Les uploads UGC portent le role explicite dans `references_payload`, mais le Director conserve les placeholders modele `image 1` / `image 2` via le serializer du composer.
+- `ReferenceUpload` expose aussi Product + Outfit/Style comme slots images explicites.
+- Scope : aucune DB/migration/route/provider/state machine.
+- Validation : `tsc` clean, `vitest` 281/281, `lint` clean, `build` OK, `test:e2e` 3/3. Browser plugin KO connu (`windows sandbox failed: spawn setup refresh`), fallback Playwright utilise.

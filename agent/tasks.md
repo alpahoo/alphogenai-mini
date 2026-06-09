@@ -185,6 +185,15 @@ de migration ni de modif state machine**.
   le Director avec scenes locales, aspect ratio et duree plafonnes par le plan.
 - Aucun changement backend/API/DB/payload submit.
 
+### [T-801d] Explicit UGC reference roles - `status: done` - `owner: codex`
+- Ajout des roles image `product_reference` et `outfit_reference` dans le contrat
+  `ReferenceRole` + validation serveur, avec `outfit_style` garde en compat legacy.
+- `/create/product` et `/create/social` affichent deux slots proches du composer :
+  Product reference et Outfit/style, avec upload ou drag/drop direct.
+- Mapping V1 conserve les placeholders modele `image 1` / `image 2` dans le
+  Director, tout en envoyant des roles explicites dans `references_payload`.
+- Aucun changement DB/migration/provider/state machine.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio
@@ -406,3 +415,4 @@ polir l'existant.
   `/jobs/<id>`, `Master` telecharge la video finale, `Social` ouvre le job.
 - Donnees : reutilise `jobs` done + `social_exports` existants ; aucune route/API/DB.
 - Validation : 270 tests, 3 smoke e2e Playwright, tsc, lint, build OK.
+

@@ -15,7 +15,7 @@ export const MAX_REFERENCE_IMAGES = 9; // EvoLink cap
 
 /** Valid roles per media category (Étape C) */
 export const VALID_ROLES: Record<string, readonly string[]> = {
-  images: ["character_face", "outfit_style"],
+  images: ["character_face", "product_reference", "outfit_reference", "outfit_style"],
   videos: ["camera_motion"],
   audio: ["mood"],
 };
@@ -128,3 +128,4 @@ export function validateReferences(
 
   return null; // All checks passed
 }
+
