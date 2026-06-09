@@ -871,3 +871,11 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Tests `lib/__tests__/ugc-capabilities.test.ts` : Auto, product grounding,
   avatar vs product, defaults prudents, anti provider-leak.
 - Scope : helper/test/docs only ; aucune route/API/DB/migration/provider/state machine.
+
+## 2026-06-09 - Codex - T-1004 public gallery from curated rows
+- Branche `/gallery` sur `gallery_items` via le client Supabase public/RLS :
+  `status='published'` uniquement, tri featured puis sort_order puis published_at.
+- `GalleryShowcasePage` accepte des lignes curatées et conserve le fallback
+  placeholders privacy-first si aucun item n'est publié.
+- Garanties : aucune lecture directe de `jobs`, aucune route admin, aucun service-role
+  côté galerie publique ; le manager admin T-1003 reste la seule source de publication.

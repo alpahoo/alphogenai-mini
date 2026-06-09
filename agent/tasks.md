@@ -374,7 +374,7 @@ n'infère JAMAIS la publiabilité depuis le statut d'un job. Pas de lecture dire
 - Vérifié : advisors security **0 nouvelle alerte** ; table 0 ligne (aucun backfill) ; 2
   policies + RLS on + trigger présents.
 
-### [T-1003] Admin Gallery Manager — `status: in_progress` · `owner: claude`
+### [T-1003] Admin Gallery Manager — `status: done` · `owner: claude/codex`
 - **API livrée** (couche testable d'abord) :
   - `lib/gallery-admin.ts` (pur) : `normalizeGalleryWrite(body, "create"|"update")` (whitelist
     stricte des champs écrivables — id/created_by/timestamps jamais acceptés ; enums validés ;
@@ -388,13 +388,19 @@ n'infère JAMAIS la publiabilité depuis le statut d'un job. Pas de lecture dire
   - Toutes admin-gated `requireAdmin()` (`isAdminEmail`) + service-role. Tests : 23
     (`lib/__tests__/gallery-admin.test.ts` + `app/api/admin/gallery/route.test.ts`, 1er test
     de route admin du repo). 394 tests · tsc 0 · lint 0 · build OK.
-- **Reste (UI)** : page `/admin/gallery` (list/filtre, edit form, publish/unpublish/hide,
-  toggle featured, sort_order) + bouton `Add to gallery` depuis `/admin/jobs`. Prochaine slice.
+- **UI livree** : page `/admin/gallery` (list/filtre, create draft, create from job id,
+  edit title/subtitle/public prompt, publish/unpublish/hide/delete, toggle featured,
+  preview media) + entree sidebar admin. Le bouton direct `Add to gallery` depuis
+  `/admin/jobs` reste optionnel polish futur, pas bloquant.
 
-### [T-1004] Refonte page publique `/gallery` — `status: todo` · `owner: codex`
+### [T-1004] Refonte page publique `/gallery` — `status: done` · `owner: codex`
 - Lire **uniquement** `gallery_items.status='published'` (via projection `gallery-showcase`)
   + rendu premium (hero featured, filtres catégories, grille curated). Remplace les
   placeholders quand des items publiés existent.
+- Livre : `/gallery` lit `gallery_items` via client Supabase public/RLS, filtre
+  `status='published'`, trie featured/sort_order/published_at et passe les lignes a
+  `GalleryShowcasePage`. Fallback placeholders privacy-first si zero item publie ou
+  erreur. Aucune lecture directe de `jobs`, aucune route admin/service-role.
 
 ### [T-1005/1006] Lightbox + Create similar / Visual QA — `status: todo`
 

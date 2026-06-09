@@ -16,6 +16,7 @@ import {
   getFeaturedGalleryItem,
   getVisibleGalleryCategories,
   type GalleryAccent,
+  type GalleryItemRow,
   type GalleryShowcaseItem,
 } from "@/lib/gallery-showcase";
 
@@ -135,10 +136,11 @@ function GalleryLightbox({
   );
 }
 
-export function GalleryShowcasePage() {
-  const showcaseItems = buildGalleryShowcase(null);
+export function GalleryShowcasePage({ rows }: { rows?: GalleryItemRow[] | null }) {
+  const showcaseItems = buildGalleryShowcase(rows);
   const featuredItem = getFeaturedGalleryItem(showcaseItems);
   const categories = getVisibleGalleryCategories(showcaseItems);
+  const hasPublishedItems = Boolean(rows?.some((row) => row.status === "published"));
   const [previewItem, setPreviewItem] = useState<GalleryShowcaseItem | null>(null);
 
   return (
@@ -216,12 +218,12 @@ export function GalleryShowcasePage() {
                   </div>
                   <div className="absolute inset-x-0 top-0 hidden items-center justify-between px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70 sm:flex">
                     <span>Featured slot</span>
-                    <span>Admin selected</span>
+                    <span>{hasPublishedItems ? "Admin selected" : "Awaiting curation"}</span>
                   </div>
                   <div className="absolute bottom-0 left-0 right-0 p-5 text-white">
                     <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1 text-[11px] font-medium backdrop-blur">
                       <Film className="h-3.5 w-3.5" />
-                      Showcase pending
+                      {hasPublishedItems ? "Curated preview" : "Showcase pending"}
                     </div>
                     <h2 className="max-w-[16rem] text-3xl font-semibold tracking-tight sm:max-w-md">
                       {featuredItem.title}
@@ -271,15 +273,16 @@ export function GalleryShowcasePage() {
           <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#635bff]">
-                Coming from admin curation
+                {hasPublishedItems ? "Published by admin" : "Coming from admin curation"}
               </p>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight">
-                Curated examples, not private job history.
+                {hasPublishedItems ? "Selected examples, cleared for public view." : "Curated examples, not private job history."}
               </h2>
             </div>
             <p className="max-w-md text-sm leading-6 text-neutral-600">
-              These slots show the final layout. Published media will appear only after
-              the gallery manager and RLS-backed gallery table are connected.
+              {hasPublishedItems
+                ? "Every item below comes from the gallery manager. Private generations are never inferred from job history."
+                : "These slots show the final layout. Published media will appear only after an admin approves items in the gallery manager."}
             </p>
           </div>
 
