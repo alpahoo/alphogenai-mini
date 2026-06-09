@@ -12,6 +12,19 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-09 — Claude (Opus 4.8) — T-901b : design auth /api/mcp (PAT, docs-only)
+- Rédigé `docs/product/alphogen-mcp-auth-design.md` (design doc, docs-only). PAT par
+  user `agk_<token_id>_<secret>` ; hash HMAC-SHA256 + `MCP_TOKEN_PEPPER` (one-way,
+  pas `lib/encryption` qui sert à déchiffrer) ; table future `mcp_tokens` (RLS
+  owner-scoped, migration additive plus tard = go Paul) ; flux résolution header→user
+  (service-role UNIQUEMENT dans le resolver, jamais donné au serveur MCP) ; scopes
+  least-privilege (read/plan/generate/export/assets ; défaut read+plan) ; réutilisation
+  des gates via helper partagé `assertCanCreateJob(userId,payload)` (à extraire, 1 source
+  de vérité) ; rate limit + audit (sans secret/provider) ; preview-first pour `generate`.
+- **Docs-only** ; aucune route/API/DB/migration/secret. T-901b (design) done ;
+  implémentation derrière review (+ migration `mcp_tokens` = process R-003).
+- Fichiers : `docs/product/alphogen-mcp-auth-design.md`, `agent/tasks.md`, `agent/log.md`.
+
 ## 2026-06-09 — Claude (Opus 4.8) — T-901a : spec MCP AlphoGen (docs-only)
 - `git pull` (à `451debb`). Rédigé `docs/product/alphogen-mcp-spec.md` (spec-only) après
   discussion d'avis avec Paul/Codex sur un MCP « studio API pour agents ».

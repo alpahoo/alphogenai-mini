@@ -284,9 +284,16 @@ les gates existants (plan/quota/content-policy/ownership/confidentialité provid
   `use_as_reference`, `duplicate_job`, `export_social_pack`), règles sécurité,
   phasing T-901a→e, non-goals. Docs-only.
 
-### [T-901b] `/api/mcp` auth design (PAT) — `status: todo` · `owner: chatgpt(spec)→claude/codex`
-- Design doc : émission/hash/révocation/scoping des PAT par user, rate limit, audit.
-  **Pas de service-role exposé.** Implémentation derrière review (nouvelle surface auth).
+### [T-901b] `/api/mcp` auth design (PAT) — `status: done (design)` · `owner: claude`
+- Livré docs-only : `docs/product/alphogen-mcp-auth-design.md`. PAT `agk_<id>_<secret>`
+  (hash HMAC-SHA256+pepper, montré une fois, révocable, TTL optionnel) ; table future
+  `mcp_tokens` (RLS owner-scoped, migration additive plus tard = go Paul) ; flux de
+  résolution header→user (service-role UNIQUEMENT dans le resolver, jamais exposé au
+  MCP) ; **scopes** least-privilege (`read`/`plan`/`generate`/`export`/`assets`,
+  défaut `read+plan`) ; **réutilisation des gates** existants (plan/quota/content-policy/
+  references/confidentialité) via un helper partagé `assertCanCreateJob(userId,payload)`
+  à extraire ; rate limit ; audit logs (sans secret/provider) ; preview-first pour les
+  actions coûteuses. Implémentation derrière review.
 
 ### [T-901c] Outils read-only sur compte de test — `status: todo` · `owner: claude/codex`
 - `get_job`, `list_recent_jobs` ; prouve la frontière auth + confidentialité providers.
