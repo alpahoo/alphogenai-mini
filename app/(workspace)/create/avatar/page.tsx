@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { buildSavedLookReusePayload } from "@/lib/saved-look-payload";
 import type { JobPlan } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -318,16 +319,16 @@ export default function CreateAvatarPage() {
               target_duration_seconds: 60,
             }
           : reusingLook
-            ? {
-                // Reuse a saved Look → lipsync-only (skips Seedance)
-                prompt: scriptText.trim(),
-                preferred_engine: "heygen_avatar_shots",
-                look_id: selectedLookId,
-                voice_id: voiceId,
-                script_text: scriptText.trim(),
-                lipsync_mode: lipsyncMode,
-                audio_mode: "none",
-              }
+            ? (() => {
+                const built = buildSavedLookReusePayload({
+                  lookId: selectedLookId,
+                  scriptText,
+                  voiceId,
+                  lipsyncMode,
+                });
+                if (!built.ok) throw new Error(built.error);
+                return built.payload;
+              })()
             : {
                 prompt: scenePrompt.trim(),
                 preferred_engine: "heygen_avatar_shots",

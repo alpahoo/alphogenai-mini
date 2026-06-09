@@ -512,3 +512,13 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Scope : aucune route/API/DB/migration/provider modifiee.
 - Validation : `tsc` clean, `vitest` 270/270, `lint` clean, `build` OK, `test:e2e` 3/3.
 - Browser plugin : KO dans cette session avec `windows sandbox failed: spawn setup refresh`; fallback Playwright utilise.
+
+
+## 2026-06-09 - Codex - T-401c Saved Look reuse payload helper
+- Ajout `lib/saved-look-payload.ts` : helper pur pour construire le body `POST /api/jobs`
+  depuis un Look sauvegarde (`look_id`, script, voix, qualite lipsync).
+- `/create/avatar` reutilise ce helper pour le chemin `Create with look`.
+- Tests `lib/__tests__/saved-look-payload.test.ts` : contrat, validations, cap 2000,
+  default `speed`, anti provider-leak.
+- Scope : pas de route/API/DB/migration/provider.
+- Validation : `tsc` clean, `vitest` 274/274, `lint` clean, `build` OK, `test:e2e` 3/3.

@@ -151,6 +151,13 @@ de migration ni de modif state machine**.
 - `/create/avatar` preselectionne le look via query param et passe en mode cinematic.
 - Aucun changement DB/API/provider.
 
+### [T-401c] Saved Look reuse payload helper - `status: done` - `owner: codex`
+- Nouveau helper pur `lib/saved-look-payload.ts`.
+- Centralise le contrat `look_id + script_text + voice_id + lipsync_mode` vers
+  `POST /api/jobs`.
+- Tests unitaires : validation champs requis, trim/cap script, default `speed`,
+  anti provider-leak.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio
