@@ -333,9 +333,15 @@ polir l'existant.
 - Validation : 270 tests, tsc, lint, build OK ; dev server local `/create/story`
   -> HTTP 307 (auth gate, pas de 500).
 
-### [T-704] Home dashboard premium pass - `status: todo` - `owner: codex`
-- Objectif : transformer la home template-picker en command center produit premium
-  (recent projects, quick actions, saved looks, references, status).
+### [T-704] Home dashboard premium pass - `status: done` - `owner: codex`
+- Livre UI-only : `/home` transforme l'ancien template picker en command center
+  premium : hero operationnel, actions principales (Director, reference, studio),
+  production pulse, pipeline workspace, starters compacts et projets recents.
+- Donnees : reutilise uniquement le fetch existant des jobs recents (limite portee
+  a 8) ; aucune route/API/DB.
+- QA : Playwright ajoute comme dev dependency + smoke tests publics/auth gate
+  (`npm run test:e2e`). La capture authentifiee reste limitee par le login user.
+- Validation : 270 tests, 3 smoke e2e Playwright, tsc, lint, build OK.
 
 ### [T-705] Library asset studio pass - `status: todo` - `owner: codex`
 - Objectif : rendre Library actionnable (use as reference, duplicate, save look, filters),

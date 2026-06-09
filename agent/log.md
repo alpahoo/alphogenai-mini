@@ -478,3 +478,11 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Nettoyage : suppression du doublon bas du Director ; textes visibles de credits admin rendus provider-neutral dans le create flow.
 - Scope : UI-only ; aucune route/API/DB/state machine.
 - Validation : `vitest` 270/270, `tsc` clean, `lint` clean, `build` OK. Dev server local : `/create/story` -> HTTP 307 (auth gate, pas de 500). Browser plugin toujours indisponible dans cet environnement.
+
+
+## 2026-06-09 - Codex - Playwright QA + T-704 Home command center
+- Browser plugin KO confirme dans une session dediee : `windows sandbox failed: spawn setup refresh`.
+- Fait : ajout de Playwright en dev dependency (`@playwright/test`) + script `npm run test:e2e`, config Chromium et smoke tests publics/auth gate.
+- Fait : `/home` remplace le template picker par un command center premium : actions principales, production pulse, pipeline workspace, starters et projets recents.
+- Scope T-704 : UI-only ; aucune route/API/DB. Les tests Playwright ne saisissent aucun login ; les routes workspace sont verifiees comme auth-gated sans session.
+- Validation : `vitest` 270/270, `test:e2e` 3/3, `tsc` clean, `lint` clean, `build` OK. Note : un serveur dev stale a ete redemarre apres une erreur Turbopack locale (`[turbopack]_runtime.js` manquant).

@@ -1,81 +1,118 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
-  Film,
-  ShoppingBag,
-  Share2,
-  Scissors,
-  FlaskConical,
-  Clapperboard,
   ArrowRight,
-  Clock,
+  BarChart3,
+  CalendarClock,
   CheckCircle2,
-  XCircle,
+  Clapperboard,
+  Clock,
+  Film,
+  ImagePlus,
+  Library,
   Loader2,
-  Lock,
+  Play,
+  Plus,
   Sparkles,
+  Wand2,
+  XCircle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-// ---------------------------------------------------------------------------
-// Workflow families — with color coding
-// ---------------------------------------------------------------------------
-const WORKFLOW_ITEMS = [
+interface RecentJob {
+  id: string;
+  prompt: string;
+  status: string;
+  created_at: string;
+}
+
+const PRIMARY_ACTIONS = [
+  {
+    label: "Create with Director",
+    description: "Plan scenes before generation",
+    href: "/create/story",
+    icon: Clapperboard,
+    tone: "text-primary bg-primary/10",
+  },
+  {
+    label: "Use a reference",
+    description: "Start from a previous result",
+    href: "/library",
+    icon: ImagePlus,
+    tone: "text-violet-500 bg-violet-500/10",
+  },
+  {
+    label: "Open Studio",
+    description: "Export, duplicate, schedule",
+    href: "/projects",
+    icon: Film,
+    tone: "text-blue-500 bg-blue-500/10",
+  },
+];
+
+const PIPELINE_ITEMS = [
+  {
+    label: "Director Console",
+    value: "Scene plan",
+    href: "/create/story",
+    icon: Wand2,
+    tone: "text-primary bg-primary/10",
+  },
+  {
+    label: "Asset Library",
+    value: "References",
+    href: "/library",
+    icon: Library,
+    tone: "text-emerald-500 bg-emerald-500/10",
+  },
+  {
+    label: "Analytics",
+    value: "Performance",
+    href: "/analytics",
+    icon: BarChart3,
+    tone: "text-blue-500 bg-blue-500/10",
+  },
+  {
+    label: "Schedule",
+    value: "Publishing",
+    href: "/schedule",
+    icon: CalendarClock,
+    tone: "text-amber-500 bg-amber-500/10",
+  },
+];
+
+const STARTERS = [
   {
     label: "Story Video",
-    description: "Cinematic narrative scene from text",
-    icon: Film,
+    description: "Cinematic narrative scene",
     href: "/create/story",
-    iconBg: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-    active: true,
+    icon: Film,
   },
   {
     label: "Product Video",
-    description: "Eye-catching product showcase",
-    icon: ShoppingBag,
+    description: "Product-focused showcase",
     href: "/create/product",
-    iconBg: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    active: true,
+    icon: Plus,
   },
   {
     label: "Social Clip",
-    description: "Punchy clip for TikTok & Reels",
-    icon: Share2,
+    description: "Short vertical concept",
     href: "/create/social",
-    iconBg: "bg-pink-500/10 text-pink-600 dark:text-pink-400",
-    active: true,
+    icon: Play,
   },
   {
     label: "Scene Editor",
-    description: "Multi-scene storyboard with drag & drop",
-    icon: Clapperboard,
+    description: "Storyboard control",
     href: "/create/editor",
-    iconBg: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
-    active: true,
+    icon: Clapperboard,
   },
 ];
 
-const COMING_SOON_ITEMS = [
-  {
-    label: "Edit Your Video",
-    description: "Trim & remix existing footage",
-    icon: Scissors,
-  },
-  {
-    label: "AI Playground",
-    description: "Experiment with latest models",
-    icon: FlaskConical,
-  },
-];
-
-// ---------------------------------------------------------------------------
-// Status helpers
-// ---------------------------------------------------------------------------
 function statusIcon(status: string) {
-  if (status === "done") return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+  if (status === "done") return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
   if (status === "failed") return <XCircle className="h-4 w-4 text-destructive" />;
   return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
 }
@@ -97,16 +134,6 @@ function timeAgo(iso: string) {
   return `${days}d ago`;
 }
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
-interface RecentJob {
-  id: string;
-  prompt: string;
-  status: string;
-  created_at: string;
-}
-
 export default function WorkspaceHome() {
   const [recents, setRecents] = useState<RecentJob[]>([]);
   const [loadingRecents, setLoadingRecents] = useState(true);
@@ -125,163 +152,231 @@ export default function WorkspaceHome() {
           .select("id, prompt, status, created_at")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
-          .limit(5);
+          .limit(8);
 
         if (data) setRecents(data);
       } catch {
-        // fail silently
+        // Dashboard stays useful even if recents fail to load.
       } finally {
         setLoadingRecents(false);
       }
     }
+
     fetchRecents();
   }, []);
 
+  const stats = useMemo(() => {
+    const complete = recents.filter((job) => job.status === "done").length;
+    const failed = recents.filter((job) => job.status === "failed").length;
+    const active = recents.length - complete - failed;
+    return [
+      { label: "Recent", value: recents.length.toString(), hint: "projects" },
+      { label: "Complete", value: complete.toString(), hint: "ready" },
+      { label: "Active", value: active.toString(), hint: "running" },
+      { label: "Failed", value: failed.toString(), hint: "needs review" },
+    ];
+  }, [recents]);
+
+  const latest = recents[0];
+
   return (
-    <div className="px-8 py-10 max-w-5xl mx-auto">
-      {/* Hero */}
+    <div className="mx-auto max-w-7xl px-6 py-8 lg:px-10">
       <motion.div
-        initial={{ opacity: 0, y: 16 }}
+        initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35 }}
-        className="mb-10"
+        transition={{ duration: 0.3 }}
+        className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]"
       >
-        <h1 className="text-3xl font-bold tracking-tight">
-          What do you want to create?
-        </h1>
-        <p className="mt-2 text-base text-muted-foreground">
-          Choose a template to start, or open the Scene Editor for full control.
-        </p>
-      </motion.div>
-
-      {/* ── Active workflows ─────────────────────────────────────── */}
-      <motion.section
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.05 }}
-        className="mb-10"
-      >
-        <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Create with AI
-          </h2>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {WORKFLOW_ITEMS.map((item, i) => (
-            <motion.div
-              key={item.label}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.08 + i * 0.05 }}
-            >
-              <Link
-                href={item.href}
-                className="group flex flex-col rounded-2xl border border-border bg-card p-5 transition-all duration-200 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1"
-              >
-                <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${item.iconBg} mb-3 transition-transform group-hover:scale-110`}>
-                  <item.icon className="h-5 w-5" />
-                </div>
-                <h3 className="text-[15px] font-semibold mb-0.5">{item.label}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {item.description}
-                </p>
-              </Link>
-            </motion.div>
-          ))}
-        </div>
-      </motion.section>
-
-      {/* ── Coming soon ──────────────────────────────────────────── */}
-      <motion.section
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.2 }}
-        className="mb-10"
-      >
-        <div className="flex items-center gap-2 mb-4">
-          <Lock className="h-3.5 w-3.5 text-muted-foreground/40" />
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground/50">
-            Coming Soon
-          </h2>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {COMING_SOON_ITEMS.map((item) => (
-            <div
-              key={item.label}
-              className="flex flex-col rounded-2xl border border-border/50 bg-muted/20 p-5 opacity-50 cursor-not-allowed"
-            >
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted/60 text-muted-foreground/40 mb-3">
-                <item.icon className="h-5 w-5" />
+        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-2xl">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                Command Center
               </div>
-              <h3 className="text-[15px] font-semibold text-muted-foreground/50 mb-0.5">{item.label}</h3>
-              <p className="text-sm text-muted-foreground/40 leading-relaxed">
-                {item.description}
+              <h1 className="text-3xl font-bold tracking-tight text-foreground">
+                Direct the next video from one workspace
+              </h1>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Plan the scene, reuse assets, create a finished project, then package it for publishing.
               </p>
             </div>
-          ))}
-        </div>
-      </motion.section>
 
-      {/* Quick start */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.3 }}
-        className="mb-12"
-      >
-        <Link
-          href="/create/story"
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-base font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:brightness-110 hover:shadow-lg hover:shadow-primary/30"
-        >
-          <Sparkles className="h-5 w-5" />
-          Start from scratch
-          <ArrowRight className="h-4 w-4" />
-        </Link>
-      </motion.div>
-
-      {/* ── Recent projects ──────────────────────────────────────── */}
-      {!loadingRecents && recents.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.4 }}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Recent Projects
-            </h2>
             <Link
-              href="/projects"
-              className="text-sm text-primary font-medium hover:underline transition-colors"
+              href="/create/story"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:brightness-110"
             >
-              View all →
+              <Clapperboard className="h-4 w-4" />
+              New director project
+              <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
 
-          <div className="space-y-2">
-            {recents.map((job) => (
+          <div className="mt-7 grid gap-3 md:grid-cols-3">
+            {PRIMARY_ACTIONS.map((action) => (
               <Link
-                key={job.id}
-                href={`/jobs/${job.id}`}
-                className="flex items-center gap-3 rounded-xl border border-border bg-card px-5 py-3.5 transition-all hover:border-primary/30 hover:shadow-sm"
+                key={action.label}
+                href={action.href}
+                className="group rounded-xl border border-border/70 bg-background px-4 py-4 transition-all hover:border-primary/40 hover:bg-primary/[0.03]"
               >
-                {statusIcon(job.status)}
-                <span className="flex-1 truncate text-sm font-medium">
-                  {job.prompt}
+                <span className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${action.tone}`}>
+                  <action.icon className="h-5 w-5" />
                 </span>
-                <span className="hidden sm:inline text-sm text-muted-foreground">
-                  {statusLabel(job.status)}
-                </span>
-                <span className="flex items-center gap-1.5 text-sm text-muted-foreground/60">
-                  <Clock className="h-3.5 w-3.5" />
-                  {timeAgo(job.created_at)}
-                </span>
+                <span className="block text-sm font-bold text-foreground">{action.label}</span>
+                <span className="mt-1 block text-xs leading-5 text-muted-foreground">{action.description}</span>
               </Link>
             ))}
           </div>
-        </motion.div>
-      )}
+        </section>
+
+        <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-foreground">Production pulse</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Latest workspace activity</p>
+            </div>
+            <Clock className="h-4 w-4 text-muted-foreground/50" />
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            {stats.map((item) => (
+              <div key={item.label} className="rounded-xl border border-border/60 bg-background px-3 py-3">
+                <span className="text-[11px] uppercase text-muted-foreground/60">{item.label}</span>
+                <span className="mt-1 block text-2xl font-bold text-foreground">{item.value}</span>
+                <span className="text-xs text-muted-foreground">{item.hint}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 rounded-xl border border-border/60 bg-muted/20 px-3 py-3">
+            <span className="text-[11px] uppercase text-muted-foreground/60">Latest</span>
+            {latest ? (
+              <Link href={`/jobs/${latest.id}`} className="mt-1 block">
+                <span className="line-clamp-2 text-sm font-semibold text-foreground">{latest.prompt}</span>
+                <span className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  {statusIcon(latest.status)}
+                  {statusLabel(latest.status)} · {timeAgo(latest.created_at)}
+                </span>
+              </Link>
+            ) : (
+              <p className="mt-1 text-sm text-muted-foreground">No project yet</p>
+            )}
+          </div>
+        </section>
+      </motion.div>
+
+      <motion.section
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.05 }}
+        className="mt-8"
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Workspace pipeline
+          </h2>
+          <Link href="/projects" className="text-sm font-medium text-primary hover:underline">
+            All projects
+          </Link>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {PIPELINE_ITEMS.map((item) => (
+            <Link
+              key={item.label}
+              href={item.href}
+              className="group flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-4 transition-all hover:border-primary/40 hover:shadow-sm"
+            >
+              <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${item.tone}`}>
+                <item.icon className="h-5 w-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-bold text-foreground">{item.label}</span>
+                <span className="block truncate text-xs text-muted-foreground">{item.value}</span>
+              </span>
+              <ArrowRight className="h-4 w-4 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+            </Link>
+          ))}
+        </div>
+      </motion.section>
+
+      <div className="mt-8 grid gap-8 xl:grid-cols-[0.85fr_1.15fr]">
+        <motion.section
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
+        >
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Start from
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {STARTERS.map((item) => (
+              <Link
+                key={item.label}
+                href={item.href}
+                className="group rounded-xl border border-border bg-card p-4 transition-all hover:border-primary/40 hover:bg-primary/[0.03]"
+              >
+                <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                  <item.icon className="h-5 w-5" />
+                </span>
+                <span className="block text-sm font-bold text-foreground">{item.label}</span>
+                <span className="mt-1 block text-xs leading-5 text-muted-foreground">{item.description}</span>
+              </Link>
+            ))}
+          </div>
+        </motion.section>
+
+        <motion.section
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.15 }}
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Recent projects
+            </h2>
+            <Link href="/projects" className="text-sm font-medium text-primary hover:underline">
+              View all
+            </Link>
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            {loadingRecents ? (
+              <div className="flex items-center gap-2 px-4 py-5 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading projects
+              </div>
+            ) : recents.length > 0 ? (
+              <div className="divide-y divide-border/60">
+                {recents.slice(0, 6).map((job) => (
+                  <Link
+                    key={job.id}
+                    href={`/jobs/${job.id}`}
+                    className="grid grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/25"
+                  >
+                    {statusIcon(job.status)}
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-foreground">{job.prompt}</span>
+                      <span className="mt-1 block text-xs text-muted-foreground">{statusLabel(job.status)}</span>
+                    </span>
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground/70">
+                      <Clock className="h-3.5 w-3.5" />
+                      {timeAgo(job.created_at)}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="px-4 py-8 text-center">
+                <p className="text-sm font-semibold text-foreground">No projects yet</p>
+                <Link href="/create/story" className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-primary">
+                  Create the first one
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            )}
+          </div>
+        </motion.section>
+      </div>
     </div>
   );
 }
