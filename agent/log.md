@@ -12,6 +12,27 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-09 — Claude (Opus 4.8) — T-901b-impl : helper partagé `assertCanCreateJob`
+- Fait : extrait la séquence de gate de `POST /api/jobs` (prompt → content-policy →
+  references ownership → résolution plan depuis `profiles` → limite génération active →
+  quota journalier → engine plan gate EvoLink/Bailian Pro+, HeyGen Premium + avatar/voix)
+  dans un helper interne pur `lib/jobs/guard.ts` : `assertCanCreateJob(supabase, input)`
+  → `{ ok:true, plan }` | `{ ok:false, status, body }`. `MAX_ACTIVE_JOBS` migré dans le
+  helper. La route appelle le helper et réutilise `gate.plan`. **Aucune route MCP créée** —
+  premier pas d'implémentation à faible risque (auth-design §5 : 1 source de vérité que le
+  futur `/api/mcp/*` réutilisera au lieu de ré-implémenter).
+- Comportement préservé à l'identique : `app/api/jobs/route.test.ts` (7 tests, le filet de
+  régression) passe inchangé.
+- Fichiers modifiés : `lib/jobs/guard.ts` (nouveau), `lib/__tests__/jobs-guard.test.ts`
+  (nouveau, 18 tests : prompt/policy/script_text/references/active/quota/engine gates +
+  anonyme + HeyGen avatar/look/voice), `app/api/jobs/route.ts` (appel du helper ; imports
+  morts retirés : screenPrompt, validateReferences, PLAN_DAILY_QUOTA, const MAX_ACTIVE_JOBS).
+- Tests : npm test → **326 passed** (308 + 18) · `tsc --noEmit` → 0 · lint (fichiers
+  touchés) → 0 · `next build` → OK.
+- Prochaine étape : T-901c (outils read-only `get_job`/`list_recent_jobs` sur compte de
+  test) derrière review + go Paul ; le helper est prêt à être branché par le futur
+  `/api/mcp/*`.
+
 ## 2026-06-09 — Claude (Opus 4.8) — T-901b : design auth /api/mcp (PAT, docs-only)
 - Rédigé `docs/product/alphogen-mcp-auth-design.md` (design doc, docs-only). PAT par
   user `agk_<token_id>_<secret>` ; hash HMAC-SHA256 + `MCP_TOKEN_PEPPER` (one-way,

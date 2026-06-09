@@ -2,7 +2,6 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateStoryboard, enrichStoryboardWithLLM } from "@/lib/storyboard";
-import { screenPrompt } from "@/lib/content-policy";
 import {
   isEvoLinkEngine,
   createEvoLinkTask,
@@ -37,14 +36,11 @@ import {
 } from "@/lib/heygen-client";
 import { enhancePrompt } from "@/lib/prompt-enhancer";
 import type { JobPlan, ReferencePayload } from "@/lib/types";
-import { PLAN_DAILY_QUOTA } from "@/lib/types";
-import { validateReferences } from "@/lib/validate-references";
+import { assertCanCreateJob } from "@/lib/jobs/guard";
 
 // LLM calls (enhancePrompt + enrichStoryboardWithLLM) can add 4-8 s on top of
 // the normal Supabase + EvoLink/Modal round-trips. 60 s is safe on Vercel Pro.
 export const maxDuration = 60;
-
-const MAX_ACTIVE_JOBS = 1; // max concurrent jobs per user
 
 // All valid engine keys (Modal + EvoLink + Bailian + HeyGen)
 const VALID_ENGINES = [
@@ -186,150 +182,25 @@ export async function POST(req: Request) {
         ? preferred_engine
         : undefined;
 
-    // --- validation ---------------------------------------------------
-    if (!prompt || prompt.trim().length < 3) {
-      return NextResponse.json(
-        { error: "Prompt is required (min 3 characters)" },
-        { status: 400 }
-      );
+    // --- create-job gate (shared, single source of truth) -----------------
+    // Prompt validation → content policy → references ownership → plan
+    // resolution → active-generation limit → daily quota → engine plan gate.
+    // Extracted to lib/jobs/guard.ts so a future /api/mcp/* route reuses the
+    // exact same enforcement (see docs/product/alphogen-mcp-auth-design.md §5).
+    const gate = await assertCanCreateJob(supabase, {
+      userId: user?.id,
+      prompt,
+      scriptText: script_text,
+      references: safeReferences as ReferencePayload | undefined,
+      preferredEngine: safePreferredEngine,
+      avatarId: avatar_id,
+      lookId: look_id,
+      voiceId: voice_id,
+    });
+    if (!gate.ok) {
+      return NextResponse.json(gate.body, { status: gate.status });
     }
-
-    if (prompt.trim().length > 2000) {
-      return NextResponse.json(
-        { error: "Prompt too long (max 2000 characters)" },
-        { status: 400 }
-      );
-    }
-
-    // --- AlphoGen content policy (our own layer, before any provider) ----
-    const policy = screenPrompt(`${prompt}\n${typeof script_text === "string" ? script_text : ""}`);
-    const block = policy.findings.find((f) => f.level === "block");
-    if (block) {
-      return NextResponse.json(
-        {
-          error: block.message,
-          code: block.code,
-          policy: policy.findings,
-        },
-        { status: 400 }
-      );
-    }
-
-    // --- V1 Étape C: validate references (count, roles, ownership) ------
-    if (safeReferences) {
-      const refError = validateReferences(
-        safeReferences as ReferencePayload,
-        user?.id,
-      );
-      if (refError) {
-        return NextResponse.json(
-          { error: refError.error, code: refError.code },
-          { status: refError.status },
-        );
-      }
-    }
-
-    // --- resolve plan from profiles (never trust client input) ----------
-    let plan: JobPlan = "free";
-    if (user?.id) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("plan")
-        .eq("id", user.id)
-        .single();
-      if (profile?.plan === "pro" || profile?.plan === "premium") {
-        plan = profile.plan as JobPlan;
-      }
-    }
-
-    // --- quota check (authenticated users only) -----------------------
-    if (user?.id) {
-      const { count: activeCount } = await supabase
-        .from("jobs")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .in("status", ["pending", "in_progress"]);
-
-      if (activeCount && activeCount >= MAX_ACTIVE_JOBS) {
-        return NextResponse.json(
-          { error: "You already have an active generation. Please wait for it to finish." },
-          { status: 429 }
-        );
-      }
-
-      // Daily quota enforcement (applies to all plans except unlimited)
-      const dailyLimit = PLAN_DAILY_QUOTA[plan];
-      if (dailyLimit !== -1) {
-        const twentyFourHoursAgo = new Date(
-          Date.now() - 24 * 60 * 60 * 1000
-        ).toISOString();
-
-        const { count: recentCount } = await supabase
-          .from("jobs")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .gte("created_at", twentyFourHoursAgo);
-
-        if (recentCount && recentCount >= dailyLimit) {
-          const msg =
-            plan === "free"
-              ? "You've reached your free limit. Upgrade to Pro for more generations."
-              : `You've reached your daily limit of ${dailyLimit} generations. Upgrade to Premium for unlimited access.`;
-          return NextResponse.json(
-            { error: msg, upgrade: true },
-            { status: 429 }
-          );
-        }
-      }
-    }
-
-    // --- engine plan gate (server-side) ------------------------------------
-    // Verify the requested engine is allowed for the user's plan.
-    // Free users can only use Modal engines (wan_i2v). EvoLink/Bailian
-    // engines require Pro+; sora_2 requires Premium.
-    if (safePreferredEngine && isEvoLinkEngine(safePreferredEngine)) {
-      const engineConfig = EVOLINK_ENGINES[safePreferredEngine];
-      if (engineConfig && !engineConfig.plans.includes(plan)) {
-        return NextResponse.json(
-          { error: "This model requires a higher plan. Upgrade to Pro or Premium.", upgrade: true },
-          { status: 403 }
-        );
-      }
-    }
-    if (safePreferredEngine && isBailianEngine(safePreferredEngine)) {
-      const engineConfig = BAILIAN_ENGINES[safePreferredEngine];
-      if (engineConfig && !engineConfig.plans.includes(plan)) {
-        return NextResponse.json(
-          { error: "This model requires a higher plan. Upgrade to Pro or Premium.", upgrade: true },
-          { status: 403 }
-        );
-      }
-    }
-    // HeyGen Avatar engines — Premium only
-    if (safePreferredEngine && isHeyGenEngine(safePreferredEngine)) {
-      if (plan !== "premium") {
-        return NextResponse.json(
-          { error: "Avatar generation requires a Premium plan. Upgrade to access.", upgrade: true },
-          { status: 403 }
-        );
-      }
-      // An avatar is required — unless reusing a saved Look (the Look IS the
-      // visual; we only lip-sync onto it).
-      if (!avatar_id && !look_id) {
-        return NextResponse.json(
-          { error: "An avatar is required." },
-          { status: 400 }
-        );
-      }
-      // Avatar IV (presenter) requires a voice; Avatar Shots (cinematic)
-      // only requires a voice when a script is provided for lip-sync.
-      if (!isHeyGenShotsEngine(safePreferredEngine) && !voice_id) {
-        return NextResponse.json(
-          { error: "A voice is required for Avatar IV." },
-          { status: 400 }
-        );
-      }
-    }
+    const plan: JobPlan = gate.plan;
 
     const rawDuration = Number(target_duration_seconds);
     const safeDuration =

@@ -295,6 +295,20 @@ les gates existants (plan/quota/content-policy/ownership/confidentialité provid
   à extraire ; rate limit ; audit logs (sans secret/provider) ; preview-first pour les
   actions coûteuses. Implémentation derrière review.
 
+### [T-901b-impl] Helper partagé `assertCanCreateJob` — `status: done` · `owner: claude`
+- Premier pas d'implémentation à faible risque (refactor interne pur, **aucune route
+  MCP**). Extrait la séquence de gate de `POST /api/jobs` (prompt → content-policy →
+  references ownership → résolution plan depuis `profiles` → limite génération active →
+  quota journalier → engine plan gate EvoLink/Bailian Pro+, HeyGen Premium + avatar/voix)
+  dans `lib/jobs/guard.ts` : `assertCanCreateJob(supabase, input)` →
+  `{ ok:true, plan }` | `{ ok:false, status, body }`. `MAX_ACTIVE_JOBS` y migre aussi.
+- Fichiers : `lib/jobs/guard.ts` (nouveau), `app/api/jobs/route.ts` (appelle le helper,
+  imports nettoyés : screenPrompt/validateReferences/PLAN_DAILY_QUOTA/const MAX_ACTIVE_JOBS
+  retirés), `lib/__tests__/jobs-guard.test.ts` (nouveau, 18 tests).
+- Comportement **identique** : `app/api/jobs/route.test.ts` (7 tests) reste le filet de
+  régression et passe inchangé. Validé : 326 tests · tsc 0 · lint 0 · build OK.
+- Source de vérité unique pour le futur `/api/mcp/*` (voir auth-design §5).
+
 ### [T-901c] Outils read-only sur compte de test — `status: todo` · `owner: claude/codex`
 - `get_job`, `list_recent_jobs` ; prouve la frontière auth + confidentialité providers.
 
