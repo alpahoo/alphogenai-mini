@@ -191,6 +191,10 @@ Only after T-802b/c, decide whether a dedicated `/api/ugc/jobs` wrapper is neede
 Default answer should be "no" unless the normal jobs payload cannot preserve the
 contract.
 
+Decision complete: see `docs/product/ugc-backend-decision.md`. UGC V1 stays on
+`POST /api/jobs`; no dedicated route is needed until a future exact try-on/product
+grounding requirement proves the generic jobs contract insufficient.
+
 ### T-803 Future exact try-on / product grounding
 
 Separate future work. Requires model/provider capability validation, UI copy changes,

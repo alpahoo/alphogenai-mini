@@ -240,6 +240,15 @@ de migration ni de modif state machine**.
   best-effort, identites indisponibles, anti provider-leak.
 - Scope : UI/helper/test only ; aucune route/API/DB/migration/provider/state machine.
 
+### [T-802d] Dedicated UGC backend decision - `status: done` - `owner: codex`
+- Livre docs-only : `docs/product/ugc-backend-decision.md`.
+- Decision : ne pas creer `/api/ugc/jobs` en V1. Le chemin existant
+  `POST /api/jobs` preserve deja le contrat UGC (refs, verified faces, scenes,
+  aspect ratio, captions, identity fields) et garde quota/policy/routing centralises.
+- Reconsiderer seulement pour T-803+ si exact try-on/product grounding impose un
+  contrat backend impossible a exprimer via `POST /api/jobs`.
+- Scope : aucun runtime, aucune route/API/DB/migration/provider/state machine.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio
