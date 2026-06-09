@@ -251,6 +251,10 @@ Create a provider-neutral local helper describing model capabilities:
 
 No public provider names.
 
+Delivered in `lib/ugc-capabilities.ts`. The matrix is intentionally conservative:
+exact try-on is unavailable for all current models until a dedicated validation slice
+proves otherwise.
+
 ### T-803c Grounding Readiness Helper
 
 Extend UGC readiness to distinguish:

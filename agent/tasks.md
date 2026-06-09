@@ -259,6 +259,16 @@ de migration ni de modif state machine**.
   un contrat impossible via `POST /api/jobs`.
 - Scope : aucun runtime, aucune route/API/DB/migration/provider/state machine.
 
+### [T-803b] UGC capability matrix - `status: done` - `owner: codex`
+- Ajout helper pur `lib/ugc-capabilities.ts` : matrice provider-neutral par modele
+  public (product grounding, logo/text, outfit style, exact try-on, verified identity,
+  duree fiable, usages/cautions).
+- Exact try-on reste `none` pour tous les modeles actuels tant qu'aucune validation
+  T-803e ne prouve une capacite dediee.
+- Tests `lib/__tests__/ugc-capabilities.test.ts` : Auto -> Seedance Fast, product
+  grounding fort, avatar vs product grounding, defaults prudents, anti provider-leak.
+- Scope : helper/test/docs only ; aucune route/API/DB/migration/provider/state machine.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio

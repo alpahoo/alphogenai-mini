@@ -716,3 +716,13 @@ findings level block/warn + message), `byteplus-cost.ts`
   evaluation harness et les tranches T-803b/c/d/e.
 - Decision : ne pas ajouter de backend dedie sans validation modele/payload concrete.
 - Scope : docs/coordination only ; aucun runtime/route/API/DB/migration/provider.
+
+## 2026-06-09 - Codex - T-803b UGC capability matrix
+- Ajout `lib/ugc-capabilities.ts` : matrice provider-neutral des capacites UGC par
+  modele public (product grounding, logo/text, outfit style, exact try-on,
+  verified identity, duree fiable, usages/cautions).
+- Exact try-on est explicitement `none` pour tous les modeles actuels : pas de
+  promesse avant validation T-803e.
+- Tests `lib/__tests__/ugc-capabilities.test.ts` : Auto, product grounding,
+  avatar vs product, defaults prudents, anti provider-leak.
+- Scope : helper/test/docs only ; aucune route/API/DB/migration/provider/state machine.
