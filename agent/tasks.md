@@ -343,6 +343,10 @@ polir l'existant.
   (`npm run test:e2e`). La capture authentifiee reste limitee par le login user.
 - Validation : 270 tests, 3 smoke e2e Playwright, tsc, lint, build OK.
 
-### [T-705] Library asset studio pass - `status: todo` - `owner: codex`
-- Objectif : rendre Library actionnable (use as reference, duplicate, save look, filters),
-  pas seulement grille de videos.
+### [T-705] Library asset studio pass - `status: done` - `owner: codex`
+- Livre UI-only : `/library` devient un Asset Studio avec hero, stats, recherche,
+  filtres (all/reference/social-ready), grille video premium et actions par asset.
+- Actions : `Reference` -> `/create/story?reference_job_id=<id>`, `Studio` ->
+  `/jobs/<id>`, `Master` telecharge la video finale, `Social` ouvre le job.
+- Donnees : reutilise `jobs` done + `social_exports` existants ; aucune route/API/DB.
+- Validation : 270 tests, 3 smoke e2e Playwright, tsc, lint, build OK.

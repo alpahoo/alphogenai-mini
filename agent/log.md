@@ -486,3 +486,10 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Fait : `/home` remplace le template picker par un command center premium : actions principales, production pulse, pipeline workspace, starters et projets recents.
 - Scope T-704 : UI-only ; aucune route/API/DB. Les tests Playwright ne saisissent aucun login ; les routes workspace sont verifiees comme auth-gated sans session.
 - Validation : `vitest` 270/270, `test:e2e` 3/3, `tsc` clean, `lint` clean, `build` OK. Note : un serveur dev stale a ete redemarre apres une erreur Turbopack locale (`[turbopack]_runtime.js` manquant).
+
+
+## 2026-06-09 - Codex - T-705 Library asset studio pass
+- Fait : `/library` transforme la grille simple en Asset Studio : hero, stats, recherche, filtres, cartes video premium.
+- Actions par asset : utiliser comme reference (`/create/story?reference_job_id=<id>`), ouvrir Studio (`/jobs/<id>`), telecharger le master, ouvrir le job pour social pack.
+- Scope : UI-only ; reutilise `jobs` done + `social_exports`, aucune route/API/DB.
+- Validation : `vitest` 270/270, `test:e2e` 3/3, `tsc` clean, `lint` clean, `build` OK.
