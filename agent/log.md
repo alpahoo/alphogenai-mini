@@ -12,6 +12,24 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-09 — Claude (Opus 4.8) — SÉCU R-018b : jobs INSERT policies cleanup
+- `git pull` (déjà à `79e91c7`, Codex T-802c readiness par-dessus mon fix RLS).
+- Audit (read-only) policies `public.jobs` : 3 INSERT permissives `WITH CHECK (true)`
+  (`All users can create jobs`, `Allow authenticated to create jobs`, `Allow insert
+  on jobs` [public→anon]) + 1 correcte `users_insert_own_jobs` (`auth.uid()=user_id`)
+  + `service_role_all_jobs`. Audit code : tous les inserts `jobs` passent par
+  `createServiceClient()` (route.ts:89,365…) ; aucun insert client/anon (grep repo).
+- **Fix appliqué (go Paul, validé sûr)** : `apply_migration
+  jobs_drop_permissive_insert_policies` → drop des 3 permissives. Vérifié :
+  policies restantes OK ; advisor → les 3 `rls_policy_always_true` sur `jobs` ont
+  disparu. Tracé `supabase/migrations/20260609_jobs_drop_permissive_insert_policies.sql`.
+- **Aucun code applicatif modifié ; aucune donnée user ; création de jobs/quotas
+  intacts** (service-role bypasse RLS).
+- Découverte → **R-018c** (open) : SELECT `Users can view own jobs` `USING (true)`
+  (authenticated) = fuite lecture (tout job lisible). NON modifié (audit lecture
+  requis avant — consigne « stop & document »).
+- Tests : `vitest 287/287` (DB-only, code inchangé).
+
 ## 2026-06-09 — Claude (Opus 4.8) — SÉCU R-018 : RLS app_settings (email Supabase)
 - Retour, `git pull` (déjà à `8ee53df`), lecture tasks/log/review + contrat/audit UGC.
 - Diagnostic Supabase (MCP `74b88f17…`, projet `qbrpzmuedfugbhoeytdj`, read-only) :
@@ -626,3 +644,12 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Tests `lib/__tests__/ugc-readiness.test.ts` : statuts, identites indisponibles,
   copy best-effort pour outfit/try-on et guard anti provider-leak.
 - Scope : UI/helper/test only ; aucune route/API/DB/migration/provider/state machine.
+
+## 2026-06-09 - Codex - T-802d UGC backend decision
+- Livre `docs/product/ugc-backend-decision.md`.
+- Decision : pas de route dediee `/api/ugc/jobs` en V1. UGC reste une couche
+  planning/orchestration au-dessus du `POST /api/jobs` existant.
+- Raison : T-802b prouve que les champs UGC V1 sont preserves et que le chemin jobs
+  garde validation references, quota, plan gates, content policy, routing et state
+  machine centralises.
+- Scope : docs/coordination only ; aucun runtime/route/API/DB/migration/provider.

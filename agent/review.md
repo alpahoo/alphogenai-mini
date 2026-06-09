@@ -197,10 +197,32 @@ Format :
   (état attendu/sûr, deny-par-défaut, service-role bypasse). Plus aucun advisor ERROR.
   Aucune fonctionnalité cassée (tous les accès sont en service-role).
 - **Reste ouvert (durcissement, non urgent, tranche dédiée + go)** :
-  policies `jobs` INSERT `WITH CHECK (true)` (3 doublons) à resserrer/dédupliquer ;
-  `music_cache`/`video_cache` idem ; `REVOKE EXECUTE … FROM anon/authenticated` sur les
-  RPC admin (déjà gardées en interne) ; `search_path` des fonctions ; activer
-  leaked-password protection (Auth).
+  ~~policies `jobs` INSERT~~ ✅ R-018b ; `music_cache`/`video_cache` INSERT idem ;
+  `REVOKE EXECUTE … FROM anon/authenticated` sur les RPC admin (déjà gardées en interne) ;
+  `search_path` des fonctions ; activer leaked-password protection (Auth) ; **R-018c** ci-dessous.
+
+### [R-018b] Jobs INSERT policies permissives — `severity: medium` · `status: resolved`
+- **RÉSOLU (2026-06-09, go Paul)** : drop des 3 policies INSERT permissives sur
+  `public.jobs` (`All users can create jobs`, `Allow authenticated to create jobs`,
+  `Allow insert on jobs` [role public → anon]), toutes `WITH CHECK (true)`. Migration
+  `jobs_drop_permissive_insert_policies` via MCP + `supabase/migrations/20260609_jobs_drop_permissive_insert_policies.sql`.
+- **Vérifié sûr** : l'app insère les jobs uniquement en **service-role**
+  (`app/api/jobs/route.ts` → `createServiceClient`, bypass RLS) ; aucun insert
+  client/anon. Restent `users_insert_own_jobs` (`auth.uid()=user_id`) +
+  `service_role_all_jobs`. Advisor : les 3 `rls_policy_always_true` sur `jobs` ont
+  disparu. Aucune donnée user modifiée ; création de jobs/quotas intacts.
+
+### [R-018c] Jobs SELECT policy `USING (true)` — fuite de lecture — `severity: medium` · `status: open`
+- Constat (audit R-018b) : `public.jobs` a une policy SELECT `Users can view own jobs`
+  en **`USING (true)`** pour le rôle `authenticated` → un utilisateur connecté peut
+  lire **tous** les jobs (tous users) directement via PostgREST. L'advisor Supabase
+  n'en parle pas (SELECT `true` volontairement exclu) mais c'est une vraie fuite.
+- Il existe déjà `users_select_own_jobs` (`auth.uid()=user_id`) correcte.
+- ⚠️ NE PAS dropper sans auditer les chemins de **lecture** (page job, `/v/[id]`
+  partage public, projects, library) : certains peuvent lire via le client user et
+  dépendre de cette policy, ou lire un job d'autrui (partage). Stop & document
+  (consigne Paul). Reco : audit lecture → remplacer `USING (true)` par
+  `auth.uid()=user_id` (+ éventuelle policy dédiée au partage public si nécessaire).
 - Diagnostic (2026-06-09, MCP `74b88f17…`, projet `qbrpzmuedfugbhoeytdj`, read-only).
 - **CRITIQUE (ERROR)** — `public.app_settings` a **RLS désactivé** alors qu'elle est
   exposée à PostgREST → lecture/écriture possibles via la clé anon. Contenu :
