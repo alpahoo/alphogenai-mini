@@ -893,3 +893,12 @@ findings level block/warn + message), `byteplus-cost.ts`
   galerie, puis redirige vers `/admin/gallery` pour edition/publication manuelle.
 - Confidentialite conservee : aucun item n'est publie automatiquement et le prompt
   prive brut reste protege par `galleryDraftFromJob`.
+
+## 2026-06-10 - Codex - Axe 11 Premium Product Experience T-1101/T-1102/T-1103
+- Ajout `docs/product/premium-product-experience-spec.md` : direction globale
+  Runway-like / Director Console, principes media-first, privacy-first, non-goals
+  et ordre des passes futures.
+- Ajout de primitives marketing premium partagees dans
+  `components/premium/premium-marketing.tsx`.
+- Rebuild de la landing `/` : hero Director Console, workflows, section UGC/product,
+  post-generation studio, curation/privacy copy. Scope public UI-only.

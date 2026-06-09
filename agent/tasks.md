@@ -411,6 +411,40 @@ n'infère JAMAIS la publiabilité depuis le statut d'un job. Pas de lecture dire
 - Polish : filtres catégorie fonctionnels côté client (`All`, `Cinematic`, `UGC`, etc.).
 - QA : `/gallery` HTTP 200, capture Playwright OK, `test:e2e` 3/3.
 
+## Axe 11 — Premium Product Experience  `status: in_progress`
+
+Objectif : homogénéiser l'expérience AlphoGen autour d'un langage Runway-like /
+Director Console : media-first, éditorial, privé par défaut, moins "template SaaS".
+Spec : `docs/product/premium-product-experience-spec.md`.
+
+### [T-1101] Design direction spec — `status: done` · `owner: codex`
+- Livre : spec globale design premium (principes, langage visuel, pages cibles,
+  non-goals, séquence recommandée).
+
+### [T-1102] Shared premium primitives — `status: done` · `owner: codex`
+- Ajout `components/premium/premium-marketing.tsx` : `PremiumEyebrow`,
+  `PremiumSectionHeader`, `PremiumMediaFrame`, `PremiumWorkflowCard`,
+  `PremiumMetricStrip`.
+- Scope : UI-only, aucune donnée app/Supabase.
+
+### [T-1103] Landing public rebuild — `status: done` · `owner: codex`
+- `/` reconstruit en page éditoriale premium : hero Director Console, preuve
+  workflows, UGC/product section, post-generation studio, privacy/curation copy.
+- Scope : public UI-only ; aucune route/API/DB/provider.
+
+### [T-1104] Home command center V2 — `status: todo` · `owner: codex`
+- Reprendre `/home` pour harmoniser avec le nouveau langage premium.
+
+### [T-1105] Create flow visual polish — `status: todo` · `owner: codex`
+- Polir `/create/[mode]` autour de la Director Console existante, sans toucher au
+  submit/payload backend.
+
+### [T-1106] Job studio polish — `status: todo` · `owner: codex`
+- Polir `/jobs/[id]` comme studio post-generation.
+
+### [T-1107/T-1108] Secondary pages + visual QA — `status: todo` · `owner: codex`
+- Library/Projects/Analytics/Schedule consistency + captures desktop/mobile.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio
