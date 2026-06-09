@@ -315,10 +315,14 @@ Audit + actions 2026-06-09 (go Paul) sur les 4 items de durcissement restants :
   pas). **Reco : tranche dédiée** — relire chaque corps puis
   `ALTER FUNCTION … SET search_path = public, extensions, pg_temp` (ou qualifier les
   appels), avec validation.
-- **#4 leaked-password protection — ➡️ ACTION PAUL.** C'est un **toggle Auth GoTrue**
-  (dashboard), pas du SQL → non applicable via MCP `execute_sql`. À activer :
-  **Dashboard → Authentication → Sign In/Providers → Password → « Leaked password
-  protection » (HaveIBeenPwned)**.
+- **#4 leaked-password protection — ⛔ BLOQUÉ PAR LE PLAN (Free).** Tenté via le
+  dashboard (Auth → Email → « Prevent use of leaked passwords ») le 2026-06-09 : erreur
+  Supabase « available on Pro Plans and up ». La feature HaveIBeenPwned est **réservée
+  au plan Pro+** → non activable sur Free. WARN advisor restera ouvert tant que le
+  projet est Free (non critique : email confirmé déjà requis). **Décision financière
+  (upgrade Pro) = Paul.** Alternative gratuite recommandée (même panneau Email) :
+  passer **Minimum password length de 6 → 8+** et/ou ajouter des **Password
+  requirements** (hygiène mdp sans HIBP).
 
 ## Décisions actées
 

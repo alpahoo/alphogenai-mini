@@ -23,8 +23,10 @@ Entrée la plus récente en haut. Format :
   casserait. Fonctions déjà gardées en interne (risque faible). Documenté.
 - **#3 ⛔** : `search_path` non fixé à l'aveugle (risque casse via `gen_random_uuid()`
   etc. du schéma `extensions` non qualifié). Tranche dédiée recommandée. Documenté.
-- **#4 ➡️ Paul** : leaked-password protection = toggle Auth dashboard, pas faisable via
-  MCP SQL.
+- **#4 ⛔ bloqué (plan Free)** : Paul a tenté le toggle « Prevent use of leaked
+  passwords » → erreur Supabase « available on Pro Plans and up ». Feature HIBP =
+  Pro+. Non activable sur Free ; WARN restera (non critique). Décision upgrade = Paul.
+  Alternative gratuite : min password length 6→8 + password requirements.
 - Détails dans `agent/review.md` R-018d. Aucun code applicatif ; aucune donnée user.
 
 ## 2026-06-09 — Claude (Opus 4.8) — SÉCU R-018c : drop SELECT permissif jobs (go Paul)
