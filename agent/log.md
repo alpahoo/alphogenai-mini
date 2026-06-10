@@ -14,7 +14,7 @@ Entrée la plus récente en haut. Format :
 
 ## 2026-06-10 — Claude (Haiku 4.5) — T-1101: AlphoResearch Schema Migration (SQL + Guide)
 - Livré : Migration Supabase traçable + guide d'application manuelle.
-- Migration SQL : `supabase/migrations/001_create_alphoresearch_schema.sql` (350 lignes).
+- Migration SQL : `supabase/migrations/20260610_create_alphoresearch_schema.sql` (timestamped Supabase ordering).
   - 5 tables : research_jobs (root), research_sources, research_angles, research_scripts, research_storyboards.
   - Colonnes, types, CHECK constraints, size limits exactement du spec T-1101a.
   - Indexes : (user_id, created_at DESC), (job_id, selected), partial unique for single-selected angle, URL per-job dedup.
@@ -35,7 +35,7 @@ Entrée la plus récente en haut. Format :
   - Rollback instructions (DROP CASCADE si needed).
 - Blocage : MCP Supabase no access to remote project (account permissions issue).
   Migration est prête pour application manuelle ; applicator peut être utilisateur ou CLI.
-- Fichiers : `supabase/migrations/001_create_alphoresearch_schema.sql`, `docs/MIGRATION_T1101_README.md`, `agent/tasks.md`, `agent/log.md`.
+- Fichiers : `supabase/migrations/20260610_create_alphoresearch_schema.sql`, `docs/MIGRATION_T1101_README.md`, `agent/tasks.md`, `agent/log.md`.
 - Dépendances : T-1101a spec ✅, T-1100b Hostinger contract ✅.
 - Prochaine étape : Apply migration via Supabase console → T-1102 (API skeleton).
 

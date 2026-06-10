@@ -63,10 +63,7 @@ CREATE POLICY research_jobs_user_update ON public.research_jobs
   FOR UPDATE USING (auth.uid() = user_id)
   WITH CHECK (
     auth.uid() = user_id
-    AND (
-      (status = 'draft')
-      OR (auth.role() = 'service_role')
-    )
+    AND status = 'draft'
   );
 
 CREATE POLICY research_jobs_user_delete ON public.research_jobs
@@ -133,7 +130,7 @@ CREATE INDEX research_sources_job_id_status ON public.research_sources(research_
 CREATE INDEX research_sources_url ON public.research_sources(url);
 CREATE INDEX research_sources_source_type ON public.research_sources(source_type);
 
--- Canonical URL dedup (unique per job)
+-- URL dedup (unique per job)
 CREATE UNIQUE INDEX research_sources_job_url_unique ON public.research_sources(research_job_id, url);
 
 -- RLS for research_sources
@@ -257,6 +254,13 @@ CREATE TABLE public.research_scripts (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
 
+  CONSTRAINT hook_strength_range CHECK (hook_strength IS NULL OR (hook_strength >= 0 AND hook_strength <= 1.0)),
+  CONSTRAINT source_coverage_range CHECK (source_coverage IS NULL OR (source_coverage >= 0 AND source_coverage <= 1.0)),
+  CONSTRAINT clarity_range CHECK (clarity IS NULL OR (clarity >= 0 AND clarity <= 1.0)),
+  CONSTRAINT originality_range CHECK (originality IS NULL OR (originality >= 0 AND originality <= 1.0)),
+  CONSTRAINT risk_disclosure_range CHECK (risk_disclosure IS NULL OR (risk_disclosure >= 0 AND risk_disclosure <= 1.0)),
+  CONSTRAINT rhythm_fit_range CHECK (rhythm_fit IS NULL OR (rhythm_fit >= 0 AND rhythm_fit <= 1.0)),
+  CONSTRAINT duration_fit_range CHECK (duration_fit IS NULL OR (duration_fit >= 0 AND duration_fit <= 1.0)),
   CONSTRAINT sections_json_valid CHECK (sections_json IS NULL OR jsonb_typeof(sections_json) = 'array'),
   CONSTRAINT sections_json_size CHECK (sections_json IS NULL OR CHAR_LENGTH(sections_json::TEXT) <= 5120)
 );
@@ -347,3 +351,25 @@ CREATE POLICY research_storyboards_user_delete ON public.research_storyboards
   FOR DELETE USING (
     EXISTS(SELECT 1 FROM public.research_jobs WHERE public.research_jobs.id = public.research_storyboards.research_job_id AND public.research_jobs.user_id = auth.uid())
   );
+
+-- ========================================
+-- 6. updated_at maintenance
+-- ========================================
+-- Reuse the existing project helper created by earlier migrations.
+DROP TRIGGER IF EXISTS trg_research_jobs_updated_at ON public.research_jobs;
+CREATE TRIGGER trg_research_jobs_updated_at
+  BEFORE UPDATE ON public.research_jobs
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS trg_research_sources_updated_at ON public.research_sources;
+CREATE TRIGGER trg_research_sources_updated_at
+  BEFORE UPDATE ON public.research_sources
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS trg_research_scripts_updated_at ON public.research_scripts;
+CREATE TRIGGER trg_research_scripts_updated_at
+  BEFORE UPDATE ON public.research_scripts
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();

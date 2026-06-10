@@ -1,9 +1,9 @@
 # T-1101 Migration: AlphoResearch Schema
 
-**Status:** Ready for manual application  
-**Migration file:** `supabase/migrations/001_create_alphoresearch_schema.sql`  
-**Project ID:** `qbrpzmuedfugbhoeytdj`  
-**Validation:** Aligns with T-1101a spec review  
+**Status:** Ready for manual application
+**Migration file:** `supabase/migrations/20260610_create_alphoresearch_schema.sql`
+**Project ID:** `qbrpzmuedfugbhoeytdj`
+**Validation:** Aligns with T-1101a spec review
 
 ---
 
@@ -36,7 +36,7 @@ This migration creates the complete AlphoResearch database schema:
 2. Select project: **alphogenai-mini** (EU, qbrpzmuedfugbhoeytdj)
 3. Navigate to **SQL Editor**
 4. Open a new query
-5. Copy the entire SQL from `supabase/migrations/001_create_alphoresearch_schema.sql`
+5. Copy the entire SQL from `supabase/migrations/20260610_create_alphoresearch_schema.sql`
 6. Paste into the editor
 7. Click **Run** (or ⌘/Ctrl + Enter)
 8. Confirm all 5 tables created ✓
@@ -53,10 +53,10 @@ This will run all migrations in `supabase/migrations/` against the remote projec
 ### Option 3: Via psql (Direct DB)
 
 ```bash
-psql "postgresql://postgres.qbrpzmuedfugbhoeytdj:[PASSWORD]@aws-1-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require" < supabase/migrations/001_create_alphoresearch_schema.sql
+psql "postgresql://postgres.qbrpzmuedfugbhoeytdj:[PASSWORD]@aws-1-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require" < supabase/migrations/20260610_create_alphoresearch_schema.sql
 ```
 
-(Password available in `.vercel/.env.production.local` as `SUPABASE_POSTGRES_PASSWORD`)
+Retrieve the database password from the Supabase dashboard or your private deployment environment. Do not paste or commit it in project files.
 
 ---
 
@@ -94,7 +94,7 @@ SELECT indexname FROM pg_indexes WHERE tablename LIKE 'research_%' AND schemanam
 
 Key indexes to verify:
 - `research_angles_job_id_selected_partial` (partial unique)
-- `research_sources_job_url_unique` (canonical URL dedup)
+- `research_sources_job_url_unique` (per-job URL dedup)
 - `research_jobs_user_id_created_at` (user timeline)
 
 ### 5. Constraints Verified
@@ -153,7 +153,7 @@ Once T-1101 migration is confirmed:
 - **Spec:** `docs/product/alphoresearch-schema-review.md` (T-1101a)
 - **UX:** `docs/product/research-studio-ux-spec.md`
 - **Hostinger Contract:** `docs/product/hostinger-service-contract.md` (auxiliary services)
-- **Migration SQL:** `supabase/migrations/001_create_alphoresearch_schema.sql`
+- **Migration SQL:** `supabase/migrations/20260610_create_alphoresearch_schema.sql`
 
 ---
 

@@ -913,7 +913,7 @@ Contraintes :
 - Commit : À faire (docs-only).
 
 ### [T-1101] Research schema migration — `status: in_progress` · `owner: claude`
-- Livré : Migration SQL traçable `supabase/migrations/001_create_alphoresearch_schema.sql` (350 lines).
+- Livré : Migration SQL traçable `supabase/migrations/20260610_create_alphoresearch_schema.sql` (timestamped Supabase ordering).
 - Contenu :
   - ✅ 5 tables : research_jobs, research_sources, research_angles, research_scripts, research_storyboards
   - ✅ Colonnes exactes, types, CHECK constraints, size limits du spec T-1101a
