@@ -1,9 +1,22 @@
-# AlphoResearch Schema Spec Review
+# AlphoResearch Schema Spec Review (T-1101a)
 
-**Status:** Spec for validation (no migration, no code yet)  
+**Status:** Docs-only spec for validation (no SQL migration, no runtime code)  
 **Owner:** Database Architecture / AlphoResearch (T-1101a)  
-**Scope:** Document the complete schema, RLS, indexes, constraints before T-1101 migration  
-**Next step:** Review + validate together, then migrate (T-1101)
+**Scope:** Document the complete Supabase schema, RLS policies, indexes, constraints, and edge cases  
+**Next step:** Review + validate together, THEN proceed to T-1101 migration
+
+---
+
+## IMPORTANT: This is a specification, not a migration
+
+This document defines the **intended schema** for AlphoResearch. It includes:
+- **SQL table DDL** (as reference, not to be run blindly)
+- **RLS policies** (WITH CHECK constraints, cascading ownership, service-role bypass)
+- **Indexes** (partial unique indexes, covering indexes)
+- **Size constraints** (50 KB, 5 KB, 100 KB limits)
+- **Edge cases** (canonical URL dedup, single-selected angle, delete cascade)
+
+**DO NOT RUN THESE SQL STATEMENTS YET.** This review phase is for validation and corrections. T-1101 migration will happen after approval.
 
 ---
 
@@ -46,16 +59,16 @@ CREATE TABLE public.research_jobs (
   language TEXT NOT NULL DEFAULT 'en-US' CHECK (language ~ '^[a-z]{2}(-[A-Z]{2})?$'),
   target_duration_seconds INT CHECK (target_duration_seconds >= 3 AND target_duration_seconds <= 600),
   
-  -- Lifecycle
+  -- Lifecycle (aligns with research-studio-ux-spec.md)
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN (
-    'draft',           -- Created, not started
-    'discovering',     -- SearXNG in progress
-    'extracting',      -- Crawl4AI in progress
-    'ready_for_angles', -- Sources extracted, waiting for angle proposal
-    'scripting',       -- Angle selected, script in progress
-    'approved',        -- Script approved, ready to send to Director
-    'sent_to_director', -- Sent to Create/Director
-    'failed'           -- Error in any step
+    'draft',           -- User editing brief (topic, mode, language, duration)
+    'discovering',     -- SearXNG searching for sources
+    'extracting',      -- Crawl4AI extracting selected sources
+    'ready_for_angles', -- Sources extracted, awaiting angle proposal by LLM
+    'scripting',       -- Angle selected, LLM generating script + sections
+    'approved',        -- Script approved by user, ready to send to Director
+    'sent_to_director', -- Sent to Create/Director for video generation
+    'failed'           -- Error at any step (see error_message, error_step)
   )),
   
   -- Error tracking
@@ -86,11 +99,25 @@ CREATE POLICY research_jobs_user_insert ON research_jobs
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY research_jobs_user_update ON research_jobs
-  FOR UPDATE USING (auth.uid() = user_id);
+  FOR UPDATE USING (auth.uid() = user_id)
+  WITH CHECK (
+    auth.uid() = user_id  -- Prevent user from changing ownership
+    AND (
+      -- User can edit draft jobs freely
+      (status = 'draft')
+      OR
+      -- User can update status/error tracking as job progresses (service-role path)
+      (auth.role() = 'service_role')
+    )
+  );
 
+-- NOTE: Delete policies can be user-owned OR service-role-only.
+-- V1 choice: Allow users to delete their own jobs (soft-delete via archive in V1+).
 CREATE POLICY research_jobs_user_delete ON research_jobs
   FOR DELETE USING (auth.uid() = user_id);
 
+-- Service-role bypass: optional, but explicit for clarity.
+-- Service-role always bypasses RLS, so this policy is redundant but documented.
 CREATE POLICY research_jobs_service_role ON research_jobs
   FOR ALL USING (auth.role() = 'service_role');
 ```
@@ -189,6 +216,16 @@ CREATE POLICY research_sources_user_insert ON research_sources
 CREATE POLICY research_sources_user_update ON research_sources
   FOR UPDATE USING (
     EXISTS(SELECT 1 FROM research_jobs WHERE research_jobs.id = research_sources.research_job_id AND research_jobs.user_id = auth.uid())
+  )
+  WITH CHECK (
+    research_job_id IS NOT NULL
+    AND EXISTS(SELECT 1 FROM research_jobs WHERE research_jobs.id = research_sources.research_job_id AND research_jobs.user_id = auth.uid())
+  );
+
+-- User can delete own sources (e.g., deselect before extraction)
+CREATE POLICY research_sources_user_delete ON research_sources
+  FOR DELETE USING (
+    EXISTS(SELECT 1 FROM research_jobs WHERE research_jobs.id = research_sources.research_job_id AND research_jobs.user_id = auth.uid())
   );
 
 CREATE POLICY research_sources_service_role ON research_sources
@@ -224,16 +261,20 @@ CREATE TABLE public.research_angles (
   -- LLM quality scoring
   score DECIMAL(3, 2) CHECK (score >= 0 AND score <= 1.0),
   
-  -- User selection (only one per job)
+  -- User selection (only one per job via unique partial index)
   selected BOOLEAN NOT NULL DEFAULT FALSE,
   
   -- Audit
-  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-  
-  CONSTRAINT one_selected_per_job UNIQUE (research_job_id, selected) WHERE selected = TRUE
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 -- Indexes
+-- Partial unique index: ensures max one angle selected=true per job
+CREATE UNIQUE INDEX research_angles_job_id_selected_partial 
+  ON research_angles(research_job_id) 
+  WHERE selected = TRUE;
+
+-- Lookup indexes for filtering and sorting
 CREATE INDEX research_angles_job_id_score ON research_angles(research_job_id, score DESC);
 CREATE INDEX research_angles_job_id_selected ON research_angles(research_job_id, selected);
 
@@ -253,16 +294,27 @@ CREATE POLICY research_angles_user_insert ON research_angles
 CREATE POLICY research_angles_user_update ON research_angles
   FOR UPDATE USING (
     EXISTS(SELECT 1 FROM research_jobs WHERE research_jobs.id = research_angles.research_job_id AND research_jobs.user_id = auth.uid())
+  )
+  WITH CHECK (
+    research_job_id IS NOT NULL
+    AND EXISTS(SELECT 1 FROM research_jobs WHERE research_jobs.id = research_angles.research_job_id AND research_jobs.user_id = auth.uid())
+  );
+
+-- User can delete regenerated angles or unselect via DELETE + re-INSERT
+CREATE POLICY research_angles_user_delete ON research_angles
+  FOR DELETE USING (
+    EXISTS(SELECT 1 FROM research_jobs WHERE research_jobs.id = research_angles.research_job_id AND research_jobs.user_id = auth.uid())
   );
 
 CREATE POLICY research_angles_service_role ON research_angles
   FOR ALL USING (auth.role() = 'service_role');
 ```
 
-**Selection constraint:**
-- `UNIQUE (research_job_id, selected) WHERE selected = TRUE`
-- Ensures only one angle can be selected per job
-- Unenforced: LLM proposes 3-5, user picks best one
+**Selection constraint (Postgres partial unique index):**
+- `CREATE UNIQUE INDEX research_angles_job_id_selected_partial ON research_angles(research_job_id) WHERE selected = TRUE`
+- Ensures only one angle can have `selected = TRUE` per job
+- Workflow: LLM proposes 3-5 angles, user `UPDATE selected = TRUE` on one, database enforces uniqueness
+- If user changes selection: old angle `UPDATE selected = FALSE`, new angle `UPDATE selected = TRUE`
 
 ---
 
@@ -304,8 +356,8 @@ CREATE TABLE public.research_scripts (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   
-  CONSTRAINT script_duration_check CHECK (script ~ '\d+ (second|minute|hour)s?'),
-  CONSTRAINT sections_json_size CHECK (CHAR_LENGTH(sections_json::TEXT) <= 5120) -- sections must be reasonable
+  CONSTRAINT sections_json_valid CHECK (jsonb_typeof(sections_json) = 'array'),
+  CONSTRAINT sections_json_size CHECK (CHAR_LENGTH(sections_json::TEXT) <= 5120)
 );
 
 -- Indexes
@@ -328,6 +380,16 @@ CREATE POLICY research_scripts_user_insert ON research_scripts
 
 CREATE POLICY research_scripts_user_update ON research_scripts
   FOR UPDATE USING (
+    EXISTS(SELECT 1 FROM research_jobs WHERE research_jobs.id = research_scripts.research_job_id AND research_jobs.user_id = auth.uid())
+  )
+  WITH CHECK (
+    research_job_id IS NOT NULL
+    AND EXISTS(SELECT 1 FROM research_jobs WHERE research_jobs.id = research_scripts.research_job_id AND research_jobs.user_id = auth.uid())
+  );
+
+-- User can delete regenerated scripts (e.g., start over with different angle)
+CREATE POLICY research_scripts_user_delete ON research_scripts
+  FOR DELETE USING (
     EXISTS(SELECT 1 FROM research_jobs WHERE research_jobs.id = research_scripts.research_job_id AND research_jobs.user_id = auth.uid())
   );
 
@@ -390,8 +452,9 @@ CREATE TABLE public.research_storyboards (
   -- Audit
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   
+  CONSTRAINT scenes_json_is_array CHECK (jsonb_typeof(scenes_json) = 'array'),
   CONSTRAINT scenes_json_not_empty CHECK (jsonb_array_length(scenes_json) > 0),
-  CONSTRAINT scenes_json_size CHECK (CHAR_LENGTH(scenes_json::TEXT) <= 102400) -- 100 KB max for full storyboard
+  CONSTRAINT scenes_json_size CHECK (CHAR_LENGTH(scenes_json::TEXT) <= 102400) -- 100 KB max
 );
 
 -- Indexes
@@ -408,6 +471,21 @@ CREATE POLICY research_storyboards_user_select ON research_storyboards
 
 CREATE POLICY research_storyboards_user_insert ON research_storyboards
   FOR INSERT WITH CHECK (
+    EXISTS(SELECT 1 FROM research_jobs WHERE research_jobs.id = research_storyboards.research_job_id AND research_jobs.user_id = auth.uid())
+  );
+
+CREATE POLICY research_storyboards_user_update ON research_storyboards
+  FOR UPDATE USING (
+    EXISTS(SELECT 1 FROM research_jobs WHERE research_jobs.id = research_storyboards.research_job_id AND research_jobs.user_id = auth.uid())
+  )
+  WITH CHECK (
+    research_job_id IS NOT NULL
+    AND EXISTS(SELECT 1 FROM research_jobs WHERE research_jobs.id = research_storyboards.research_job_id AND research_jobs.user_id = auth.uid())
+  );
+
+-- User can delete storyboard and regenerate from script if needed
+CREATE POLICY research_storyboards_user_delete ON research_storyboards
+  FOR DELETE USING (
     EXISTS(SELECT 1 FROM research_jobs WHERE research_jobs.id = research_storyboards.research_job_id AND research_jobs.user_id = auth.uid())
   );
 
@@ -463,11 +541,20 @@ research_jobs (root)
 **User perspective:**
 - SELECT, INSERT, UPDATE, DELETE only on own jobs (auth.uid() = user_id)
 - RLS policy cascades through foreign keys (user can only see sources/angles/scripts for their own jobs)
+- WITH CHECK clauses on UPDATE/INSERT prevent user from changing `job_id` or `user_id` (orphaning protection)
+- WITH CHECK cascades ownership: user cannot create source for someone else's job
 
 **Service-role perspective:**
-- API routes in Vercel use `supabaseService.from(...)` to bypass RLS
-- Create jobs, extract sources, propose angles, generate scripts
-- All done with service-role; RLS policy allows everything when role = 'service_role'
+- API routes in Vercel use `supabaseService.from(...)` to bypass RLS completely
+- Service-role has unrestricted access, regardless of policies
+- The explicit `CREATE POLICY ... FOR ALL USING (auth.role() = 'service_role')` is optional/redundant; included for clarity only
+- All sensitive operations (SearXNG discovery, Crawl4AI extraction, LLM analysis) happen via service-role routes
+
+**Canonical URL dedup (per job):**
+- `CREATE UNIQUE INDEX research_sources_job_url_unique ON research_sources(research_job_id, url)`
+- Prevents duplicate URL discovery within a single research job
+- SearXNG dedupes across engines; index prevents re-inserting the same URL
+- Different jobs can have the same URL (e.g., blog post referenced in two research briefs)
 
 **Example policy (research_sources):**
 ```sql
@@ -609,12 +696,46 @@ Before T-1101 migration, confirm:
 
 ---
 
+## T-1101a Corrections Applied (Spec Review)
+
+This version includes corrections from review comments:
+
+1. **UNIQUE WHERE → partial index** ✅  
+   Replaced `CONSTRAINT one_selected_per_job UNIQUE WHERE selected=TRUE` with `CREATE UNIQUE INDEX research_angles_job_id_selected_partial ON research_angles(research_job_id) WHERE selected = TRUE`
+
+2. **Removed script_duration_check** ✅  
+   Deleted CHECK constraint that was regex-matching on raw text. Scripts are generated; format validation happens in app.
+
+3. **Added WITH CHECK on UPDATE** ✅  
+   Added explicit WITH CHECK to jobs, sources, angles, scripts, storyboards UPDATE policies to prevent orphaning or ownership change.
+
+4. **Added DELETE policies** ✅  
+   Added user-owned DELETE policies for sources, angles, scripts, storyboards (service-role can always delete via bypass).
+
+5. **Added jsonb_typeof checks** ✅  
+   Added `CONSTRAINT sections_json_valid CHECK (jsonb_typeof(sections_json) = 'array')` and same for scenes_json.
+
+6. **Clarified service-role bypass** ✅  
+   Documented that service-role bypasses RLS completely; explicit policies are optional but included for clarity.
+
+7. **Aligned statuses with UX spec** ✅  
+   Updated status comments to align with research-studio-ux-spec.md (draft → discovering → extracting → ready_for_angles → scripting → approved → sent_to_director).
+
+8. **Clarified canonical URL dedup** ✅  
+   Documented partial unique index `(research_job_id, url)` prevents duplicate discovery per job.
+
+9. **Docs-only reminder** ✅  
+   Added clear header: this is a spec, not a migration. T-1101 follows after approval.
+
+---
+
 ## Version History
 
 | Date | Status | Owner | Notes |
 | --- | --- | --- | --- |
-| 2026-06-10 | Draft for review | Claude | Initial schema spec, no migration yet |
+| 2026-06-10 | Draft for review | Claude | Initial schema spec |
+| 2026-06-10 | Spec review corrections | Claude | T-1101a-fix: indexes, WITH CHECK, DELETE, service-role, status alignment |
 
 ---
 
-**Next:** Review this spec together, validate assumptions, then proceed to T-1101 migration when approved.
+**Next:** Review this corrected spec together, validate assumptions, then proceed to T-1101 migration when approved.
