@@ -215,12 +215,11 @@ export async function listOwnedAvatars(): Promise<HeyGenAvatar[]> {
     const groupId = String(g.id ?? g.group_id ?? "");
     if (!groupId) continue;
     const name = String(g.name ?? g.group_name ?? "");
-    let previewUrl = (g.preview_image as string) ?? (g.preview_image_url as string) ?? null;
+    const groupPreviewUrl = (g.preview_image as string) ?? (g.preview_image_url as string) ?? null;
     // Photo-avatar groups are usable via their look id; instant/studio avatars
     // use the group/avatar id directly.
     const isPhoto = String(g.group_type ?? g.type ?? "").toUpperCase().includes("PHOTO");
-    let avatarId = groupId;
-    let kind: "avatar" | "talking_photo" = isPhoto ? "talking_photo" : "avatar";
+    const groupKind: "avatar" | "talking_photo" = isPhoto ? "talking_photo" : "avatar";
 
     try {
       const lr = await fetch(`${HEYGEN_API_V2}/avatar_group/${groupId}/avatars`, {
@@ -231,18 +230,43 @@ export async function listOwnedAvatars(): Promise<HeyGenAvatar[]> {
         const ld = await lr.json();
         const looks: Record<string, unknown>[] =
           ld.data?.avatar_list ?? ld.avatar_list ?? ld.data?.avatars ?? [];
-        const first = looks.find((l) => l.id ?? l.avatar_id ?? l.talking_photo_id);
-        if (first) {
-          avatarId = String(first.id ?? first.avatar_id ?? first.talking_photo_id ?? groupId);
-          previewUrl = (first.image_url as string) ?? (first.preview_image_url as string) ?? previewUrl;
-          if (first.talking_photo_id) kind = "talking_photo";
+        const usableLooks = looks.filter((l) => l.id ?? l.avatar_id ?? l.talking_photo_id);
+        if (usableLooks.length > 0) {
+          for (const look of usableLooks) {
+            const avatarId = String(look.id ?? look.avatar_id ?? look.talking_photo_id);
+            const previewUrl =
+              (look.image_url as string) ??
+              (look.preview_image_url as string) ??
+              (look.preview_image as string) ??
+              groupPreviewUrl;
+            const lookName = String(
+              look.name ?? look.avatar_name ?? look.talking_photo_name ?? name
+            );
+            const kind: "avatar" | "talking_photo" = look.talking_photo_id
+              ? "talking_photo"
+              : groupKind;
+            out.push({
+              avatarId,
+              name: lookName || name,
+              gender: String(look.gender ?? g.gender ?? ""),
+              previewUrl,
+              kind,
+            });
+          }
+          continue;
         }
       }
     } catch {
       /* fall back to group id + preview */
     }
 
-    out.push({ avatarId, name, gender: "", previewUrl, kind });
+    out.push({
+      avatarId: groupId,
+      name,
+      gender: String(g.gender ?? ""),
+      previewUrl: groupPreviewUrl,
+      kind: groupKind,
+    });
   }
   return out.filter((a) => a.avatarId);
 }
