@@ -937,6 +937,13 @@ Contraintes :
 ### [T-1107] Research Studio UI — `status: todo` · `owner: codex`
 - Liste jobs, source review, angles, script approval, send to Director.
 
+### [T-1107a] Research Studio UX spec — `status: done` · `owner: codex`
+- Livre : `docs/product/research-studio-ux-spec.md`.
+- Couvre : navigation `/research` + `/research/[id]`, new research brief,
+  pipeline Brief/Sources/Angles/Script/Storyboard/Director, etats UX, actions,
+  quality score, plan gates, handoff vers Director sans `POST /api/jobs` direct.
+- Scope : docs-only, aucune route/API/DB/runtime ; ne bloque pas T-1101a schema review.
+
 ### [T-1108] Watchlists — `status: todo` · `owner: claude`
 - changedetection.io webhook + notifications dashboard, sans auto-publication.
 
