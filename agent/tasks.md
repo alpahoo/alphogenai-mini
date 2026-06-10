@@ -912,12 +912,19 @@ Contraintes :
 - Validation : Prête pour review + feedback avant migration T-1101.
 - Commit : À faire (docs-only).
 
-### [T-1101] Research schema migration — `status: todo` · `owner: claude`
-- Migration Supabase (après validation T-1101a).
-- Créer 5 tables avec contraintes exactes du spec.
-- Créer indexes + RLS policies.
-- Valider RLS (user A can't see user B's jobs).
-- Déployer à production.
+### [T-1101] Research schema migration — `status: in_progress` · `owner: claude`
+- Livré : Migration SQL traçable `supabase/migrations/001_create_alphoresearch_schema.sql` (350 lines).
+- Contenu :
+  - ✅ 5 tables : research_jobs, research_sources, research_angles, research_scripts, research_storyboards
+  - ✅ Colonnes exactes, types, CHECK constraints, size limits du spec T-1101a
+  - ✅ Indexes : (user_id, created_at DESC), (job_id, selected), URL uniqueness per job, partial unique angle selected
+  - ✅ RLS enabled : SELECT/INSERT/UPDATE WITH CHECK/DELETE policies user ownership, sans service-role redondant
+  - ✅ jsonb_typeof validation : sections_json et scenes_json = array
+  - ✅ Foreign keys cascading (jobs → sources/angles/scripts → storyboards)
+- Application : Via `docs/MIGRATION_T1101_README.md` (3 options : console Supabase, CLI, psql direct).
+- Validation : POST-migration advisor check, RLS test (user A can't see user B's jobs), indexes listed.
+- Dépendances : T-1101a (spec review) ✅
+- Commit : À faire (migration SQL + guide + tasks/log updates).
 
 ### [T-1102] Research API skeleton — `status: todo` · `owner: claude/codex`
 - Routes auth research sans appels externes : create/read/update status.

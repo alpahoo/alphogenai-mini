@@ -12,6 +12,33 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-10 — Claude (Haiku 4.5) — T-1101: AlphoResearch Schema Migration (SQL + Guide)
+- Livré : Migration Supabase traçable + guide d'application manuelle.
+- Migration SQL : `supabase/migrations/001_create_alphoresearch_schema.sql` (350 lignes).
+  - 5 tables : research_jobs (root), research_sources, research_angles, research_scripts, research_storyboards.
+  - Colonnes, types, CHECK constraints, size limits exactement du spec T-1101a.
+  - Indexes : (user_id, created_at DESC), (job_id, selected), partial unique for single-selected angle, URL per-job dedup.
+  - RLS : SELECT/INSERT/UPDATE WITH CHECK/DELETE policies user ownership (no redundant service-role).
+  - JSON validation : `jsonb_typeof(sections_json) = 'array'`, `jsonb_typeof(scenes_json) = 'array'`.
+  - Foreign keys cascading (jobs → sources/angles/scripts → storyboards).
+- Guide d'application : `docs/MIGRATION_T1101_README.md` (3 options).
+  - Option 1 : Supabase Console SQL Editor (copier/coller + Run).
+  - Option 2 : Supabase CLI (supabase migrations up).
+  - Option 3 : psql direct (nécessite credentials Postgres).
+- Validation POST-migration :
+  - Tables listed en Table Editor.
+  - RLS enabled check (`pg_tables.rowsecurity = true`).
+  - Policies listed (`pg_policies`).
+  - Indexes listed (`pg_indexes`).
+  - Constraints listed (`pg_constraint` type 'c').
+  - Advisor review (opcional).
+  - Rollback instructions (DROP CASCADE si needed).
+- Blocage : MCP Supabase no access to remote project (account permissions issue).
+  Migration est prête pour application manuelle ; applicator peut être utilisateur ou CLI.
+- Fichiers : `supabase/migrations/001_create_alphoresearch_schema.sql`, `docs/MIGRATION_T1101_README.md`, `agent/tasks.md`, `agent/log.md`.
+- Dépendances : T-1101a spec ✅, T-1100b Hostinger contract ✅.
+- Prochaine étape : Apply migration via Supabase console → T-1102 (API skeleton).
+
 ## 2026-06-10 — Claude (Haiku 4.5) — T-1101a: AlphoResearch Schema Spec Review (docs-only)
 - Livré : Documentation complète du schéma Supabase pour AlphoResearch avant migration.
 - Scope : 5 tables, RLS policies, indexes, contraintes, tailles max — pas de migration SQL.
