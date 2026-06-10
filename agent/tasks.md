@@ -709,3 +709,95 @@ polir l'existant.
 - Donnees : reutilise `jobs` done + `social_exports` existants ; aucune route/API/DB.
 - Validation : 270 tests, 3 smoke e2e Playwright, tsc, lint, build OK.
 
+---
+
+## Axe 8 — Lip-Sync & Video Reuse  `status: in_progress`
+
+Spec : **`docs/product/lipsync-existing-video-spec.md`** (audit complet, costing, 
+workflows, non-goals V1/V2). Objectif : réutiliser une vidéo cinématique réussie 
+(HeyGen Avatar Shots) sans régénération complète, en appliquant nouveau script + voix 
++ lip-sync pour réduire coûts (V1 = 5–20% du coût full video).
+
+### [T-801] Audit + Spec : Lip-sync existing video — `status: done` · `owner: claude`
+- **Scope** : audit pure, docs-only, sans code runtime.
+- Livré : `docs/product/lipsync-existing-video-spec.md`
+  - État actuel (✅ implementé) : Save Look, Reuse Look, TTS + lip-sync workflow
+  - Limitations actuelles (⚠️) : UX affordance manquante, costing non transparent
+  - Out of scope V1 (❌) : arbitrary video lip-sync, ElevenLabs TTS, editing results
+  - Decisions & rationale : pourquoi HeyGen Avatar Shots only, pourquoi HeyGen TTS V1
+  - Open questions : script screening, quality degradation, plan limits
+  - Testing strategy, rollout plan, API examples
+- Audit files lus :
+  - `app/(workspace)/create/avatar/page.tsx` (Reuse Look UI)
+  - `lib/saved-look-payload.ts` (validation payload)
+  - `app/api/looks/route.ts` (save/list/delete Looks)
+  - `app/api/jobs/route.ts` (look_id branch, lip-sync workflow)
+  - `lib/heygen-client.ts` (generateSpeech, createLipsync)
+- Conclusions : Feature core est fonctionnel et testé ; manquent UX affordance + 
+  costing display pour V1 public launch.
+- Validation : spec review-ready ; docs/product/* conforme ; pas de code breaking.
+
+### [T-802] UX affordance : "Reuse with new voice" — `status: todo` · `owner: —`
+- Objectif : améliorer découverte & réutilisation des Looks depuis page job.
+- À faire : 
+  - [ ] Button "Reuse with new voice" sur job page (si engine=heygen_avatar_shots)
+  - [ ] Auto-navigate `/create/avatar?look_id=...` (pre-fill Look sélectionné)
+  - [ ] Afficher estimated cost reduction (~10–20% vs full video)
+  - [ ] Tests : E2E workflow Save → Reuse
+- Fichiers touchés : `app/jobs/[id]/page.tsx`, `/create/avatar/page.tsx`
+- Risques : changements UI doivent rester provider-neutral
+- Critères : affordance visible, costing transparent, aucune breaking change
+
+### [T-803] Cost transparency : Lip-sync costing in UI — `status: todo` · `owner: —`
+- Objectif : afficher estimation coûts avant création lip-sync job.
+- À faire :
+  - [ ] Helper `estimateLipsyncCost(scriptLength, mode)` → credits estimate
+  - [ ] Display sur `/create/avatar` (mode cinematic + Look selected)
+  - [ ] Preview : "TTS cost: 2 credits, Lip-sync (precision): 10 credits, Total: 12 credits (~15% of full video)"
+  - [ ] Tests : costing accuracy, edge cases (very short/long script)
+- Fichiers touchés : `lib/costing.ts` (ajout), `/create/avatar/page.tsx` (display)
+- Risques : costing estimates doivent rester conservateurs (vs real HeyGen API)
+- Critères : estimate affiché, conforme historique coûts, tests passing
+
+### [T-804] Library Looks management (V2 future) — `status: todo` · `owner: —`
+- Objectif : page dédiée pour browse/rename/delete/preview Looks (V2).
+- Scope : defer post-V1-launch ; préparer infra (thumbnail gen, UI components)
+- À faire (V2+) :
+  - [ ] `/library?tab=looks` ou `/looks` page UI
+  - [ ] Thumbnail extraction + R2 upload on Look save
+  - [ ] Browse grid, rename modal, delete confirmation
+  - [ ] Quick "Reuse" button → `/create/avatar?look_id=...`
+- Dépendances : T-802 (affordance) + T-803 (costing) doivent être done d'abord
+
+### [T-805] V2 Planning : Alternative TTS providers — `status: todo` · `owner: —`
+- Objectif : abstraire voice provider pour supporter ElevenLabs + open-source (V2+).
+- Scope : architecture & decision, pas d'implementation.
+- À faire (design phase) :
+  - [ ] Spec voice_provider abstraction (heygen | elevenlabs | openai | custom)
+  - [ ] Costing model per provider + currency handling
+  - [ ] Consent/licensing logic (ElevenLabs commercial, etc)
+  - [ ] Voice mapping: HeyGen voice_id ≠ ElevenLabs voice_id
+  - [ ] Fallback strategy si voice provider unavailable
+- Dépendances : T-801 (spec) done
+- Risques : feature creep ; dépasser scope V1 produit
+
+---
+
+## Axe 9 — Favorites & Personal Curation  `status: in_progress`
+
+Objectif : donner à l'utilisateur un contrôle simple sur ses meilleures générations
+sans migration DB V1. Les favoris sont stockés dans `jobs.app_state.favorite`,
+préservant tout état applicatif existant.
+
+### [T-901] Favorites V1 — `status: done` · `owner: codex`
+- Scope : favori par job vidéo, visible sur job detail, Library et Projects.
+- Données : `jobs.app_state.favorite === true` ; aucune nouvelle table, aucune migration.
+- API : `PATCH /api/jobs/[id]` avec `{ favorite: boolean }`, ownership check et
+  service-role côté serveur ; ne modifie pas `updated_at`.
+- UI :
+  - bouton `Favorite/Favorited` sur la page job ;
+  - filtre `Favorites` + badge dans Library ;
+  - filtre `Favorites` + badge dans Projects.
+- Tests : helper pur `lib/job-favorite.ts` couvert par Vitest.
+- Non-goals V1 : dossiers, tags utilisateur, tri avancé, favoris galerie publique.
+

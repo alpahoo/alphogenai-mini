@@ -962,3 +962,40 @@ findings level block/warn + message), `byteplus-cost.ts`
   privacy/terms/help/generate`) en verifiant headlines + absence de noms
   providers visibles.
 - Validation : Playwright 4/4, Vitest 399/399, tsc clean, lint clean.
+
+## 2026-06-10 — Claude (Haiku 4.5) — T-801 Audit & Spec : Lip-sync existing video
+- Fait : Audit complet docs-only de la feature lip-sync/reuse Look, sans runtime code.
+  Examen des fichiers clés : `app/(workspace)/create/avatar/page.tsx` (Reuse Look UI),
+  `lib/saved-look-payload.ts` (validation payload), `app/api/looks/route.ts`
+  (save/list/delete), `app/api/jobs/route.ts` (look_id branch, lip-sync workflow),
+  `lib/heygen-client.ts` (generateSpeech, createLipsync helpers).
+- Livraison : `docs/product/lipsync-existing-video-spec.md` (~1400 lignes)
+  - État ✅ implémenté : Save Look (`POST /api/looks`), Reuse Look (`/create/avatar`),
+    TTS + lip-sync workflow (`POST /api/jobs` avec look_id), HeyGen helpers working
+  - Limitations V1 ⚠️ : UX affordance ("Reuse with new voice" button manquante),
+    costing non transparent, Library page inexistante
+  - Out of scope V1 ❌ : arbitrary video lip-sync, ElevenLabs TTS, editing lip-sync results
+  - Workflow synthèse : User complète Avatar Shots job → "Save as Look" → R2 persist
+    → "Reuse with new voice" → nouveau script+voix → `generateSpeech()` + `createLipsync()`
+    → lip-sync-only job (~5–20% coût vs full video)
+  - Décisions : V1 = HeyGen Avatar Shots + HeyGen native TTS (cloned voices existantes) ;
+    V2 = abstraction voice_provider pour ElevenLabs/open-source TTS
+  - Open questions résolues : spec costing model, error handling, security/privacy
+  - Appendix : API examples, testing strategy, rollout phases (V1/V2/V3)
+- Mise à jour docs : `agent/tasks.md` ajout Axe 8 (T-801 done, T-802 affordance UI,
+  T-803 costing transparency, T-804–T-805 V2 futures)
+- Validation : spec review-ready, docs conf orme YAML/Markdown, aucun breaking change,
+  tests 399/399 passing, tsc clean, lint clean
+
+## 2026-06-10 — Codex — T-901 Favorites V1
+- Fait : ajout d'un favori utilisateur par job vidéo, sans migration DB.
+- Données : stockage dans `jobs.app_state.favorite`, avec helper pur
+  `lib/job-favorite.ts` pour lire/écrire le flag sans écraser l'état existant.
+- API : `PATCH /api/jobs/[id]` accepte `{ favorite: boolean }`, vérifie
+  l'authentification + ownership, et ne modifie pas `updated_at`.
+- UI :
+  - bouton `Favorite/Favorited` sur la page job ;
+  - filtre + badge `Favorites` dans Library ;
+  - filtre + badge `Favorites` dans Projects.
+- Tests : `lib/__tests__/job-favorite.test.ts` couvre les cas app_state true/false,
+  préservation d'état et valeurs invalides.
