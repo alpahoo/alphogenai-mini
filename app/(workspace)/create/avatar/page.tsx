@@ -27,6 +27,7 @@ import {
 import { useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { buildSavedLookReusePayload } from "@/lib/saved-look-payload";
+import { estimateLipsyncCost } from "@/lib/lipsync-cost";
 import type { JobPlan } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -987,6 +988,24 @@ export default function CreateAvatarPage() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Cost estimate for lip-sync reuse */}
+                  {selectedLookId && (
+                    <div className="mt-3 rounded-lg border border-green-500/30 bg-green-500/5 p-3">
+                      <p className="text-xs font-semibold text-green-400 mb-2 uppercase tracking-wider">
+                        Estimated cost
+                      </p>
+                      <p className="text-sm text-foreground">
+                        {(() => {
+                          const est = estimateLipsyncCost(scriptText.length, lipsyncMode);
+                          return `${est.totalCost} credits (~${est.percentOfFullVideo}% of full video)`;
+                        })()}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground/70 mt-1.5">
+                        TTS + lip-sync for this script at {lipsyncMode} quality
+                      </p>
+                    </div>
+                  )}
                 </>
               )}
             </div>
