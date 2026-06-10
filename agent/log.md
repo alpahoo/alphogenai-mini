@@ -12,6 +12,24 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-10 — Claude (Haiku 4.5) — T-804a Spec : Library Looks management
+- Fait : Audit complet + spec docs-only pour T-804 (dedicated Looks management UI).
+- Audit `/api/looks` : GET/POST/DELETE routes ready, cinematic_looks schema, 
+  thumbnail_url always NULL (used in POST, not in v1 implementation).
+- Scope T-804 : /library?tab=looks (cohérent avec Library existante), 
+  hard delete (simple V1), no thumbnail V1 (inline video preview).
+- UX decisions : Rename modal (PATCH endpoint), delete confirmation (irreversible),
+  quick reuse button → /create/avatar?look_id=...
+- Implementation phases : T-804a (grid + rename modal), T-804b (thumbnail strategy),
+  T-804c (API endpoint + E2E tests).
+- Risk mitigation : grid virtualization (>50 Looks), soft delete in V1+ if needed,
+  R2 orphan cleanup task (manual or scheduled).
+- Fichiers : `docs/product/library-looks-management-spec.md` (1100+ lignes),
+  `agent/tasks.md` updated (T-804 split into a/b/c).
+- Validation : tsc/lint clean, tests 408/408 passing (no code changes).
+- Commit : 95db1cf
+- Priorité : **TIER 1** (suite T-802 + T-803)
+
 ## 2026-06-09 — Claude (Opus 4.8) — T-1003 (API) : Admin Gallery Manager
 - Fait : couche API admin pour la galerie curated (API d'abord, testable, avant l'UI).
   Toutes les routes sont admin-gated `requireAdmin()` (`isAdminEmail`) + service-role
