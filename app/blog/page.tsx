@@ -1,100 +1,131 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ArrowRight, BookOpen, Sparkles } from "lucide-react";
 import { POSTS, formatPostDate } from "@/lib/blog-posts";
 
 export const metadata: Metadata = {
-  title: "Blog — AlphoGen",
+  title: "Blog - AlphoGen",
   description:
-    "Updates, architecture deep dives, and behind-the-scenes from the team building AlphoGen.",
+    "Product notes, architecture essays, and studio updates from AlphoGen.",
   openGraph: {
-    title: "Blog — AlphoGen",
+    title: "Blog - AlphoGen",
     description:
-      "Updates, architecture deep dives, and behind-the-scenes from the team building AlphoGen.",
+      "Product notes, architecture essays, and studio updates from AlphoGen.",
     type: "website",
   },
 };
 
 export default function BlogIndexPage() {
   return (
-    <div className="relative overflow-hidden px-4 py-16 sm:py-24">
-      {/* Background gradient orbs — same language as homepage / about */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute top-1/4 left-1/4 h-96 w-96 rounded-full bg-indigo-500/10 blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 h-96 w-96 rounded-full bg-purple-500/10 blur-3xl" />
-      </div>
+    <main className="min-h-screen bg-[#f4f1ea] text-neutral-950">
+      <section className="border-b border-black/10 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5">
+          <Link href="/" className="text-sm font-semibold">
+            AlphoGen
+          </Link>
+          <Link
+            href="/create"
+            className="inline-flex items-center gap-2 rounded-full bg-neutral-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800"
+          >
+            Create
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </section>
 
-      <div className="relative z-10 mx-auto max-w-6xl">
-        {/* Hero */}
-        <section className="text-center">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-primary">
-            Blog
-          </h2>
-          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-            Notes from the studio
-          </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
-            Engineering updates, architecture deep dives, and behind-the-scenes
-            from the team building AlphoGen.
+      <section className="mx-auto max-w-7xl px-5 py-12 sm:py-16">
+        <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-end">
+          <div>
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-neutral-700">
+              <BookOpen className="h-4 w-4 text-[#5f5bf6]" />
+              Notes from the studio
+            </div>
+            <h1 className="max-w-3xl text-5xl font-semibold leading-[0.96] tracking-tight sm:text-7xl">
+              Product thinking behind directed AI video.
+            </h1>
+          </div>
+          <p className="max-w-2xl text-lg leading-8 text-neutral-600">
+            Architecture notes, workflow decisions, and product essays from the
+            AlphoGen studio.
           </p>
+        </div>
+
+        <section className="mt-12 grid gap-5 md:grid-cols-2">
+          {POSTS.map((post, index) => (
+            <Link
+              key={post.slug}
+              href={`/blog/${post.slug}`}
+              className={`group overflow-hidden rounded-[32px] border border-black/10 shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl ${
+                index === 0 ? "bg-neutral-950 text-white" : "bg-white text-neutral-950"
+              }`}
+            >
+              <div
+                className={`flex aspect-[16/9] items-end justify-between p-6 ${
+                  index === 0
+                    ? "bg-[radial-gradient(circle_at_20%_20%,rgba(186,255,59,0.22),transparent_24%),linear-gradient(135deg,#111,#343026_54%,#101010)]"
+                    : "bg-[#ebe7dc]"
+                }`}
+              >
+                <span className="rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-neutral-950">
+                  {post.category}
+                </span>
+                <span
+                  className={`text-6xl font-semibold tracking-tight ${
+                    index === 0 ? "text-white/20" : "text-neutral-950/10"
+                  }`}
+                >
+                  {post.coverWord}
+                </span>
+              </div>
+              <div className="p-6">
+                <div
+                  className={`mb-4 flex items-center gap-2 text-xs ${
+                    index === 0 ? "text-white/45" : "text-neutral-500"
+                  }`}
+                >
+                  <time dateTime={post.date}>{formatPostDate(post.date)}</time>
+                  <span aria-hidden>·</span>
+                  <span>{post.readTime}</span>
+                </div>
+                <h2 className="text-2xl font-semibold leading-tight tracking-tight">
+                  {post.title}
+                </h2>
+                <p
+                  className={`mt-4 line-clamp-3 text-sm leading-7 ${
+                    index === 0 ? "text-white/65" : "text-neutral-600"
+                  }`}
+                >
+                  {post.excerpt}
+                </p>
+                <div className="mt-6 inline-flex items-center gap-2 text-sm font-semibold">
+                  Read note
+                  <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+                </div>
+              </div>
+            </Link>
+          ))}
         </section>
 
-        {/* Posts grid */}
-        <section className="mt-16">
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {POSTS.map((post) => (
-              <Link
-                key={post.slug}
-                href={`/blog/${post.slug}`}
-                className="group flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm transition-all hover:border-border hover:bg-card/60"
-              >
-                {/* Cover */}
-                <div
-                  className={`relative aspect-[16/10] w-full bg-gradient-to-br ${post.gradient}`}
-                >
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-5xl font-bold tracking-tight text-foreground/90 mix-blend-overlay sm:text-6xl">
-                      {post.coverWord}
-                    </span>
-                  </div>
-                  <div className="absolute left-4 top-4">
-                    <span className="inline-flex items-center rounded-full border border-white/20 bg-black/40 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-md">
-                      {post.category}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Body */}
-                <div className="flex flex-1 flex-col p-6">
-                  <h3 className="mb-2 text-lg font-semibold leading-snug transition-colors group-hover:text-primary">
-                    {post.title}
-                  </h3>
-                  <p className="mb-4 line-clamp-3 text-sm text-muted-foreground">
-                    {post.excerpt}
-                  </p>
-                  <div className="mt-auto flex items-center gap-2 text-xs text-muted-foreground">
-                    <time dateTime={post.date}>{formatPostDate(post.date)}</time>
-                    <span aria-hidden>·</span>
-                    <span>{post.readTime}</span>
-                  </div>
-                </div>
-              </Link>
-            ))}
+        <section className="mt-12 rounded-[28px] border border-black/10 bg-white p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Sparkles className="h-4 w-4 text-[#5f5bf6]" />
+                More notes are coming
+              </div>
+              <p className="mt-2 text-sm text-neutral-600">
+                We publish when a product decision is worth documenting.
+              </p>
+            </div>
+            <a
+              href="mailto:ai@alphogen.com"
+              className="text-sm font-semibold underline-offset-4 hover:underline"
+            >
+              ai@alphogen.com
+            </a>
           </div>
         </section>
-
-        {/* Footer note */}
-        <section className="mt-16 text-center">
-          <p className="text-sm text-muted-foreground">
-            More articles coming as we ship. Want to be notified?{" "}
-            <a
-              href="mailto:contact@alphogen.com"
-              className="text-foreground underline-offset-4 hover:underline"
-            >
-              contact@alphogen.com
-            </a>
-          </p>
-        </section>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

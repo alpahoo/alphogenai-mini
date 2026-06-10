@@ -472,6 +472,14 @@ Spec : `docs/product/premium-product-experience-spec.md`.
 - Pricing conserve le checkout existant (`POST /api/stripe/checkout`) ; aucune
   route/API/DB/auth/Stripe modifiée.
 
+### [T-1110] Public utility pages premium pass — `status: done` · `owner: codex`
+- Livre UI/copy-only : `/login`, `/generate`, `/blog`, `/blog/[slug]`,
+  `/privacy`, `/terms`, `/help/verified-face-id` harmonisés avec l'Axe 11.
+- Login conserve les appels Supabase auth existants ; `/generate` conserve le
+  POST direct `/api/jobs` tout en orientant vers la Director Console.
+- Blog/legal/help nettoyés des noms providers/infra visibles et convertis en
+  surfaces éditoriales warm-neutral ; aucun endpoint, DB, auth ou génération modifié.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio

@@ -1,19 +1,3 @@
-/**
- * Blog content registry.
- *
- * Posts are defined as data here (not MDX) — the content tree is small enough
- * that a typed module is simpler than a content pipeline. Each post has:
- *   - slug:     URL segment under /blog/[slug]
- *   - title:    page title + h1
- *   - excerpt:  shown on the index card and used in OG description
- *   - date:     ISO yyyy-mm-dd, formatted at render time
- *   - category: short label, used as a tag chip
- *   - readTime: rough estimate, shown next to date
- *   - gradient: tailwind gradient classes for the cover block (no images yet)
- *   - body:     ordered list of paragraphs / headings rendered on the post page
- *
- * Order in POSTS = display order on /blog (newest first).
- */
 export type BlogBlock =
   | { type: "p"; text: string }
   | { type: "h2"; text: string }
@@ -23,10 +7,9 @@ export type BlogPost = {
   slug: string;
   title: string;
   excerpt: string;
-  date: string; // ISO yyyy-mm-dd
+  date: string;
   category: string;
   readTime: string;
-  gradient: string;
   coverWord: string;
   body: BlogBlock[];
 };
@@ -36,72 +19,70 @@ export const POSTS: BlogPost[] = [
     slug: "multi-scene-chaining",
     title: "Multi-scene chaining: producing coherent multi-shot AI videos",
     excerpt:
-      "How AlphoGen stitches independent generations into a single fluid story by re-using the last frame of each scene as the seed of the next.",
+      "How AlphoGen keeps a story moving across scenes by carrying visual context forward instead of treating every clip as a disconnected prompt.",
     date: "2026-04-26",
     category: "Engineering",
     readTime: "4 min read",
-    gradient: "from-indigo-500/40 via-purple-500/30 to-fuchsia-500/30",
     coverWord: "Chain",
     body: [
       {
         type: "p",
-        text: "One of the hardest problems in AI video is continuity. A single text-to-video model can produce a beautiful 5-second clip, but the moment you ask for a 15-second story across three different shots, things fall apart: the character changes face, the lighting jumps, the props disappear. We just shipped a fix for that — multi-scene chaining is now live in AlphoGen.",
+        text: "One of the hardest problems in AI video is continuity. A single prompt can produce a beautiful short clip, but the moment you ask for a longer story across multiple shots, things can drift: the character changes face, the lighting jumps, the props disappear. Multi-scene chaining is one way AlphoGen keeps the creative thread intact.",
       },
-      { type: "h2", text: "The trick: last frame as seed" },
+      { type: "h2", text: "The trick: carry context forward" },
       {
         type: "p",
-        text: "When a user describes a multi-scene video, we generate scene 0 from text. As soon as it finishes, we extract its final frame and feed it as the first frame of scene 1's image-to-video generation. Scene 1 finishes, we extract its last frame, feed it to scene 2. The chain continues until the story is complete. The visual identity of characters, lighting, and props carries through naturally.",
+        text: "When a user describes a multi-scene video, each scene is treated as part of a production rather than a standalone output. The final visual state of one scene can inform the next, helping characters, locations, lighting, and composition feel connected.",
       },
       { type: "h2", text: "Why this is non-trivial" },
       {
         type: "p",
-        text: "The naive version breaks at scale. You need atomic state transitions so two workers don't claim the same scene, race-safe last-frame extraction, and graceful retries when one engine returns a 4xx without losing the scenes that already rendered. Our pipeline runs on Modal with a small state machine and idempotent claim semantics — if a scene fails on attempt 3, we retry just that scene without throwing away the earlier work.",
+        text: "The naive version breaks at scale. You need atomic state transitions so two workers do not claim the same scene, race-safe frame handling, and graceful retries when a model returns an error without losing the scenes that already rendered.",
       },
-      { type: "h2", text: "What's next" },
+      { type: "h2", text: "What comes next" },
       {
         type: "p",
-        text: "We're rolling out the same chaining approach across all our supported engines (Wan 2.6, Wan 2.7, Happy Horse 1.0) and exposing per-scene controls so creators can pin a character reference image at the start and let it propagate. Reference-driven multi-scene is the next milestone.",
+        text: "The same approach can power richer controls: pinning a character reference, preserving an opening frame, or giving each scene its own direction while still feeling like one production. Reference-driven multi-scene control is the next milestone.",
       },
     ],
   },
   {
     slug: "gpu-native-pipeline",
-    title: "Inside AlphoGen: our Modal-based GPU-native video pipeline",
+    title: "Inside AlphoGen: the production pipeline behind AI video",
     excerpt:
-      "A look at how we orchestrate Wan 2.6, Seedance, and other generative video models behind a single API — and why we picked Modal over a managed inference platform.",
+      "A look at how AlphoGen turns one creative brief into a validated, multi-step generation pipeline behind a single product surface.",
     date: "2026-04-20",
     category: "Architecture",
     readTime: "6 min read",
-    gradient: "from-cyan-500/40 via-blue-500/30 to-indigo-500/30",
     coverWord: "Stack",
     body: [
       {
         type: "p",
-        text: "AlphoGen is built on three core pieces of infrastructure: Modal for elastic GPU compute, Supabase for application data, and Cloudflare R2 for global asset delivery. None of these choices are accidental — each one comes from a constraint we hit early and refused to negotiate on.",
+        text: "AlphoGen is built around a few core constraints: video generation is expensive, user assets must stay private, and creators need feedback before they spend a generation. The technical architecture follows from those constraints.",
       },
-      { type: "h2", text: "Modal for compute" },
+      { type: "h2", text: "Elastic compute for bursty generation" },
       {
         type: "p",
-        text: "Generative video is bursty. A single user can trigger an H100 for 2 minutes, then we sit idle for an hour. Reserved instances are wasteful; managed inference platforms charge a premium and lock you into their model catalog. Modal lets us write Python functions, decorate them with the GPU we need, and pay strictly for the seconds we use. We can also chain multiple steps — text-to-video, audio sync, format export — inside the same function call without touching infrastructure.",
+        text: "Generative video is bursty. A single user can trigger a heavy job for a short window, then sit idle while reviewing the result. The system needs to scale up quickly, chain several processing steps, and avoid paying for idle capacity.",
       },
-      { type: "h2", text: "Supabase for data" },
+      { type: "h2", text: "A database shaped around ownership" },
       {
         type: "p",
-        text: "Postgres with Row-Level Security gives us the right primitives for a multi-tenant creator app. Each user only sees their own jobs; the realtime channel pushes job-status updates to the browser without us writing a polling layer. We use the JS client on the edge and the service-role client on the server for admin operations.",
+        text: "A multi-tenant creator app needs strong ownership boundaries. Each user should only see their own jobs, references, saved looks, and generated media unless something has been deliberately curated for the public gallery.",
       },
-      { type: "h2", text: "R2 for assets" },
+      { type: "h2", text: "Asset storage as a production layer" },
       {
         type: "p",
-        text: "Generated videos are large and read globally. Cloudflare R2 gives us S3-compatible storage with zero egress fees, which is the right shape for a content platform. We sign upload URLs server-side and serve the final assets via a custom domain on the Cloudflare CDN.",
+        text: "Generated videos and reference images are large, reusable, and sensitive. Uploads are signed, outputs are attached to their owner, and public media is served only through explicit showcase flows.",
       },
       { type: "h2", text: "The orchestration layer" },
       {
         type: "p",
-        text: "On top of those primitives, we built a small unified API that abstracts every supported generative video engine behind a single shape. The same job specification can run on Wan 2.6, Wan 2.7, or Happy Horse 1.0, and our router picks the right one based on quality, latency, and price for the user's plan.",
+        text: "On top of those primitives, AlphoGen exposes one product contract: a creative brief becomes a validated job. The routing details stay private while the user sees clear capabilities, readiness, cost, and output state.",
       },
       {
         type: "p",
-        text: "It's not a flashy stack, but it's a pragmatic one. Each piece is replaceable. Each piece earns its place. That's the bar.",
+        text: "The goal is not a flashy stack. It is a system where each layer earns its place, protects user data, and keeps the creative workflow moving.",
       },
     ],
   },

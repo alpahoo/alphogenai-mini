@@ -943,3 +943,13 @@ findings level block/warn + message), `byteplus-cost.ts`
   route/API/DB/auth/Stripe modifiee.
 - Diagnostic Vercel : le commit `d6b4647` (signale en erreur cote Vercel) build
   correctement en local ; si Vercel echoue encore, recuperer les logs exacts.
+
+## 2026-06-10 - Codex - T-1110 public utility pages premium pass
+- Polish UI/copy-only de `/login`, `/generate`, `/blog`, `/blog/[slug]`,
+  `/privacy`, `/terms` et `/help/verified-face-id` pour terminer l'homogeneite
+  publique Axe 11.
+- Login conserve les appels Supabase auth existants ; `/generate` conserve le
+  POST `/api/jobs` existant, avec une orientation plus claire vers la Director Console.
+- Blog/legal/help rendus provider-neutral : suppression des noms infra/providers
+  visibles dans les articles, privacy/terms et aide verified face ID.
+- Aucun changement route/API/DB/auth/generation/checkout.

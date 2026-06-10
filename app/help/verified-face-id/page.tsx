@@ -1,79 +1,137 @@
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, ImagePlus, ShieldCheck, UserRound } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ImagePlus,
+  Lock,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 
 const STEPS = [
   {
-    title: "Create or verify the face in your model console",
-    body: "Use your approved real-person workflow to create a reusable face asset. AlphoGen only needs the resulting asset id.",
+    title: "Use an approved identity workflow",
+    body: "Create or verify the person through the approved identity flow available to your account.",
   },
   {
-    title: "Copy the asset id",
-    body: "The value usually starts with asset-. Keep the full id unchanged, including dashes and suffixes.",
+    title: "Copy the verified face ID",
+    body: "Keep the full ID unchanged. It is used as hidden metadata while the UI shows only your friendly name and thumbnail.",
   },
   {
-    title: "Add it to My Faces",
-    body: "Return to Create, open Assets, add a friendly name, paste the id, and attach a thumbnail photo for easy selection.",
+    title: "Save it in My Faces",
+    body: "Return to Create, open Assets, add a clear name, paste the ID, and attach a private thumbnail for recognition.",
+  },
+];
+
+const NOTES = [
+  {
+    icon: UserRound,
+    title: "Reusable identity",
+    body: "A verified face lets you keep the same person across supported scenes.",
+  },
+  {
+    icon: ImagePlus,
+    title: "Private thumbnail",
+    body: "The thumbnail is only for selection inside your Assets panel.",
+  },
+  {
+    icon: Lock,
+    title: "Account scoped",
+    body: "Saved faces are scoped to your account and are not shown publicly.",
   },
 ];
 
 export default function VerifiedFaceIdHelpPage() {
   return (
-    <main className="min-h-screen bg-background px-6 py-10 text-foreground">
-      <div className="mx-auto max-w-3xl">
-        <Link
-          href="/create/story"
-          className="mb-8 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Create
-        </Link>
+    <main className="min-h-screen bg-[#f4f1ea] text-neutral-950">
+      <section className="border-b border-black/10 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5">
+          <Link
+            href="/create/story"
+            className="inline-flex items-center gap-2 text-sm font-medium text-neutral-600 transition hover:text-neutral-950"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Create
+          </Link>
+          <span className="text-sm font-semibold">AlphoGen Help</span>
+        </div>
+      </section>
 
-        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase text-primary">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            Verified faces
+      <section className="mx-auto grid max-w-7xl gap-8 px-5 py-12 lg:grid-cols-[0.85fr_1.15fr]">
+        <aside className="lg:sticky lg:top-8 lg:self-start">
+          <div className="rounded-[32px] bg-neutral-950 p-7 text-white shadow-2xl shadow-black/20">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
+              <ShieldCheck className="h-5 w-5 text-[#baff3b]" />
+            </div>
+            <p className="mt-8 text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
+              Verified faces
+            </p>
+            <h1 className="mt-4 text-5xl font-semibold leading-[0.95] tracking-tight">
+              Find your verified face ID.
+            </h1>
+            <p className="mt-5 text-sm leading-7 text-white/65">
+              A verified face ID lets AlphoGen reuse an approved person
+              consistently where the selected model supports it.
+            </p>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">Find your verified face ID</h1>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            A verified face ID lets AlphoGen reuse an approved person consistently across scenes. It is stored as hidden metadata; users select the face by name and thumbnail inside the Assets panel.
-          </p>
+        </aside>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-border/60 bg-background p-4">
-              <UserRound className="mb-3 h-5 w-5 text-primary" />
-              <p className="text-sm font-semibold">Face asset</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">A reusable, approved identity for generation.</p>
+        <div className="space-y-5">
+          <section className="rounded-[32px] border border-black/10 bg-white p-6 shadow-sm">
+            <div className="grid gap-3 sm:grid-cols-3">
+              {NOTES.map((note) => {
+                const Icon = note.icon;
+                return (
+                  <div key={note.title} className="rounded-2xl bg-[#f4f1ea] p-4">
+                    <Icon className="h-5 w-5 text-[#5f5bf6]" />
+                    <p className="mt-4 text-sm font-semibold">{note.title}</p>
+                    <p className="mt-2 text-xs leading-5 text-neutral-600">
+                      {note.body}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
-            <div className="rounded-xl border border-border/60 bg-background p-4">
-              <ImagePlus className="mb-3 h-5 w-5 text-violet-500" />
-              <p className="text-sm font-semibold">Thumbnail</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">Only for recognition in your private Assets panel.</p>
-            </div>
-            <div className="rounded-xl border border-border/60 bg-background p-4">
-              <CheckCircle2 className="mb-3 h-5 w-5 text-emerald-500" />
-              <p className="text-sm font-semibold">Private use</p>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">Only your account can see and use your saved faces.</p>
-            </div>
-          </div>
-        </section>
+          </section>
 
-        <section className="mt-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Steps</h2>
-          <div className="mt-4 space-y-4">
-            {STEPS.map((step, index) => (
-              <div key={step.title} className="flex gap-3">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                  {index + 1}
-                </span>
-                <div>
-                  <h3 className="text-sm font-bold text-foreground">{step.title}</h3>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{step.body}</p>
+          <section className="rounded-[32px] border border-black/10 bg-white p-6 shadow-sm">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.22em] text-neutral-500">
+              Steps
+            </h2>
+            <div className="mt-6 space-y-5">
+              {STEPS.map((step, index) => (
+                <div key={step.title} className="flex gap-4">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-950 text-sm font-semibold text-white">
+                    {index + 1}
+                  </span>
+                  <div>
+                    <h3 className="text-base font-semibold">{step.title}</h3>
+                    <p className="mt-2 text-sm leading-7 text-neutral-600">
+                      {step.body}
+                    </p>
+                  </div>
                 </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-[28px] border border-black/10 bg-white p-6 shadow-sm">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-500" />
+              <div>
+                <h2 className="text-base font-semibold">
+                  You do not need to expose the ID in prompts.
+                </h2>
+                <p className="mt-2 text-sm leading-7 text-neutral-600">
+                  Once saved, choose the face from the Assets panel. AlphoGen
+                  inserts the right hidden reference while your prompt stays
+                  readable.
+                </p>
               </div>
-            ))}
-          </div>
-        </section>
-      </div>
+            </div>
+          </section>
+        </div>
+      </section>
     </main>
   );
 }
