@@ -919,3 +919,11 @@ findings level block/warn + message), `byteplus-cost.ts`
   `cleanModelName(getEngineDisplayName(...))` pour rester provider-neutral.
 - Aucun changement handler, route, API, DB, retry, duplicate, save-look, scene panel ou
   Social Pack.
+
+## 2026-06-10 - Codex - T-1107/T-1108 secondary workspace premium pass
+- Polish UI-only de `/projects`, `/library`, `/analytics` et `/schedule` :
+  fond warm-neutral, headers editoriaux, surfaces blanches, tabs/filtres plus sobres,
+  cards et CTA harmonises avec landing/create/job.
+- Analytics nettoie les noms modeles via `cleanModelName(getEngineDisplayName(...))`.
+- Aucun changement requetes Supabase, endpoints, drag/drop schedule, actions projets,
+  liens library, analytics API ou logique metier.

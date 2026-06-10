@@ -451,8 +451,14 @@ Spec : `docs/product/premium-product-experience-spec.md`.
 - Aucun changement handler, route, API, DB, retry, duplicate, save-look, scene panel ou
   Social Pack.
 
-### [T-1107/T-1108] Secondary pages + visual QA — `status: todo` · `owner: codex`
-- Library/Projects/Analytics/Schedule consistency + captures desktop/mobile.
+### [T-1107/T-1108] Secondary pages + visual QA — `status: done` · `owner: codex`
+- Livre UI-only : `/projects`, `/library`, `/analytics`, `/schedule` alignés sur
+  l'Axe 11 (fond warm-neutral, headers éditoriaux, surfaces blanches, CTA neutres,
+  filtres/tabs plus premium, cards plus lisibles).
+- Confidentialité : analytics passe les labels modèles par
+  `cleanModelName(getEngineDisplayName(...))`.
+- Aucun changement requêtes Supabase, endpoints, drag/drop schedule, actions projets,
+  library links, analytics API ou logique métier.
 
 ## Axe 5 — Post-generation studio  `status: in_progress`
 

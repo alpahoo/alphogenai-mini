@@ -171,40 +171,47 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="px-8 py-10 max-w-5xl mx-auto">
+    <div className="min-h-screen bg-[#f5f3ee] px-6 py-8 lg:px-10">
+      <div className="mx-auto max-w-6xl">
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
-        className="flex items-center justify-between mb-6"
+        className="mb-6 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm"
       >
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Projects</h1>
-          <p className="mt-2 text-base text-muted-foreground">
-            Your generated videos and creations.
-          </p>
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-neutral-950 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white">
+              <Film className="h-3.5 w-3.5" />
+              Project vault
+            </div>
+            <h1 className="text-3xl font-semibold tracking-tight text-neutral-950">Projects</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600">
+              Review every generation, reopen the studio, duplicate strong takes, or turn a completed video into a new reference.
+            </p>
+          </div>
+          <Link
+            href="/create"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-neutral-950 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-neutral-800"
+          >
+            <Plus className="h-4 w-4" />
+            New project
+          </Link>
         </div>
-        <Link
-          href="/create"
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:brightness-110"
-        >
-          <Plus className="h-4 w-4" />
-          New project
-        </Link>
       </motion.div>
 
       {/* ── Filters bar ───────────────────────────────────── */}
-      <div className="mb-5 flex flex-col sm:flex-row gap-3">
+      <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm sm:flex-row">
         {/* Status tabs */}
-        <div className="flex gap-1 rounded-xl border border-border bg-muted/30 p-1">
+        <div className="flex gap-1 rounded-xl border border-neutral-200 bg-neutral-50 p-1">
           {STATUS_TABS.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setStatusFilter(tab.key)}
               className={`rounded-lg px-4 py-2 text-sm font-medium transition-all ${
                 statusFilter === tab.key
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-white text-neutral-950 shadow-sm"
+                  : "text-neutral-500 hover:text-neutral-950"
               }`}
             >
               {tab.label}
@@ -213,14 +220,14 @@ export default function ProjectsPage() {
         </div>
 
         {/* Search */}
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/50" />
+        <div className="relative flex-1 sm:max-w-sm">
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
           <input
             type="text"
             placeholder="Search prompts..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-xl border border-border bg-card py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground/40 focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 py-2.5 pl-10 pr-4 text-sm text-neutral-950 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-950/10"
           />
         </div>
       </div>
@@ -234,7 +241,7 @@ export default function ProjectsPage() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="flex flex-col items-center justify-center py-20 text-center"
+          className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-neutral-200 bg-white py-20 text-center shadow-sm"
         >
           <Film className="h-10 w-10 text-muted-foreground/30 mb-4" />
           <p className="text-muted-foreground mb-4">
@@ -245,7 +252,7 @@ export default function ProjectsPage() {
           {!debouncedSearch && statusFilter === "all" && (
             <Link
               href="/create"
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110"
+              className="inline-flex items-center gap-2 rounded-xl bg-neutral-950 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-neutral-800"
             >
               <Plus className="h-4 w-4" />
               Create video
@@ -254,7 +261,7 @@ export default function ProjectsPage() {
         </motion.div>
       ) : (
         <>
-          <div className="space-y-2">
+          <div className="space-y-3">
             <AnimatePresence initial={false}>
               {projects.map((project, i) => (
                 <motion.div
@@ -267,10 +274,10 @@ export default function ProjectsPage() {
                 >
                   <Link
                     href={`/jobs/${project.id}`}
-                    className="flex items-center gap-4 rounded-xl border border-border bg-card px-5 py-4 pr-14 transition-all duration-150 hover:border-primary/30 hover:shadow-sm"
+                    className="flex items-center gap-4 rounded-2xl border border-neutral-200 bg-white px-5 py-4 pr-14 shadow-sm transition-all duration-150 hover:border-neutral-300 hover:shadow-md"
                   >
                     {/* Thumbnail */}
-                    <div className="flex h-14 w-24 shrink-0 items-center justify-center rounded-lg bg-muted/40 overflow-hidden">
+                    <div className="flex h-16 w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-neutral-100">
                       {project.output_url_final ? (
                         <video
                           src={project.output_url_final}
@@ -285,18 +292,18 @@ export default function ProjectsPage() {
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <p className="truncate text-sm font-medium">
+                      <p className="truncate text-sm font-semibold text-neutral-950">
                         {project.prompt}
                       </p>
-                      <div className="mt-1.5 flex items-center gap-3 text-sm text-muted-foreground">
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
                         <span className="flex items-center gap-1.5">
                           <Clock className="h-3.5 w-3.5" />
                           {formatDate(project.created_at)}
                         </span>
                         {project.target_duration_seconds && (
-                          <span>{project.target_duration_seconds}s</span>
+                          <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2 py-0.5">{project.target_duration_seconds}s</span>
                         )}
-                        <span className="uppercase text-xs font-medium text-muted-foreground/60">
+                        <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-700">
                           {project.plan}
                         </span>
                       </div>
@@ -311,7 +318,7 @@ export default function ProjectsPage() {
                     onClick={(e) => handleDelete(e, project.id)}
                     disabled={deleting === project.id}
                     title="Delete project"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all disabled:opacity-50"
+                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-neutral-400 opacity-0 transition-all hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 disabled:opacity-50"
                   >
                     {deleting === project.id ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -330,7 +337,7 @@ export default function ProjectsPage() {
               <button
                 onClick={handleLoadMore}
                 disabled={loadingMore}
-                className="inline-flex items-center gap-2 rounded-lg border border-border/40 px-5 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-all disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-5 py-2 text-sm font-medium text-neutral-600 transition-all hover:bg-neutral-50 hover:text-neutral-950 disabled:opacity-50"
               >
                 {loadingMore ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -343,6 +350,7 @@ export default function ProjectsPage() {
           )}
         </>
       )}
+      </div>
     </div>
   );
 }

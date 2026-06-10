@@ -120,28 +120,29 @@ export default function LibraryPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-8 lg:px-10">
+    <div className="min-h-screen bg-[#f5f3ee] px-6 py-8 lg:px-10">
+      <div className="mx-auto max-w-7xl">
       <motion.section
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="rounded-2xl border border-border bg-card p-6 shadow-sm"
+        className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm"
       >
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-[11px] font-semibold uppercase text-primary">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-neutral-950 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white">
               <Library className="h-3.5 w-3.5" />
               Asset Studio
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">Library</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            <h1 className="text-3xl font-semibold tracking-tight text-neutral-950">Library</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600">
               Reuse finished videos as references, reopen the studio, download masters, or prepare social cuts.
             </p>
           </div>
 
           <Link
             href="/create/story"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground shadow-md shadow-primary/20 transition-all hover:brightness-110"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-neutral-950 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-neutral-800"
           >
             <Sparkles className="h-4 w-4" />
             Create new asset
@@ -151,29 +152,29 @@ export default function LibraryPage() {
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {stats.map((item) => (
-            <div key={item.label} className="rounded-xl border border-border/60 bg-background px-4 py-3">
-              <span className="text-[11px] uppercase text-muted-foreground/60">{item.label}</span>
-              <span className="mt-1 block text-2xl font-bold text-foreground">{item.value}</span>
+            <div key={item.label} className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3">
+              <span className="text-[11px] uppercase tracking-[0.14em] text-neutral-500">{item.label}</span>
+              <span className="mt-1 block text-2xl font-semibold text-neutral-950">{item.value}</span>
             </div>
           ))}
         </div>
       </motion.section>
 
-      <section className="mt-8 rounded-2xl border border-border bg-card p-5 shadow-sm">
+      <section className="mt-8 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-primary">
+            <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-neutral-500">
               <Clapperboard className="h-3.5 w-3.5" />
               Saved Looks
             </div>
-            <h2 className="mt-1 text-lg font-bold text-foreground">Reusable shots</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+            <h2 className="mt-1 text-lg font-semibold text-neutral-950">Reusable shots</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-neutral-600">
               Keep a shot you already like, then apply a fresh script and voice without rebuilding the visual from scratch.
             </p>
           </div>
           <Link
             href="/create/avatar"
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-primary/35 hover:bg-primary/5"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-sm font-semibold text-neutral-800 transition-colors hover:bg-neutral-100"
           >
             Open avatar studio
             <ArrowRight className="h-4 w-4" />
@@ -187,9 +188,9 @@ export default function LibraryPage() {
             ))}
           </div>
         ) : looks.length === 0 ? (
-          <div className="mt-5 rounded-xl border border-dashed border-border/50 bg-background px-5 py-6">
-            <p className="text-sm font-semibold text-foreground">No saved looks yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+          <div className="mt-5 rounded-xl border border-dashed border-neutral-200 bg-neutral-50 px-5 py-6">
+            <p className="text-sm font-semibold text-neutral-950">No saved looks yet</p>
+            <p className="mt-1 text-sm text-neutral-600">
               Save a completed cinematic avatar shot as a Look, then it will appear here for fast reuse.
             </p>
           </div>
@@ -198,7 +199,7 @@ export default function LibraryPage() {
             {looks.map((look) => (
               <article
                 key={look.id}
-                className="overflow-hidden rounded-xl border border-border bg-background shadow-sm transition-all hover:border-primary/35 hover:shadow-md"
+                className="overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50 shadow-sm transition-all hover:border-neutral-300 hover:shadow-md"
               >
                 <div className="relative aspect-video overflow-hidden bg-muted/30">
                   {look.thumbnail_url ? (
@@ -231,7 +232,7 @@ export default function LibraryPage() {
                   </div>
                   <Link
                     href={`/create/avatar?look_id=${look.id}`}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground transition hover:brightness-110"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-neutral-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-neutral-800"
                   >
                     <Sparkles className="h-3.5 w-3.5" />
                     Create with look
@@ -251,7 +252,7 @@ export default function LibraryPage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search generated assets..."
-              className="h-11 w-full rounded-xl border border-border bg-card pl-9 pr-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary/40"
+              className="h-11 w-full rounded-xl border border-neutral-200 bg-white pl-9 pr-3 text-sm text-neutral-950 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-400"
             />
           </div>
 
@@ -267,8 +268,8 @@ export default function LibraryPage() {
                 onClick={() => setFilter(item.id as FilterKey)}
                 className={`rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
                   filter === item.id
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    ? "border-neutral-950 bg-neutral-950 text-white"
+                    : "border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 hover:text-neutral-950"
                 }`}
               >
                 {item.label}
@@ -284,7 +285,7 @@ export default function LibraryPage() {
             ))}
           </div>
         ) : filteredVideos.length === 0 ? (
-          <div className="mt-5 flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/40 bg-card py-16">
+          <div className="mt-5 flex flex-col items-center justify-center rounded-2xl border border-dashed border-neutral-200 bg-white py-16">
             <Film className="mb-3 h-8 w-8 text-muted-foreground/25" />
             <p className="text-sm font-semibold text-foreground">
               {videos.length === 0 ? "No finished videos yet" : "No assets match this view"}
@@ -304,7 +305,7 @@ export default function LibraryPage() {
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.25, delay: Math.min(i * 0.025, 0.2) }}
-                  className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all hover:border-primary/35 hover:shadow-md"
+                  className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm transition-all hover:border-neutral-300 hover:shadow-md"
                 >
                   <Link href={`/jobs/${asset.id}`} className="group block">
                     <div className="relative aspect-video overflow-hidden bg-muted/30">
@@ -360,14 +361,14 @@ export default function LibraryPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <Link
                         href={`/create/story?reference_job_id=${asset.id}`}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-2 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100"
                       >
                         <ImagePlus className="h-3.5 w-3.5" />
                         Reference
                       </Link>
                       <Link
                         href={`/jobs/${asset.id}`}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-2 text-xs font-semibold text-foreground transition-colors hover:border-primary/35 hover:bg-primary/5"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-2 text-xs font-semibold text-neutral-800 transition-colors hover:bg-neutral-100"
                       >
                         <Film className="h-3.5 w-3.5" />
                         Studio
@@ -375,14 +376,14 @@ export default function LibraryPage() {
                       <a
                         href={asset.output_url_final}
                         download
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-2 text-xs font-semibold text-foreground transition-colors hover:border-primary/35 hover:bg-primary/5"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-2 text-xs font-semibold text-neutral-800 transition-colors hover:bg-neutral-100"
                       >
                         <Download className="h-3.5 w-3.5" />
                         Master
                       </a>
                       <Link
                         href={`/jobs/${asset.id}#social`}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-2 text-xs font-semibold text-foreground transition-colors hover:border-primary/35 hover:bg-primary/5"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-2 text-xs font-semibold text-neutral-800 transition-colors hover:bg-neutral-100"
                       >
                         <Sparkles className="h-3.5 w-3.5" />
                         Social
@@ -397,7 +398,7 @@ export default function LibraryPage() {
       </section>
 
       <div className="mt-10 grid gap-4 md:grid-cols-2">
-        <section className="rounded-2xl border border-dashed border-border/40 bg-card/50 p-6">
+        <section className="rounded-2xl border border-dashed border-neutral-200 bg-white/70 p-6">
           <ImageIcon className="mb-3 h-6 w-6 text-muted-foreground/30" />
           <h2 className="text-sm font-bold text-foreground">Images</h2>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -405,13 +406,14 @@ export default function LibraryPage() {
           </p>
         </section>
 
-        <section className="rounded-2xl border border-dashed border-border/40 bg-card/50 p-6">
+        <section className="rounded-2xl border border-dashed border-neutral-200 bg-white/70 p-6">
           <Music className="mb-3 h-6 w-6 text-muted-foreground/30" />
           <h2 className="text-sm font-bold text-foreground">Music</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Voice-over and soundtrack assets stay attached to their projects for now.
           </p>
         </section>
+      </div>
       </div>
     </div>
   );

@@ -21,6 +21,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { getEngineDisplayName } from "@/lib/types";
+import { cleanModelName } from "@/lib/engine-intentions";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -158,7 +159,7 @@ const KpiCard = memo(function KpiCard({
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="relative overflow-hidden rounded-xl border border-border/40 bg-card/60 p-5 hover:border-border/60 transition-colors"
+      className="relative overflow-hidden rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm transition-colors hover:border-neutral-300"
     >
       {/* Accent bar top — Postiz style */}
       <div className={`absolute top-0 left-0 right-0 h-0.5 ${bg.replace("/10", "/40").replace("/15", "/50")}`} />
@@ -224,9 +225,9 @@ const SectionCard = memo(function SectionCard({
 }) {
   return (
     <div
-      className={`rounded-xl border border-border/40 bg-card/60 p-5 ${className ?? ""}`}
+      className={`rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm ${className ?? ""}`}
     >
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">
+      <h3 className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
         {title}
       </h3>
       {children}
@@ -347,7 +348,7 @@ function OverviewTab({ data }: { data: AnalyticsData }) {
                   <div className="flex items-center justify-between mb-1">
                     <span className="flex items-center gap-2 text-sm font-medium">
                       <Cpu className="h-3.5 w-3.5 text-muted-foreground" />
-                      {getEngineDisplayName(key)}
+                      {cleanModelName(getEngineDisplayName(key))}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {stats.count} &middot;{" "}
@@ -443,7 +444,7 @@ function OverviewTab({ data }: { data: AnalyticsData }) {
                 </p>
                 {job.engine && (
                   <span className="text-[10px] text-muted-foreground/60 hidden sm:inline">
-                    {getEngineDisplayName(job.engine)}
+                    {cleanModelName(getEngineDisplayName(job.engine))}
                   </span>
                 )}
                 <span className="text-[10px] text-muted-foreground/50 shrink-0">
@@ -710,7 +711,7 @@ function EnginesTab({ data }: { data: AnalyticsData }) {
                         }`}
                       />
                       <span className="text-sm font-semibold">
-                        {getEngineDisplayName(key)}
+                        {cleanModelName(getEngineDisplayName(key))}
                       </span>
                     </div>
                     <span className="text-xs text-muted-foreground font-mono">
@@ -827,36 +828,38 @@ export default function AnalyticsPage() {
   ];
 
   return (
-    <div className="px-6 py-8 max-w-6xl mx-auto">
+    <div className="min-h-screen bg-[#f5f3ee] px-6 py-8 lg:px-10">
+      <div className="mx-auto max-w-7xl">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="mb-6"
+        className="mb-6 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm"
       >
-        <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <BarChart3 className="h-6 w-6 text-primary" />
-              Analytics
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-neutral-950 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white">
+              <BarChart3 className="h-3.5 w-3.5" />
+              Performance room
+            </div>
+            <h1 className="text-3xl font-semibold tracking-tight text-neutral-950">Analytics</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600">
               Track your generation and publishing performance.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             {/* Period selector */}
-            <div className="flex rounded-lg border border-border/40 bg-card/60 p-0.5">
+            <div className="flex rounded-xl border border-neutral-200 bg-neutral-50 p-1">
               {([7, 30, 90] as PeriodKey[]).map((p) => (
                 <button
                   key={p}
                   onClick={() => setPeriod(p)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                     period === p
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "bg-white text-neutral-950 shadow-sm"
+                      : "text-neutral-500 hover:text-neutral-950"
                   }`}
                 >
                   {p}d
@@ -868,7 +871,7 @@ export default function AnalyticsPage() {
             <button
               onClick={() => fetchData()}
               disabled={refreshing}
-              className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-card/60 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-950 disabled:opacity-50"
             >
               <RefreshCw
                 className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`}
@@ -880,15 +883,15 @@ export default function AnalyticsPage() {
       </motion.div>
 
       {/* Tab bar */}
-      <div className="flex items-center gap-1 rounded-lg border border-border/40 bg-card/60 p-0.5 mb-6 w-fit">
+      <div className="mb-6 flex w-fit items-center gap-1 rounded-xl border border-neutral-200 bg-white p-1 shadow-sm">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md transition-all ${
               tab === t.key
-                ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
+                ? "bg-neutral-950 text-white shadow-sm"
+                : "text-neutral-500 hover:text-neutral-950"
             }`}
           >
             <t.icon className="h-3.5 w-3.5" />
@@ -911,6 +914,7 @@ export default function AnalyticsPage() {
           {tab === "engines" && <EnginesTab data={data} />}
         </motion.div>
       </AnimatePresence>
+      </div>
     </div>
   );
 }
