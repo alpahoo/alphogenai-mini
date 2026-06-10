@@ -12,6 +12,44 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-10 — Claude (Haiku 4.5) — T-1101a: AlphoResearch Schema Spec Review (docs-only)
+- Livré : Documentation complète du schéma Supabase pour AlphoResearch avant migration.
+- Scope : 5 tables, RLS policies, indexes, contraintes, tailles max — pas de migration SQL.
+- Tables :
+  - **research_jobs** : root entity, statuts de workflow (draft → sent_to_director),
+    error tracking, user_id ownership.
+  - **research_sources** : candidates découverts (SearXNG) + extraits (Crawl4AI),
+    extracted_markdown max 50 KB, extraction_status (pending/success/failed/blocked/timeout).
+  - **research_angles** : 3-5 angles proposés par LLM, scoring (0-1), 
+    UNIQUE constraint pour un seul selected par job.
+  - **research_scripts** : script généré + sections_json, quality_score + sous-scores
+    (hook_strength, clarity, originality, etc.), script max 10 KB.
+  - **research_storyboards** : scenes_json compatible Director, max 100 KB,
+    correspond directement à Director scene payload.
+- RLS Pattern :
+  - Users see only their own jobs (auth.uid() = user_id).
+  - RLS cascades via foreign keys (sources/angles/scripts inherit from job ownership).
+  - Service-role bypass pour routes trusted (existing app pattern).
+- Indexes :
+  - (user_id, created_at DESC) pour listing jobs.
+  - (job_id, selected) pour découvrir sources à extraire.
+  - (job_id, score DESC) pour trier angles par qualité.
+  - URL uniqueness per job pour prévenir duplicatas.
+- Contraintes Size :
+  - extracted_markdown: 50 KB (prévient articles énormes).
+  - script: 10 KB (full script ~2000 mots).
+  - sections_json: 5 KB (3-5 sections typical).
+  - scenes_json: 100 KB (full storyboard).
+- Intégration existante :
+  - scenes_json format compatible Director (no secondary transform).
+  - User ownership via auth.users (existing pattern).
+  - Service-role bypasses RLS en app routes (existing pattern).
+- Out of scope V1 : ❌ n8n hooks, ❌ seeded demo data, ❌ sharing users,
+  ❌ soft-delete, ❌ changedetection webhooks (Phase 4).
+- Fichier : `docs/product/alphoresearch-schema-review.md` (3700+ lignes).
+- Validation : Checklist complète (13 points) avant migration T-1101.
+- Prochaine étape : Review + validation ensemble, puis migration (T-1101).
+
 ## 2026-06-10 — Claude (Haiku 4.5) — T-1100b: Hostinger Service Contract (docs-only)
 - Livré : Documentation complète du contrat de service pour VPS Hostinger.
 - Scope : SearXNG (recherche), Crawl4AI (extraction), changedetection (future), 

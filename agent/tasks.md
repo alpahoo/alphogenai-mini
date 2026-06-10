@@ -897,10 +897,27 @@ Contraintes :
   `*.internal`/127.0.0.1 ni des ports services ; utiliser un gateway Hostinger
   unique en HTTPS + service token/tunnel, les containers restant privés.
 
-### [T-1101] Research schema + RLS — `status: todo` · `owner: claude`
-- Migration Supabase future pour `research_jobs`, `research_sources`,
-  `research_angles`, `research_scripts`, `research_storyboards`.
-- RLS/ownership obligatoire ; service-role uniquement dans routes de confiance.
+### [T-1101a] Schema spec review — `status: done` · `owner: claude`
+- Livré : `docs/product/alphoresearch-schema-review.md` (specs-only, no migration).
+- Couverture :
+  - 5 tables (research_jobs, research_sources, research_angles, research_scripts, research_storyboards)
+    avec colonnes, types, contraintes, tailles max.
+  - RLS policies (users see own jobs only, service-role bypass pour app routes).
+  - Indexes (performance pour découverte, listing, tri).
+  - Foreign key graph (jobs → sources/angles → scripts → storyboards).
+  - Size constraints : extracted_markdown 50 KB, script 10 KB, scenes_json 100 KB.
+  - Integration Director (scenes_json compatible).
+  - Validation checklist (13 points avant migration).
+- Out of scope : ❌ n8n hooks, ❌ seeded data, ❌ soft-delete V1, ❌ sharing.
+- Validation : Prête pour review + feedback avant migration T-1101.
+- Commit : À faire (docs-only).
+
+### [T-1101] Research schema migration — `status: todo` · `owner: claude`
+- Migration Supabase (après validation T-1101a).
+- Créer 5 tables avec contraintes exactes du spec.
+- Créer indexes + RLS policies.
+- Valider RLS (user A can't see user B's jobs).
+- Déployer à production.
 
 ### [T-1102] Research API skeleton — `status: todo` · `owner: claude/codex`
 - Routes auth research sans appels externes : create/read/update status.
