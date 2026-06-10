@@ -855,3 +855,56 @@ préservant tout état applicatif existant.
 - Tests : helper pur `lib/job-favorite.ts` couvert par Vitest.
 - Non-goals V1 : dossiers, tags utilisateur, tri avancé, favoris galerie publique.
 
+---
+
+## Axe 10 — AlphoResearch Engine  `status: in_progress`
+
+Objectif : transformer un sujet, une URL, un produit, un concurrent ou une tendance
+en sources verifiees, angles editoriaux, script, storyboard puis payload Director.
+
+Contraintes :
+- **Pas de n8n** : l'utilisateur a deja son orchestrateur/workflow.
+- Docs/spec d'abord ; aucune route/API/DB avant validation.
+- Hostinger VPS = services auxiliaires (SearXNG, Crawl4AI, changedetection.io,
+  Speaches/Kokoro, Redis/Dragonfly optionnel), pas remplacement de Vercel/Supabase.
+- V1 = approval manuel, pas de publication ou generation video automatique.
+
+### [T-1100a] Spec: AlphoResearch Engine — `status: done` · `owner: codex`
+- Livre : `docs/product/alphoresearch-engine-spec.md`.
+- Couvre : intent produit, architecture sans n8n, role Hostinger, API future,
+  modele de donnees propose, discovery SearXNG, extraction Crawl4AI, analyse LLM,
+  storyboard compatible Director, quality score, watchlists changedetection et
+  roadmap T-1100b -> T-1108.
+- Scope : docs-only, aucune migration, aucune route, aucun runtime.
+
+### [T-1100b] Service contract Hostinger — `status: todo` · `owner: codex/claude`
+- Documenter variables d'environnement, URLs internes, auth, health checks,
+  timeouts et fallback pour SearXNG/Crawl4AI/changedetection/Speaches.
+- Pas de code applicatif avant validation.
+
+### [T-1101] Research schema + RLS — `status: todo` · `owner: claude`
+- Migration Supabase future pour `research_jobs`, `research_sources`,
+  `research_angles`, `research_scripts`, `research_storyboards`.
+- RLS/ownership obligatoire ; service-role uniquement dans routes de confiance.
+
+### [T-1102] Research API skeleton — `status: todo` · `owner: claude/codex`
+- Routes auth research sans appels externes : create/read/update status.
+
+### [T-1103] Source discovery adapter — `status: todo` · `owner: codex`
+- SearXNG integration : queries, normalize, dedupe, classify, tests.
+
+### [T-1104] Extraction adapter — `status: todo` · `owner: codex`
+- Crawl4AI integration : Markdown extraction, metadata, per-source errors, caps.
+
+### [T-1105] Angles analysis — `status: todo` · `owner: codex/chatgpt`
+- Summaries, uncertainty, contradictions, 3-5 angles, recommended angle.
+
+### [T-1106] Script + storyboard — `status: todo` · `owner: codex`
+- Script depuis angle selectionne + scenes compatibles Director.
+
+### [T-1107] Research Studio UI — `status: todo` · `owner: codex`
+- Liste jobs, source review, angles, script approval, send to Director.
+
+### [T-1108] Watchlists — `status: todo` · `owner: claude`
+- changedetection.io webhook + notifications dashboard, sans auto-publication.
+
