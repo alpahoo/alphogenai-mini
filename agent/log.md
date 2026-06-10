@@ -953,3 +953,12 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Blog/legal/help rendus provider-neutral : suppression des noms infra/providers
   visibles dans les articles, privacy/terms et aide verified face ID.
 - Aucun changement route/API/DB/auth/generation/checkout.
+
+## 2026-06-10 - Codex - T-1111 public premium E2E smoke QA
+- Browser plugin indisponible dans cette session (`windows sandbox failed`) ;
+  fallback Playwright local utilise sur `http://localhost:3002`.
+- Mise a jour du smoke E2E : login accepte le nouveau CTA `Enter studio` et un
+  test parcourt les pages publiques premium (`pricing/about/technology/blog/
+  privacy/terms/help/generate`) en verifiant headlines + absence de noms
+  providers visibles.
+- Validation : Playwright 4/4, Vitest 399/399, tsc clean, lint clean.

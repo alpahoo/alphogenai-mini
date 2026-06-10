@@ -480,6 +480,13 @@ Spec : `docs/product/premium-product-experience-spec.md`.
 - Blog/legal/help nettoyés des noms providers/infra visibles et convertis en
   surfaces éditoriales warm-neutral ; aucun endpoint, DB, auth ou génération modifié.
 
+### [T-1111] Public premium E2E smoke QA — `status: done` · `owner: codex`
+- Mise à jour du smoke Playwright `tests/e2e/workspace-smoke.spec.ts`.
+- Couvre `/pricing`, `/about`, `/technology`, `/blog`, `/privacy`, `/terms`,
+  `/help/verified-face-id`, `/generate` + login + auth gate workspace.
+- Vérifie que les pages publiques refondues rendent leurs headlines et qu'aucun
+  nom provider sensible n'apparaît dans le texte visible.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio
