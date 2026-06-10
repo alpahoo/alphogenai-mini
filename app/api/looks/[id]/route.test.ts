@@ -43,7 +43,7 @@ describe("/api/looks/[id] — API validation", () => {
     });
 
     it("rejects non-string name", () => {
-      const bodies = [
+      const bodies: Array<{ name?: unknown }> = [
         { name: 123 },
         { name: null },
         { name: { nested: "object" } },
@@ -51,7 +51,7 @@ describe("/api/looks/[id] — API validation", () => {
       ];
 
       bodies.forEach((body) => {
-        const { name } = body as { name?: string };
+        const { name } = body;
         const isValid = typeof name === "string";
         expect(isValid).toBe(false);
       });
@@ -112,14 +112,16 @@ describe("/api/looks/[id] — API validation", () => {
     it("verifies user_id matches for PATCH", () => {
       const requestUserId = "user-123";
       const lookOwnerId = "user-123";
-      const isOwner = requestUserId === lookOwnerId;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const isOwner = (requestUserId as any) === (lookOwnerId as any);
       expect(isOwner).toBe(true);
     });
 
     it("rejects if user_id doesn't match", () => {
       const requestUserId = "user-123";
-      const lookOwnerId = "user-456";
-      const isOwner = requestUserId === lookOwnerId;
+      const lookOwnerId = "user-different";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const isOwner = (requestUserId as any) === (lookOwnerId as any);
       expect(isOwner).toBe(false);
     });
 

@@ -19,10 +19,17 @@ import {
   Sparkles,
   Star,
   Trash2,
-  X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { isJobFavorite } from "@/lib/job-favorite";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 interface VideoAsset {
   id: string;
@@ -513,88 +520,76 @@ export default function LibraryPage() {
         </section>
       </div>
 
-      {renameModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="rounded-2xl bg-white p-6 shadow-lg sm:w-96">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-neutral-950">Rename Look</h3>
-              <button
-                onClick={() => setRenameModalOpen(false)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="mt-4 space-y-3">
-              <label className="block">
-                <span className="text-sm font-medium text-neutral-700">Look name</span>
-                <input
-                  type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value.slice(0, 100))}
-                  maxLength={100}
-                  className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm text-neutral-950 outline-none focus:border-neutral-400"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && newName.trim()) handleSaveRename();
-                    if (e.key === "Escape") setRenameModalOpen(false);
-                  }}
-                  autoFocus
-                />
-                <p className="mt-1 text-xs text-muted-foreground">{newName.length}/100</p>
+      <Dialog open={renameModalOpen} onOpenChange={setRenameModalOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Rename Look</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label htmlFor="look-name" className="text-sm font-medium text-neutral-700">
+                Look name
               </label>
-            </div>
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => setRenameModalOpen(false)}
-                className="flex-1 rounded-lg border border-neutral-200 px-3 py-2.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveRename}
-                disabled={!newName.trim() || isSaving}
-                className="flex-1 rounded-lg bg-neutral-950 px-3 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 disabled:opacity-50"
-              >
-                {isSaving ? "Saving..." : "Save"}
-              </button>
+              <input
+                id="look-name"
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value.slice(0, 100))}
+                maxLength={100}
+                className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm text-neutral-950 outline-none focus:border-neutral-400"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newName.trim()) handleSaveRename();
+                }}
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground">{newName.length}/100</p>
             </div>
           </div>
-        </div>
-      )}
+          <DialogFooter>
+            <button
+              onClick={() => setRenameModalOpen(false)}
+              className="rounded-lg border border-neutral-200 px-3 py-2.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveRename}
+              disabled={!newName.trim() || isSaving}
+              className="rounded-lg bg-neutral-950 px-3 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 disabled:opacity-50"
+              aria-busy={isSaving}
+            >
+              {isSaving ? "Saving..." : "Save"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {deleteConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="rounded-2xl bg-white p-6 shadow-lg sm:w-96">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-neutral-950">Delete Look</h3>
-              <button
-                onClick={() => setDeleteConfirmOpen(false)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <p className="mt-4 text-sm text-neutral-600">
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Delete Look</DialogTitle>
+            <DialogDescription>
               This will permanently delete the Look. You can still reference the original job.
-            </p>
-            <div className="mt-6 flex gap-3">
-              <button
-                onClick={() => setDeleteConfirmOpen(false)}
-                className="flex-1 rounded-lg border border-neutral-200 px-3 py-2.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmDelete}
-                disabled={isDeleting}
-                className="flex-1 rounded-lg bg-red-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                {isDeleting ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              onClick={() => setDeleteConfirmOpen(false)}
+              className="rounded-lg border border-neutral-200 px-3 py-2.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+              className="rounded-lg bg-red-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              aria-busy={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </div>
     </div>
   );
