@@ -27,6 +27,50 @@ Hostinger VPS hosts auxiliary research and support services for AlphoResearch. T
 
 ---
 
+## Architecture Review Addendum
+
+Before implementation, the network contract needs one correction: Vercel cannot call
+`*.alphoresearch.internal` names that resolve to `127.0.0.1` on the VPS. From Vercel,
+`127.0.0.1` is the Vercel runtime itself, not Hostinger. Also, whitelisting Vercel
+outbound IPs is not a stable security boundary for most Vercel deployments.
+
+Recommended production-safe access pattern:
+
+```text
+Vercel /api/research/*
+  |
+  | HTTPS + service token
+  v
+Hostinger edge gateway
+  |
+  | private Docker network
+  +-- SearXNG
+  +-- Crawl4AI
+  +-- changedetection.io
+  +-- Speaches/Kokoro
+```
+
+Acceptable gateway options:
+- Caddy/Nginx reverse proxy on Hostinger with public DNS such as
+  `research-gateway.alphogen.com`, TLS, and `Authorization: Bearer <service token>`.
+- Cloudflare Tunnel / Zero Trust in front of the VPS.
+- Tailscale/WireGuard only if the deployment environment can reliably reach the
+  private network.
+
+Implementation rule:
+- Individual service containers stay private on the Docker network.
+- Vercel never calls raw service ports directly.
+- Public exposure is limited to a single gateway endpoint with authentication,
+  rate limits, request size limits, and logs.
+- Do not disable TLS verification in production. Use a public certificate or a
+  trusted tunnel/proxy path.
+
+The `*.alphoresearch.internal` hostnames below should be interpreted as VPS
+internal Docker aliases, not URLs that Vercel can call directly. Future app env
+vars should point to the gateway, not to these aliases.
+
+---
+
 ## Service Definitions
 
 ### 1. SearXNG
@@ -56,8 +100,9 @@ SEARXNG_BASE_URL=https://search.alphoresearch.internal:9090
 
 #### Auth / Access Control
 
-- No authentication required **internally** (VPS-internal access only).
-- Firewall rule: Allow port 9090 from Vercel outbound IP range only (whitelist in Hostinger firewall).
+- No authentication required **inside the private Docker network**.
+- External callers must go through the Hostinger gateway with a service token.
+- Do not expose port 9090 directly to the public internet.
 - Rate limit: 60 req/min per search client (built-in SearXNG config).
 
 #### API Contract
@@ -166,8 +211,9 @@ CRAWL4AI_USER_AGENT="AlphoResearch/1.0 (+https://alphogenai.com)"
 
 #### Auth / Access Control
 
-- No authentication required **internally** (VPS-internal access only).
-- Firewall: Allow port 8000 from Vercel outbound IP only.
+- No authentication required **inside the private Docker network**.
+- External callers must go through the Hostinger gateway with a service token.
+- Do not expose port 8000 directly to the public internet.
 - Rate limit: 5 concurrent extractions, 60 req/min total.
 
 #### API Contract
@@ -382,15 +428,16 @@ Volumes: /var/lib/redis (persistence)
 
 | Source | Destination | Port | Protocol | Rule |
 | --- | --- | --- | --- | --- |
-| Vercel outbound IP | SearXNG | 9090 | HTTPS | Whitelist |
-| Vercel outbound IP | Crawl4AI | 8000 | HTTPS | Whitelist |
-| Vercel outbound IP | Redis | 6379 | TCP | Whitelist (if enabled) |
+| Public internet | Hostinger gateway | 443 | HTTPS | Service token + rate limit |
+| Gateway container | SearXNG | 9090 | Docker network | Private only |
+| Gateway container | Crawl4AI | 8000 | Docker network | Private only |
+| Gateway container | Redis | 6379 | Docker network | Private only, if enabled |
 | VPS internal | All services | 9090, 8000, ... | TCP | Allow |
-| World | Hostinger VPS | 22, 80, 443 | TCP | SSH + standard (no service ports exposed) |
+| World | Hostinger VPS | 22, 80, 443 | TCP | SSH + gateway only |
 
 ### Hostname Resolution
 
-Internal DNS (via docker-compose or /etc/hosts on VPS):
+Internal DNS (via docker-compose or /etc/hosts on VPS only):
 
 ```
 search.alphoresearch.internal    → 127.0.0.1
@@ -402,9 +449,10 @@ redis.alphoresearch.internal     → 127.0.0.1 (if enabled)
 
 ### SSL/TLS
 
-- All service endpoints use self-signed certs or internal CA.
-- Vercel app skips verification for internal-only calls OR trusts internal CA.
-- No publicly routable hostnames.
+- Service containers use private Docker aliases.
+- The public gateway uses a valid TLS certificate or a trusted tunnel.
+- Vercel must not skip TLS verification in production.
+- No raw service ports are publicly routable.
 
 ---
 

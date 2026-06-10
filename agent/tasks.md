@@ -893,6 +893,9 @@ Contraintes :
   - **Scope out** : ❌ production Supabase/Next.js sur Hostinger, ❌ n8n, ❌ auto-publish.
 - Validation : Prête pour review avant T-1101 (schema DB).
 - Commit : 241e6e1+ (docs/product/hostinger-service-contract.md).
+- Review Codex : addendum réseau ajouté. Vercel ne doit pas appeler directement
+  `*.internal`/127.0.0.1 ni des ports services ; utiliser un gateway Hostinger
+  unique en HTTPS + service token/tunnel, les containers restant privés.
 
 ### [T-1101] Research schema + RLS — `status: todo` · `owner: claude`
 - Migration Supabase future pour `research_jobs`, `research_sources`,
