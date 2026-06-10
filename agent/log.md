@@ -932,3 +932,14 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Polish UI-only de `/home` : fond warm-neutral, hero workspace blanc, CTA neutre,
   production pulse, pipeline, starters et recent projects alignes avec l'Axe 11.
 - Aucun changement requete Supabase, navigation, auth, routes ou logique metier.
+
+## 2026-06-10 - Codex - T-1109 public secondary pages premium pass
+- Polish UI/copy-only de `/pricing`, `/about` et `/technology` pour les aligner
+  avec la direction Axe 11 : warm-neutral, surfaces editoriales, CTA sobres,
+  langage studio/Director plutot que template SaaS ou page stack.
+- Confidentialite : textes publics provider-neutral ; `/technology` ne liste plus
+  les providers/infra/modeles internes et parle de capacites/orchestration.
+- Pricing conserve le flux checkout existant via `/api/stripe/checkout` ; aucune
+  route/API/DB/auth/Stripe modifiee.
+- Diagnostic Vercel : le commit `d6b4647` (signale en erreur cote Vercel) build
+  correctement en local ; si Vercel echoue encore, recuperer les logs exacts.

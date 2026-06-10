@@ -1,365 +1,253 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
-  Sparkles,
-  Cpu,
-  ShieldCheck,
-  Layers,
-  Wand2,
-  Workflow,
-  Server,
-  Cloud,
-  Database,
-  HardDrive,
-  Code2,
-  CreditCard,
+  ArrowRight,
   Check,
+  Cpu,
+  Database,
+  Film,
+  Layers,
   Lock,
-  Globe2,
-  ScrollText,
+  Server,
+  ShieldCheck,
+  Sparkles,
+  Workflow,
 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Technology — AlphoGen",
+  title: "Technology - AlphoGen",
   description:
-    "AlphoGen orchestrates the world's most advanced generative video AI — Wan 2.6/2.7, Happy Horse 1.0 — within a unified production platform.",
+    "AlphoGen combines model orchestration, planning, assets, and safety gates into a production-grade AI video workspace.",
   openGraph: {
-    title: "Technology — AlphoGen",
+    title: "Technology - AlphoGen",
     description:
-      "AlphoGen orchestrates the world's most advanced generative video AI — Wan 2.6/2.7, Happy Horse 1.0 — within a unified production platform.",
+      "AlphoGen combines model orchestration, planning, assets, and safety gates into a production-grade AI video workspace.",
     type: "website",
   },
 };
 
-const ARCHITECTURE_CARDS = [
+const ARCHITECTURE = [
+  {
+    icon: Workflow,
+    title: "Director-first planning",
+    body: "The workspace turns an idea into editable scenes, durations, reference roles, and readiness signals before generation.",
+  },
   {
     icon: Layers,
-    title: "Engine Registry",
-    body: "A pluggable engine registry routes each generation request to the optimal model based on user tier, prompt complexity, scene type, and quality requirements. New models integrate in days, not months.",
+    title: "Model orchestration",
+    body: "A private routing layer chooses the right generation capability for each workflow while keeping provider details out of the product surface.",
   },
   {
     icon: ShieldCheck,
-    title: "Defense-in-Depth Validation",
-    body: "Every generation passes through a multi-layer validation pipeline — TypeScript at the edge, Python at the orchestrator, and Modal at the inference layer — ensuring consistent output quality and fail-fast safety.",
-  },
-  {
-    icon: Cpu,
-    title: "Elastic GPU Compute",
-    body: "Built on Modal for serverless GPU inference. Auto-scales from zero to thousands of concurrent jobs based on demand. Zero idle cost, sub-second cold starts on warm pools.",
+    title: "Safety and ownership gates",
+    body: "Prompt policy, plan limits, asset ownership, reference validation, and quota checks run before any expensive generation begins.",
   },
 ];
 
-const MODEL_CARDS = [
+const PIPELINE = [
   {
-    name: "Wan 2.6",
-    tag: "Production",
-    tagClass: "border-indigo-500/40 bg-indigo-500/10 text-indigo-300",
-    body: "Alibaba's flagship generative video model. 720p and 1080p output, image-to-video, multi-scene generation, and strong prompt adherence. Our default workhorse for fast, high-quality clips.",
+    step: "01",
+    title: "Brief",
+    body: "Prompt, platform, references, creator identity, product images, and saved looks are collected as structured intent.",
   },
   {
-    name: "Wan 2.7",
-    tag: "Production",
-    tagClass: "border-indigo-500/40 bg-indigo-500/10 text-indigo-300",
-    body: "Optimized for longer-form content (>5s). Higher motion coherence and improved temporal consistency for narrative video sequences.",
+    step: "02",
+    title: "Plan",
+    body: "AI Director builds a scene plan with readiness, cost, duration, and compatibility feedback that can be edited.",
   },
   {
-    name: "Happy Horse 1.0",
-    tag: "Premium",
-    tagClass: "border-yellow-500/40 bg-yellow-500/10 text-yellow-300",
-    body: "The #1-ranked AI video model on Artificial Analysis Video Arena. 15B parameters, native joint audio-video generation, 1080p output, multilingual lip-sync. Used in our premium tier for production-grade output.",
+    step: "03",
+    title: "Generate",
+    body: "The backend validates the final payload, applies the right gates, then dispatches scenes through the generation pipeline.",
   },
   {
-    name: "Multi-LLM Prompt Layer",
-    tag: "Enhancement",
-    tagClass: "border-purple-500/40 bg-purple-500/10 text-purple-300",
-    body: "Qwen and Claude models power our prompt enhancement pipeline, expanding short user prompts into detailed cinematographic descriptions for higher-quality generations.",
-  },
-];
-
-const STACK = [
-  {
-    icon: Server,
-    name: "Modal",
-    line: "Serverless GPU inference and Python orchestration",
-  },
-  {
-    icon: Cloud,
-    name: "Alibaba Cloud Bailian",
-    line: "Frontier video model API access (Frankfurt region, GDPR-compliant)",
-  },
-  {
-    icon: Database,
-    name: "Supabase",
-    line: "Authentication, database, and storage",
-  },
-  {
-    icon: HardDrive,
-    name: "Cloudflare R2",
-    line: "Global video delivery and asset storage",
-  },
-  {
-    icon: Code2,
-    name: "Next.js",
-    line: "App Router, server components, edge-optimized frontend",
-  },
-  {
-    icon: CreditCard,
-    name: "Stripe",
-    line: "Subscription billing and metered usage",
+    step: "04",
+    title: "Refine",
+    body: "The job studio supports scene review, social exports, references, duplication, and future saved-look reuse.",
   },
 ];
 
 const CAPABILITIES = [
-  "Text-to-video generation across multiple model engines",
-  "Image-to-video with reference-driven character consistency",
-  "Multi-scene composition with narrative continuity",
-  "Native synchronized audio generation (dialogue, ambient, Foley)",
-  "Multilingual lip-sync in 7+ languages",
-  "720p and 1080p HD output",
-  "Async REST API with webhook callbacks",
-  "Tiered model selection (Standard / Pro / Studio)",
-  "Prompt enhancement via integrated LLM pipeline",
-  "Project history, regeneration, and creative iteration",
-];
-
-const COMPLIANCE = [
-  {
-    icon: Globe2,
-    title: "GDPR Compliant",
-    body: "European data residency via Alibaba Cloud Frankfurt region. Full compliance with EU data protection regulations.",
-  },
-  {
-    icon: Lock,
-    title: "Content Safety",
-    body: "Multi-layer content moderation. Generation is restricted to lawful, non-infringing creative content. No deepfakes, no public figure impersonation, no harmful material.",
-  },
-  {
-    icon: ScrollText,
-    title: "Commercial Rights",
-    body: "Users retain full commercial rights to videos generated through AlphoGen, in accordance with our model providers' terms of service.",
-  },
-];
-
-const ROADMAP = [
-  "Q2 2026 — Private beta launch",
-  "Q3 2026 — Public release + Pro tier",
-  "Q4 2026 — Studio tier + Enterprise API",
+  "Multi-scene story planning",
+  "Reference image roles",
+  "Verified identity assets",
+  "UGC product planning",
+  "Saved-look foundations",
+  "Social export pack",
+  "Curated public gallery",
+  "Agent-ready MCP design",
 ];
 
 export default function TechnologyPage() {
   return (
-    <div className="relative overflow-hidden px-4 py-16 sm:py-24">
-      {/* Background gradient orbs — same language as homepage */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute top-1/4 left-1/4 h-96 w-96 rounded-full bg-indigo-500/10 blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 h-96 w-96 rounded-full bg-purple-500/10 blur-3xl" />
-      </div>
+    <main className="min-h-screen bg-[#f4f1ea] text-neutral-950">
+      <section className="border-b border-black/10 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5">
+          <Link href="/" className="text-sm font-semibold">
+            AlphoGen
+          </Link>
+          <Link
+            href="/create"
+            className="inline-flex items-center gap-2 rounded-full bg-neutral-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800"
+          >
+            Open studio
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </section>
 
-      <div className="relative z-10 mx-auto max-w-6xl">
-        {/* ── Section 1: Hero ─────────────────────────────────────── */}
-        <section className="text-center">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border/50 bg-card/50 px-4 py-2 text-sm text-muted-foreground backdrop-blur-sm">
-            <Sparkles className="h-4 w-4 text-primary" />
-            Technology
-          </div>
-          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-            Engineered for{" "}
-            <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-              cinematic AI video
-            </span>{" "}
-            at scale
-          </h1>
-          <p className="mx-auto mt-5 max-w-3xl text-lg text-muted-foreground">
-            AlphoGen orchestrates the world&apos;s most advanced generative
-            video models within a unified, production-ready creative platform —
-            built for performance, scalability, and creative freedom.
-          </p>
-        </section>
-
-        {/* ── Section 2: Architecture overview ────────────────────── */}
-        <section className="mt-24">
-          <div className="mb-10 text-center">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              A multi-engine AI orchestration platform
-            </h2>
-            <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
-              We don&apos;t bet on a single model. We orchestrate the best of
-              generative video AI behind a unified API.
+      <section className="mx-auto max-w-7xl px-5 py-12 sm:py-16">
+        <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
+          <div>
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-neutral-700">
+              <Cpu className="h-4 w-4 text-[#5f5bf6]" />
+              Technology
+            </div>
+            <h1 className="max-w-4xl text-5xl font-semibold leading-[0.95] tracking-tight text-neutral-950 sm:text-7xl">
+              The system behind directed AI video.
+            </h1>
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-neutral-600">
+              AlphoGen is built as an orchestration layer for creators: planning,
+              assets, validation, generation, and post-production working as one
+              pipeline.
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-            {ARCHITECTURE_CARDS.map((card) => {
-              const Icon = card.icon;
-              return (
-                <div
-                  key={card.title}
-                  className="flex flex-col rounded-2xl border border-border/50 bg-card/50 p-7 backdrop-blur-sm"
-                >
-                  <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                    <Icon className="h-5 w-5 text-primary" />
-                  </div>
-                  <h3 className="mb-2 text-lg font-semibold">{card.title}</h3>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    {card.body}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </section>
 
-        {/* ── Section 3: AI Models ────────────────────────────────── */}
-        <section className="mt-24">
-          <div className="mb-10 text-center">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Powered by frontier video AI
-            </h2>
-          </div>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-            {MODEL_CARDS.map((m) => (
-              <div
-                key={m.name}
-                className="rounded-2xl border border-border/50 bg-card/50 p-7 backdrop-blur-sm transition-colors hover:border-border"
-              >
-                <div className="mb-4 flex items-start justify-between gap-4">
-                  <h3 className="text-xl font-semibold">{m.name}</h3>
-                  <span
-                    className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${m.tagClass}`}
-                  >
-                    {m.tag}
-                  </span>
+          <div className="rounded-[32px] bg-neutral-950 p-6 text-white shadow-2xl shadow-black/20">
+            <div className="grid gap-3 sm:grid-cols-3">
+              {[
+                { label: "Scenes", value: "10" },
+                { label: "Duration", value: "120s" },
+                { label: "Flow", value: "Studio" },
+              ].map((metric) => (
+                <div key={metric.label} className="rounded-2xl bg-white/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/40">
+                    {metric.label}
+                  </p>
+                  <p className="mt-3 text-3xl font-semibold">{metric.value}</p>
                 </div>
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {m.body}
+              ))}
+            </div>
+            <div className="mt-4 rounded-[24px] border border-white/10 bg-white/10 p-5">
+              <div className="flex items-center gap-3">
+                <Film className="h-5 w-5 text-[#baff3b]" />
+                <p className="text-sm font-semibold text-white/80">
+                  One brief becomes a structured production plan.
                 </p>
               </div>
+              <div className="mt-5 grid gap-2">
+                {["Prompt policy", "Reference ownership", "Plan and quota", "Scene dispatch"].map(
+                  (item) => (
+                    <div
+                      key={item}
+                      className="flex items-center gap-3 rounded-2xl bg-black/20 px-4 py-3 text-sm text-white/70"
+                    >
+                      <Check className="h-4 w-4 text-[#baff3b]" />
+                      {item}
+                    </div>
+                  ),
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <section className="mt-16 grid gap-5 md:grid-cols-3">
+          {ARCHITECTURE.map((item) => {
+            const Icon = item.icon;
+            return (
+              <article
+                key={item.title}
+                className="rounded-[28px] border border-black/10 bg-white p-6 shadow-sm"
+              >
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <h2 className="mt-6 text-xl font-semibold">{item.title}</h2>
+                <p className="mt-3 text-sm leading-7 text-neutral-600">
+                  {item.body}
+                </p>
+              </article>
+            );
+          })}
+        </section>
+
+        <section className="mt-16 rounded-[32px] bg-neutral-950 p-6 text-white sm:p-8">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
+                Pipeline
+              </p>
+              <h2 className="mt-4 max-w-2xl text-4xl font-semibold tracking-tight">
+                Built to preserve intent from idea to output.
+              </h2>
+            </div>
+            <Sparkles className="hidden h-10 w-10 text-[#baff3b] sm:block" />
+          </div>
+          <div className="mt-8 grid gap-4 lg:grid-cols-4">
+            {PIPELINE.map((step) => (
+              <article key={step.step} className="rounded-[24px] bg-white/10 p-5">
+                <p className="text-sm font-semibold text-[#baff3b]">
+                  {step.step}
+                </p>
+                <h3 className="mt-5 text-xl font-semibold">{step.title}</h3>
+                <p className="mt-3 text-sm leading-7 text-white/65">
+                  {step.body}
+                </p>
+              </article>
             ))}
           </div>
         </section>
 
-        {/* ── Section 4: Infrastructure stack ─────────────────────── */}
-        <section className="mt-24">
-          <div className="mb-10 text-center">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Production-grade infrastructure
+        <section className="mt-16 grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
+          <div className="rounded-[28px] border border-black/10 bg-white p-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100">
+              <Lock className="h-5 w-5" />
+            </div>
+            <h2 className="mt-6 text-3xl font-semibold tracking-tight">
+              Private internals, clear creative controls.
             </h2>
-            <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
-              Built on best-in-class platforms for global reliability,
-              security, and performance.
+            <p className="mt-4 text-sm leading-7 text-neutral-600">
+              Users see capabilities, readiness, cost, and model names that make
+              product sense. Provider routing, credentials, and operational
+              details remain behind the API boundary.
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-            {STACK.map((s) => {
-              const Icon = s.icon;
-              return (
+          <div className="rounded-[28px] border border-black/10 bg-white p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-neutral-500">
+              Capabilities
+            </p>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {CAPABILITIES.map((capability) => (
                 <div
-                  key={s.name}
-                  className="flex flex-col rounded-xl border border-border/50 bg-card/50 p-5 backdrop-blur-sm"
+                  key={capability}
+                  className="flex items-center gap-3 rounded-2xl bg-[#f4f1ea] px-4 py-4 text-sm font-semibold"
                 >
-                  <Icon className="mb-3 h-5 w-5 text-primary" />
-                  <h3 className="text-sm font-semibold">{s.name}</h3>
-                  <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                    {s.line}
-                  </p>
+                  <Server className="h-4 w-4 text-[#5f5bf6]" />
+                  {capability}
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
         </section>
 
-        {/* ── Section 5: Capabilities ─────────────────────────────── */}
-        <section className="mt-24">
-          <div className="mb-10 text-center">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              What AlphoGen can do
-            </h2>
-          </div>
-          <ul className="mx-auto grid max-w-4xl grid-cols-1 gap-3 sm:grid-cols-2">
-            {CAPABILITIES.map((c) => (
-              <li
-                key={c}
-                className="flex items-start gap-3 rounded-xl border border-border/40 bg-card/30 px-4 py-3 backdrop-blur-sm"
-              >
-                <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <span className="text-sm text-foreground/90">{c}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        {/* ── Section 6: Compliance ───────────────────────────────── */}
-        <section className="mt-24">
-          <div className="mb-10 text-center">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Built responsibly
-            </h2>
-          </div>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-            {COMPLIANCE.map((c) => {
-              const Icon = c.icon;
-              return (
-                <div
-                  key={c.title}
-                  className="flex flex-col rounded-2xl border border-border/50 bg-card/50 p-7 backdrop-blur-sm"
-                >
-                  <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                    <Icon className="h-5 w-5 text-primary" />
-                  </div>
-                  <h3 className="mb-2 text-lg font-semibold">{c.title}</h3>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    {c.body}
-                  </p>
-                </div>
-              );
-            })}
+        <section className="mt-16 rounded-[32px] border border-black/10 bg-white p-6 sm:p-8">
+          <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
+            <div>
+              <Database className="h-8 w-8" />
+              <h2 className="mt-5 text-3xl font-semibold tracking-tight">
+                Ready for agent workflows.
+              </h2>
+            </div>
+            <p className="text-sm leading-7 text-neutral-600">
+              The same pure helpers used by the product can power future MCP
+              tools for validation, plan creation, UGC planning, job lookup, and
+              safe execution through the internal API. The goal is one contract,
+              shared by humans and agents.
+            </p>
           </div>
         </section>
-
-        {/* ── Section 7: Roadmap ──────────────────────────────────── */}
-        <section className="mt-24">
-          <div className="mb-8 text-center">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Roadmap
-            </h2>
-          </div>
-          <div className="flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
-            {ROADMAP.map((r) => (
-              <div
-                key={r}
-                className="rounded-full border border-border/60 bg-card/60 px-5 py-2.5 text-sm text-foreground/90 backdrop-blur-sm"
-              >
-                {r}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* ── Section 8: Bottom CTA ───────────────────────────────── */}
-        <section className="mt-24 rounded-3xl border border-border/50 bg-card/40 p-10 text-center backdrop-blur-sm sm:p-14">
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Ready to create?
-          </h2>
-          <p className="mx-auto mt-4 max-w-xl text-lg text-muted-foreground">
-            Join the private beta or explore our model library.
-          </p>
-          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-            <Link
-              href="/create"
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-all hover:brightness-110"
-            >
-              <Wand2 className="h-4 w-4" />
-              Start Creating
-            </Link>
-            <Link
-              href="/pricing"
-              className="inline-flex items-center gap-2 rounded-xl border border-border bg-card/50 px-6 py-3 text-sm font-semibold text-foreground backdrop-blur-sm transition-all hover:bg-card"
-            >
-              <Workflow className="h-4 w-4" />
-              View Pricing
-            </Link>
-          </div>
-        </section>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

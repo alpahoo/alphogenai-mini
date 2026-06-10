@@ -1,115 +1,168 @@
 import type { Metadata } from "next";
-import { Sparkles, Cpu, Layers, Workflow } from "lucide-react";
+import Link from "next/link";
+import {
+  ArrowRight,
+  Clapperboard,
+  Layers,
+  ShieldCheck,
+  Sparkles,
+  Workflow,
+} from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "About — AlphoGen",
+  title: "About - AlphoGen",
   description:
-    "AlphoGen is an AI-first studio building creative tools for video generation.",
+    "AlphoGen is an AI video studio for directing cinematic, social, product, and creator-led video workflows.",
   openGraph: {
-    title: "About — AlphoGen",
+    title: "About - AlphoGen",
     description:
-      "AlphoGen is an AI-first studio building creative tools for video generation.",
+      "AlphoGen is an AI video studio for directing cinematic, social, product, and creator-led video workflows.",
     type: "website",
   },
 };
 
-const TECHNOLOGY = [
+const PRINCIPLES = [
+  {
+    icon: Clapperboard,
+    title: "Direction before generation",
+    body: "We turn a prompt into an editable plan first, so creators can shape scenes, duration, references, and intent before spending a generation.",
+  },
   {
     icon: Layers,
-    title: "Multi-Engine AI",
-    description:
-      "We orchestrate the best open and proprietary video models (Wan 2.6, Wan 2.7, Happy Horse 1.0, and more) behind a single API, automatically routing each generation to the optimal engine based on user tier, scene complexity, and quality requirements.",
+    title: "Assets with memory",
+    body: "Faces, references, saved looks, product images, and prior outputs should behave like a reusable production kit, not one-off uploads.",
   },
   {
-    icon: Cpu,
-    title: "GPU-Native Infrastructure",
-    description:
-      "Powered by Modal for elastic GPU compute, Supabase for data, and Cloudflare R2 for global delivery. Built to scale from one video to one million.",
+    icon: ShieldCheck,
+    title: "Privacy by curation",
+    body: "Public showcases are selected explicitly. Private prompts, test outputs, and user assets never become marketing material by accident.",
   },
-  {
-    icon: Workflow,
-    title: "Creator-First Workspace",
-    description:
-      "A studio-grade interface for multi-scene composition, image-to-video, reference-driven generation, and audio sync — designed for production workflows, not prompts in a box.",
-  },
+];
+
+const WORKFLOWS = [
+  "Cinematic story videos",
+  "UGC product pitches",
+  "Avatar presenters",
+  "Reference-led variations",
+  "Social exports",
+  "Post-generation refinements",
 ];
 
 export default function AboutPage() {
   return (
-    <div className="relative overflow-hidden px-4 py-16 sm:py-24">
-      {/* Background gradient orbs — same language as homepage */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute top-1/4 left-1/4 h-96 w-96 rounded-full bg-indigo-500/10 blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 h-96 w-96 rounded-full bg-purple-500/10 blur-3xl" />
-      </div>
+    <main className="min-h-screen bg-[#f4f1ea] text-neutral-950">
+      <section className="border-b border-black/10 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5">
+          <Link href="/" className="text-sm font-semibold">
+            AlphoGen
+          </Link>
+          <Link
+            href="/create"
+            className="inline-flex items-center gap-2 rounded-full bg-neutral-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800"
+          >
+            Create your own
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </section>
 
-      <div className="relative z-10 mx-auto max-w-4xl">
-        {/* Hero — matches homepage pattern: badge → headline → subhead */}
-        <section className="text-center">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border/50 bg-card/50 px-4 py-2 text-sm text-muted-foreground backdrop-blur-sm">
-            <Sparkles className="h-4 w-4 text-primary" />
-            About AlphoGen
+      <section className="mx-auto max-w-7xl px-5 py-12 sm:py-16">
+        <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-end">
+          <div>
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-neutral-700">
+              <Sparkles className="h-4 w-4 text-[#5f5bf6]" />
+              About the studio
+            </div>
+            <h1 className="max-w-4xl text-5xl font-semibold leading-[0.95] tracking-tight text-neutral-950 sm:text-7xl">
+              A video studio for people who want to direct AI.
+            </h1>
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-neutral-600">
+              AlphoGen is built around a simple idea: AI video should feel like
+              directing a production, not filling out a technical form. The
+              workspace brings planning, references, looks, generation, and
+              post-production into one deliberate flow.
+            </p>
           </div>
-          <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-            Building the future of{" "}
-            <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-              AI video creation
-            </span>
-          </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg text-muted-foreground">
-            AlphoGen is an AI-first studio building creative tools that let
-            anyone produce broadcast-quality video without a camera, crew, or
-            budget.
-          </p>
-        </section>
 
-        {/* Mission */}
-        <section className="mt-20">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-primary">
-            Our mission
-          </h2>
-          <p className="text-lg leading-relaxed text-foreground/90">
-            We combine state-of-the-art generative video models within a
-            unified workspace designed for creators, marketers, and content
-            teams. Our goal: collapse the gap between idea and output — from
-            days to seconds. We believe creative production should be limited
-            only by imagination, not by budget, equipment, or technical skill.
-          </p>
-        </section>
-
-        {/* What we build */}
-        <section className="mt-16">
-          <h2 className="mb-6 text-sm font-semibold uppercase tracking-wider text-primary">
-            What we build
-          </h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {TECHNOLOGY.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div
-                  key={item.title}
-                  className="flex flex-col rounded-xl border border-border/50 bg-card/50 p-6 backdrop-blur-sm"
-                >
-                  <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                    <Icon className="h-4 w-4 text-primary" />
-                  </div>
-                  <h3 className="mb-2 font-semibold">{item.title}</h3>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    {item.description}
-                  </p>
+          <div className="rounded-[32px] bg-neutral-950 p-7 text-white shadow-2xl shadow-black/20">
+            <div className="aspect-[4/3] overflow-hidden rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_20%_20%,rgba(186,255,59,0.22),transparent_24%),linear-gradient(135deg,#111,#343026_54%,#101010)]">
+              <div className="flex h-full flex-col justify-between p-6">
+                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-white/50">
+                  <span>Director Console</span>
+                  <span>Preview</span>
                 </div>
-              );
-            })}
+                <div>
+                  <p className="max-w-sm text-3xl font-semibold leading-tight">
+                    Plan scenes, attach references, generate with intent.
+                  </p>
+                  <div className="mt-6 grid grid-cols-3 gap-2">
+                    {["Plan", "Assets", "Studio"].map((item) => (
+                      <div
+                        key={item}
+                        className="rounded-2xl border border-white/10 bg-white/10 p-3 text-sm text-white/70"
+                      >
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
+
+        <section className="mt-16 grid gap-5 md:grid-cols-3">
+          {PRINCIPLES.map((principle) => {
+            const Icon = principle.icon;
+            return (
+              <article
+                key={principle.title}
+                className="rounded-[28px] border border-black/10 bg-white p-6 shadow-sm"
+              >
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <h2 className="mt-6 text-xl font-semibold">
+                  {principle.title}
+                </h2>
+                <p className="mt-3 text-sm leading-7 text-neutral-600">
+                  {principle.body}
+                </p>
+              </article>
+            );
+          })}
         </section>
 
-        {/* Stage */}
-        <section className="mt-16 text-center">
-          <p className="text-sm text-muted-foreground">
-            Currently in private beta. Public launch Q2 2026.
-          </p>
+        <section className="mt-16 rounded-[32px] border border-black/10 bg-white p-6 sm:p-8">
+          <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-neutral-500">
+                What it is becoming
+              </p>
+              <h2 className="mt-4 text-4xl font-semibold tracking-tight">
+                One workspace for repeatable video production.
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-neutral-600">
+                The goal is not only better models. It is a system where a
+                creator can define a look, bring in a product, keep a character
+                consistent, generate a plan, and iterate without losing the
+                creative thread.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {WORKFLOWS.map((workflow) => (
+                <div
+                  key={workflow}
+                  className="flex items-center gap-3 rounded-2xl bg-[#f4f1ea] px-4 py-4 text-sm font-semibold"
+                >
+                  <Workflow className="h-4 w-4 text-[#5f5bf6]" />
+                  {workflow}
+                </div>
+              ))}
+            </div>
+          </div>
         </section>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

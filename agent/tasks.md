@@ -463,6 +463,15 @@ Spec : `docs/product/premium-product-experience-spec.md`.
 - Aucun changement requêtes Supabase, endpoints, drag/drop schedule, actions projets,
   library links, analytics API ou logique métier.
 
+### [T-1109] Public secondary pages premium pass — `status: done` · `owner: codex`
+- Livre UI/copy-only : `/pricing`, `/about`, `/technology` harmonisés avec la
+  landing Axe 11 (fond warm-neutral, surfaces blanches/noires, headers éditoriaux,
+  CTA sobres, récit Director/studio plutôt que stack technique).
+- Confidentialité : retrait des noms providers/infra/modèles des textes publics ;
+  `/technology` décrit les capacités et l'orchestration sans exposer le routing.
+- Pricing conserve le checkout existant (`POST /api/stripe/checkout`) ; aucune
+  route/API/DB/auth/Stripe modifiée.
+
 ## Axe 5 — Post-generation studio  `status: in_progress`
 
 Spec : **`docs/product/post-generation-studio-spec.md`**. Audit Codex : le studio

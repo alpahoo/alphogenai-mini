@@ -1,70 +1,81 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import { Check, ArrowLeft, Loader2, Sparkles, Zap, Crown } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Clapperboard,
+  Crown,
+  Loader2,
+  ShieldCheck,
+  Sparkles,
+  Zap,
+} from "lucide-react";
+import { useState } from "react";
 
 const PLANS = [
   {
     name: "Free",
     price: "$0",
+    description: "Explore the studio and test fast short-form ideas.",
+    eyebrow: "Start",
     icon: Zap,
-    iconColor: "text-muted-foreground",
-    description: "Perfect to test ideas and generate quick clips.",
     features: [
       "1 video per day",
       "5-second clips",
-      "1 scene per video",
-      "Wan 2.2 I2V engine",
+      "Single-scene generation",
+      "Starter model access",
     ],
-    cta: "Get Started",
+    cta: "Start creating",
     ctaAction: "navigate" as const,
-    highlight: false,
-    badge: null,
   },
   {
     name: "Pro",
     price: "$19",
-    icon: Sparkles,
-    iconColor: "text-primary",
-    description: "Create multi-scene videos with more depth and control.",
+    description: "Build polished multi-scene clips with stronger direction.",
+    eyebrow: "Most chosen",
+    icon: Clapperboard,
+    featured: true,
     features: [
       "Unlimited generations",
-      "Up to 15s videos",
-      "Up to 3 scenes per video",
-      "Seedance 2.0 + Wan engines",
-      "Audio sync",
+      "Up to 15 seconds",
+      "Up to 3 scenes",
+      "Director Console",
+      "Reference-based creation",
       "Priority generation",
     ],
     cta: "Upgrade to Pro",
     ctaAction: "checkout" as const,
     ctaPlan: "pro",
-    highlight: true,
-    badge: "Most popular",
   },
   {
     name: "Premium",
     price: "$49",
+    description: "Run longer productions with the full creative stack.",
+    eyebrow: "Studio",
     icon: Crown,
-    iconColor: "text-yellow-400",
-    description: "Maximum power. Unlimited everything for professionals.",
     features: [
       "Everything in Pro",
-      "Up to 120s videos",
-      "Up to 10 scenes per video",
-      "All engines unlocked",
-      "Audio sync",
-      "Priority support",
-      "Early access to new models",
+      "Up to 120 seconds",
+      "Up to 10 scenes",
+      "Premium model access",
+      "Saved looks and references",
+      "Early feature access",
     ],
     cta: "Go Premium",
     ctaAction: "checkout" as const,
     ctaPlan: "premium",
-    highlight: false,
-    badge: "Best value",
   },
+];
+
+const COMPARISON = [
+  "Director planning and editable scenes",
+  "Reference images and verified faces",
+  "Post-generation studio tools",
+  "Curated social exports",
+  "Provider-neutral public workspace",
 ];
 
 export default function PricingPage() {
@@ -98,130 +109,179 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="min-h-screen px-4 py-16 relative overflow-hidden">
-      {/* Background gradient orbs */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute top-1/4 left-1/4 h-96 w-96 rounded-full bg-indigo-500/10 blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 h-96 w-96 rounded-full bg-purple-500/10 blur-3xl" />
-      </div>
+    <main className="min-h-screen bg-[#f4f1ea] text-neutral-950">
+      <section className="border-b border-black/10 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-sm font-medium text-neutral-600 transition hover:text-neutral-950"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to AlphoGen
+          </Link>
+          <Link
+            href="/create"
+            className="inline-flex items-center gap-2 rounded-full bg-neutral-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800"
+          >
+            Create
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </section>
 
-      <div className="relative z-10 mx-auto max-w-5xl">
-        <Link
-          href="/"
-          className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Link>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="text-center mb-12"
-        >
-          <h1 className="text-4xl font-bold tracking-tight mb-3">
-            Turn ideas into cinematic AI videos
-          </h1>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Start free. Upgrade when you need longer, more powerful videos.
-          </p>
-        </motion.div>
+      <section className="mx-auto max-w-7xl px-5 py-12 sm:py-16">
+        <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-end">
+          <div>
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-neutral-700">
+              <Sparkles className="h-4 w-4 text-[#5f5bf6]" />
+              Creative production plans
+            </div>
+            <h1 className="max-w-3xl text-5xl font-semibold leading-[0.96] tracking-tight text-neutral-950 sm:text-6xl">
+              Choose the studio scale you need.
+            </h1>
+            <p className="mt-5 max-w-2xl text-lg leading-8 text-neutral-600">
+              Start with quick ideas, then unlock longer scenes, stronger
+              direction, references, and post-generation tools as your workflow
+              grows.
+            </p>
+          </div>
+          <div className="rounded-[28px] bg-neutral-950 p-6 text-white shadow-2xl shadow-black/20">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-white/50">
+                  Included
+                </p>
+                <h2 className="text-2xl font-semibold">Built for safe output</h2>
+              </div>
+            </div>
+            <div className="mt-7 grid gap-3 sm:grid-cols-2">
+              {COMPARISON.map((item) => (
+                <div key={item} className="flex gap-3 rounded-2xl bg-white/10 p-4">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#baff3b]" />
+                  <span className="text-sm leading-6 text-white/80">{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
 
         {error && (
-          <div className="mb-6 mx-auto max-w-md rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive text-center">
+          <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
             {error}
           </div>
         )}
 
-        <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-          {PLANS.map((plan, i) => (
-            <motion.div
-              key={plan.name}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.1 * (i + 1) }}
-              className={`rounded-2xl ${
-                plan.highlight
-                  ? "border-2 border-primary"
-                  : "border border-border/50"
-              } bg-card/80 backdrop-blur-sm p-8 flex flex-col relative`}
-            >
-              {plan.badge && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                      plan.highlight
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
+        <div className="mt-10 grid gap-5 lg:grid-cols-3">
+          {PLANS.map((plan) => {
+            const Icon = plan.icon;
+            const isLoading = loading === plan.ctaPlan;
+            return (
+              <article
+                key={plan.name}
+                className={`flex min-h-[520px] flex-col rounded-[28px] border p-6 shadow-sm ${
+                  plan.featured
+                    ? "border-neutral-950 bg-neutral-950 text-white"
+                    : "border-black/10 bg-white text-neutral-950"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p
+                      className={`text-xs font-semibold uppercase tracking-[0.2em] ${
+                        plan.featured ? "text-white/50" : "text-neutral-500"
+                      }`}
+                    >
+                      {plan.eyebrow}
+                    </p>
+                    <h2 className="mt-3 text-3xl font-semibold">{plan.name}</h2>
+                  </div>
+                  <div
+                    className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
+                      plan.featured ? "bg-white/10" : "bg-neutral-100"
                     }`}
                   >
-                    {plan.badge}
-                  </span>
+                    <Icon className="h-5 w-5" />
+                  </div>
                 </div>
-              )}
 
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-2">
-                  <plan.icon className={`h-5 w-5 ${plan.iconColor}`} />
-                  <h2 className="text-xl font-semibold">{plan.name}</h2>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {plan.description}
-                </p>
-              </div>
-
-              <div className="mb-6">
-                <span className="text-4xl font-bold">{plan.price}</span>
-                <span className="text-muted-foreground ml-1">/month</span>
-              </div>
-
-              <ul className="space-y-3 mb-8 flex-1">
-                {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-2 text-sm">
-                    <Check
-                      className={`h-4 w-4 mt-0.5 shrink-0 ${
-                        plan.highlight ? "text-primary" : plan.name === "Premium" ? "text-yellow-400" : "text-muted-foreground"
-                      }`}
-                    />
-                    <span className={plan.name === "Free" ? "text-muted-foreground" : ""}>
-                      {feature}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-
-              {plan.ctaAction === "navigate" ? (
-                <button
-                  onClick={() => router.push("/create")}
-                  className="w-full rounded-xl border border-border bg-background py-3 text-sm font-semibold transition-colors hover:bg-accent"
-                >
-                  {plan.cta}
-                </button>
-              ) : (
-                <button
-                  onClick={() => handleCheckout(plan.ctaPlan!)}
-                  disabled={loading === plan.ctaPlan}
-                  className={`w-full rounded-xl py-3 text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
-                    plan.highlight
-                      ? "bg-primary text-primary-foreground hover:brightness-110"
-                      : "bg-gradient-to-r from-yellow-500 to-amber-500 text-black hover:brightness-110"
+                <p
+                  className={`mt-5 min-h-[60px] text-sm leading-7 ${
+                    plan.featured ? "text-white/70" : "text-neutral-600"
                   }`}
                 >
-                  {loading === plan.ctaPlan ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Redirecting...
-                    </>
-                  ) : (
-                    plan.cta
-                  )}
-                </button>
-              )}
-            </motion.div>
-          ))}
+                  {plan.description}
+                </p>
+
+                <div className="mt-8">
+                  <span className="text-5xl font-semibold tracking-tight">
+                    {plan.price}
+                  </span>
+                  <span
+                    className={`ml-2 text-sm ${
+                      plan.featured ? "text-white/50" : "text-neutral-500"
+                    }`}
+                  >
+                    /month
+                  </span>
+                </div>
+
+                <ul className="mt-8 flex-1 space-y-4">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex gap-3 text-sm">
+                      <Check
+                        className={`mt-0.5 h-4 w-4 shrink-0 ${
+                          plan.featured ? "text-[#baff3b]" : "text-neutral-950"
+                        }`}
+                      />
+                      <span
+                        className={
+                          plan.featured ? "text-white/80" : "text-neutral-700"
+                        }
+                      >
+                        {feature}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+
+                {plan.ctaAction === "navigate" ? (
+                  <button
+                    onClick={() => router.push("/create")}
+                    className="mt-8 inline-flex h-12 items-center justify-center rounded-full border border-black/10 bg-white px-5 text-sm font-semibold text-neutral-950 transition hover:bg-neutral-100"
+                  >
+                    {plan.cta}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleCheckout(plan.ctaPlan!)}
+                    disabled={isLoading}
+                    className={`mt-8 inline-flex h-12 items-center justify-center gap-2 rounded-full px-5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                      plan.featured
+                        ? "bg-[#baff3b] text-neutral-950 hover:bg-[#d4ff68]"
+                        : "bg-neutral-950 text-white hover:bg-neutral-800"
+                    }`}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Redirecting
+                      </>
+                    ) : (
+                      <>
+                        {plan.cta}
+                        <ArrowRight className="h-4 w-4" />
+                      </>
+                    )}
+                  </button>
+                )}
+              </article>
+            );
+          })}
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
