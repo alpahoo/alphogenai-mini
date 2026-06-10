@@ -42,6 +42,7 @@ SELECT
   cmd
 FROM pg_policies
 WHERE tablename LIKE 'research_%'
+  AND schemaname = 'public'
 ORDER BY tablename, policyname;
 
 -- Expected output: ~20 policies (4 per table: SELECT, INSERT, UPDATE, DELETE)
@@ -82,16 +83,12 @@ ORDER BY tablename, indexname;
 -- 6. Check CHECK constraints (size limits, ranges, formats)
 -- ========================================
 SELECT
-  c.relname AS tablename,
-  con.conname,
-  pg_get_constraintdef(con.oid) AS definition
-FROM pg_constraint con
-JOIN pg_class c ON c.oid = con.conrelid
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE c.relname LIKE 'research_%'
-  AND n.nspname = 'public'
-  AND con.contype = 'c'  -- CHECK constraints
-ORDER BY c.relname, con.conname;
+  tablename,
+  conname
+FROM pg_constraint
+WHERE tablename LIKE 'research_%'
+  AND contype = 'c'
+ORDER BY tablename, conname;
 
 -- Expected: JSON validation, size limits (50KB, 10KB, 100KB),
 --           score ranges (0-1), URL format, topic length, etc.
@@ -100,16 +97,12 @@ ORDER BY c.relname, con.conname;
 -- 7. Check triggers for updated_at maintenance
 -- ========================================
 SELECT
-  c.relname AS tablename,
-  t.tgname,
-  pg_get_triggerdef(t.oid) AS definition
-FROM pg_trigger t
-JOIN pg_class c ON c.oid = t.tgrelid
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE c.relname LIKE 'research_%'
-  AND n.nspname = 'public'
-  AND NOT t.tgisinternal
-ORDER BY c.relname, t.tgname;
+  event_object_table,
+  trigger_name
+FROM information_schema.triggers
+WHERE event_object_table LIKE 'research_%'
+  AND trigger_schema = 'public'
+ORDER BY event_object_table, trigger_name;
 
 -- Expected: 3 triggers (research_jobs, research_sources, research_scripts)
 --           All call update_updated_at_column() function
@@ -118,16 +111,18 @@ ORDER BY c.relname, t.tgname;
 -- 8. Quick schema summary
 -- ========================================
 SELECT
-  c.relname AS tablename,
-  (SELECT COUNT(*) FROM pg_constraint con WHERE con.conrelid = c.oid AND con.contype = 'c') AS check_constraints,
-  (SELECT COUNT(*) FROM pg_indexes i WHERE i.schemaname = n.nspname AND i.tablename = c.relname) AS indexes,
-  (SELECT COUNT(*) FROM pg_policies p WHERE p.schemaname = n.nspname AND p.tablename = c.relname) AS policies
-FROM pg_class c
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE c.relname LIKE 'research_%'
-  AND n.nspname = 'public'
-  AND c.relkind = 'r'
-ORDER BY c.relname;
+  t.tablename,
+  COUNT(CASE WHEN c.contype = 'c' THEN 1 END) AS check_constraints,
+  COUNT(DISTINCT i.indexname) AS indexes,
+  COUNT(DISTINCT p.policyname) AS policies
+FROM pg_tables t
+LEFT JOIN pg_constraint c ON c.conrelid = (SELECT oid FROM pg_class WHERE relname = t.tablename) AND c.contype = 'c'
+LEFT JOIN pg_indexes i ON i.tablename = t.tablename
+LEFT JOIN pg_policies p ON p.tablename = t.tablename
+WHERE t.tablename LIKE 'research_%'
+  AND t.schemaname = 'public'
+GROUP BY t.tablename
+ORDER BY t.tablename;
 
 -- ========================================
 -- Summary: If all queries return expected results, migration is validated ✓
