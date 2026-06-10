@@ -27,6 +27,7 @@ import {
   Wallet,
   Clapperboard,
   Link2,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
