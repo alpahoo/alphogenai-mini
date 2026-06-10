@@ -12,7 +12,7 @@ Entrée la plus récente en haut. Format :
 
 ---
 
-## 2026-06-11 — Claude (Haiku 4.5) — T-1104: Extraction Adapter IMPLEMENTED ✅
+## 2026-06-11 — Claude (Haiku 4.5) — T-1104: Extraction Adapter FINALIZED ✅ (+ Codex production review)
 - Livré : Crawl4AI integration pour extraire Markdown des sources.
 - Route implémentée :
   - `POST /api/research/jobs/[id]/extract` : Query Crawl4AI, update sources, update job status
@@ -46,7 +46,18 @@ Entrée la plus récente en haut. Format :
   - app/api/research/jobs/[id]/extract/route.ts (POST handler)
   - app/api/research/jobs/[id]/extract/__tests__/extract.test.ts (unit tests)
 - Validation : npm test 477/477 ✅, tsc ✅, npm build ✅, lint ✅
-- Commit : b2b308a
+- Commits : b2b308a (initial), 7d6e3cc (production fixes)
+
+**Production Review (Codex) - Blockers Fixed :**
+1. Column name : Changed .eq('job_id') → .eq('research_job_id') (matches T-1101 schema)
+2. extraction_status enum : Conformed to T-1101 CHECK constraint
+   - Removed extracting, parsing_error, error
+   - Kept only : pending, success, failed, blocked, timeout
+   - Mapped parsing_error/error → failed (no migration needed, Option A)
+   - Job status can still be 'extracting', only source statuses constrained
+
+- Final validation : npm test 477/477 ✅, tsc ✅, npm build ✅
+- Status : DONE (production-ready)
 - Prochaine étape : T-1105 (Angles analysis — LLM summaries)
 
 ## 2026-06-11 — Claude (Haiku 4.5) — T-1103: Source Discovery Adapter IMPLEMENTED ✅

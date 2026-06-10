@@ -961,8 +961,9 @@ Contraintes :
 ### [T-1104] Extraction adapter — `status: done` · `owner: claude`
 - Crawl4AI integration : Markdown extraction, metadata, per-source errors, caps.
 - Livré : `lib/research/extraction.ts` (helpers), `app/api/research/jobs/[id]/extract/route.ts` (POST handler)
-- Validation : npm test 477/477, tsc clean, npm build OK
-- Commit : b2b308a
+- Production fixes (Codex review) : research_job_id column, extraction_status enum conformance
+- Validation : npm test 477/477 ✓, tsc clean ✓, npm build OK ✓
+- Commits : b2b308a (initial), 7d6e3cc (prod fixes)
 
 ### [T-1105] Angles analysis — `status: todo` · `owner: codex/chatgpt`
 - Summaries, uncertainty, contradictions, 3-5 angles, recommended angle.
