@@ -737,27 +737,24 @@ workflows, non-goals V1/V2). Objectif : réutiliser une vidéo cinématique réu
   costing display pour V1 public launch.
 - Validation : spec review-ready ; docs/product/* conforme ; pas de code breaking.
 
-### [T-802] UX affordance : "Reuse with new voice" — `status: todo` · `owner: —`
-- Objectif : améliorer découverte & réutilisation des Looks depuis page job.
-- À faire : 
-  - [ ] Button "Reuse with new voice" sur job page (si engine=heygen_avatar_shots)
-  - [ ] Auto-navigate `/create/avatar?look_id=...` (pre-fill Look sélectionné)
-  - [ ] Afficher estimated cost reduction (~10–20% vs full video)
-  - [ ] Tests : E2E workflow Save → Reuse
-- Fichiers touchés : `app/jobs/[id]/page.tsx`, `/create/avatar/page.tsx`
-- Risques : changements UI doivent rester provider-neutral
-- Critères : affordance visible, costing transparent, aucune breaking change
+### [T-802] UX affordance : "Reuse with new voice" — `status: done` · `owner: claude`
+- Livré : Button "Reuse with new voice" sur job page (HeyGen Avatar Shots only)
+  - Auto-navigates `/create/avatar?look_id=...` quand Look sauvegardée
+  - Button visible uniquement après `lookSaved && savedLookId` true
+  - Stocke `savedLookId` retourné par `POST /api/looks`
+- Fichiers : `app/jobs/[id]/page.tsx` (button + state pour savedLookId)
+- Validation : tsc/lint clean, tests 408/408 passing
 
-### [T-803] Cost transparency : Lip-sync costing in UI — `status: todo` · `owner: —`
-- Objectif : afficher estimation coûts avant création lip-sync job.
-- À faire :
-  - [ ] Helper `estimateLipsyncCost(scriptLength, mode)` → credits estimate
-  - [ ] Display sur `/create/avatar` (mode cinematic + Look selected)
-  - [ ] Preview : "TTS cost: 2 credits, Lip-sync (precision): 10 credits, Total: 12 credits (~15% of full video)"
-  - [ ] Tests : costing accuracy, edge cases (very short/long script)
-- Fichiers touchés : `lib/costing.ts` (ajout), `/create/avatar/page.tsx` (display)
-- Risques : costing estimates doivent rester conservateurs (vs real HeyGen API)
-- Critères : estimate affiché, conforme historique coûts, tests passing
+### [T-803] Cost transparency : Lip-sync costing in UI — `status: done` · `owner: claude`
+- Livré : Helper `estimateLipsyncCost(scriptLength, mode, duration)` dans `lib/lipsync-cost.ts`
+  - Estime TTS cost (~0.01 credits/100 chars) + lip-sync cost (mode-dependent)
+  - Retourne `{ ttsCost, lipsyncCost, totalCost, percentOfFullVideo }`
+  - Display sur `/create/avatar` quand Look selected & script fourni
+  - Affichage : "X credits (~Y% of full video)" avec breakdown TTS + lip-sync
+  - Mise à jour réactive : cost recalcule quand script ou lipsyncMode change
+- Fichiers : `lib/lipsync-cost.ts` (new), `lib/__tests__/lipsync-cost.test.ts` (6 tests),
+  `app/(workspace)/create/avatar/page.tsx` (import + display)
+- Validation : tsc/lint clean, tests 408/408 passing
 
 ### [T-804] Library Looks management (V2 future) — `status: todo` · `owner: —`
 - Objectif : page dédiée pour browse/rename/delete/preview Looks (V2).

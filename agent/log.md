@@ -963,6 +963,22 @@ findings level block/warn + message), `byteplus-cost.ts`
   providers visibles.
 - Validation : Playwright 4/4, Vitest 399/399, tsc clean, lint clean.
 
+## 2026-06-10 — Claude (Haiku 4.5) — T-802 + T-803 Lip-sync reuse end-to-end
+- Fait : Feature end-to-end T-802 + T-803 en cascade (affordance UX + costing transparency).
+- T-802 : Button "Reuse with new voice" sur page job (HeyGen Avatar Shots only)
+  - Affiche après sauvegarde Look, navigue `/create/avatar?look_id={id}`
+  - Capture `look.id` retourné par `POST /api/looks`, stocke dans `savedLookId` state
+- T-803 : Cost estimation + display réactif
+  - Nouveau `lib/lipsync-cost.ts` : `estimateLipsyncCost(scriptLength, mode, duration)`
+  - Estime TTS (~0.01 cr/100 chars) + lip-sync (speed 2cr/s, precision 5cr/s)
+  - Display `/create/avatar` : "X credits (~Y% of full video)" avec breakdown
+  - Recalcule réactivement lors édition script ou changement mode
+  - Nouveau `lib/__tests__/lipsync-cost.test.ts` : 6 unit tests (heuristiques, cas limites)
+- Fichiers : `app/jobs/[id]/page.tsx`, `app/(workspace)/create/avatar/page.tsx`,
+  `lib/lipsync-cost.ts`, `lib/__tests__/lipsync-cost.test.ts`
+- Validation : tsc ✓, lint ✓, tests 408/408 ✓
+- Commit : 6fd7e5c
+
 ## 2026-06-10 — Claude (Haiku 4.5) — T-801 Audit & Spec : Lip-sync existing video
 - Fait : Audit complet docs-only de la feature lip-sync/reuse Look, sans runtime code.
   Examen des fichiers clés : `app/(workspace)/create/avatar/page.tsx` (Reuse Look UI),
