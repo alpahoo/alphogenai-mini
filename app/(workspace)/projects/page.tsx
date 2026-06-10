@@ -13,8 +13,10 @@ import {
   Trash2,
   Search,
   ChevronDown,
+  Star,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { isJobFavorite } from "@/lib/job-favorite";
 
 const PAGE_SIZE = 20;
 
@@ -27,12 +29,14 @@ interface Project {
   created_at: string;
   output_url_final: string | null;
   target_duration_seconds: number | null;
+  app_state: Record<string, unknown> | null;
 }
 
-type StatusFilter = "all" | "in_progress" | "done" | "failed";
+type StatusFilter = "all" | "favorites" | "in_progress" | "done" | "failed";
 
 const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: "all", label: "All" },
+  { key: "favorites", label: "Favorites" },
   { key: "in_progress", label: "In progress" },
   { key: "done", label: "Completed" },
   { key: "failed", label: "Failed" },
@@ -105,7 +109,7 @@ export default function ProjectsPage() {
         let query = supabase
           .from("jobs")
           .select(
-            "id, prompt, status, plan, engine_used, created_at, output_url_final, target_duration_seconds",
+            "id, prompt, status, plan, engine_used, created_at, output_url_final, target_duration_seconds, app_state",
           )
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
@@ -114,7 +118,7 @@ export default function ProjectsPage() {
         // Status filter
         if (statusFilter === "in_progress") {
           query = query.in("status", ["pending", "in_progress"]);
-        } else if (statusFilter !== "all") {
+        } else if (statusFilter !== "all" && statusFilter !== "favorites") {
           query = query.eq("status", statusFilter);
         }
 
@@ -124,7 +128,10 @@ export default function ProjectsPage() {
         }
 
         const { data } = await query;
-        const rows = (data ?? []) as Project[];
+        let rows = (data ?? []) as Project[];
+        if (statusFilter === "favorites") {
+          rows = rows.filter((project) => isJobFavorite(project.app_state));
+        }
 
         setHasMore(rows.length > PAGE_SIZE);
         const trimmed = rows.slice(0, PAGE_SIZE);
@@ -306,6 +313,12 @@ export default function ProjectsPage() {
                         <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-700">
                           {project.plan}
                         </span>
+                        {isJobFavorite(project.app_state) && (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-700">
+                            <Star className="h-3 w-3 fill-current" />
+                            Favorite
+                          </span>
+                        )}
                       </div>
                     </div>
 

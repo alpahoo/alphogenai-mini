@@ -27,6 +27,7 @@ import {
   Wallet,
   Clapperboard,
   Link2,
+  Star,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -174,6 +175,7 @@ export default function JobPage() {
   const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
   const [voiceoverEnabled, setVoiceoverEnabled] = useState(true);
   const [videoModalOpen, setVideoModalOpen] = useState(false);
+  const [favoriteSaving, setFavoriteSaving] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const voiceoverRef = useRef<HTMLAudioElement>(null);
   const modalVideoRef = useRef<HTMLVideoElement>(null);
@@ -414,6 +416,28 @@ export default function JobPage() {
     setTimeout(() => setCopiedShare(false), 2000);
   };
 
+  const handleToggleFavorite = async () => {
+    if (!job || favoriteSaving) return;
+    const nextFavorite = !job.is_favorite;
+    setFavoriteSaving(true);
+    setJob((prev) => prev ? { ...prev, is_favorite: nextFavorite } : prev);
+    try {
+      const res = await fetch(`/api/jobs/${params.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ favorite: nextFavorite }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not update favorite");
+      setJob((prev) => prev ? { ...prev, is_favorite: Boolean(data.is_favorite) } : prev);
+    } catch (err) {
+      setJob((prev) => prev ? { ...prev, is_favorite: !nextFavorite } : prev);
+      setError(err instanceof Error ? err.message : "Could not update favorite");
+    } finally {
+      setFavoriteSaving(false);
+    }
+  };
+
   const handleRetry = async () => {
     if (retrying || !params.id) return;
     setRetrying(true);
@@ -440,6 +464,7 @@ export default function JobPage() {
 
   const [savingLook, setSavingLook] = useState(false);
   const [lookSaved, setLookSaved] = useState(false);
+  const [savedLookId, setSavedLookId] = useState<string | null>(null);
   const handleSaveLook = async () => {
     if (savingLook || !params.id) return;
     setSavingLook(true);
@@ -450,8 +475,12 @@ export default function JobPage() {
         body: JSON.stringify({ job_id: params.id }),
       });
       const data = await res.json();
-      if (data.success) setLookSaved(true);
-      else setError(data.error || "Could not save Look");
+      if (data.success && data.look?.id) {
+        setLookSaved(true);
+        setSavedLookId(data.look.id);
+      } else {
+        setError(data.error || "Could not save Look");
+      }
     } catch { setError("Could not save Look"); }
     setSavingLook(false);
   };
@@ -901,6 +930,23 @@ export default function JobPage() {
 
                       <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap lg:justify-end">
                         <button
+                          onClick={handleToggleFavorite}
+                          disabled={favoriteSaving}
+                          aria-pressed={Boolean(job.is_favorite)}
+                          className={`flex min-h-11 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 ${
+                            job.is_favorite
+                              ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                              : "border-neutral-200 bg-neutral-50 text-neutral-800 hover:bg-neutral-100"
+                          }`}
+                        >
+                          {favoriteSaving ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Star className={`h-4 w-4 ${job.is_favorite ? "fill-current" : ""}`} />
+                          )}
+                          {job.is_favorite ? "Favorited" : "Favorite"}
+                        </button>
+                        <button
                           onClick={handleDuplicate}
                           disabled={duplicating}
                           className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-sm font-medium text-neutral-800 transition hover:bg-neutral-100 disabled:opacity-50"
@@ -916,15 +962,27 @@ export default function JobPage() {
                           Use as reference
                         </Link>
                         {job?.engine_used === "heygen_avatar_shots" && (
-                          <button
-                            onClick={handleSaveLook}
-                            disabled={savingLook || lookSaved}
-                            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2.5 text-sm font-semibold text-cyan-700 transition hover:bg-cyan-100 disabled:opacity-50"
-                            title="Save this cinematic shot to reuse with new scripts"
-                          >
-                            {savingLook ? <Loader2 className="h-4 w-4 animate-spin" /> : lookSaved ? <Check className="h-4 w-4" /> : <Clapperboard className="h-4 w-4" />}
-                            {savingLook ? "Saving..." : lookSaved ? "Saved as Look" : "Save as Look"}
-                          </button>
+                          <>
+                            <button
+                              onClick={handleSaveLook}
+                              disabled={savingLook || lookSaved}
+                              className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2.5 text-sm font-semibold text-cyan-700 transition hover:bg-cyan-100 disabled:opacity-50"
+                              title="Save this cinematic shot to reuse with new scripts"
+                            >
+                              {savingLook ? <Loader2 className="h-4 w-4 animate-spin" /> : lookSaved ? <Check className="h-4 w-4" /> : <Clapperboard className="h-4 w-4" />}
+                              {savingLook ? "Saving..." : lookSaved ? "Saved as Look" : "Save as Look"}
+                            </button>
+                            {lookSaved && savedLookId && (
+                              <Link
+                                href={`/create/avatar?look_id=${savedLookId}`}
+                                className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-700 transition hover:bg-green-100"
+                                title="Reuse this saved Look with a new script and voice"
+                              >
+                                <Volume2 className="h-4 w-4" />
+                                Reuse with new voice
+                              </Link>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>

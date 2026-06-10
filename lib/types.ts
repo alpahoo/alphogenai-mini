@@ -40,6 +40,7 @@ export interface Job {
   image_url: string | null;
   engine_used: string | null;
   estimated_cost_usd: number | string | null;
+  is_favorite?: boolean;
   // Social export URLs populated by Modal `export_social_formats` —
   // shape: { tiktok?: url, instagram?: url, youtube?: url }
   social_exports: Record<string, string> | null;

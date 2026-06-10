@@ -16,8 +16,10 @@ import {
   Play,
   Search,
   Sparkles,
+  Star,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { isJobFavorite } from "@/lib/job-favorite";
 
 interface VideoAsset {
   id: string;
@@ -26,6 +28,7 @@ interface VideoAsset {
   created_at: string;
   target_duration_seconds: number | null;
   social_exports: Record<string, string> | null;
+  app_state: Record<string, unknown> | null;
 }
 
 interface SavedLook {
@@ -37,7 +40,7 @@ interface SavedLook {
   created_at: string;
 }
 
-type FilterKey = "all" | "reference" | "social";
+type FilterKey = "all" | "favorites" | "reference" | "social";
 
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -73,7 +76,7 @@ export default function LibraryPage() {
 
         const { data } = await supabase
           .from("jobs")
-          .select("id, prompt, output_url_final, created_at, target_duration_seconds, social_exports")
+          .select("id, prompt, output_url_final, created_at, target_duration_seconds, social_exports, app_state")
           .eq("user_id", user.id)
           .eq("status", "done")
           .not("output_url_final", "is", null)
@@ -103,6 +106,7 @@ export default function LibraryPage() {
       const matchesQuery = !q || asset.prompt.toLowerCase().includes(q);
       const matchesFilter =
         filter === "all" ||
+        (filter === "favorites" && isJobFavorite(asset.app_state)) ||
         filter === "reference" ||
         (filter === "social" && hasSocialPack(asset));
       return matchesQuery && matchesFilter;
@@ -112,9 +116,9 @@ export default function LibraryPage() {
   const stats = useMemo(
     () => [
       { label: "Videos", value: videos.length.toString() },
+      { label: "Favorites", value: videos.filter((asset) => isJobFavorite(asset.app_state)).length.toString() },
       { label: "Saved Looks", value: looks.length.toString() },
       { label: "Reference-ready", value: videos.length.toString() },
-      { label: "Social packs", value: videos.filter(hasSocialPack).length.toString() },
     ],
     [videos, looks],
   );
@@ -259,6 +263,7 @@ export default function LibraryPage() {
           <div className="flex flex-wrap gap-2">
             {[
               { id: "all", label: "All videos" },
+              { id: "favorites", label: "Favorites" },
               { id: "reference", label: "Use as reference" },
               { id: "social", label: "Social-ready" },
             ].map((item) => (
@@ -299,6 +304,7 @@ export default function LibraryPage() {
           <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {filteredVideos.map((asset, i) => {
               const thumbnail = asset.social_exports?.thumbnail ?? null;
+              const favorite = isJobFavorite(asset.app_state);
               return (
                 <motion.article
                   key={asset.id}
@@ -332,6 +338,12 @@ export default function LibraryPage() {
                         <span className="rounded-full bg-black/55 px-2 py-1 text-[10px] font-semibold text-white backdrop-blur-sm">
                           Video
                         </span>
+                        {favorite && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/90 px-2 py-1 text-[10px] font-semibold text-neutral-950">
+                            <Star className="h-3 w-3 fill-current" />
+                            Favorite
+                          </span>
+                        )}
                         {hasSocialPack(asset) && (
                           <span className="rounded-full bg-emerald-500/85 px-2 py-1 text-[10px] font-semibold text-white">
                             Social pack

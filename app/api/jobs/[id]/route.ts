@@ -19,6 +19,7 @@ import {
 import { triggerExtractLastFrame, triggerConcatScenes, triggerApplyVoiceover } from "@/lib/modal-client";
 import { generateVoiceover, isTTSAvailable } from "@/lib/tts";
 import { uploadBufferToR2, downloadAndUploadToR2 } from "@/lib/r2";
+import { isJobFavorite, withJobFavorite } from "@/lib/job-favorite";
 
 /**
  * Persist a direct-provider video output to R2. BytePlus / EvoLink / Atlas
@@ -1352,6 +1353,7 @@ function formatJob(job: Record<string, unknown>) {
     target_duration_seconds: job.target_duration_seconds ?? 5,
     engine_used: job.engine_used ?? null,
     estimated_cost_usd: job.estimated_cost_usd ?? null,
+    is_favorite: isJobFavorite(job.app_state as Record<string, unknown> | null),
     multi_scene_chain: job.multi_scene_chain ?? true,
     social_exports: job.social_exports ?? null,
     aspect_ratio: job.aspect_ratio ?? null,
@@ -1359,6 +1361,69 @@ function formatJob(job: Record<string, unknown>) {
     created_at: job.created_at,
     updated_at: job.updated_at,
   };
+}
+
+/**
+ * PATCH /api/jobs/[id]
+ * User-owned lightweight metadata updates.
+ */
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await req.json().catch(() => ({}));
+
+    if (!id) {
+      return NextResponse.json({ error: "Job ID is required" }, { status: 400 });
+    }
+
+    if (typeof body.favorite !== "boolean") {
+      return NextResponse.json({ error: "favorite must be a boolean" }, { status: 400 });
+    }
+
+    const supabaseAuth = await createClient();
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    const supabase = createServiceClient();
+    const { data: job } = await supabase
+      .from("jobs")
+      .select("id, user_id, app_state")
+      .eq("id", id)
+      .single();
+
+    if (!job) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    if (job.user_id !== user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const appState = withJobFavorite(job.app_state, body.favorite);
+    const { error } = await supabase
+      .from("jobs")
+      .update({
+        app_state: appState,
+      })
+      .eq("id", id);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      is_favorite: body.favorite,
+    });
+  } catch (error: unknown) {
+    console.error("Error in PATCH /api/jobs/[id]:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }
 
 /**
