@@ -356,8 +356,8 @@ CREATE TABLE public.research_scripts (
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   
-  CONSTRAINT sections_json_valid CHECK (jsonb_typeof(sections_json) = 'array'),
-  CONSTRAINT sections_json_size CHECK (CHAR_LENGTH(sections_json::TEXT) <= 5120)
+  CONSTRAINT sections_json_valid CHECK (sections_json IS NULL OR jsonb_typeof(sections_json) = 'array'),
+  CONSTRAINT sections_json_size CHECK (sections_json IS NULL OR CHAR_LENGTH(sections_json::TEXT) <= 5120)
 );
 
 -- Indexes
@@ -452,8 +452,13 @@ CREATE TABLE public.research_storyboards (
   -- Audit
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   
-  CONSTRAINT scenes_json_is_array CHECK (jsonb_typeof(scenes_json) = 'array'),
-  CONSTRAINT scenes_json_not_empty CHECK (jsonb_array_length(scenes_json) > 0),
+  CONSTRAINT scenes_json_valid CHECK (
+    CASE
+      WHEN jsonb_typeof(scenes_json) = 'array'
+      THEN jsonb_array_length(scenes_json) > 0
+      ELSE FALSE
+    END
+  ),
   CONSTRAINT scenes_json_size CHECK (CHAR_LENGTH(scenes_json::TEXT) <= 102400) -- 100 KB max
 );
 
@@ -549,6 +554,11 @@ research_jobs (root)
 - Service-role has unrestricted access, regardless of policies
 - The explicit `CREATE POLICY ... FOR ALL USING (auth.role() = 'service_role')` is optional/redundant; included for clarity only
 - All sensitive operations (SearXNG discovery, Crawl4AI extraction, LLM analysis) happen via service-role routes
+
+**Migration recommendation:**
+- Do not generate explicit service-role policies in T-1101 unless there is a proven need.
+- Keep RLS policies focused on authenticated user ownership.
+- Service-role access is handled by Supabase bypass behavior and should be tested separately.
 
 **Canonical URL dedup (per job):**
 - `CREATE UNIQUE INDEX research_sources_job_url_unique ON research_sources(research_job_id, url)`
@@ -726,6 +736,9 @@ This version includes corrections from review comments:
 
 9. **Docs-only reminder** ✅  
    Added clear header: this is a spec, not a migration. T-1101 follows after approval.
+
+10. **Migration-readiness addendum** ✅  
+   JSON constraints should be null-safe where fields are optional, and T-1101 should omit redundant explicit service-role policies unless needed.
 
 ---
 
