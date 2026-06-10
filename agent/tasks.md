@@ -756,15 +756,62 @@ workflows, non-goals V1/V2). Objectif : réutiliser une vidéo cinématique réu
   `app/(workspace)/create/avatar/page.tsx` (import + display)
 - Validation : tsc/lint clean, tests 408/408 passing
 
-### [T-804] Library Looks management (V2 future) — `status: todo` · `owner: —`
-- Objectif : page dédiée pour browse/rename/delete/preview Looks (V2).
-- Scope : defer post-V1-launch ; préparer infra (thumbnail gen, UI components)
-- À faire (V2+) :
-  - [ ] `/library?tab=looks` ou `/looks` page UI
-  - [ ] Thumbnail extraction + R2 upload on Look save
-  - [ ] Browse grid, rename modal, delete confirmation
-  - [ ] Quick "Reuse" button → `/create/avatar?look_id=...`
-- Dépendances : T-802 (affordance) + T-803 (costing) doivent être done d'abord
+### [T-804a] Spec: Library Looks management — `status: done` · `owner: claude`
+- Livré : `docs/product/library-looks-management-spec.md` (spec-only, audit + decisions)
+  - Audit `/api/looks` GET/POST/DELETE, schema `cinematic_looks`
+  - UX decisions : `/library?tab=looks` (cohérent), hard delete (simple), 
+    no thumbnail V1 (MVP: inline video preview)
+  - Rename strategy : `PATCH /api/looks/[id] { name }` (new endpoint)
+  - Implementation phases : T-804a (grid UI), T-804b (thumbnail), T-804c (rename + E2E)
+- Risk mitigation : lazy-gen thumbnails, grid virtualization if >50 Looks, 
+  soft delete in V1+ if user feedback needed
+- Non-goals V1 : bulk ops, tags, share, analytics, soft delete
+
+### [T-804b] UI: Library Looks grid + rename modal — `status: todo` · `owner: —`
+- Objectif : `/library?tab=looks` page UI avec grid, rename modal, empty state.
+- À faire :
+  - [ ] Add "Looks" tab to Library page (`app/(workspace)/library/page.tsx`)
+  - [ ] Grid component : video preview + name + actions (pencil/trash/reuse)
+  - [ ] Rename modal : text input, validation (1..100 chars), Save/Cancel
+  - [ ] Empty state : icon + CTA to `/create/avatar`
+  - [ ] Responsive layout (4 cols desktop, 2 mobile)
+  - [ ] Tests : grid render, modal interactions
+- Dépendances : T-804a spec done ✅
+- Risques : grid performance si 50+ Looks (solution: lazy-load videos, virtualize)
+
+### [T-804c] API + E2E: Rename endpoint + delete confirmation — `status: todo` · `owner: —`
+- Objectif : `PATCH /api/looks/[id]` endpoint + delete flow + full E2E tests.
+- À faire :
+  - [ ] `PATCH /api/looks/[id] { name }` route (validation, ownership check)
+  - [ ] Delete confirmation modal (warning, irreversible)
+  - [ ] Tests : rename validation, delete ownership, E2E workflow (save → rename → delete)
+- Dépendances : T-804a (spec) ✅, T-804b (grid UI) done
+- Risques : aucun (simple CRUD, hard delete acceptable)
+
+### [T-805] Futures : Video upload / Lip-sync source video contract
+- Objectif : Permettre à l'utilisateur de télécharger une vidéo et faire juste du lip-sync.
+- Priorité : **TIER 2** (plus risqué, nécessite spec + contrat backend clair).
+- Scope : Research + spec phase d'abord, pas implementation V1.
+- Questions clés :
+  - Formats vidéo acceptés (mp4, webm, mov) ? Résolution min/max ?
+  - Durée min/max ? Constraints HeyGen lip-sync API ?
+  - Comment reconnaître "vidéo compatible" vs "vidéo non-compatible" ?
+  - UX : upload form vs drag-drop vs gallery picker ?
+  - Costing : moins cher que génération Seedance ? Baseline estimate ?
+- À faire post-T-804 : audit HeyGen lip-sync API, draft spec contract
+
+### [T-806] V2 Planning : Alternative TTS providers — `status: todo` · `owner: —`
+- Objectif : abstraire voice provider pour supporter ElevenLabs + open-source (V2+).
+- Priorité : **TIER 3** (moins urgent ; après flux HeyGen parfaitement propre).
+- Scope : architecture & decision, pas d'implementation.
+- À faire (design phase) :
+  - [ ] Spec voice_provider abstraction (heygen | elevenlabs | openai | custom)
+  - [ ] Costing model per provider + currency handling
+  - [ ] Consent/licensing logic (ElevenLabs commercial, etc)
+  - [ ] Voice mapping: HeyGen voice_id ≠ ElevenLabs voice_id
+  - [ ] Fallback strategy si voice provider unavailable
+- Dépendances : T-801 (spec) done ; T-804 (Looks stable) done
+- Risques : feature creep ; dépasser scope V1 produit
 
 ### [T-805] V2 Planning : Alternative TTS providers — `status: todo` · `owner: —`
 - Objectif : abstraire voice provider pour supporter ElevenLabs + open-source (V2+).
