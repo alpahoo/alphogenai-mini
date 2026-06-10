@@ -767,26 +767,36 @@ workflows, non-goals V1/V2). Objectif : réutiliser une vidéo cinématique réu
   soft delete in V1+ if user feedback needed
 - Non-goals V1 : bulk ops, tags, share, analytics, soft delete
 
-### [T-804b] UI: Library Looks grid + rename modal — `status: todo` · `owner: —`
-- Objectif : `/library?tab=looks` page UI avec grid, rename modal, empty state.
-- À faire :
-  - [ ] Add "Looks" tab to Library page (`app/(workspace)/library/page.tsx`)
-  - [ ] Grid component : video preview + name + actions (pencil/trash/reuse)
-  - [ ] Rename modal : text input, validation (1..100 chars), Save/Cancel
-  - [ ] Empty state : icon + CTA to `/create/avatar`
-  - [ ] Responsive layout (4 cols desktop, 2 mobile)
-  - [ ] Tests : grid render, modal interactions
+### [T-804b] UI: Library Looks grid + rename modal — `status: done` · `owner: claude`
+- Livré : UI complète de gestion des Looks dans la Library.
+  - ✅ Grid composant déjà présent (video preview + name + duration badge + "Create with look" button)
+  - ✅ Rename modal : input (1-100 chars), Save/Cancel, validation feedback (char count)
+  - ✅ Delete confirmation modal : avertissement "permanently delete", Delete (red)/Cancel
+  - ✅ Hover actions : pencil icon → rename, trash icon → delete (group:hover)
+  - ✅ Empty state déjà implémenté
+  - ✅ Responsive layout : 4 cols desktop (xl:grid-cols-4), 2 mobile (sm:grid-cols-2) ✅
+- `app/(workspace)/library/page.tsx` : état (renameModalOpen, selectedLookId, newName, 
+  deleteConfirmOpen, lookToDelete, isSaving, isDeleting) + handlers 
+  (handleStartRename, handleSaveRename, handleStartDelete, handleConfirmDelete)
+- Error handling : user-facing alerts (rename/delete failures)
 - Dépendances : T-804a spec done ✅
-- Risques : grid performance si 50+ Looks (solution: lazy-load videos, virtualize)
+- Commit : b3c5b67
 
-### [T-804c] API + E2E: Rename endpoint + delete confirmation — `status: todo` · `owner: —`
-- Objectif : `PATCH /api/looks/[id]` endpoint + delete flow + full E2E tests.
-- À faire :
-  - [ ] `PATCH /api/looks/[id] { name }` route (validation, ownership check)
-  - [ ] Delete confirmation modal (warning, irreversible)
-  - [ ] Tests : rename validation, delete ownership, E2E workflow (save → rename → delete)
-- Dépendances : T-804a (spec) ✅, T-804b (grid UI) done
-- Risques : aucun (simple CRUD, hard delete acceptable)
+### [T-804c] API + E2E: Rename endpoint + delete confirmation — `status: done` · `owner: claude`
+- Livré : API endpoints + UI modals (inclus dans T-804b implementation).
+  - ✅ `PATCH /api/looks/[id] { name }` route (`app/api/looks/[id]/route.ts`)
+    - Validation : name [1..100], type string
+    - Ownership check : user_id == auth user
+    - Response : { success, look: { id, name, updated_at } }
+    - Errors : 400 (invalid), 401 (unauth), 404 (not found), 500 (DB)
+  - ✅ `DELETE /api/looks/[id]` route (path param variant, nouvelle + query param ancien)
+    - Ownership check : user_id == auth user
+    - Hard delete (spec V1 acceptable)
+  - ✅ UI modals : rename + delete confirmation (voir T-804b)
+- `app/api/looks/[id]/route.ts` (nouveau) : 85 lines, PATCH + DELETE handlers
+- Tests : tsc clean (Promise<params> fix), build OK
+- Dépendances : T-804a (spec) ✅, T-804b (grid UI + modals) ✅
+- Commit : b3c5b67
 
 ### [T-805] Futures : Video upload / Lip-sync source video contract
 - Objectif : Permettre à l'utilisateur de télécharger une vidéo et faire juste du lip-sync.

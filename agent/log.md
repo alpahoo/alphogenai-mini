@@ -12,6 +12,25 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-10 — Claude (Haiku 4.5) — T-804b : Library Looks grid UI + rename/delete modals
+- Fait : Implémentation complète du workflow de gestion des Looks (renommer + supprimer).
+  - **UI modals** : modal rename (input 1-100 chars, Save/Cancel) + modal delete confirmation 
+    (avertissement, Delete rouge/Cancel).
+  - **Actions hover** : pencil icon (rename) + trash icon (delete) apparaissent au survol 
+    des grid items via group:hover.
+  - **API endpoints** : PATCH /api/looks/[id] {name} pour renommer ; 
+    DELETE /api/looks/[id] pour supprimer (path param alternative to existing ?id= variant).
+  - **Validation** : ownership check (user_id), name length [1..100], updated_at audit.
+  - **Error handling** : user-facing alerts (failed rename/delete), logging.
+  - **UI state** : renameModalOpen, selectedLookId, newName, deleteConfirmOpen, 
+    lookToDelete, isSaving, isDeleting.
+- Fichiers : `app/(workspace)/library/page.tsx` (+171 lines), `app/api/looks/[id]/route.ts` 
+  (nouveau, +85 lines).
+- Icons ajoutées : Edit2 (pencil), Trash2, X (close modal).
+- Tests : tsc clean, build OK (255 lines added).
+- Commit : b3c5b67
+- Prochaine étape : T-804c (E2E tests : save → rename → delete → reuse workflow).
+
 ## 2026-06-10 — Claude (Haiku 4.5) — T-804a Spec : Library Looks management
 - Fait : Audit complet + spec docs-only pour T-804 (dedicated Looks management UI).
 - Audit `/api/looks` : GET/POST/DELETE routes ready, cinematic_looks schema, 
