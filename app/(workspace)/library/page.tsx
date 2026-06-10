@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Clapperboard,
   Download,
+  Edit2,
   Film,
   Image as ImageIcon,
   ImagePlus,
@@ -17,6 +18,8 @@ import {
   Search,
   Sparkles,
   Star,
+  Trash2,
+  X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { isJobFavorite } from "@/lib/job-favorite";
@@ -64,6 +67,13 @@ export default function LibraryPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [selectedLookId, setSelectedLookId] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [lookToDelete, setLookToDelete] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -99,6 +109,66 @@ export default function LibraryPage() {
 
     load();
   }, []);
+
+  const handleStartRename = (look: SavedLook) => {
+    setSelectedLookId(look.id);
+    setNewName(look.name);
+    setRenameModalOpen(true);
+  };
+
+  const handleSaveRename = async () => {
+    if (!selectedLookId || !newName.trim()) return;
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/looks/${selectedLookId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to rename look");
+      }
+      setLooks((prev) =>
+        prev.map((l) => (l.id === selectedLookId ? { ...l, name: newName.trim() } : l))
+      );
+      setRenameModalOpen(false);
+      setSelectedLookId(null);
+      setNewName("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "An error occurred";
+      console.error("Rename failed:", msg);
+      alert(`Failed to rename: ${msg}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleStartDelete = (lookId: string) => {
+    setLookToDelete(lookId);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!lookToDelete) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/looks/${lookToDelete}`, { method: "DELETE" });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to delete look");
+      }
+      setLooks((prev) => prev.filter((l) => l.id !== lookToDelete));
+      setDeleteConfirmOpen(false);
+      setLookToDelete(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "An error occurred";
+      console.error("Delete failed:", msg);
+      alert(`Failed to delete: ${msg}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const filteredVideos = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -203,7 +273,7 @@ export default function LibraryPage() {
             {looks.map((look) => (
               <article
                 key={look.id}
-                className="overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50 shadow-sm transition-all hover:border-neutral-300 hover:shadow-md"
+                className="group overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50 shadow-sm transition-all hover:border-neutral-300 hover:shadow-md"
               >
                 <div className="relative aspect-video overflow-hidden bg-muted/30">
                   {look.thumbnail_url ? (
@@ -226,6 +296,22 @@ export default function LibraryPage() {
                       {look.duration_sec}s
                     </span>
                   )}
+                  <div className="absolute inset-0 flex items-end justify-center gap-2 bg-black/0 transition-all group-hover:bg-black/40 p-3">
+                    <button
+                      onClick={() => handleStartRename(look)}
+                      className="opacity-0 transition-opacity group-hover:opacity-100 inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/30 bg-white/10 backdrop-blur-sm px-2.5 py-2 text-xs font-semibold text-white hover:bg-white/20"
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                      Rename
+                    </button>
+                    <button
+                      onClick={() => handleStartDelete(look.id)}
+                      className="opacity-0 transition-opacity group-hover:opacity-100 inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-300/50 bg-red-500/20 backdrop-blur-sm px-2.5 py-2 text-xs font-semibold text-red-100 hover:bg-red-500/30"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-3 p-3">
                   <div>
@@ -426,6 +512,89 @@ export default function LibraryPage() {
           </p>
         </section>
       </div>
+
+      {renameModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="rounded-2xl bg-white p-6 shadow-lg sm:w-96">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-neutral-950">Rename Look</h3>
+              <button
+                onClick={() => setRenameModalOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              <label className="block">
+                <span className="text-sm font-medium text-neutral-700">Look name</span>
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value.slice(0, 100))}
+                  maxLength={100}
+                  className="mt-1 w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm text-neutral-950 outline-none focus:border-neutral-400"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newName.trim()) handleSaveRename();
+                    if (e.key === "Escape") setRenameModalOpen(false);
+                  }}
+                  autoFocus
+                />
+                <p className="mt-1 text-xs text-muted-foreground">{newName.length}/100</p>
+              </label>
+            </div>
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => setRenameModalOpen(false)}
+                className="flex-1 rounded-lg border border-neutral-200 px-3 py-2.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveRename}
+                disabled={!newName.trim() || isSaving}
+                className="flex-1 rounded-lg bg-neutral-950 px-3 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 disabled:opacity-50"
+              >
+                {isSaving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="rounded-2xl bg-white p-6 shadow-lg sm:w-96">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-neutral-950">Delete Look</h3>
+              <button
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="mt-4 text-sm text-neutral-600">
+              This will permanently delete the Look. You can still reference the original job.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="flex-1 rounded-lg border border-neutral-200 px-3 py-2.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="flex-1 rounded-lg bg-red-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
