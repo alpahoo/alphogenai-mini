@@ -12,6 +12,68 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-10 — Claude (Haiku 4.5) — T-804 FINAL: Library Looks management — v1 production-ready
+- Livré : Version 1.0 complète et production-ready du management de Looks sauvegardés.
+
+**Architecture finale** :
+- **UI Grid** : 4 cols desktop (xl:grid-cols-4), 2 cols mobile (sm:grid-cols-2)
+- **Modals** : Radix UI Dialog + shadcn/ui (a11y, focus management, backdrop click)
+- **API** : PATCH /api/looks/[id] (rename) + DELETE /api/looks/[id] (delete)
+- **Database** : cinematic_looks table existant (aucune migration)
+- **Auth** : RLS + user_id ownership checks
+- **Error handling** : Alerts utilisateur + logging console
+
+**Workflow complet (testé)** :
+1. **Browse** : Library page affiche tous les Looks de l'utilisateur
+   - Grid responsive (4 col desktop, 2 col mobile)
+   - Video preview inline
+   - Duration badge
+   - Création date
+   - Empty state avec CTA
+
+2. **Reuse** : Bouton "Create with look" → `/create/avatar?look_id=<id>`
+   - Pré-sélectionne le Look au studio
+   - Permet d'ajouter new script/voice
+   - Lip-sync (via T-803)
+
+3. **Rename** : Pencil icon → modal rename
+   - Radix Dialog (backdrop click, Escape, focus trap)
+   - Input validation (1-100 chars)
+   - Char counter
+   - Live update dans grid après save
+   - Error alert si échec
+
+4. **Delete** : Trash icon → modal confirmation
+   - Radix Dialog
+   - Warning: "permanently delete"
+   - Red Delete button (destructive)
+   - Confirmation required
+   - Remove from grid après succès
+   - Error alert si échec
+
+**Commits T-804** :
+- b3c5b67 : feat: T-804b UI + rename/delete modals
+- b841237 : docs: Update T-804b/c status
+- f83f16d : test: Unit tests + E2E structure (18 tests)
+- 78eab14 : refactor: Upgrade modals to Radix UI Dialog
+
+**Tests & Validation** :
+- npm test : 426/426 passing (18 new unit tests)
+- npm run build : ✅ Success
+- TypeScript : ✅ Clean
+- Accessibility : ✅ Radix Dialog WCAG compliant
+- Design : ✅ Cohérent avec Library existante
+
+**Non-goals V1 (approuvés) ** :
+- ❌ Thumbnail generation (MVP: inline video preview)
+- ❌ Soft delete avec restore
+- ❌ Bulk operations
+- ❌ Tags/folders
+- ❌ Share public
+- ❌ R2 orphan cleanup (manual task future)
+
+**Prochaine étape** : T-1100 AlphoResearch Engine Spec (separate backlog)
+
 ## 2026-06-10 — Claude (Haiku 4.5) — T-804b : Library Looks grid UI + rename/delete modals
 - Fait : Implémentation complète du workflow de gestion des Looks (renommer + supprimer).
   - **UI modals** : modal rename (input 1-100 chars, Save/Cancel) + modal delete confirmation 
