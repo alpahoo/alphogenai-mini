@@ -877,10 +877,22 @@ Contraintes :
   roadmap T-1100b -> T-1108.
 - Scope : docs-only, aucune migration, aucune route, aucun runtime.
 
-### [T-1100b] Service contract Hostinger — `status: todo` · `owner: codex/claude`
-- Documenter variables d'environnement, URLs internes, auth, health checks,
-  timeouts et fallback pour SearXNG/Crawl4AI/changedetection/Speaches.
-- Pas de code applicatif avant validation.
+### [T-1100b] Service contract Hostinger — `status: done` · `owner: claude`
+- Livré : `docs/product/hostinger-service-contract.md` (2900+ lines, docs-only).
+- Contenus :
+  - **SearXNG** : recherche meta, port 9090, API contract JSON, health check toutes les 5 min,
+    rate limit 60 req/min, failure graceful (fallback manual).
+  - **Crawl4AI** : extraction Markdown, port 8000, metadata + links, timeout 30s,
+    max 20 URLs/job, 50 KB per source, failure tagging sans blocage job.
+  - **changedetection** : monitoring (Phase 4), webhook contract, auth token, TBD.
+  - **Speaches/Kokoro** : TTS low-cost (Phase 3+), reference implementée.
+  - **Redis** : cache optionnel, rate-limit counters.
+  - **Network & Security** : firewall rules (Vercel → VPS), internal DNS, SSL self-signed.
+  - **Operations** : baseline 2+ CPU, 4+ GB RAM, docker-compose, health check orchestration,
+    restart policies, Uptime Kuma monitoring, log retention (7-30 days).
+  - **Scope out** : ❌ production Supabase/Next.js sur Hostinger, ❌ n8n, ❌ auto-publish.
+- Validation : Prête pour review avant T-1101 (schema DB).
+- Commit : 241e6e1+ (docs/product/hostinger-service-contract.md).
 
 ### [T-1101] Research schema + RLS — `status: todo` · `owner: claude`
 - Migration Supabase future pour `research_jobs`, `research_sources`,

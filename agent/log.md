@@ -12,6 +12,37 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-10 — Claude (Haiku 4.5) — T-1100b: Hostinger Service Contract (docs-only)
+- Livré : Documentation complète du contrat de service pour VPS Hostinger.
+- Scope : SearXNG (recherche), Crawl4AI (extraction), changedetection (future), 
+  Speaches/Kokoro (TTS future), Redis (optionnel).
+- Détails par service :
+  - Déploiement (URLs, ports, docker-compose)
+  - Variables d'environnement
+  - Contracts API (format JSON, échecs)
+  - Health checks (fréquence, timeouts, fallback)
+  - Quotas + limites de débit (recherches, extractions, concurrence)
+  - Timeouts & retries (exponential backoff)
+  - Failure behavior (graceful degradation, alerts)
+  - Logging & monitoring (Uptime Kuma, métriques)
+- Network & Security :
+  - Firewall rules (Vercel → services VPS)
+  - Internal DNS resolution
+  - SSL/TLS (self-signed OK pour interne)
+- Operations :
+  - Baseline infrastructure (CPU 2+, RAM 4+, storage 40+)
+  - Docker-compose orchestration
+  - Restart policies
+  - Recovery procedures
+- Out of scope explicite :
+  - ❌ Production Supabase sur Hostinger
+  - ❌ Production Next.js backend sur Hostinger
+  - ❌ n8n orchestration
+  - ❌ Auto-publishing
+- Fichier : `docs/product/hostinger-service-contract.md` (2900+ lignes)
+- Validation : Prête pour review avant T-1101 (schema DB)
+- Commit : À faire (docs-only)
+
 ## 2026-06-10 — Claude (Haiku 4.5) — T-804 FINAL: Library Looks management — v1 production-ready
 - Livré : Version 1.0 complète et production-ready du management de Looks sauvegardés.
 
