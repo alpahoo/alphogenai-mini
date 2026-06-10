@@ -12,6 +12,40 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-11 — Claude (Haiku 4.5) — T-1103: Source Discovery Adapter IMPLEMENTED ✅
+- Livré : SearXNG integration pour découvrir sources candidates.
+- Route implémentée :
+  - `POST /api/research/jobs/[id]/discover` : Query SearXNG, insert sources, update job status
+- Features :
+  - SearXNG gateway via env var (RESEARCH_SEARXNG_GATEWAY_URL + RESEARCH_SEARXNG_SERVICE_TOKEN)
+  - Timeout 30s (AbortController)
+  - Source type classification : github, youtube, forum, media, docs, official, unknown
+  - URL deduplication per job (unique index constraint)
+  - Status transitions : draft/failed → discovering → ready_for_angles OR failed
+  - Failure handling : timeout, zero results, network errors, partial results accepted
+- Auth pattern :
+  - Bearer token → Supabase auth.getUser()
+  - Service-role for DB writes
+  - Strict ownership enforcement
+  - Status gate : draft or failed only
+- Helpers (lib/research/discovery.ts) :
+  - querySearxng(topic, inputUrl, timeoutMs) : Raw API call with timeout
+  - classifySourceType(url, category?) : Heuristic classification
+  - normalizeSearxngResult(result) : Transform to research_source shape
+  - deduplicateByUrl(sources) : Remove duplicates per job
+  - discoverSources(topic, inputUrl) : Orchestrator
+- Tests :
+  - Unit tests for discovery helpers (classifySourceType, normalizeSearxngResult, deduplicateByUrl)
+  - 464/464 tests passing
+- Files :
+  - lib/research/discovery.ts (pure helpers)
+  - app/api/research/jobs/[id]/discover/route.ts (POST handler)
+  - app/api/research/jobs/[id]/discover/__tests__/discover.test.ts (unit tests)
+  - docs/product/research-discovery-adapter-spec.md (spec doc)
+- Validation : npm test 464/464 ✅, tsc ✅, npm build ✅, lint ✅
+- Commit : e81ff9f
+- Prochaine étape : T-1104 (Extraction adapter — Crawl4AI integration)
+
 ## 2026-06-10 — Claude (Haiku 4.5) — T-1102: Research API Skeleton IMPLEMENTED ✅
 - Livré : 4 routes API authentifiées pour AlphoResearch job management.
 - Routes implémentées :

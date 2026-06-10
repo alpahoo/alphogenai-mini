@@ -951,8 +951,12 @@ Contraintes :
 - Validation : npm test 454/454, tsc clean, npm build OK
 - Commit : eab661e
 
-### [T-1103] Source discovery adapter — `status: todo` · `owner: codex`
+### [T-1103] Source discovery adapter — `status: done` · `owner: claude`
 - SearXNG integration : queries, normalize, dedupe, classify, tests.
+- Livré : `lib/research/discovery.ts` (helpers), `app/api/research/jobs/[id]/discover/route.ts` (POST handler)
+- Spec : `docs/product/research-discovery-adapter-spec.md`
+- Validation : npm test 464/464, tsc clean, npm build OK
+- Commit : e81ff9f
 
 ### [T-1104] Extraction adapter — `status: todo` · `owner: codex`
 - Crawl4AI integration : Markdown extraction, metadata, per-source errors, caps.
