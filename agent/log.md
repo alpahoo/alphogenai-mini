@@ -12,6 +12,43 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-11 — Claude (Haiku 4.5) — T-1104: Extraction Adapter IMPLEMENTED ✅
+- Livré : Crawl4AI integration pour extraire Markdown des sources.
+- Route implémentée :
+  - `POST /api/research/jobs/[id]/extract` : Query Crawl4AI, update sources, update job status
+- Features :
+  - Crawl4AI gateway via env var (RESEARCH_CRAWL4AI_GATEWAY_URL + RESEARCH_CRAWL4AI_SERVICE_TOKEN)
+  - Timeout 15s per source (AbortController)
+  - Sequential extraction (V1, no parallel)
+  - Markdown truncation : 50 KB max per source
+  - Per-source extraction_status tracking
+  - Status transitions : ready_for_angles/failed → extracting → ready_for_angles OR failed
+  - Failure handling : timeout, blocked, parsing_error, error (all per-source, non-blocking)
+  - Partial success accepted (job ready_for_angles if ≥1 success)
+  - Zero success → job failed (error_step=extraction)
+- Extraction statuses : pending, extracting, success, timeout, blocked, parsing_error, error
+- Auth pattern :
+  - Bearer token → Supabase auth.getUser()
+  - Service-role for DB writes
+  - Strict ownership enforcement
+  - Status gate : ready_for_angles or failed only
+- Helpers (lib/research/extraction.ts) :
+  - callCrawl4AI(url, timeoutMs) : Raw API call with timeout
+  - mapErrorToStatus(errorMessage) : Map errors to status enum
+  - normalizeExtraction(result) : Transform to research_sources shape
+  - truncateMarkdown(markdown) : 50 KB size cap
+  - extractSource(url, timeoutMs) : Orchestrator
+- Tests :
+  - Unit tests for extraction helpers (truncateMarkdown, mapErrorToStatus, normalizeExtraction)
+  - 477/477 tests passing
+- Files :
+  - lib/research/extraction.ts (pure helpers)
+  - app/api/research/jobs/[id]/extract/route.ts (POST handler)
+  - app/api/research/jobs/[id]/extract/__tests__/extract.test.ts (unit tests)
+- Validation : npm test 477/477 ✅, tsc ✅, npm build ✅, lint ✅
+- Commit : b2b308a
+- Prochaine étape : T-1105 (Angles analysis — LLM summaries)
+
 ## 2026-06-11 — Claude (Haiku 4.5) — T-1103: Source Discovery Adapter IMPLEMENTED ✅
 - Livré : SearXNG integration pour découvrir sources candidates.
 - Route implémentée :

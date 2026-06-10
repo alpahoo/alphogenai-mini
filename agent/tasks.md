@@ -958,8 +958,11 @@ Contraintes :
 - Validation : npm test 464/464, tsc clean, npm build OK
 - Commit : e81ff9f
 
-### [T-1104] Extraction adapter — `status: todo` · `owner: codex`
+### [T-1104] Extraction adapter — `status: done` · `owner: claude`
 - Crawl4AI integration : Markdown extraction, metadata, per-source errors, caps.
+- Livré : `lib/research/extraction.ts` (helpers), `app/api/research/jobs/[id]/extract/route.ts` (POST handler)
+- Validation : npm test 477/477, tsc clean, npm build OK
+- Commit : b2b308a
 
 ### [T-1105] Angles analysis — `status: todo` · `owner: codex/chatgpt`
 - Summaries, uncertainty, contradictions, 3-5 angles, recommended angle.
