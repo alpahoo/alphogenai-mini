@@ -12,6 +12,43 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-10 — Claude (Haiku 4.5) — T-1102: Research API Skeleton IMPLEMENTED ✅
+- Livré : 4 routes API authentifiées pour AlphoResearch job management.
+- Routes implémentées :
+  - `POST /api/research/jobs` : Créer job (draft status)
+  - `GET /api/research/jobs` : Lister jobs avec pagination et status filter
+  - `GET /api/research/jobs/[id]` : Récupérer job (ownership verified)
+  - `PATCH /api/research/jobs/[id]` : Éditer job (draft-only check)
+- Auth pattern :
+  - Bearer token → Supabase auth.getUser()
+  - user_id from auth.uid(), never from request body
+  - Service-role client for server-side queries
+  - Ownership filtering on all DB queries
+- Validation :
+  - topic: 3-500 characters
+  - mode: enum (news, tutorial, product, competitor)
+  - input_url: optional, must be http/https
+  - language: format [a-z]{2}(-[A-Z]{2})?, default en-US
+  - target_duration_seconds: optional, 3-600
+  - PATCH: draft status required
+- Error handling :
+  - 401: No session / invalid Bearer token
+  - 404: Job missing or non-owned
+  - 400: Validation errors (topic, mode, URL, language, duration)
+  - 500: Database errors
+- Tests :
+  - route-level with Supabase mocked
+  - Auth required, ownership check, validation, draft-only constraint
+  - 454/454 tests passing
+- Files :
+  - app/api/research/jobs/route.ts (GET list, POST create)
+  - app/api/research/jobs/[id]/route.ts (GET single, PATCH edit)
+  - app/api/research/jobs/__tests__/jobs.test.ts
+  - docs/product/research-api-skeleton-spec.md
+- Validation : npm test ✅, tsc ✅, npm build ✅, lint ✅
+- Commit : eab661e
+- Prochaine étape : T-1103 (Source discovery adapter — SearXNG integration)
+
 ## 2026-06-10 — Claude (Haiku 4.5) — T-1101: AlphoResearch Schema Migration VALIDATED ✅
 - Livré : Validation PROD complète + marquage T-1101 done.
 - Validation PROD ✅ confirmée :

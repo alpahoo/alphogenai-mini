@@ -934,8 +934,22 @@ Contraintes :
 - Dépendances : T-1101a (spec review) ✅, T-1100b (Hostinger) ✅
 - Commit : e3810b6 (migration SQL) + 8c16b35 (T-1101 fix)
 
-### [T-1102] Research API skeleton — `status: todo` · `owner: claude/codex`
-- Routes auth research sans appels externes : create/read/update status.
+### [T-1102] Research API skeleton — `status: done` · `owner: claude`
+- Livré : 4 routes API authentifiées pour recherche job CRUD minimal.
+- Routes :
+  - `POST /api/research/jobs` : Créer job (draft status)
+  - `GET /api/research/jobs` : Lister jobs user avec pagination + status filter
+  - `GET /api/research/jobs/[id]` : Récupérer job (ownership check)
+  - `PATCH /api/research/jobs/[id]` : Éditer job draft seulement
+- Authentification : Supabase session (Bearer token), user_id from auth.uid() jamais client body
+- Ownership strict : Filtrage user_id sur toutes les requêtes, 404 si non-owned
+- Validation : topic 3-500, mode enum, URL format, language, duration 3-600
+- Draft-only : PATCH rejette éditions sur jobs non-draft
+- Codes erreur : 401 (no auth), 404 (missing/non-owned), 400 (validation), 500 (DB)
+- Tests : route-level avec Supabase mocké (auth, ownership, validation, draft-only)
+- Pas d'appels externes (SearXNG, Crawl4AI, LLM)
+- Validation : npm test 454/454, tsc clean, npm build OK
+- Commit : eab661e
 
 ### [T-1103] Source discovery adapter — `status: todo` · `owner: codex`
 - SearXNG integration : queries, normalize, dedupe, classify, tests.
