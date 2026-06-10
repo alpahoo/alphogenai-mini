@@ -965,8 +965,13 @@ Contraintes :
 - Validation : npm test 477/477 ✓, tsc clean ✓, npm build OK ✓
 - Commits : b2b308a (initial), 7d6e3cc (prod fixes)
 
-### [T-1105] Angles analysis — `status: todo` · `owner: codex/chatgpt`
+### [T-1105] Angles analysis — `status: done` · `owner: claude`
 - Summaries, uncertainty, contradictions, 3-5 angles, recommended angle.
+- Livré : `lib/research/angles.ts` (helpers), `app/api/research/jobs/[id]/analyze/route.ts` (POST handler)
+- LLM: Claude via Anthropic API (server-side only)
+- Status flow: ready_for_angles → scripting → ready_for_angles or failed
+- Validation : npm test 499/499, tsc clean, npm build OK
+- Commit : 5f3a34b
 
 ### [T-1106] Script + storyboard — `status: todo` · `owner: codex`
 - Script depuis angle selectionne + scenes compatibles Director.

@@ -12,6 +12,45 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-11 — Claude (Haiku 4.5) — T-1105: Angles Analysis IMPLEMENTED ✅
+
+- Livré : LLM-driven editorial angles generation from extracted sources.
+- Route implémentée :
+  - `POST /api/research/jobs/[id]/analyze` : Query LLM, insert angles, update job status
+- Features :
+  - LLM (Claude via Anthropic API, server-side only, provider hidden from user)
+  - Prompt construction : topic + mode + top 5 source excerpts (500 chars each)
+  - Timeout 30s, max 2000 tokens response
+  - Generate 3-5 angles per job (title, hook, positioning, score 0..1)
+  - Score validation and clamping [0.0, 1.0]
+  - Strict source validation : ≥1 source with extraction_status=success
+- Status machine (per spec correction):
+  - During LLM: job.status = scripting
+  - Success: insert 3-5 angles (selected=false), job.status = ready_for_angles
+  - Failure: job.status = failed, error_step = analysis
+- Auth pattern :
+  - Bearer token → Supabase auth.getUser()
+  - Service-role for DB writes
+  - Strict ownership enforcement
+  - Status gate: ready_for_angles or failed (error_step ≠ analysis) only
+- Helpers (lib/research/angles.ts) :
+  - buildAnglePrompt(topic, mode, sources) : Construct prompt
+  - callLLMForAngles(prompt, timeoutMs) : LLM API call
+  - parseAnglesFromLLM(response) : Parse JSON + validate
+  - validateAngle(angle) : Per-angle validation
+  - clampScore(score) : Clamp to [0.0, 1.0]
+  - generateAngles(topic, mode, sources) : Orchestrator
+- Tests :
+  - Unit tests for angle helpers (prompt, parsing, validation, score clamping)
+  - 499/499 tests passing
+- Files :
+  - lib/research/angles.ts (pure helpers)
+  - app/api/research/jobs/[id]/analyze/route.ts (POST handler)
+  - app/api/research/jobs/[id]/analyze/__tests__/analyze.test.ts (unit tests)
+- Validation : npm test 499/499 ✅, tsc ✅, npm build ✅, lint ✅
+- Commit : 5f3a34b
+- Prochaine étape : T-1106 (Script + storyboard generation)
+
 ## 2026-06-11 — Claude (Haiku 4.5) — T-1104: Extraction Adapter FINALIZED ✅ (+ Codex production review)
 - Livré : Crawl4AI integration pour extraire Markdown des sources.
 - Route implémentée :
