@@ -12,6 +12,20 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-10 — Claude (Haiku 4.5) — T-1101: AlphoResearch Schema Migration VALIDATED ✅
+- Livré : Validation PROD complète + marquage T-1101 done.
+- Validation PROD ✅ confirmée :
+  - 5 tables research_* (jobs, sources, angles, scripts, storyboards) existent et visibles
+  - RLS enabled = true sur toutes les 5 tables
+  - 4 policies par table : SELECT, INSERT, UPDATE, DELETE (20 policies total)
+  - Index partial unique research_angles_job_id_selected_partial existe avec WHERE selected = TRUE
+  - Indexes, CHECK constraints, triggers tous présents et actifs
+  - Supabase Advisor : pas d'erreurs critiques
+- Script validation SQL créé : `docs/VALIDATE_T1101_MIGRATION.sql` (8 blocs de vérification)
+- Fichiers modifiés : agent/tasks.md (T-1101 done), agent/log.md
+- Commit : T-1101 validation + tasks/log updates
+- Prochaine étape : T-1102 (Research API skeleton)
+
 ## 2026-06-10 — Claude (Haiku 4.5) — T-1101: AlphoResearch Schema Migration (SQL + Guide)
 - Livré : Migration Supabase traçable + guide d'application manuelle.
 - Migration SQL : `supabase/migrations/20260610_create_alphoresearch_schema.sql` (timestamped Supabase ordering).
