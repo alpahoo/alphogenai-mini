@@ -90,7 +90,7 @@ export async function POST(
     const { data: sources, error: sourcesError } = await getSupabaseService()
       .from('research_sources')
       .select()
-      .eq('job_id', id)
+      .eq('research_job_id', id)
       .limit(100); // Max 100 sources per job
 
     if (sourcesError) {
@@ -147,7 +147,7 @@ export async function POST(
             extraction_time_ms: extraction.extraction_time_ms,
           })
           .eq('id', source.id)
-          .eq('job_id', id);
+          .eq('research_job_id', id);
 
         if (extraction.extraction_status === 'success') {
           sourcesExtracted += 1;
@@ -163,12 +163,12 @@ export async function POST(
           .from('research_sources')
           .update({
             extracted_markdown: null,
-            extraction_status: 'error',
+            extraction_status: 'failed',
             extraction_error: errorMsg,
             extraction_time_ms: 0,
           })
           .eq('id', source.id)
-          .eq('job_id', id);
+          .eq('research_job_id', id);
       }
     }
 

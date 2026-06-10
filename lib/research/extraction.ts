@@ -3,7 +3,7 @@
  * Extracts Markdown content from URLs via Crawl4AI
  */
 
-export type ExtractionStatus = 'pending' | 'extracting' | 'success' | 'timeout' | 'blocked' | 'parsing_error' | 'error';
+export type ExtractionStatus = 'pending' | 'success' | 'failed' | 'timeout' | 'blocked';
 
 export interface ExtractionResult {
   success: boolean;
@@ -92,6 +92,7 @@ export async function callCrawl4AI(
 
 /**
  * Map Crawl4AI error message to extraction status
+ * Maps parsing_error and error to 'failed' (per T-1101 migration constraints)
  */
 export function mapErrorToStatus(errorMessage: string): ExtractionStatus {
   const msg = errorMessage.toLowerCase();
@@ -102,11 +103,9 @@ export function mapErrorToStatus(errorMessage: string): ExtractionStatus {
   if (msg.includes('forbidden') || msg.includes('429') || msg.includes('blocked')) {
     return 'blocked';
   }
-  if (msg.includes('parsing') || msg.includes('no content')) {
-    return 'parsing_error';
-  }
 
-  return 'error';
+  // Map parsing_error and other errors to 'failed'
+  return 'failed';
 }
 
 /**
@@ -169,7 +168,7 @@ export async function extractSource(
     const errMsg = err instanceof Error ? err.message : 'Unknown error';
     return {
       extracted_markdown: null,
-      extraction_status: 'error',
+      extraction_status: 'failed',
       extraction_error: errMsg,
       extraction_time_ms: 0,
     };

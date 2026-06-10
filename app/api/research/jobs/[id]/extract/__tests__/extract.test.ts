@@ -58,14 +58,14 @@ describe('Extraction Adapter', () => {
       expect(mapErrorToStatus('Access blocked')).toBe('blocked');
     });
 
-    it('should map parsing errors', () => {
-      expect(mapErrorToStatus('No content found')).toBe('parsing_error');
-      expect(mapErrorToStatus('Parsing failed')).toBe('parsing_error');
+    it('should map parsing errors to failed', () => {
+      expect(mapErrorToStatus('No content found')).toBe('failed');
+      expect(mapErrorToStatus('Parsing failed')).toBe('failed');
     });
 
-    it('should default to error', () => {
-      expect(mapErrorToStatus('Unknown error')).toBe('error');
-      expect(mapErrorToStatus('Something went wrong')).toBe('error');
+    it('should default to failed', () => {
+      expect(mapErrorToStatus('Unknown error')).toBe('failed');
+      expect(mapErrorToStatus('Something went wrong')).toBe('failed');
     });
   });
 
@@ -118,7 +118,7 @@ describe('Extraction Adapter', () => {
       expect(normalized.extracted_markdown).toBeNull();
     });
 
-    it('should normalize parsing error', () => {
+    it('should normalize parsing error as failed', () => {
       const result = {
         success: false,
         markdown: null,
@@ -129,7 +129,7 @@ describe('Extraction Adapter', () => {
 
       const normalized = normalizeExtraction(result);
 
-      expect(normalized.extraction_status).toBe('parsing_error');
+      expect(normalized.extraction_status).toBe('failed');
       expect(normalized.extracted_markdown).toBeNull();
     });
 
