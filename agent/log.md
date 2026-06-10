@@ -927,3 +927,8 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Analytics nettoie les noms modeles via `cleanModelName(getEngineDisplayName(...))`.
 - Aucun changement requetes Supabase, endpoints, drag/drop schedule, actions projets,
   liens library, analytics API ou logique metier.
+
+## 2026-06-10 - Codex - T-1104 home command center V2
+- Polish UI-only de `/home` : fond warm-neutral, hero workspace blanc, CTA neutre,
+  production pulse, pipeline, starters et recent projects alignes avec l'Axe 11.
+- Aucun changement requete Supabase, navigation, auth, routes ou logique metier.

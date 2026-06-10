@@ -432,8 +432,11 @@ Spec : `docs/product/premium-product-experience-spec.md`.
   workflows, UGC/product section, post-generation studio, privacy/curation copy.
 - Scope : public UI-only ; aucune route/API/DB/provider.
 
-### [T-1104] Home command center V2 — `status: todo` · `owner: codex`
-- Reprendre `/home` pour harmoniser avec le nouveau langage premium.
+### [T-1104] Home command center V2 — `status: done` · `owner: codex`
+- Livre UI-only : `/home` harmonise le command center avec l'Axe 11 (fond warm-neutral,
+  hero workspace blanc, CTA neutre, production pulse, pipeline, starters et recents
+  en cards premium).
+- Aucun changement requête Supabase, navigation ou logique métier.
 
 ### [T-1105] Create flow visual polish — `status: done` · `owner: codex`
 - Polir `/create/[mode]` autour de la Director Console existante, sans toucher au
