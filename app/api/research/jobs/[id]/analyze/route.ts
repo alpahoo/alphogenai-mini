@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { generateAngles } from '@/lib/research/angles';
 
+const RESEARCH_LLM_TIMEOUT_MS = 90000;
+
 function getSupabaseService() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -123,7 +125,7 @@ export async function POST(
       job.topic,
       job.mode,
       sourceSummaries,
-      30000,
+      RESEARCH_LLM_TIMEOUT_MS,
     );
 
     // Handle LLM errors

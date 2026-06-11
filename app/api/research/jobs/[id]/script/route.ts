@@ -11,6 +11,8 @@ import {
 } from '@/lib/research/script';
 import { callLLMForScript } from '@/lib/research/script-llm';
 
+const RESEARCH_LLM_TIMEOUT_MS = 90000;
+
 function getSupabaseService() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -165,7 +167,7 @@ export async function POST(
 
     // Generate via LLM
     const prompt = buildScriptPrompt(job.topic, job.mode, angle, sourceSummaries);
-    const llm = await callLLMForScript(prompt, 30000);
+    const llm = await callLLMForScript(prompt, RESEARCH_LLM_TIMEOUT_MS);
 
     if (llm.error) {
       await failJob(id, userId, llm.error);

@@ -16,6 +16,8 @@ export interface LLMResponse {
   error?: string;
 }
 
+export const ANGLE_SOURCE_EXCERPT_CHARS = 500;
+
 /**
  * Build prompt for LLM angle generation
  */
@@ -24,7 +26,10 @@ export function buildAnglePrompt(
   mode: string,
   sourceSummaries: string[],
 ): string {
-  const sourceExcerpts = sourceSummaries.slice(0, 5).join('\n---\n');
+  const sourceExcerpts = sourceSummaries
+    .slice(0, 5)
+    .map((source) => source.slice(0, ANGLE_SOURCE_EXCERPT_CHARS))
+    .join('\n---\n');
 
   return `Topic: ${topic}
 Content Mode: ${mode}

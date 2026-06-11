@@ -122,6 +122,12 @@ function friendlyResearchError(message: string | null | undefined) {
   if (message.includes("SearXNG gateway not configured")) {
     return "Source search is not connected yet. Add RESEARCH_SEARXNG_GATEWAY_URL and RESEARCH_SEARXNG_SERVICE_TOKEN in Vercel, then redeploy.";
   }
+  if (message.includes("LLM request timed out")) {
+    return "The research model took too long to answer. Try Generate angles again; if it repeats, use fewer sources or a shorter brief.";
+  }
+  if (message.includes("LLM gateway not configured")) {
+    return "Research writing is not connected yet. Add RESEARCH_LLM_GATEWAY_URL, RESEARCH_LLM_SERVICE_TOKEN, and RESEARCH_LLM_MODEL in Vercel, then redeploy.";
+  }
   return message;
 }
 

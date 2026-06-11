@@ -49,6 +49,14 @@ describe('Angles Analysis Adapter', () => {
       expect(prompt).toContain('Source 4');
     });
 
+    it('should truncate each source excerpt to 500 chars', () => {
+      const long = 'x'.repeat(2000);
+      const prompt = buildAnglePrompt('Topic', 'mode', [long]);
+
+      expect(prompt).toContain('x'.repeat(500));
+      expect(prompt).not.toContain('x'.repeat(501));
+    });
+
     it('should request JSON array format', () => {
       const prompt = buildAnglePrompt('Topic', 'mode', ['Source']);
 
