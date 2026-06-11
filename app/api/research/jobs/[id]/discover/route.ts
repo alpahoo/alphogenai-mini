@@ -114,9 +114,10 @@ export async function POST(
     }
 
     // Insert sources into research_sources
+    // Note: research_sources keys off research_job_id only (no user_id column);
+    // ownership is enforced via the research_jobs join + RLS.
     const sourcesToInsert = sources.map((source) => ({
-      job_id: id,
-      user_id: userId,
+      research_job_id: id,
       url: source.url,
       title: source.title,
       source_type: source.source_type,
@@ -145,12 +146,13 @@ export async function POST(
 
     const sourcesCount = Array.isArray(insertedSources) ? insertedSources.length : 0;
 
-    // Update job to ready_for_angles with source count
+    // Update job to ready_for_angles
+    // Note: research_jobs has no sources_count column; the count is returned in
+    // the response body only (derive from research_sources when needed).
     const { data: updatedJob, error: updateError } = await getSupabaseService()
       .from('research_jobs')
       .update({
         status: 'ready_for_angles',
-        sources_count: sourcesCount,
       })
       .eq('id', id)
       .eq('user_id', userId)

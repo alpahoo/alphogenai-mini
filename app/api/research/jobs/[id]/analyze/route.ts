@@ -174,9 +174,10 @@ export async function POST(
     }
 
     // Insert angles into research_angles
+    // Note: research_angles keys off research_job_id only (no user_id column);
+    // ownership is enforced via the research_jobs join + RLS.
     const anglesToInsert = angles.map((angle) => ({
       research_job_id: id,
-      user_id: userId,
       title: angle.title,
       hook: angle.hook,
       positioning: angle.positioning,
