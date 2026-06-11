@@ -12,6 +12,16 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-11 — Claude (Fable 5) — Docs + research schema fix
+- T-1104 spec added : `docs/product/research-extraction-adapter-spec.md`
+- T-1105 spec added : `docs/product/research-angles-analysis-spec.md`
+- T-1106 spec created : `docs/product/research-script-storyboard-spec.md`
+- fix research schema alignment pushed in 7d236ec (discover/analyze inserts:
+  research_job_id only, no user_id; research_jobs update: no sources_count)
+- Prochaine étape : T-1106 implementation
+
+---
+
 ## 2026-06-11 — Claude (Haiku 4.5) — T-1105: Angles Analysis IMPLEMENTED ✅
 
 - Livré : LLM-driven editorial angles generation from extracted sources.
