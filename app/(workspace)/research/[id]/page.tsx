@@ -104,6 +104,20 @@ function statusClass(status: string) {
   return "border-neutral-200 bg-neutral-50 text-neutral-600";
 }
 
+function researchDisplayStatus(status: string, sourcesCount: number, readySources: number) {
+  if (status === "ready_for_angles" && sourcesCount > 0 && readySources === 0) {
+    return {
+      label: "Sources found",
+      className: "border-blue-200 bg-blue-50 text-blue-700",
+    };
+  }
+
+  return {
+    label: STATUS_LABELS[status] || status,
+    className: statusClass(status),
+  };
+}
+
 function sourceTone(status: string) {
   if (status === "success") return "text-emerald-700 bg-emerald-50 border-emerald-200";
   if (status === "failed" || status === "blocked" || status === "timeout") {
@@ -375,6 +389,8 @@ export default function ResearchDetailPage() {
     );
   }
 
+  const displayStatus = researchDisplayStatus(job.status, sources.length, readySources);
+
   return (
     <div className="min-h-screen bg-[#f5f3ee] px-6 py-8 lg:px-10">
       <div className="mx-auto max-w-7xl">
@@ -387,8 +403,8 @@ export default function ResearchDetailPage() {
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl">
               <div className="mb-3 flex flex-wrap items-center gap-2">
-                <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClass(job.status)}`}>
-                  {STATUS_LABELS[job.status] || job.status}
+                <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${displayStatus.className}`}>
+                  {displayStatus.label}
                 </span>
                 <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-500">
                   {job.mode}
@@ -531,14 +547,16 @@ export default function ResearchDetailPage() {
                   className="inline-flex items-center gap-2 rounded-xl bg-neutral-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 disabled:opacity-60"
                 >
                   {action === "analyze" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radio className="h-4 w-4" />}
-                  Generate angles
+                  {readySources === 0 ? "Extract first" : "Generate angles"}
                 </button>
               </div>
 
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {angles.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-6 text-sm text-neutral-500 md:col-span-2">
-                    No angles yet. Extract at least one source first.
+                    {readySources === 0
+                      ? "Sources are found but not extracted yet. Click Extract above, then generate angles."
+                      : "No angles yet. Generate editorial angles from the extracted sources."}
                   </div>
                 ) : (
                   angles.map((angle) => (
