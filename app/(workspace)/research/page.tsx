@@ -8,6 +8,7 @@ import {
   Bell,
   BookOpenCheck,
   Clock,
+  Copy,
   Eye,
   Loader2,
   Plus,
@@ -99,6 +100,7 @@ export default function ResearchPage() {
   const [watchlistName, setWatchlistName] = useState("");
   const [watchlistUrl, setWatchlistUrl] = useState("");
   const [watchlistTopic, setWatchlistTopic] = useState("");
+  const [copiedWatchlistId, setCopiedWatchlistId] = useState<string | null>(null);
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -233,6 +235,21 @@ export default function ResearchPage() {
     } finally {
       setWatchlistCreating(false);
     }
+  }
+
+  async function copyWatchlistText(value: string, watchlistId: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedWatchlistId(watchlistId);
+      window.setTimeout(() => setCopiedWatchlistId((current) => (current === watchlistId ? null : current)), 1800);
+    } catch {
+      setWatchlistError("Could not copy to clipboard.");
+    }
+  }
+
+  function webhookUrlForWatchlist(watchlistId: string) {
+    if (typeof window === "undefined") return `/api/webhooks/changedetection/${watchlistId}`;
+    return `${window.location.origin}/api/webhooks/changedetection/${watchlistId}`;
   }
 
   return (
@@ -421,6 +438,23 @@ export default function ResearchPage() {
                     <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
                       <span>{MODE_LABELS[watchlist.mode]}</span>
                       {watchlist.last_changed_at && <span>Changed {formatDate(watchlist.last_changed_at)}</span>}
+                    </div>
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={() => copyWatchlistText(webhookUrlForWatchlist(watchlist.id), watchlist.id)}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-neutral-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        {copiedWatchlistId === watchlist.id ? "Copied" : "Copy webhook URL"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => copyWatchlistText(watchlist.id, watchlist.id)}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs font-semibold text-neutral-700 transition hover:bg-neutral-50"
+                      >
+                        Copy ID
+                      </button>
                     </div>
                   </div>
                 ))}
