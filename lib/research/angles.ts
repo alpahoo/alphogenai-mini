@@ -82,7 +82,20 @@ export function validateAngle(angle: unknown): angle is ResearchAngle {
  */
 export function parseAnglesFromLLM(response: string): ResearchAngle[] {
   try {
-    const parsed = JSON.parse(response);
+    let text = response.trim();
+    // Strip markdown code fences if the model wrapped the JSON.
+    const fence = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+    if (fence) {
+      text = fence[1].trim();
+    }
+
+    let parsed: unknown = JSON.parse(text);
+
+    // Some models wrap the array in an object, e.g. { "angles": [...] }.
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const arr = Object.values(parsed as Record<string, unknown>).find((v) => Array.isArray(v));
+      parsed = arr ?? [];
+    }
 
     if (!Array.isArray(parsed)) {
       return [];
@@ -108,40 +121,43 @@ export function parseAnglesFromLLM(response: string): ResearchAngle[] {
 }
 
 /**
- * Call LLM (Claude via Anthropic API)
- * Server-side only, provider hidden from user
+ * Call the Research LLM gateway (LiteLLM, OpenAI-compatible).
+ * Server-side only; provider/model are hidden behind the gateway.
  */
 export async function callLLMForAngles(
   prompt: string,
   timeoutMs: number = 30000,
 ): Promise<{ angles: ResearchAngle[]; error?: string }> {
-  const apiKey = process.env.RESEARCH_LLM_API_KEY;
-  const model = process.env.RESEARCH_LLM_MODEL || 'claude-opus-4-8';
+  const gatewayUrl = process.env.RESEARCH_LLM_GATEWAY_URL;
+  const serviceToken = process.env.RESEARCH_LLM_SERVICE_TOKEN;
+  const model = process.env.RESEARCH_LLM_MODEL || 'research-basic';
 
-  if (!apiKey) {
-    return { angles: [], error: 'LLM API key not configured' };
+  if (!gatewayUrl || !serviceToken) {
+    return { angles: [], error: 'LLM gateway not configured' };
   }
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch(`${gatewayUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        Authorization: `Bearer ${serviceToken}`,
       },
       body: JSON.stringify({
         model,
         max_tokens: 2000,
-        system: `You are an editorial angles expert. Generate 3-5 unique, compelling angles for a video/article based on research sources.
+        messages: [
+          {
+            role: 'system',
+            content: `You are an editorial angles expert. Generate 3-5 unique, compelling angles for a video/article based on research sources.
 
 Each angle should offer a distinct perspective or approach to the topic, suitable for video/content production.
 
-Return ONLY valid JSON. Do not include markdown, code blocks, or explanations outside the JSON.`,
-        messages: [
+Return ONLY valid JSON (a top-level array). Do not include markdown, code blocks, or explanations outside the JSON.`,
+          },
           {
             role: 'user',
             content: prompt,
@@ -162,9 +178,9 @@ Return ONLY valid JSON. Do not include markdown, code blocks, or explanations ou
     }
 
     const data = (await response.json()) as {
-      content?: Array<{ type: string; text: string }>;
+      choices?: Array<{ message?: { content?: string } }>;
     };
-    const content = data.content?.[0]?.text || '';
+    const content = data.choices?.[0]?.message?.content || '';
 
     const angles = parseAnglesFromLLM(content);
 

@@ -12,38 +12,43 @@ export interface ScriptLLMResult {
 }
 
 /**
- * Call the LLM to generate a script + storyboard (Claude via Anthropic API).
- * Server-side only; provider details are not surfaced to user-facing responses.
+ * Call the Research LLM gateway (LiteLLM, OpenAI-compatible).
+ * Server-side only; provider/model are hidden behind the gateway.
  */
 export async function callLLMForScript(
   prompt: string,
   timeoutMs: number = 30000,
 ): Promise<ScriptLLMResult> {
-  const apiKey = process.env.RESEARCH_LLM_API_KEY;
-  const model = process.env.RESEARCH_LLM_MODEL || 'claude-opus-4-8';
+  const gatewayUrl = process.env.RESEARCH_LLM_GATEWAY_URL;
+  const serviceToken = process.env.RESEARCH_LLM_SERVICE_TOKEN;
+  const model = process.env.RESEARCH_LLM_MODEL || 'research-basic';
 
-  if (!apiKey) {
-    return { content: '', tokensUsed: null, modelUsed: null, error: 'LLM API key not configured' };
+  if (!gatewayUrl || !serviceToken) {
+    return { content: '', tokensUsed: null, modelUsed: null, error: 'LLM gateway not configured' };
   }
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch(`${gatewayUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        Authorization: `Bearer ${serviceToken}`,
       },
       body: JSON.stringify({
         model,
         max_tokens: 4000,
-        system: `You are a short-form video script + storyboard expert. Generate one complete script and a Director-compatible storyboard from the provided angle and sources.
+        messages: [
+          {
+            role: 'system',
+            content: `You are a short-form video script + storyboard expert. Generate one complete script and a Director-compatible storyboard from the provided angle and sources.
 
 Return ONLY a valid JSON object. Do not include markdown, code blocks, or explanations outside the JSON.`,
-        messages: [{ role: 'user', content: prompt }],
+          },
+          { role: 'user', content: prompt },
+        ],
       }),
       signal: controller.signal,
     });
@@ -59,14 +64,13 @@ Return ONLY a valid JSON object. Do not include markdown, code blocks, or explan
     }
 
     const data = (await response.json()) as {
-      content?: Array<{ type: string; text: string }>;
-      usage?: { input_tokens?: number; output_tokens?: number };
+      choices?: Array<{ message?: { content?: string } }>;
+      usage?: { total_tokens?: number };
       model?: string;
     };
 
-    const content = data.content?.[0]?.text || '';
-    const tokensUsed =
-      (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0) || null;
+    const content = data.choices?.[0]?.message?.content || '';
+    const tokensUsed = data.usage?.total_tokens || null;
 
     return { content, tokensUsed, modelUsed: data.model || model };
   } catch (err) {

@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import {
   buildAnglePrompt,
+  callLLMForAngles,
   clampScore,
   validateAngle,
   parseAnglesFromLLM,
@@ -12,6 +13,17 @@ import {
  */
 
 describe('Angles Analysis Adapter', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.RESEARCH_LLM_GATEWAY_URL;
+    delete process.env.RESEARCH_LLM_SERVICE_TOKEN;
+    delete process.env.RESEARCH_LLM_MODEL;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe('buildAnglePrompt', () => {
     it('should include topic and mode', () => {
       const prompt = buildAnglePrompt('AI Trends', 'news', ['Source 1', 'Source 2']);
@@ -217,6 +229,42 @@ describe('Angles Analysis Adapter', () => {
       expect(angles).toHaveLength(0);
     });
 
+    it('should parse JSON wrapped in markdown fences', () => {
+      const json = `\`\`\`json
+[
+  {
+    "title": "Wrapped",
+    "hook": "Hook",
+    "positioning": "Positioning",
+    "score": 0.8
+  }
+]
+\`\`\``;
+
+      const angles = parseAnglesFromLLM(json);
+
+      expect(angles).toHaveLength(1);
+      expect(angles[0].title).toBe('Wrapped');
+    });
+
+    it('should parse object-wrapped angle arrays from gateway models', () => {
+      const json = JSON.stringify({
+        angles: [
+          {
+            title: 'Wrapped Array',
+            hook: 'Hook',
+            positioning: 'Positioning',
+            score: 0.7,
+          },
+        ],
+      });
+
+      const angles = parseAnglesFromLLM(json);
+
+      expect(angles).toHaveLength(1);
+      expect(angles[0].title).toBe('Wrapped Array');
+    });
+
     it('should handle empty array', () => {
       const angles = parseAnglesFromLLM('[]');
       expect(angles).toHaveLength(0);
@@ -235,6 +283,58 @@ describe('Angles Analysis Adapter', () => {
 
       expect(parsed.length).toBeGreaterThanOrEqual(3);
       expect(parsed.length).toBeLessThanOrEqual(5);
+    });
+  });
+
+  describe('callLLMForAngles', () => {
+    it('should require the LiteLLM gateway env vars', async () => {
+      const result = await callLLMForAngles('prompt');
+
+      expect(result).toEqual({ angles: [], error: 'LLM gateway not configured' });
+    });
+
+    it('should call the OpenAI-compatible LiteLLM endpoint', async () => {
+      process.env.RESEARCH_LLM_GATEWAY_URL = 'https://research-gw.example.com';
+      process.env.RESEARCH_LLM_SERVICE_TOKEN = 'service-token';
+      process.env.RESEARCH_LLM_MODEL = 'research-basic';
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify([
+                  {
+                    title: 'LiteLLM Angle',
+                    hook: 'Hook',
+                    positioning: 'Positioning',
+                    score: 0.9,
+                  },
+                ]),
+              },
+            },
+          ],
+        }),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await callLLMForAngles('prompt');
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://research-gw.example.com/v1/chat/completions',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer service-token',
+          }),
+        }),
+      );
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+      expect(body.model).toBe('research-basic');
+      expect(body.messages[0].role).toBe('system');
+      expect(result.angles).toHaveLength(1);
+      expect(result.angles[0].title).toBe('LiteLLM Angle');
     });
   });
 });

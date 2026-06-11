@@ -149,10 +149,13 @@ export async function POST(
     // Update job to ready_for_angles
     // Note: research_jobs has no sources_count column; the count is returned in
     // the response body only (derive from research_sources when needed).
+    // Clear any prior failure markers so a successful retry doesn't keep a stale banner.
     const { data: updatedJob, error: updateError } = await getSupabaseService()
       .from('research_jobs')
       .update({
         status: 'ready_for_angles',
+        error_step: null,
+        error_message: null,
       })
       .eq('id', id)
       .eq('user_id', userId)
