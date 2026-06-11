@@ -973,8 +973,13 @@ Contraintes :
 - Validation : npm test 499/499, tsc clean, npm build OK
 - Commit : 5f3a34b
 
-### [T-1106] Script + storyboard — `status: todo` · `owner: codex`
+### [T-1106] Script + storyboard — `status: done` · `owner: codex`
 - Script depuis angle selectionne + scenes compatibles Director.
+- Livré : `lib/research/script.ts` (helpers purs), `lib/research/script-llm.ts` (LLM call isolé), `app/api/research/jobs/[id]/script/route.ts` (POST handler).
+- Route : `POST /api/research/jobs/[id]/script`.
+- Status flow : ready_for_angles/scripting/failed → scripting ; succès conserve `scripting` avec `approved=false`.
+- DB payloads : `research_job_id` only on child tables, no `user_id`/`job_id`; `research_scripts` + `research_storyboards` schema-aligned.
+- Validation : npm test 531/531, tsc clean, npm build OK.
 
 ### [T-1107] Research Studio UI — `status: todo` · `owner: codex`
 - Liste jobs, source review, angles, script approval, send to Director.
