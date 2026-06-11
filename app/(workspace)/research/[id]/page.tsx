@@ -9,6 +9,7 @@ import {
   ArrowRight,
   CheckCircle2,
   FileText,
+  Send,
   Loader2,
   Radio,
   SearchCheck,
@@ -18,6 +19,7 @@ import { createClient } from "@/lib/supabase/client";
 
 interface ResearchJob {
   id: string;
+  user_id: string;
   topic: string;
   input_url: string | null;
   mode: string;
@@ -66,6 +68,8 @@ interface ResearchStoryboard {
   scenes_json: Array<{ title?: string; prompt?: string; duration_sec?: number }>;
 }
 
+const RESEARCH_HANDOFF_STORAGE_KEY = "alphogen:research-handoff";
+
 const STEPS = [
   { key: "brief", label: "Brief" },
   { key: "sources", label: "Sources" },
@@ -106,6 +110,11 @@ function sourceTone(status: string) {
     return "text-red-700 bg-red-50 border-red-200";
   }
   return "text-neutral-600 bg-neutral-50 border-neutral-200";
+}
+
+function clampSceneDuration(value: number | undefined) {
+  if (!Number.isFinite(value)) return 5;
+  return Math.max(3, Math.min(10, Math.round(value ?? 5)));
 }
 
 export default function ResearchDetailPage() {
@@ -240,9 +249,80 @@ export default function ResearchDetailPage() {
     }
   }
 
+  async function approvePlan() {
+    if (!job || !script || scenes.length === 0) {
+      setError("Generate a script and storyboard before approving.");
+      return;
+    }
+
+    setAction("approve");
+    setError(null);
+    try {
+      const { error: scriptError } = await supabase
+        .from("research_scripts")
+        .update({ approved: true })
+        .eq("id", script.id)
+        .eq("research_job_id", jobId);
+      if (scriptError) throw scriptError;
+
+      const { error: jobError } = await supabase
+        .from("research_jobs")
+        .update({ status: "approved" })
+        .eq("id", jobId)
+        .eq("user_id", job.user_id);
+      if (jobError) throw jobError;
+
+      await load();
+    } catch {
+      setError("Could not approve this research plan.");
+    } finally {
+      setAction(null);
+    }
+  }
+
+  async function sendToDirector() {
+    if (!job || !script || !script.approved || scenes.length === 0) {
+      setError("Approve a storyboard before sending it to Director.");
+      return;
+    }
+
+    setAction("handoff");
+    setError(null);
+    try {
+      const payload = {
+        researchJobId: job.id,
+        topic: job.topic,
+        mode: job.mode,
+        language: job.language,
+        angleTitle: selectedAngle?.title ?? null,
+        angleHook: selectedAngle?.hook ?? null,
+        script: script.script,
+        scenes: scenes.map((scene, index) => ({
+          index,
+          title: scene.title || `Scene ${index + 1}`,
+          prompt: scene.prompt || job.topic,
+          durationSec: clampSceneDuration(scene.duration_sec),
+        })),
+      };
+
+      window.sessionStorage.setItem(RESEARCH_HANDOFF_STORAGE_KEY, JSON.stringify(payload));
+      await supabase
+        .from("research_jobs")
+        .update({ status: "sent_to_director" })
+        .eq("id", jobId)
+        .eq("user_id", job.user_id);
+      router.push("/create/story?research_handoff=1");
+    } catch {
+      setAction(null);
+      setError("Could not prepare the Director handoff.");
+    }
+  }
+
   const readySources = sources.filter((s) => s.extraction_status === "success").length;
   const selectedAngle = angles.find((a) => a.selected);
   const scenes = storyboard?.scenes_json ?? [];
+  const canApprove = Boolean(script && scenes.length > 0 && !script.approved);
+  const canSendToDirector = Boolean(script?.approved && scenes.length > 0);
 
   if (loading && !job) {
     return (
@@ -481,6 +561,17 @@ export default function ResearchDetailPage() {
                       </span>
                     </div>
                     <p className="whitespace-pre-wrap text-sm leading-7 text-neutral-700">{script.script}</p>
+                    {!script.approved && (
+                      <button
+                        type="button"
+                        onClick={approvePlan}
+                        disabled={!!action || !canApprove}
+                        className="mt-4 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        {action === "approve" ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                        Approve storyboard
+                      </button>
+                    )}
                   </div>
 
                   {scenes.length > 0 && (
@@ -519,6 +610,7 @@ export default function ResearchDetailPage() {
                   ["Angle selected", !!selectedAngle],
                   ["Script generated", !!script],
                   ["Storyboard generated", scenes.length > 0],
+                  ["Script approved", !!script?.approved],
                 ].map(([label, done]) => (
                   <div key={String(label)} className="flex items-center gap-2 text-sm">
                     {done ? (
@@ -535,19 +627,22 @@ export default function ResearchDetailPage() {
             <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
               <h2 className="text-sm font-semibold text-neutral-950">Director handoff</h2>
               <p className="mt-2 text-sm leading-6 text-neutral-500">
-                V1 prepares the storyboard here. The actual Director handoff will be wired after approval.
+                Approve the storyboard, then send it to the Create flow as an editable AI Director plan.
               </p>
-              <Link
-                href="/create/story"
+              <button
+                type="button"
+                onClick={sendToDirector}
+                disabled={!!action || !canSendToDirector}
                 className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${
-                  scenes.length > 0
+                  canSendToDirector
                     ? "bg-neutral-950 text-white hover:bg-neutral-800"
-                    : "bg-neutral-100 text-neutral-400 pointer-events-none"
+                    : "cursor-not-allowed bg-neutral-100 text-neutral-400"
                 }`}
               >
-                Open Director
+                {action === "handoff" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {script?.approved ? "Send to Director" : "Approve first"}
                 <ArrowRight className="h-4 w-4" />
-              </Link>
+              </button>
             </div>
           </aside>
         </div>

@@ -163,6 +163,24 @@ interface CinematicLook {
   duration_sec: number | null;
 }
 
+interface ResearchHandoffPayload {
+  researchJobId: string;
+  topic: string;
+  mode?: string;
+  language?: string;
+  angleTitle?: string | null;
+  angleHook?: string | null;
+  script?: string;
+  scenes?: Array<{
+    index?: number;
+    title?: string;
+    prompt?: string;
+    durationSec?: number;
+  }>;
+}
+
+const RESEARCH_HANDOFF_STORAGE_KEY = "alphogen:research-handoff";
+
 /** Hardcoded fallback if /api/engines fails or hasn't loaded yet. */
 const FALLBACK_ENGINES: EngineOption[] = [
   { key: "wan_i2v",        label: "Wan 2.2 I2V",       desc: "GPU - up to 60s",                    gate: null,      supportsRefs: false, supportsI2v: true,  maxDuration: 60, minDuration: null, quality: "720p" },
@@ -202,6 +220,7 @@ export default function CreateModePage({
   // `composerRefs` holds the ordered inline media chips (faces/images/…).
   const composerRef = useRef<PromptComposerHandle>(null);
   const referenceJobPrefillRef = useRef<string | null>(null);
+  const researchHandoffAppliedRef = useRef(false);
   const [composerRefs, setComposerRefs] = useState<ComposerReference[]>([]);
   // Images uploaded straight from the composer toolbar (→ @image chips). Kept
   // for the @-menu; the actual ReferenceItem is also added to `references` so
@@ -756,6 +775,64 @@ export default function CreateModePage({
   // Effective scene count shown in estimates / loading steps.
   const sceneCount =
     numScenes === "auto" ? autoSceneCount : Math.min(Math.max(numScenes, minScenes), maxUsefulScenes);
+
+  useEffect(() => {
+    if (!planLoaded) return;
+    if (searchParams.get("research_handoff") !== "1" || researchHandoffAppliedRef.current) return;
+
+    researchHandoffAppliedRef.current = true;
+    try {
+      const raw = window.sessionStorage.getItem(RESEARCH_HANDOFF_STORAGE_KEY);
+      if (!raw) return;
+
+      const handoff = JSON.parse(raw) as ResearchHandoffPayload;
+      const rawScenes = Array.isArray(handoff.scenes) ? handoff.scenes : [];
+      const maxDirectorScenes = Math.max(1, Math.min(planMaxScenes, Math.floor(planMaxDuration / 3) || 1));
+      const cappedScenes = rawScenes.slice(0, maxDirectorScenes);
+      if (cappedScenes.length === 0) return;
+
+      const promptParts = [
+        `Research brief: ${handoff.topic}`,
+        handoff.angleTitle ? `Selected angle: ${handoff.angleTitle}` : null,
+        handoff.angleHook ? `Hook: ${handoff.angleHook}` : null,
+        handoff.script ? `Script:\n${handoff.script}` : null,
+      ].filter(Boolean);
+      const researchPrompt = promptParts.join("\n\n").slice(0, 1900);
+      const totalSceneDuration = cappedScenes.reduce(
+        (sum, scene) => sum + Math.max(3, Math.min(10, Math.round(scene.durationSec ?? 5))),
+        0,
+      );
+      const durationOption =
+        DURATION_OPTIONS.map((option) => Number(option.value)).find((value) => value >= totalSceneDuration) ??
+        Number(DURATION_OPTIONS[DURATION_OPTIONS.length - 1].value);
+      const modelName =
+        selectedEngine === "auto"
+          ? "Auto"
+          : cleanModelName(engineOptions.find((e) => e.key === selectedEngine)?.label ?? selectedEngine);
+
+      setPrompt(researchPrompt);
+      composerRef.current?.setText(researchPrompt);
+      setComposerRefs([]);
+      setDuration(String(Math.min(planMaxDuration, durationOption)));
+      setNumScenes(cappedScenes.length);
+      setDirectorScenes(
+        cappedScenes.map((scene, index) => ({
+          index,
+          title: scene.title || `Research scene ${index + 1}`,
+          prompt: scene.prompt || handoff.topic,
+          durationSec: Math.max(3, Math.min(10, Math.round(scene.durationSec ?? 5))),
+          camera: index === 0 ? "strong opening frame" : undefined,
+          assets: [],
+          recommendedModel: modelName,
+          notes: ["Research-backed storyboard"],
+        })),
+      );
+      setDirectorOpen(true);
+      window.sessionStorage.removeItem(RESEARCH_HANDOFF_STORAGE_KEY);
+    } catch {
+      setError("Could not load the research storyboard handoff.");
+    }
+  }, [searchParams, planLoaded, planMaxScenes, planMaxDuration, selectedEngine, engineOptions]);
 
   // Loading overlay steps — shows progress while waiting for job creation + redirect
   const loadingSteps = [
