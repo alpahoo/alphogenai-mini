@@ -41,7 +41,6 @@ interface ResearchSource {
   selected: boolean;
   extraction_status: string;
   extraction_error: string | null;
-  extracted_markdown: string | null;
 }
 
 interface ResearchAngle {
@@ -188,7 +187,7 @@ export default function ResearchDetailPage() {
           .single(),
         supabase
           .from("research_sources")
-          .select("id, url, title, source_type, credibility_score, selected, extraction_status, extraction_error, extracted_markdown")
+          .select("id, url, title, source_type, credibility_score, selected, extraction_status, extraction_error")
           .eq("research_job_id", jobId)
           .order("created_at", { ascending: true }),
         supabase
@@ -508,10 +507,8 @@ export default function ResearchDetailPage() {
                           </span>
                         </div>
                       </div>
-                      {source.extracted_markdown && (
-                        <p className="mt-3 line-clamp-3 text-sm leading-6 text-neutral-600">
-                          {source.extracted_markdown}
-                        </p>
+                      {source.extraction_error && (
+                        <p className="mt-3 text-sm leading-6 text-red-600">{source.extraction_error}</p>
                       )}
                     </div>
                   ))
