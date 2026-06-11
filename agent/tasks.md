@@ -981,8 +981,13 @@ Contraintes :
 - DB payloads : `research_job_id` only on child tables, no `user_id`/`job_id`; `research_scripts` + `research_storyboards` schema-aligned.
 - Validation : npm test 531/531, tsc clean, npm build OK.
 
-### [T-1107] Research Studio UI — `status: todo` · `owner: codex`
-- Liste jobs, source review, angles, script approval, send to Director.
+### [T-1107] Research Studio UI — `status: done` · `owner: codex`
+- Livré V1 : `/research` (brief + liste) et `/research/[id]` (pipeline Sources → Angles → Script/Storyboard).
+- Navigation : entrée `Research` ajoutée dans la sidebar workspace.
+- Intégration : actions UI branchées sur `discover`, `extract`, `analyze`, `script`; lecture directe RLS pour jobs/sources/angles/scripts/storyboards.
+- Fix inclus : `POST /api/research/jobs` retourne maintenant la ligne créée via `.select().single()`.
+- Limite V1 : handoff Director encore placeholder (`Open Director`), pas d’édition fine sources/script/scènes.
+- Validation : npm test 531/531, tsc clean, npm build OK.
 
 ### [T-1107a] Research Studio UX spec — `status: done` · `owner: codex`
 - Livre : `docs/product/research-studio-ux-spec.md`.

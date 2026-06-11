@@ -15,6 +15,7 @@ import {
   Gift,
   Clapperboard,
   CalendarClock,
+  SearchCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -43,6 +44,12 @@ const MAIN_NAV = [
     label: "Scene Editor",
     icon: Clapperboard,
     description: "Storyboard",
+  },
+  {
+    href: "/research",
+    label: "Research",
+    icon: SearchCheck,
+    description: "Video plans",
   },
 ] as const;
 

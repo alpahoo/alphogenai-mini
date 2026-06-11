@@ -148,26 +148,30 @@ export async function POST(request: NextRequest) {
     }
 
     // Create job
-    const { data, error } = await getSupabaseService().from('research_jobs').insert({
-      user_id: userId,
-      topic: topicStr.trim(),
-      input_url: input_url || null,
-      mode,
-      language: finalLanguage,
-      target_duration_seconds: target_duration_seconds || null,
-      status: 'draft',
-    });
+    const { data, error } = await getSupabaseService()
+      .from('research_jobs')
+      .insert({
+        user_id: userId,
+        topic: topicStr.trim(),
+        input_url: input_url || null,
+        mode,
+        language: finalLanguage,
+        target_duration_seconds: target_duration_seconds || null,
+        status: 'draft',
+      })
+      .select()
+      .single();
 
     if (error) {
       console.error('DB insert error:', error);
       return NextResponse.json({ error: 'Failed to create job' }, { status: 500 });
     }
 
-    if (!Array.isArray(data) || (data as unknown[]).length === 0) {
+    if (!data) {
       return NextResponse.json({ error: 'Failed to create job' }, { status: 500 });
     }
 
-    return NextResponse.json((data as unknown[])[0], { status: 201 });
+    return NextResponse.json(data, { status: 201 });
   } catch (err) {
     console.error('POST /api/research/jobs:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

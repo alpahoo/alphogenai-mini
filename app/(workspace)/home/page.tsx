@@ -19,6 +19,7 @@ import {
   Sparkles,
   Wand2,
   XCircle,
+  SearchCheck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -36,6 +37,13 @@ const PRIMARY_ACTIONS = [
     href: "/create/story",
     icon: Clapperboard,
     tone: "text-primary bg-primary/10",
+  },
+  {
+    label: "Research a video",
+    description: "Build a sourced plan",
+    href: "/research",
+    icon: SearchCheck,
+    tone: "text-emerald-500 bg-emerald-500/10",
   },
   {
     label: "Use a reference",
@@ -213,7 +221,7 @@ export default function WorkspaceHome() {
             </Link>
           </div>
 
-          <div className="mt-7 grid gap-3 md:grid-cols-3">
+          <div className="mt-7 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {PRIMARY_ACTIONS.map((action) => (
               <Link
                 key={action.label}
