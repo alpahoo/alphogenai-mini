@@ -38,6 +38,23 @@ export interface NormalizedChangedetectionEvent {
   detectedAt: string;
 }
 
+/**
+ * Tolerant input for the path-based webhook (POST .../changedetection/[watchlist_id]).
+ * Accepts the Apprise/changedetection default shape (title/message/body/text)
+ * as well as the flat shape, so changedetection does not need a custom JSON body.
+ */
+export interface ChangedetectionPathWebhookInput {
+  url?: unknown;
+  title?: unknown;
+  summary?: unknown;
+  message?: unknown;
+  body?: unknown;
+  text?: unknown;
+  change_url?: unknown;
+  snapshot_url?: unknown;
+  detected_at?: unknown;
+}
+
 const MODES: ResearchWatchlistMode[] = ["news", "tutorial", "product", "competitor"];
 const STATUSES: ResearchWatchlistStatus[] = ["active", "paused"];
 
@@ -132,6 +149,69 @@ export function normalizeChangedetectionWebhook(input: ChangedetectionWebhookInp
     ok: true,
     value: {
       watchlistId,
+      url,
+      title: title || null,
+      summary: summary || null,
+      changeUrl: changeUrl || null,
+      snapshotUrl: snapshotUrl || null,
+      detectedAt,
+    },
+  };
+}
+
+/**
+ * Normalize a path-based changedetection webhook.
+ * watchlistId comes from the path param; url falls back to the watchlist's
+ * stored url when the body omits a valid one (Apprise does not send the
+ * watched url). Summary is extracted best-effort from message/body/text.
+ */
+export function normalizeChangedetectionPathWebhook(
+  watchlistId: string,
+  input: ChangedetectionPathWebhookInput,
+  fallbackUrl: string,
+): {
+  ok: true;
+  value: NormalizedChangedetectionEvent;
+} | {
+  ok: false;
+  error: string;
+} {
+  const id = asString(watchlistId);
+  if (!id) return { ok: false, error: "watchlist_id is required" };
+
+  const title = asString(input.title);
+  const summary =
+    asString(input.message) ||
+    asString(input.body) ||
+    asString(input.text) ||
+    asString(input.summary);
+
+  const bodyUrl = asString(input.url);
+  const bodyUrlValid = bodyUrl !== "" && assertHttpUrl(bodyUrl, "url") === null;
+  const url = bodyUrlValid ? bodyUrl : asString(fallbackUrl);
+  const urlError = assertHttpUrl(url, "url");
+  if (urlError) return { ok: false, error: urlError };
+
+  const changeUrl = asString(input.change_url);
+  if (changeUrl) {
+    const changeUrlError = assertHttpUrl(changeUrl, "change_url");
+    if (changeUrlError) return { ok: false, error: changeUrlError };
+  }
+  const snapshotUrl = asString(input.snapshot_url);
+  if (snapshotUrl) {
+    const snapshotUrlError = assertHttpUrl(snapshotUrl, "snapshot_url");
+    if (snapshotUrlError) return { ok: false, error: snapshotUrlError };
+  }
+
+  const detectedAtRaw = asString(input.detected_at);
+  const detectedAt = detectedAtRaw && !Number.isNaN(Date.parse(detectedAtRaw))
+    ? new Date(detectedAtRaw).toISOString()
+    : new Date().toISOString();
+
+  return {
+    ok: true,
+    value: {
+      watchlistId: id,
       url,
       title: title || null,
       summary: summary || null,
