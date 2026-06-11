@@ -117,6 +117,24 @@ function clampSceneDuration(value: number | undefined) {
   return Math.max(3, Math.min(10, Math.round(value ?? 5)));
 }
 
+function friendlyResearchError(message: string | null | undefined) {
+  if (!message) return null;
+  if (message.includes("SearXNG gateway not configured")) {
+    return "Source search is not connected yet. Add RESEARCH_SEARXNG_GATEWAY_URL and RESEARCH_SEARXNG_SERVICE_TOKEN in Vercel, then redeploy.";
+  }
+  return message;
+}
+
+const ACTION_LABELS: Record<string, string> = {
+  discover: "Searching trusted sources...",
+  extract: "Extracting useful evidence...",
+  analyze: "Generating editorial angles...",
+  script: "Writing the script and storyboard...",
+  approve: "Approving the storyboard...",
+  handoff: "Preparing the Director handoff...",
+  "select-angle": "Selecting this angle...",
+};
+
 export default function ResearchDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -220,10 +238,11 @@ export default function ResearchDetailPage() {
         body: body ? JSON.stringify(body) : undefined,
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Step failed.");
+      if (!res.ok) throw new Error(json?.error_message || json?.error || "Step failed.");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Step failed.");
+      const message = err instanceof Error ? err.message : "Step failed.";
+      setError(friendlyResearchError(message) || message);
       await load();
     } finally {
       setAction(null);
@@ -323,6 +342,7 @@ export default function ResearchDetailPage() {
   const scenes = storyboard?.scenes_json ?? [];
   const canApprove = Boolean(script && scenes.length > 0 && !script.approved);
   const canSendToDirector = Boolean(script?.approved && scenes.length > 0);
+  const visibleJobError = friendlyResearchError(job?.error_message);
 
   if (loading && !job) {
     return (
@@ -372,10 +392,10 @@ export default function ResearchDetailPage() {
               <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral-600">
                 Research pipeline from sourced evidence to a Director-ready storyboard.
               </p>
-              {job.error_message && (
+              {visibleJobError && (
                 <p className="mt-4 inline-flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
                   <AlertCircle className="h-4 w-4" />
-                  {job.error_message}
+                  {visibleJobError}
                 </p>
               )}
             </div>
@@ -411,6 +431,22 @@ export default function ResearchDetailPage() {
         {error && (
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
             {error}
+          </div>
+        )}
+
+        {action && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mt-4 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm"
+          >
+            <div className="flex items-center gap-2 px-4 py-3 text-sm font-semibold text-neutral-800">
+              <Loader2 className="h-4 w-4 animate-spin text-neutral-950" />
+              {ACTION_LABELS[action] || "Working..."}
+            </div>
+            <div className="h-1 bg-neutral-200">
+              <div className="h-full w-1/2 animate-pulse rounded-r-full bg-neutral-950" />
+            </div>
           </div>
         )}
 

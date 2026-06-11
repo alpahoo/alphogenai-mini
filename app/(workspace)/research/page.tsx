@@ -97,6 +97,7 @@ export default function ResearchPage() {
   const [jobs, setJobs] = useState<ResearchJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [createStatus, setCreateStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [topic, setTopic] = useState("");
   const [inputUrl, setInputUrl] = useState("");
@@ -187,7 +188,9 @@ export default function ResearchPage() {
     }
 
     setCreating(true);
+    setCreateStatus("Creating your research brief...");
     setError(null);
+    let isNavigating = false;
     try {
       const res = await fetch("/api/research/jobs", {
         method: "POST",
@@ -202,11 +205,14 @@ export default function ResearchPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Research job could not be created.");
+      setCreateStatus("Opening the research workspace...");
+      isNavigating = true;
       router.push(`/research/${json.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Research job could not be created.");
+      setCreateStatus(null);
     } finally {
-      setCreating(false);
+      if (!isNavigating) setCreating(false);
     }
   }
 
@@ -346,13 +352,28 @@ export default function ResearchPage() {
                   News summarizes an update, Tutorial teaches steps, Product explains an offer, Competitor analyzes positioning. Duration is the target length for the script/storyboard.
                 </FieldHelp>
                 {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">{error}</p>}
+                {createStatus && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50"
+                  >
+                    <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-neutral-700">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-neutral-950" />
+                      {createStatus}
+                    </div>
+                    <div className="h-1 bg-neutral-200">
+                      <div className="h-full w-1/2 animate-pulse rounded-r-full bg-neutral-950" />
+                    </div>
+                  </div>
+                )}
                 <button
                   onClick={createResearchJob}
                   disabled={creating}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-neutral-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-60"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-neutral-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-wait disabled:opacity-80"
                 >
                   {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  Start research
+                  {creating ? "Starting research..." : "Start research"}
                 </button>
               </div>
             </div>
