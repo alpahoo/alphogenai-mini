@@ -83,6 +83,15 @@ function statusClass(status: string) {
   return "border-neutral-200 bg-neutral-50 text-neutral-600";
 }
 
+function FieldHelp({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs leading-5 text-neutral-500">
+      <span className="font-semibold text-neutral-800">{title}</span>
+      <span className="ml-1">{children}</span>
+    </div>
+  );
+}
+
 export default function ResearchPage() {
   const router = useRouter();
   const [jobs, setJobs] = useState<ResearchJob[]>([]);
@@ -290,6 +299,9 @@ export default function ResearchPage() {
               </div>
 
               <div className="mt-4 space-y-3">
+                <FieldHelp title="Brief">
+                  Describe the video you want, the audience, and the structure. Example: create a 90s French tutorial for beginners with a hook, 3 steps, limits, and a final action.
+                </FieldHelp>
                 <textarea
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
@@ -304,6 +316,9 @@ export default function ResearchPage() {
                   placeholder="Optional URL"
                   className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-neutral-950/10"
                 />
+                <FieldHelp title="Optional URL">
+                  Add the official article, product page, docs page, or release note when you already know the source. Leave empty to let Research discover sources.
+                </FieldHelp>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <select
                     value={mode}
@@ -327,6 +342,9 @@ export default function ResearchPage() {
                     <option value={180}>180s</option>
                   </select>
                 </div>
+                <FieldHelp title="Mode and duration">
+                  News summarizes an update, Tutorial teaches steps, Product explains an offer, Competitor analyzes positioning. Duration is the target length for the script/storyboard.
+                </FieldHelp>
                 {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">{error}</p>}
                 <button
                   onClick={createResearchJob}
@@ -351,6 +369,9 @@ export default function ResearchPage() {
               Monitor a product page, release page, or competitor URL. Changes create draft research only.
             </p>
             <div className="mt-4 space-y-3">
+              <FieldHelp title="Watchlist">
+                Use this for pages you want to monitor over time. When the page changes, AlphoGen creates a draft Research plan only.
+              </FieldHelp>
               <input
                 value={watchlistName}
                 onChange={(e) => setWatchlistName(e.target.value)}
@@ -371,6 +392,9 @@ export default function ResearchPage() {
                 placeholder="What should AlphoResearch investigate when this changes?"
                 className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-sm outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-neutral-950/10"
               />
+              <FieldHelp title="Example">
+                Name: OpenAI updates. URL: official news page. Topic: create a French draft explaining what changed, why it matters, and a short video plan for creators.
+              </FieldHelp>
               {watchlistError && (
                 <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
                   {watchlistError}
@@ -456,6 +480,9 @@ export default function ResearchPage() {
                         Copy ID
                       </button>
                     </div>
+                    <p className="mt-2 text-[11px] leading-5 text-neutral-400">
+                      Copy webhook URL is for changedetection.io. Copy ID is only for manual debugging or support.
+                    </p>
                   </div>
                 ))}
               </div>
