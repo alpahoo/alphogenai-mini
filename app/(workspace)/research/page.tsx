@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
+  Bell,
   BookOpenCheck,
   Clock,
+  Eye,
   Loader2,
   Plus,
   SearchCheck,
@@ -25,6 +27,17 @@ interface ResearchJob {
   language: string;
   target_duration_seconds: number | null;
   created_at: string;
+  updated_at: string;
+}
+
+interface ResearchWatchlist {
+  id: string;
+  name: string;
+  topic: string;
+  url: string;
+  mode: ResearchMode;
+  status: "active" | "paused";
+  last_changed_at: string | null;
   updated_at: string;
 }
 
@@ -79,6 +92,13 @@ export default function ResearchPage() {
   const [inputUrl, setInputUrl] = useState("");
   const [mode, setMode] = useState<ResearchMode>("news");
   const [duration, setDuration] = useState(60);
+  const [watchlists, setWatchlists] = useState<ResearchWatchlist[]>([]);
+  const [watchlistsLoading, setWatchlistsLoading] = useState(true);
+  const [watchlistCreating, setWatchlistCreating] = useState(false);
+  const [watchlistError, setWatchlistError] = useState<string | null>(null);
+  const [watchlistName, setWatchlistName] = useState("");
+  const [watchlistUrl, setWatchlistUrl] = useState("");
+  const [watchlistTopic, setWatchlistTopic] = useState("");
 
   const supabase = useMemo(() => createClient(), []);
 
@@ -110,9 +130,32 @@ export default function ResearchPage() {
     }
   }, [router, supabase]);
 
+  const loadWatchlists = useCallback(async () => {
+    setWatchlistsLoading(true);
+    setWatchlistError(null);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const res = await fetch("/api/research/watchlists", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) throw new Error("Watchlists unavailable");
+      const json = await res.json();
+      setWatchlists((json.watchlists ?? []) as ResearchWatchlist[]);
+    } catch {
+      setWatchlistError("Watchlists will appear after the T-1108 migration is applied.");
+    } finally {
+      setWatchlistsLoading(false);
+    }
+  }, [supabase]);
+
   useEffect(() => {
     loadJobs();
-  }, [loadJobs]);
+    loadWatchlists();
+  }, [loadJobs, loadWatchlists]);
 
   async function authHeaders() {
     const {
@@ -153,6 +196,42 @@ export default function ResearchPage() {
       setError(err instanceof Error ? err.message : "Research job could not be created.");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function createWatchlist() {
+    const cleanName = watchlistName.trim();
+    const cleanTopic = watchlistTopic.trim();
+    const cleanUrl = watchlistUrl.trim();
+    if (cleanName.length < 2 || cleanTopic.length < 3 || !cleanUrl.startsWith("http")) {
+      setWatchlistError("Add a name, topic, and valid http/https URL.");
+      return;
+    }
+
+    setWatchlistCreating(true);
+    setWatchlistError(null);
+    try {
+      const res = await fetch("/api/research/watchlists", {
+        method: "POST",
+        headers: await authHeaders(),
+        body: JSON.stringify({
+          name: cleanName,
+          topic: cleanTopic,
+          url: cleanUrl,
+          mode,
+          status: "active",
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Watchlist could not be created.");
+      setWatchlistName("");
+      setWatchlistTopic("");
+      setWatchlistUrl("");
+      await loadWatchlists();
+    } catch (err) {
+      setWatchlistError(err instanceof Error ? err.message : "Watchlist could not be created.");
+    } finally {
+      setWatchlistCreating(false);
     }
   }
 
@@ -242,6 +321,111 @@ export default function ResearchPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="mt-8 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center gap-2">
+              <Eye className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold text-neutral-950">Create watchlist</h2>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-neutral-500">
+              Monitor a product page, release page, or competitor URL. Changes create draft research only.
+            </p>
+            <div className="mt-4 space-y-3">
+              <input
+                value={watchlistName}
+                onChange={(e) => setWatchlistName(e.target.value)}
+                placeholder="Watchlist name"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-neutral-950/10"
+              />
+              <input
+                value={watchlistUrl}
+                onChange={(e) => setWatchlistUrl(e.target.value)}
+                placeholder="https://example.com/releases"
+                className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-neutral-950/10"
+              />
+              <textarea
+                value={watchlistTopic}
+                onChange={(e) => setWatchlistTopic(e.target.value)}
+                rows={3}
+                maxLength={500}
+                placeholder="What should AlphoResearch investigate when this changes?"
+                className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-sm outline-none transition focus:border-neutral-400 focus:ring-2 focus:ring-neutral-950/10"
+              />
+              {watchlistError && (
+                <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+                  {watchlistError}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={createWatchlist}
+                disabled={watchlistCreating}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-neutral-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-60"
+              >
+                {watchlistCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+                Create watchlist
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-neutral-500">
+                  Watchlists
+                </h2>
+                <p className="mt-1 text-sm text-neutral-500">Detected changes become draft research plans.</p>
+              </div>
+              <button onClick={loadWatchlists} className="text-sm font-semibold text-neutral-950 hover:underline">
+                Refresh
+              </button>
+            </div>
+
+            {watchlistsLoading ? (
+              <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-500">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading watchlists
+              </div>
+            ) : watchlists.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-6 text-sm text-neutral-500">
+                No watchlists yet. Add one to monitor changes without auto-publishing anything.
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {watchlists.map((watchlist) => (
+                  <div key={watchlist.id} className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-neutral-950">{watchlist.name}</p>
+                        <a
+                          href={watchlist.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 block truncate text-xs text-neutral-500 hover:text-neutral-950"
+                        >
+                          {watchlist.url}
+                        </a>
+                      </div>
+                      <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                        watchlist.status === "active"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border-neutral-200 bg-white text-neutral-500"
+                      }`}>
+                        {watchlist.status}
+                      </span>
+                    </div>
+                    <p className="mt-3 line-clamp-2 text-sm leading-6 text-neutral-600">{watchlist.topic}</p>
+                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
+                      <span>{MODE_LABELS[watchlist.mode]}</span>
+                      {watchlist.last_changed_at && <span>Changed {formatDate(watchlist.last_changed_at)}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
 

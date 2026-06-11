@@ -998,4 +998,9 @@ Contraintes :
 
 ### [T-1108] Watchlists — `status: todo` · `owner: claude`
 - changedetection.io webhook + notifications dashboard, sans auto-publication.
+- Livré V1 : migration `research_watchlists` + `research_watchlist_events`, API
+  utilisateur `GET/POST/PATCH/DELETE /api/research/watchlists`, webhook
+  `POST /api/webhooks/changedetection` protégé par `CHANGEDETECTION_WEBHOOK_SECRET`.
+- Règle : un changement crée uniquement un brouillon `research_jobs.status='draft'`
+  et un événement `draft_created`; aucune génération, publication ou dépense auto.
 
