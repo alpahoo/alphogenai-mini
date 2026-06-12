@@ -126,12 +126,13 @@ describe('planCinematicScenes', () => {
     expect(out[0].voiceover_line).toBe('A compelling hook line.');
   });
 
-  it('asset policy: references real source descriptively, adds risk note, never invents ids', () => {
+  it('asset policy: uses source context without pretending media is attached', () => {
     const out = planCinematicScenes(baseInput());
     const withHint = out.find((s) => s.reference_asset_hint);
     expect(withHint).toBeTruthy();
-    expect(withHint!.reference_asset_hint!).toMatch(/reference the (official|youtube) source/);
+    expect(withHint!.reference_asset_hint!).toMatch(/source context:/);
     expect(withHint!.reference_asset_hint!).not.toMatch(/asset_id|byteplus|face/i);
+    expect(withHint!.prompt).toMatch(/do not show the website or logo unless a real reference image\/video is attached/i);
     expect(withHint!.risk_note).toMatch(/usage rights/i);
   });
 

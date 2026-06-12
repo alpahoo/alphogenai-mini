@@ -197,8 +197,10 @@ function humanMood(m: string): string {
 }
 
 /**
- * Build the asset policy result for a scene from the available sources.
- * Never invents asset ids; only references real source media descriptively.
+ * Build a source context label for a scene from extracted sources.
+ * This is not a real media attachment: it helps editorial grounding, but the
+ * video model cannot see/crop/use the source page unless a future media
+ * collector sends actual reference assets through the Create pipeline.
  */
 function assetForScene(
   usable: Array<{ title: string; url: string; type: string }>,
@@ -208,10 +210,7 @@ function assetForScene(
   const s = usable[index % usable.length];
   const domain = domainOf(s.url);
   const citation = s.title || domain;
-  const hint = cap(
-    `reference the ${s.type} source "${s.title || domain || 'source'}"${domain ? ` (${domain})` : ''}`,
-    HINT_MAX,
-  );
+  const hint = cap(`source context: ${s.title || domain || 'source'}${domain ? ` (${domain})` : ''}`, HINT_MAX);
   return { hint, citation: citation ? cap(citation, HINT_MAX) : null };
 }
 
@@ -302,7 +301,7 @@ export function planCinematicScenes(input: PlannerInput): CinematicScenePlan[] {
     const descriptors = `${humanShot(camera_shot)}, ${humanMotion(camera_motion)}, ${humanLighting(lighting)} lighting, ${humanMood(mood)} mood`;
     let prompt = `${visual_intent} — ${descriptors}.`;
     if (asset.hint) {
-      prompt += ` Reference: ${asset.hint}.`;
+      prompt += ` Editorial grounding: ${asset.hint}; do not show the website or logo unless a real reference image/video is attached.`;
     }
     prompt = cap(prompt, PROMPT_MAX);
 

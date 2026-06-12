@@ -299,6 +299,7 @@ export default function ResearchDetailPage() {
         angleTitle: selectedAngle?.title ?? null,
         angleHook: selectedAngle?.hook ?? null,
         script: script.script,
+        voiceoverText: script.script,
         scenes: scenes.map((scene, index) => ({
           index,
           title: scene.title || `Scene ${index + 1}`,

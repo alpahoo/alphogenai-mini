@@ -171,6 +171,7 @@ interface ResearchHandoffPayload {
   angleTitle?: string | null;
   angleHook?: string | null;
   script?: string;
+  voiceoverText?: string;
   scenes?: Array<{
     index?: number;
     title?: string;
@@ -798,6 +799,7 @@ export default function CreateModePage({
         handoff.script ? `Script:\n${handoff.script}` : null,
       ].filter(Boolean);
       const researchPrompt = promptParts.join("\n\n").slice(0, 1900);
+      const narrationText = (handoff.voiceoverText || handoff.script || "").trim().slice(0, 2000);
       const totalSceneDuration = cappedScenes.reduce(
         (sum, scene) => sum + Math.max(3, Math.min(10, Math.round(scene.durationSec ?? 5))),
         0,
@@ -813,6 +815,13 @@ export default function CreateModePage({
       setPrompt(researchPrompt);
       composerRef.current?.setText(researchPrompt);
       setComposerRefs([]);
+      if (narrationText) {
+        setVoiceoverEnabled(true);
+        setVoiceoverText(narrationText);
+        setVoiceScript(narrationText);
+        setVoiceMode("voiceover");
+        setCaptionMode("auto");
+      }
       setDuration(String(Math.min(planMaxDuration, durationOption)));
       setNumScenes(cappedScenes.length);
       setDirectorScenes(
