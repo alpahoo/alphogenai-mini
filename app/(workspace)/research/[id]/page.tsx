@@ -9,6 +9,7 @@ import {
   ArrowRight,
   CheckCircle2,
   FileText,
+  ImagePlus,
   Send,
   Loader2,
   Radio,
@@ -65,6 +66,20 @@ interface ResearchStoryboard {
   id: string;
   script_id: string;
   scenes_json: Array<{ title?: string; prompt?: string; duration_sec?: number }>;
+}
+
+interface ResearchSourceMedia {
+  id: string;
+  research_source_id: string | null;
+  kind: string;
+  source_url: string;
+  storage_path: string | null;
+  width: number | null;
+  height: number | null;
+  mime: string | null;
+  selected: boolean;
+  rights_status: string;
+  risk_note: string | null;
 }
 
 const RESEARCH_HANDOFF_STORAGE_KEY = "alphogen:research-handoff";
@@ -137,6 +152,7 @@ const ACTION_LABELS: Record<string, string> = {
   script: "Writing the script and storyboard...",
   approve: "Approving the storyboard...",
   handoff: "Preparing the Director handoff...",
+  media: "Saving this reference...",
   "select-angle": "Selecting this angle...",
 };
 
@@ -151,6 +167,7 @@ export default function ResearchDetailPage() {
   const [angles, setAngles] = useState<ResearchAngle[]>([]);
   const [script, setScript] = useState<ResearchScript | null>(null);
   const [storyboard, setStoryboard] = useState<ResearchStoryboard | null>(null);
+  const [media, setMedia] = useState<ResearchSourceMedia[]>([]);
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -178,7 +195,7 @@ export default function ResearchDetailPage() {
         return;
       }
 
-      const [jobResult, sourceResult, angleResult, scriptResult] = await Promise.all([
+      const [jobResult, sourceResult, angleResult, scriptResult, mediaResult] = await Promise.all([
         supabase
           .from("research_jobs")
           .select("*")
@@ -201,12 +218,20 @@ export default function ResearchDetailPage() {
           .eq("research_job_id", jobId)
           .order("created_at", { ascending: false })
           .limit(1),
+        supabase
+          .from("research_source_media")
+          .select("id, research_source_id, kind, source_url, storage_path, width, height, mime, selected, rights_status, risk_note")
+          .eq("research_job_id", jobId)
+          .order("selected", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(24),
       ]);
 
       if (jobResult.error) throw jobResult.error;
       setJob(jobResult.data as ResearchJob);
       setSources((sourceResult.data ?? []) as ResearchSource[]);
       setAngles((angleResult.data ?? []) as ResearchAngle[]);
+      setMedia((mediaResult.data ?? []) as ResearchSourceMedia[]);
       const latestScript = ((scriptResult.data ?? []) as ResearchScript[])[0] ?? null;
       setScript(latestScript);
 
@@ -273,6 +298,26 @@ export default function ResearchDetailPage() {
     }
   }
 
+  async function selectMediaReference(mediaId: string) {
+    setAction("media");
+    setError(null);
+    try {
+      const res = await fetch(`/api/research/jobs/${jobId}/media/${mediaId}/select`, {
+        method: "POST",
+        headers: await authHeaders(),
+        body: JSON.stringify({ rights_confirmed: true }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Could not save this reference.");
+      await load();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not save this reference.";
+      setError(message);
+    } finally {
+      setAction(null);
+    }
+  }
+
   async function approvePlan() {
     if (!job || !script || scenes.length === 0) {
       setError("Generate a script and storyboard before approving.");
@@ -291,6 +336,18 @@ export default function ResearchDetailPage() {
     setAction("handoff");
     setError(null);
     try {
+      const selectedReferences = media
+        .filter((item) => item.selected && item.storage_path)
+        .slice(0, 6)
+        .map((item, index) => ({
+          role: "outfit_style" as const,
+          url: item.source_url,
+          storage_path: item.storage_path as string,
+          mime_type: item.mime || "image/jpeg",
+          filename: `research-reference-${index + 1}`,
+          weight: 0.7,
+        }));
+
       const payload = {
         researchJobId: job.id,
         topic: job.topic,
@@ -300,6 +357,7 @@ export default function ResearchDetailPage() {
         angleHook: selectedAngle?.hook ?? null,
         script: script.script,
         voiceoverText: script.script,
+        references: selectedReferences,
         scenes: scenes.map((scene, index) => ({
           index,
           title: scene.title || `Scene ${index + 1}`,
@@ -323,6 +381,7 @@ export default function ResearchDetailPage() {
 
   const readySources = sources.filter((s) => s.extraction_status === "success").length;
   const selectedAngle = angles.find((a) => a.selected);
+  const selectedMediaCount = media.filter((item) => item.selected && item.storage_path).length;
   const scenes = storyboard?.scenes_json ?? [];
   const canApprove = Boolean(script && scenes.length > 0 && !script.approved);
   const canSendToDirector = Boolean(script?.approved && scenes.length > 0);
@@ -494,6 +553,76 @@ export default function ResearchDetailPage() {
                 )}
               </div>
             </section>
+
+            {media.length > 0 && (
+              <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-neutral-950">Suggested references</h2>
+                    <p className="mt-1 text-sm text-neutral-500">
+                      Choose source images you have the right to use. Selected items are copied privately and sent to Director.
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">
+                    {selectedMediaCount} selected
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {media.map((item) => (
+                    <div key={item.id} className="overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50">
+                      <div className="relative aspect-video bg-neutral-100">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={item.source_url}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          loading="lazy"
+                          className="h-full w-full object-cover"
+                          onError={(event) => {
+                            event.currentTarget.style.display = "none";
+                          }}
+                        />
+                        <div className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-neutral-600">
+                          {item.kind.replace(/_/g, " ")}
+                        </div>
+                        {item.selected && (
+                          <div className="absolute right-2 top-2 rounded-full bg-emerald-500 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white">
+                            Selected
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-3">
+                        <a
+                          href={item.source_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block truncate text-xs text-neutral-500 hover:text-neutral-950"
+                        >
+                          {item.source_url}
+                        </a>
+                        <p className="mt-2 text-xs leading-5 text-neutral-500">
+                          {item.risk_note || "Verify usage rights before publishing."}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => selectMediaReference(item.id)}
+                          disabled={!!action || item.selected}
+                          className={`mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold ${
+                            item.selected
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-neutral-950 text-white hover:bg-neutral-800"
+                          } disabled:opacity-60`}
+                        >
+                          {action === "media" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                          {item.selected ? "Ready for Director" : "Use as reference"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between gap-4">

@@ -172,6 +172,14 @@ interface ResearchHandoffPayload {
   angleHook?: string | null;
   script?: string;
   voiceoverText?: string;
+  references?: Array<{
+    role?: ReferenceRole;
+    url?: string;
+    storage_path?: string;
+    mime_type?: string;
+    filename?: string;
+    weight?: number;
+  }>;
   scenes?: Array<{
     index?: number;
     title?: string;
@@ -821,6 +829,23 @@ export default function CreateModePage({
         setVoiceScript(narrationText);
         setVoiceMode("voiceover");
         setCaptionMode("auto");
+      }
+      if (Array.isArray(handoff.references) && handoff.references.length > 0) {
+        const researchReferences: Record<string, ReferenceItem> = {};
+        handoff.references.slice(0, 6).forEach((ref, index) => {
+          if (!ref?.storage_path || !ref.url) return;
+          researchReferences[`research_reference_${index + 1}`] = {
+            role: ref.role ?? "outfit_style",
+            url: ref.url,
+            storage_path: ref.storage_path,
+            mime_type: ref.mime_type ?? "image/jpeg",
+            filename: ref.filename ?? `research-reference-${index + 1}`,
+            weight: typeof ref.weight === "number" ? ref.weight : 0.7,
+          };
+        });
+        if (Object.keys(researchReferences).length > 0) {
+          setReferences((prev) => ({ ...prev, ...researchReferences }));
+        }
       }
       setDuration(String(Math.min(planMaxDuration, durationOption)));
       setNumScenes(cappedScenes.length);

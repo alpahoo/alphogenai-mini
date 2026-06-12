@@ -12,6 +12,13 @@ EntrÃ©e la plus rÃ©cente en haut. Format :
 
 ---
 
+## 2026-06-12 — Codex — T-1110d Research source media handoff
+- Fait : affichage `Suggested references` sur `/research/[id]`, sélection explicite des médias collectés, copie serveur vers le bucket privé `references`, puis passage des références sélectionnées au Create flow via le handoff Research.
+- Fichiers modifiés : `app/(workspace)/research/[id]/page.tsx`, `app/(workspace)/create/[mode]/page.tsx`, `app/api/research/jobs/[id]/media/[mediaId]/select/route.ts`, `agent/tasks.md`.
+- Tests : `npm test -- --run` 585/585, `npx tsc --noEmit -p tsconfig.json` clean, `npm run build` OK.
+- Prochaine étape : e2e authentifié après déploiement Vercel ; polish V1+ si besoin (rôle de référence éditable, thumbnails fallback plus riche).
+
+---
 ## 2026-06-11 â€” Claude (Fable 5) â€” Docs + research schema fix
 - T-1104 spec added : `docs/product/research-extraction-adapter-spec.md`
 - T-1105 spec added : `docs/product/research-angles-analysis-spec.md`

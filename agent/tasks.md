@@ -1004,3 +1004,18 @@ Contraintes :
 - Règle : un changement crée uniquement un brouillon `research_jobs.status='draft'`
   et un événement `draft_created`; aucune génération, publication ou dépense auto.
 
+### [T-1109] Research Cinematic Planner — `status: done` · `owner: claude`
+- Livré : spec + helper pur + branchement script route.
+- Les scènes Research stockées dans `research_storyboards.scenes_json` gardent
+  `title/prompt/duration_sec`, avec prompt enrichi caméra/lumière/mood/voiceover.
+- Handoff Director inchangé côté contrat ; Create reçoit aussi `voiceoverText`.
+
+### [T-1110] Research Source Media Collector — `status: in_progress` · `owner: codex`
+- T-1110a/b/c livrés : spec, helper pur, gateway `/api/extract` avec
+  `media_candidates`, table `research_source_media`, persistance metadata-only.
+- T-1110d livré : bloc `Suggested references` sur `/research/[id]`, sélection
+  explicite avec copie serveur vers bucket privé `references`, puis handoff vers
+  Create comme `ReferenceItem` image. Aucun média n'est injecté automatiquement.
+- Reste V1+ : polish thumbnails, éventuelle édition du rôle de référence,
+  e2e visuel authentifié après déploiement.
+
