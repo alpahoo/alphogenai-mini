@@ -62,8 +62,10 @@ export async function POST(
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    // Check status gate (ready_for_angles or failed)
-    const allowedStatuses = ['ready_for_angles', 'failed'];
+    // Check status gate. Re-running Extract is also allowed after angles/script
+    // are generated so T-1110 media collection can backfill older research
+    // plans without forcing the user to start over.
+    const allowedStatuses = ['ready_for_angles', 'scripting', 'approved', 'sent_to_director', 'failed'];
     if (!allowedStatuses.includes(job.status)) {
       return NextResponse.json(
         { error: `Cannot extract sources for job in status: ${job.status}` },
@@ -132,6 +134,8 @@ export async function POST(
     // Extract sequentially (V1)
     let sourcesExtracted = 0;
     let sourcesFailed = 0;
+    let mediaCandidatesSeen = 0;
+    let mediaInsertErrors = 0;
 
     for (const source of sources) {
       try {
@@ -164,9 +168,14 @@ export async function POST(
             rights_status: 'unverified',
             risk_note: m.risk_note,
           }));
-          await getSupabaseService()
+          mediaCandidatesSeen += mediaRows.length;
+          const { error: mediaError } = await getSupabaseService()
             .from('research_source_media')
             .upsert(mediaRows, { onConflict: 'research_job_id,source_url', ignoreDuplicates: true });
+          if (mediaError) {
+            mediaInsertErrors += 1;
+            console.error('research_source_media upsert error:', mediaError);
+          }
         }
 
         if (extraction.extraction_status === 'success') {
@@ -197,7 +206,9 @@ export async function POST(
     let errorMessage: string | null = null;
 
     if (sourcesExtracted >= 1) {
-      finalStatus = 'ready_for_angles';
+      finalStatus = ['scripting', 'approved', 'sent_to_director'].includes(job.status)
+        ? job.status
+        : 'ready_for_angles';
     } else {
       finalStatus = 'failed';
       errorMessage = 'No sources could be extracted';
@@ -221,11 +232,19 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to update job' }, { status: 500 });
     }
 
+    const { count: mediaCandidatesTotal } = await getSupabaseService()
+      .from('research_source_media')
+      .select('id', { count: 'exact', head: true })
+      .eq('research_job_id', id);
+
     return NextResponse.json({
       id: updatedJob.id,
       status: updatedJob.status,
       sources_extracted: sourcesExtracted,
       sources_failed: sourcesFailed,
+      media_candidates_seen: mediaCandidatesSeen,
+      media_candidates_total: mediaCandidatesTotal ?? 0,
+      media_insert_errors: mediaInsertErrors,
       error_message: errorMessage,
     });
   } catch (err) {
