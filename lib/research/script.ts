@@ -256,7 +256,7 @@ Selected Angle:
 Extracted Sources Summary:
 ${sourceExcerpts || '(no extracted sources available)'}
 
-Produce a complete short-form video script for this angle, plus a storyboard.
+Produce a complete short-form video script for this angle, plus a cinematic storyboard.
 
 Return ONLY a JSON object (no markdown, no code fences) with this shape:
 {
@@ -269,12 +269,27 @@ Return ONLY a JSON object (no markdown, no code fences) with this shape:
     "originality": 0.6, "risk_disclosure": 0.5, "rhythm_fit": 0.7, "duration_fit": 0.8
   },
   "scenes": [
-    { "title": "Hook shot", "prompt": "Describe a generic visual...", "duration_sec": 5 }
+    {
+      "title": "Hook shot",
+      "prompt": "Concrete visual description of the shot.",
+      "duration_sec": 5,
+      "visual_intent": "What the viewer should concretely see.",
+      "camera_shot": "establishing|wide|medium|close_up|over_shoulder|screen_capture|split_screen|insert",
+      "camera_motion": "static|slow_push_in|pull_back|pan|tilt|handheld|dolly",
+      "lighting": "soft_daylight|studio_key|low_key|clean_ui|high_key|golden_hour",
+      "mood": "neutral_analytical|authoritative|curious|energetic|trustworthy|tense",
+      "onscreen_text": "Optional caption, or null",
+      "voiceover_line": "One spoken sentence for this scene.",
+      "reference_asset_hint": "Optional: real provided/extracted source media to reference, or null",
+      "source_citation": "Optional: source title/domain backing this scene, or null",
+      "risk_note": "Optional: rights/clarity caveat, or null"
+    }
   ]
 }
 
 Rules:
 - Each scene needs a non-empty title and prompt, duration_sec between 3 and 10.
-- Do not invent asset references, face IDs, or "exact try-on"/"exact face" claims.
-- Scene prompts describe generic visuals only.`;
+- For camera_shot/camera_motion/lighting/mood, pick exactly ONE value from the listed options; make scenes cinematic and varied (not generic).
+- Tailor cinematic choices to the Content Mode (news=reportage/citations; tutorial=screen capture/steps/zoom; product=product shots/benefit/demo; competitor=split-screen/neutral benchmark).
+- Do not invent asset references, asset IDs, or face IDs, and never make "exact try-on"/"exact face" claims; reference_asset_hint may only describe real provided/extracted source media, else null.`;
 }

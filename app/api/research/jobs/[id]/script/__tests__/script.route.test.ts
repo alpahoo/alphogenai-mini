@@ -176,6 +176,33 @@ describe('POST /script - insert payload schema alignment', () => {
     }
   });
 
+  it('stores cinematically enriched, Director-compatible scenes_json', async () => {
+    const { res, captures } = await runSuccess();
+    expect(res.status).toBe(200);
+
+    const insert = captures.find((c) => c.table === 'research_storyboards' && c.op === 'insert');
+    const payload = insert!.payload as Record<string, unknown>;
+    const scenes = payload.scenes_json as Array<Record<string, unknown>>;
+    expect(scenes.length).toBeGreaterThan(0);
+
+    for (const scene of scenes) {
+      // Canonical Director fields preserved
+      expect(typeof scene.title).toBe('string');
+      expect(typeof scene.prompt).toBe('string');
+      expect(scene.duration_sec).toBeGreaterThanOrEqual(3);
+      expect(scene.duration_sec).toBeLessThanOrEqual(10);
+      // Additive cinematic metadata present
+      expect(typeof scene.camera_shot).toBe('string');
+      expect(typeof scene.camera_motion).toBe('string');
+      expect(typeof scene.lighting).toBe('string');
+      expect(typeof scene.mood).toBe('string');
+      expect(typeof scene.voiceover_line).toBe('string');
+      // Cinematic detail composed INTO the prompt (the only field that reaches video)
+      expect((scene.prompt as string).toLowerCase()).toContain('lighting');
+      expect((scene.prompt as string).length).toBeLessThanOrEqual(2000);
+    }
+  });
+
   it('uses explicit angle_id when provided', async () => {
     const { res, captures } = await runSuccess({ angle_id: 'angle-2' });
     expect(res.status).toBe(200);

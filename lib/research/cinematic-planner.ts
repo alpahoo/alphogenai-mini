@@ -273,7 +273,7 @@ export function planCinematicScenes(input: PlannerInput): CinematicScenePlan[] {
   for (let i = 0; i < total; i++) {
     const raw = (scenes[i] && typeof scenes[i] === 'object' ? scenes[i] : {}) as Record<string, unknown>;
 
-    const title = str(raw.title) || `Scene ${i + 1}`;
+    const title = str(raw.title) || str(raw.role) || `Scene ${i + 1}`;
     const baseVisual = str(raw.visual_intent) || str(raw.prompt) || title;
     const visual_intent = cap(baseVisual, VISUAL_MAX);
 

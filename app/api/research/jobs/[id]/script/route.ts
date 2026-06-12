@@ -10,6 +10,7 @@ import {
   computeQualityScore,
 } from '@/lib/research/script';
 import { callLLMForScript } from '@/lib/research/script-llm';
+import { planCinematicScenes } from '@/lib/research/cinematic-planner';
 
 const RESEARCH_LLM_TIMEOUT_MS = 90000;
 
@@ -145,10 +146,11 @@ export async function POST(
       angle = rows[0];
     }
 
-    // Fetch extracted sources for prompt context (lenient: empty is allowed)
+    // Fetch extracted sources for prompt context (lenient: empty is allowed).
+    // url + source_type feed the cinematic planner's conservative asset policy.
     const { data: sources } = await getSupabaseService()
       .from('research_sources')
-      .select('title, extracted_markdown')
+      .select('title, url, source_type, extracted_markdown')
       .eq('research_job_id', id)
       .eq('extraction_status', 'success')
       .not('extracted_markdown', 'is', null)
@@ -204,6 +206,40 @@ export async function POST(
       );
     }
 
+    // T-1109c: enrich the validated scenes into a Director-grade cinematic plan.
+    // Filter raw scenes with the same validity predicate as normalizeScenes so the
+    // planner keeps parity with the gate while still seeing the LLM cinematic hints.
+    const rawScenes = Array.isArray(parsed.scenes) ? parsed.scenes : [];
+    const validRawScenes = rawScenes.filter((raw) => {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+      const s = raw as Record<string, unknown>;
+      const t = (typeof s.title === 'string' ? s.title : typeof s.role === 'string' ? s.role : '').trim();
+      const p = typeof s.prompt === 'string' ? s.prompt.trim() : '';
+      return Boolean(t && p);
+    });
+    const plannerSources = (sources || []).map((s) => {
+      const row = s as { title?: unknown; url?: unknown; source_type?: unknown; extracted_markdown?: unknown };
+      return {
+        title: row.title,
+        url: row.url,
+        source_type: row.source_type,
+        extracted_markdown: row.extracted_markdown,
+      };
+    });
+    const cinematicScenes = planCinematicScenes({
+      topic: job.topic,
+      mode: job.mode,
+      language: job.language,
+      targetDurationSeconds: job.target_duration_seconds ?? null,
+      angle: { title: angle.title, hook: angle.hook, positioning: angle.positioning },
+      script: scriptText,
+      scenes: validRawScenes,
+      sources: plannerSources,
+    });
+    // Director-compatible (title/prompt/duration_sec preserved). Fall back to the
+    // plain normalized scenes if enrichment somehow yields nothing.
+    const storyboardScenes = cinematicScenes.length > 0 ? cinematicScenes : scenes;
+
     const sections = normalizeSections(parsed.sections);
     const subscores = normalizeSubscores(parsed.subscores);
     const qualityScore = computeQualityScore(parsed.subscores);
@@ -245,7 +281,7 @@ export async function POST(
       .insert({
         research_job_id: id,
         script_id: scriptId,
-        scenes_json: scenes,
+        scenes_json: storyboardScenes,
       })
       .select('id')
       .single();
