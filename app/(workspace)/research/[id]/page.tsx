@@ -279,29 +279,7 @@ export default function ResearchDetailPage() {
       return;
     }
 
-    setAction("approve");
-    setError(null);
-    try {
-      const { error: scriptError } = await supabase
-        .from("research_scripts")
-        .update({ approved: true })
-        .eq("id", script.id)
-        .eq("research_job_id", jobId);
-      if (scriptError) throw scriptError;
-
-      const { error: jobError } = await supabase
-        .from("research_jobs")
-        .update({ status: "approved" })
-        .eq("id", jobId)
-        .eq("user_id", job.user_id);
-      if (jobError) throw jobError;
-
-      await load();
-    } catch {
-      setError("Could not approve this research plan.");
-    } finally {
-      setAction(null);
-    }
+    await runStep("approve", `/api/research/jobs/${jobId}/approve`);
   }
 
   async function sendToDirector() {
