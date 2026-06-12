@@ -150,4 +150,38 @@ describe('Extraction Adapter', () => {
       expect(bytes.length).toBeLessThanOrEqual(50 * 1024);
     });
   });
+
+  describe('normalizeExtraction media_candidates (T-1110c)', () => {
+    it('normalizes and icon-filters gateway media candidates', () => {
+      const n = normalizeExtraction({
+        success: true,
+        markdown: 'enough content here to count as a success',
+        char_count: 41,
+        extraction_time_ms: 100,
+        error: null,
+        media_candidates: [
+          { url: 'https://x.com/og.jpg', kind: 'og_image', width: 1200, height: 630 },
+          { url: 'https://x.com/favicon.ico', kind: 'inline_image' },
+        ],
+      });
+      expect(n.media_candidates).toHaveLength(1); // favicon filtered
+      expect(n.media_candidates[0]).toMatchObject({
+        source_url: 'https://x.com/og.jpg',
+        kind: 'og_image',
+        rights_status: 'unverified',
+        selected: false,
+      });
+    });
+
+    it('defaults media_candidates to [] when absent', () => {
+      const n = normalizeExtraction({
+        success: false,
+        markdown: null,
+        char_count: 0,
+        extraction_time_ms: 0,
+        error: 'blocked',
+      });
+      expect(n.media_candidates).toEqual([]);
+    });
+  });
 });

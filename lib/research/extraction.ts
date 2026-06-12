@@ -2,6 +2,7 @@
  * Research extraction adapter
  * Extracts Markdown content from URLs via Crawl4AI
  */
+import { normalizeMediaCandidates, type NormalizedMediaCandidate } from './source-media';
 
 export type ExtractionStatus = 'pending' | 'success' | 'failed' | 'timeout' | 'blocked';
 
@@ -11,6 +12,7 @@ export interface ExtractionResult {
   char_count: number;
   extraction_time_ms: number;
   error: string | null;
+  media_candidates?: unknown;
 }
 
 export interface NormalizedExtraction {
@@ -18,6 +20,7 @@ export interface NormalizedExtraction {
   extraction_status: ExtractionStatus;
   extraction_error: string | null;
   extraction_time_ms: number;
+  media_candidates: NormalizedMediaCandidate[];
 }
 
 const MAX_MARKDOWN_BYTES = 50 * 1024; // 50 KB
@@ -112,6 +115,8 @@ export function mapErrorToStatus(errorMessage: string): ExtractionStatus {
  * Normalize Crawl4AI result to research_sources shape
  */
 export function normalizeExtraction(result: ExtractionResult): NormalizedExtraction {
+  const media_candidates = normalizeMediaCandidates(result.media_candidates);
+
   if (result.success && result.markdown) {
     const markdown = truncateMarkdown(result.markdown);
     return {
@@ -119,6 +124,7 @@ export function normalizeExtraction(result: ExtractionResult): NormalizedExtract
       extraction_status: 'success',
       extraction_error: null,
       extraction_time_ms: result.extraction_time_ms,
+      media_candidates,
     };
   }
 
@@ -127,6 +133,7 @@ export function normalizeExtraction(result: ExtractionResult): NormalizedExtract
     extraction_status: mapErrorToStatus(result.error || 'unknown error'),
     extraction_error: result.error,
     extraction_time_ms: result.extraction_time_ms,
+    media_candidates,
   };
 }
 
@@ -171,6 +178,7 @@ export async function extractSource(
       extraction_status: 'failed',
       extraction_error: errMsg,
       extraction_time_ms: 0,
+      media_candidates: [],
     };
   }
 }

@@ -149,6 +149,26 @@ export async function POST(
           .eq('id', source.id)
           .eq('research_job_id', id);
 
+        // T-1110c: persist collected media candidates (metadata only, no download).
+        // selected=false / rights_status=unverified; deduped per (job, url).
+        if (extraction.media_candidates.length > 0) {
+          const mediaRows = extraction.media_candidates.map((m) => ({
+            research_job_id: id,
+            research_source_id: source.id,
+            kind: m.kind,
+            source_url: m.source_url,
+            width: m.width,
+            height: m.height,
+            mime: m.mime,
+            selected: false,
+            rights_status: 'unverified',
+            risk_note: m.risk_note,
+          }));
+          await getSupabaseService()
+            .from('research_source_media')
+            .upsert(mediaRows, { onConflict: 'research_job_id,source_url', ignoreDuplicates: true });
+        }
+
         if (extraction.extraction_status === 'success') {
           sourcesExtracted += 1;
         } else {
