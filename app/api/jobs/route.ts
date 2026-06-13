@@ -37,6 +37,7 @@ import {
 import { enhancePrompt } from "@/lib/prompt-enhancer";
 import type { JobPlan, ReferencePayload } from "@/lib/types";
 import { assertCanCreateJob } from "@/lib/jobs/guard";
+import { buildVoiceoverScript, type VoiceoverScene } from "@/lib/voiceover/voiceover-script";
 
 // LLM calls (enhancePrompt + enrichStoryboardWithLLM) can add 4-8 s on top of
 // the normal Supabase + EvoLink/Modal round-trips. 60 s is safe on Vercel Pro.
@@ -207,6 +208,8 @@ export async function POST(req: Request) {
     const plan: JobPlan = gate.plan;
 
     let researchMetadata: Record<string, unknown> | undefined;
+    // T-1112: voice-over narration derived from the linked Research plan.
+    let researchVoiceoverText: string | null = null;
     if (research_job_id !== undefined) {
       const safeResearchJobId =
         typeof research_job_id === "string" && UUID_RE.test(research_job_id.trim())
@@ -225,6 +228,47 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Research job not found" }, { status: 404 });
       }
       researchMetadata = { research_job_id: safeResearchJobId };
+
+      // T-1112: derive the spoken voice-over from the Research narration so a
+      // Research-backed job gets a voice-over without manual entry. Canonical
+      // source = per-scene voiceover_line (aligned with overlay captions),
+      // fallback = full script prose. Best-effort and non-fatal: any failure
+      // just leaves voiceover_text unset. An explicit caller-provided
+      // voiceover_text always wins (handled at insert time below).
+      try {
+        const { data: sb } = await supabase
+          .from("research_storyboards")
+          .select("scenes_json, script_id")
+          .eq("research_job_id", safeResearchJobId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle<{ scenes_json: unknown; script_id: string | null }>();
+
+        let scriptText: string | null = null;
+        if (sb?.script_id) {
+          const { data: scriptRow } = await supabase
+            .from("research_scripts")
+            .select("script")
+            .eq("id", sb.script_id)
+            .maybeSingle<{ script: string | null }>();
+          scriptText = scriptRow?.script ?? null;
+        }
+
+        const built = buildVoiceoverScript({
+          scenes: Array.isArray(sb?.scenes_json)
+            ? (sb!.scenes_json as VoiceoverScene[])
+            : [],
+          script: scriptText,
+        });
+        if (built.text) {
+          researchVoiceoverText = built.text;
+        }
+      } catch (e) {
+        console.warn(
+          `[jobs] Research voice-over derivation failed (non-fatal):`,
+          e instanceof Error ? e.message : e
+        );
+      }
     }
 
     const rawDuration = Number(target_duration_seconds);
@@ -675,9 +719,16 @@ export async function POST(req: Request) {
         ...(audio_prompt && typeof audio_prompt === "string"
           ? { audio_prompt: audio_prompt.slice(0, 500) }
           : {}),
-        ...(voiceover_text && typeof voiceover_text === "string"
-          ? { voiceover_text: voiceover_text.slice(0, 2000) }
-          : {}),
+        // Explicit caller voiceover_text wins; otherwise fall back to the
+        // Research-derived narration (T-1112). Both capped to 2000 chars.
+        ...(() => {
+          const explicit =
+            voiceover_text && typeof voiceover_text === "string"
+              ? voiceover_text.trim()
+              : "";
+          const chosen = explicit || researchVoiceoverText || "";
+          return chosen ? { voiceover_text: chosen.slice(0, 2000) } : {};
+        })(),
         // Format & captions
         ...(aspect_ratio && ["16:9", "9:16", "1:1"].includes(aspect_ratio)
           ? { aspect_ratio }
