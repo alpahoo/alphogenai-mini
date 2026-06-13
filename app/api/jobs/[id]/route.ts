@@ -1356,6 +1356,8 @@ function formatJob(job: Record<string, unknown>) {
     is_favorite: isJobFavorite(job.app_state as Record<string, unknown> | null),
     multi_scene_chain: job.multi_scene_chain ?? true,
     social_exports: job.social_exports ?? null,
+    // Needed by the UI to show the research-only "Apply branding" overlay action.
+    metadata: (job.metadata as Record<string, unknown> | null) ?? null,
     aspect_ratio: job.aspect_ratio ?? null,
     caption_mode: job.caption_mode ?? null,
     created_at: job.created_at,
