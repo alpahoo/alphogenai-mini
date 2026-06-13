@@ -44,6 +44,9 @@ export interface Job {
   // Social export URLs populated by Modal `export_social_formats` —
   // shape: { tiktok?: url, instagram?: url, youtube?: url }
   social_exports: Record<string, string> | null;
+  // Generic job metadata jsonb (e.g. { research_job_id } linking back to a
+  // Research plan for the post-production overlay step).
+  metadata: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }

@@ -189,6 +189,7 @@ export default function JobPage() {
   const [instagramConnected, setInstagramConnected] = useState(false);
   const [channelNames, setChannelNames] = useState<Record<string, string>>({});
   const [socialToast, setSocialToast] = useState<string | null>(null);
+  const [overlayBusy, setOverlayBusy] = useState(false);
 
   // ── Detect OAuth callback redirect (youtube_connected=true etc) ────────
   const searchParams = useSearchParams();
@@ -409,6 +410,27 @@ export default function JobPage() {
 
   const copyLink = (u: string) => { navigator.clipboard.writeText(u); setCopied(true); setTimeout(() => setCopied(false), 2000); };
   const copyPrompt = (t: string) => { navigator.clipboard.writeText(t); setCopiedPrompt(true); setTimeout(() => setCopiedPrompt(false), 2000); };
+  // Research-backed jobs: apply the deterministic post-production overlay
+  // (captions/lower-third/source cards/brand). Falls back cleanly server-side.
+  const applyOverlay = async () => {
+    setOverlayBusy(true);
+    try {
+      const res = await fetch(`/api/jobs/${params.id}/overlay`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setSocialToast("Branding applied to your video.");
+        await fetchJob();
+      } else if (data.fallback) {
+        setSocialToast("Branding unavailable right now — original video kept.");
+      } else {
+        setSocialToast(data.error || "Could not apply branding.");
+      }
+    } catch {
+      setSocialToast("Could not apply branding.");
+    } finally {
+      setOverlayBusy(false);
+    }
+  };
   const shareVideo = () => {
     const shareUrl = `${window.location.origin}/v/${params.id}`;
     navigator.clipboard.writeText(shareUrl);
@@ -926,6 +948,17 @@ export default function JobPage() {
                         >
                           {copiedPrompt ? <><Check className="h-4 w-4 text-green-400" /> Copied</> : <><ClipboardCopy className="h-4 w-4" /> Copy prompt</>}
                         </button>
+                        {Boolean(job.metadata?.research_job_id) && (
+                          <button
+                            onClick={applyOverlay}
+                            disabled={overlayBusy}
+                            title="Burn in exact captions, source cards and branding (deterministic, no AI text)."
+                            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm font-medium text-violet-800 transition hover:bg-violet-100 disabled:opacity-60"
+                          >
+                            <Clapperboard className="h-4 w-4" />
+                            {overlayBusy ? "Applying branding…" : "Apply branding"}
+                          </button>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap lg:justify-end">
