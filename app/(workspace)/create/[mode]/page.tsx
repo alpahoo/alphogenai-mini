@@ -230,6 +230,7 @@ export default function CreateModePage({
   const composerRef = useRef<PromptComposerHandle>(null);
   const referenceJobPrefillRef = useRef<string | null>(null);
   const researchHandoffAppliedRef = useRef(false);
+  const [researchJobId, setResearchJobId] = useState<string | null>(null);
   const [composerRefs, setComposerRefs] = useState<ComposerReference[]>([]);
   // Images uploaded straight from the composer toolbar (→ @image chips). Kept
   // for the @-menu; the actual ReferenceItem is also added to `references` so
@@ -694,6 +695,7 @@ export default function CreateModePage({
         body: JSON.stringify({
           prompt: trimmed,
           target_duration_seconds: parseInt(duration, 10),
+          ...(researchJobId && { research_job_id: researchJobId }),
           ...(uploadedImageUrl && { image_url: uploadedImageUrl }),
           ...(Object.keys(allReferences).length > 0 && { references: buildReferencePayload(allReferences) }),
           ...(selectedEngine !== "auto" && { preferred_engine: selectedEngine }),
@@ -821,6 +823,7 @@ export default function CreateModePage({
           : cleanModelName(engineOptions.find((e) => e.key === selectedEngine)?.label ?? selectedEngine);
 
       setPrompt(researchPrompt);
+      setResearchJobId(handoff.researchJobId || null);
       composerRef.current?.setText(researchPrompt);
       setComposerRefs([]);
       if (narrationText) {

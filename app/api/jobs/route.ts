@@ -58,6 +58,8 @@ const VALID_ENGINES = [
 // is already capped per-plan). Even premium can't ask EvoLink for >6 chained
 // scenes — beyond that, generation cost & wait time become unreasonable.
 const MAX_CHAIN_LENGTH = 25;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // V1 Étape C — Reference validation imported from lib/validate-references.ts
 // (pure function, extracted for testability)
@@ -89,6 +91,7 @@ export async function POST(req: Request) {
       target_duration_seconds,
       preferred_engine,
       image_url,
+      research_job_id,
       references,
       multi_scene_chain,
       chain_strategy,
@@ -114,6 +117,7 @@ export async function POST(req: Request) {
       target_duration_seconds?: unknown;
       preferred_engine?: string;
       image_url?: string;
+      research_job_id?: unknown;
       references?: Record<string, unknown>;
       multi_scene_chain?: boolean;
       /** Scene chaining strategy: "continuity" (fluid, quality decays) | "anchor" (stable quality) */
@@ -201,6 +205,27 @@ export async function POST(req: Request) {
       return NextResponse.json(gate.body, { status: gate.status });
     }
     const plan: JobPlan = gate.plan;
+
+    let researchMetadata: Record<string, unknown> | undefined;
+    if (research_job_id !== undefined) {
+      const safeResearchJobId =
+        typeof research_job_id === "string" && UUID_RE.test(research_job_id.trim())
+          ? research_job_id.trim()
+          : null;
+      if (!safeResearchJobId) {
+        return NextResponse.json({ error: "Invalid research job id" }, { status: 400 });
+      }
+      const { data: researchJob, error: researchError } = await supabase
+        .from("research_jobs")
+        .select("id")
+        .eq("id", safeResearchJobId)
+        .eq("user_id", user?.id)
+        .single();
+      if (researchError || !researchJob) {
+        return NextResponse.json({ error: "Research job not found" }, { status: 404 });
+      }
+      researchMetadata = { research_job_id: safeResearchJobId };
+    }
 
     const rawDuration = Number(target_duration_seconds);
     const safeDuration =
@@ -636,6 +661,7 @@ export async function POST(req: Request) {
         ...(safePreferredEngine ? { engine_used: safePreferredEngine } : {}),
         ...(safeAssetIds.length ? { byteplus_asset_ids: safeAssetIds } : {}),
         ...(voiceFinal ? { avatar_final: voiceFinal } : {}),
+        ...(researchMetadata ? { metadata: researchMetadata } : {}),
         ...(safeImageUrl ? { image_url: safeImageUrl } : {}),
         ...(safeReferences ? { references_payload: safeReferences } : {}),
         ...(user?.id ? { user_id: user.id } : {}),

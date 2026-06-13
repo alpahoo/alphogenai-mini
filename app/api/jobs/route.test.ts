@@ -85,9 +85,10 @@ type ServiceOptions = {
   plan?: "free" | "pro" | "premium";
   activeCount?: number | null;
   recentCount?: number | null;
+  researchJob?: { id: string } | null;
 };
 
-function mockService({ plan = "free", activeCount = 0, recentCount = 0 }: ServiceOptions = {}) {
+function mockService({ plan = "free", activeCount = 0, recentCount = 0, researchJob = null }: ServiceOptions = {}) {
   const jobsInsert = vi.fn((row: Record<string, unknown>) => ({
     select: vi.fn(() => ({
       single: vi.fn().mockResolvedValue({
@@ -130,6 +131,18 @@ function mockService({ plan = "free", activeCount = 0, recentCount = 0 }: Servic
 
     if (table === "job_scenes") {
       return { insert: jobScenesInsert, update: jobScenesUpdate };
+    }
+
+    if (table === "research_jobs") {
+      const single = vi.fn().mockResolvedValue(
+        researchJob
+          ? { data: researchJob, error: null }
+          : { data: null, error: { message: "not found" } }
+      );
+      const eqUserId = vi.fn(() => ({ single }));
+      const eqId = vi.fn(() => ({ eq: eqUserId }));
+      const select = vi.fn(() => ({ eq: eqId }));
+      return { select };
     }
 
     return {};
@@ -312,5 +325,42 @@ describe("POST /api/jobs validation and gates", () => {
       prompt: "Hook with product visible",
       duration: 3,
     }));
+  });
+
+  it("stores an owned research handoff id in jobs.metadata", async () => {
+    const researchJobId = "11111111-1111-4111-8111-111111111111";
+    const service = mockService({
+      plan: "premium",
+      activeCount: 0,
+      recentCount: 0,
+      researchJob: { id: researchJobId },
+    });
+    vi.mocked(createBytePlusTask).mockResolvedValue("task-research-1");
+
+    const res = await POST(jobsRequest({
+      prompt: "A research-backed video about AI model launches",
+      preferred_engine: "seedance2_fast_byteplus",
+      research_job_id: researchJobId,
+      scenes: [{ prompt: "Opening research-backed scene", duration_sec: 5, engine: "seedance2_fast_byteplus" }],
+    }));
+
+    expect(res.status).toBe(200);
+    expect(service.jobsInsert).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: { research_job_id: researchJobId },
+    }));
+  });
+
+  it("rejects invalid research handoff ids before job insert", async () => {
+    const service = mockService({ plan: "premium", activeCount: 0, recentCount: 0 });
+
+    const res = await POST(jobsRequest({
+      prompt: "A research-backed video about AI model launches",
+      preferred_engine: "seedance2_fast_byteplus",
+      research_job_id: "not-a-uuid",
+    }));
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toEqual({ error: "Invalid research job id" });
+    expect(service.jobsInsert).not.toHaveBeenCalled();
   });
 });

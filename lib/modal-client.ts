@@ -6,6 +6,7 @@
  * as Modal acknowledges. The Next.js poller then sees the resulting DB
  * mutations on the next GET tick.
  */
+import type { OverlayPlan } from "@/lib/overlay/overlay-plan";
 
 function modalBase(): string {
   const raw = process.env.MODAL_WEBHOOK_URL;
@@ -93,4 +94,46 @@ export async function triggerApplyVoiceover(jobId: string): Promise<void> {
     const detail = await res.text().catch(() => res.statusText);
     throw new Error(`Modal /apply-voiceover ${res.status}: ${detail.slice(0, 200)}`);
   }
+}
+
+/**
+ * Apply deterministic post-production overlays to an already completed video.
+ * Unlike the other Modal calls in this file, this returns the branded video URL
+ * because the explicit overlay route writes it to jobs.output_url_final.
+ */
+export async function triggerApplyOverlays(
+  jobId: string,
+  videoUrl: string,
+  overlayPlan: OverlayPlan
+): Promise<string> {
+  const url = `${modalBase()}/apply-overlays`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-webhook-secret": secret(),
+    },
+    body: JSON.stringify({
+      job_id: jobId,
+      video_url: videoUrl,
+      overlay_plan: overlayPlan,
+    }),
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(`Modal /apply-overlays ${res.status}: ${detail.slice(0, 200)}`);
+  }
+
+  const data = await res.json().catch(() => null) as { output_url?: unknown; video_url?: unknown } | null;
+  const outputUrl =
+    typeof data?.output_url === "string"
+      ? data.output_url
+      : typeof data?.video_url === "string"
+        ? data.video_url
+        : null;
+  if (!outputUrl) {
+    throw new Error("Modal /apply-overlays returned no output_url");
+  }
+  return outputUrl;
 }

@@ -47,6 +47,12 @@ webhook_image = (
     .pip_install("fastapi", "pydantic", "supabase", "httpx", "boto3", "sentry-sdk", "cryptography")
 )
 
+overlay_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("ffmpeg", "fonts-dejavu-core")
+    .pip_install("pillow", "httpx", "boto3", "sentry-sdk", "cryptography")
+)
+
 # ---------------------------------------------------------------------------
 # Infra
 # ---------------------------------------------------------------------------
@@ -341,6 +347,241 @@ def generate_clip(prompt: str, job_id: str, image_url: Optional[str] = None) -> 
 # ===========================================================================
 # Multi-scene generation (no GPU — just coordinates scene-by-scene)
 # ===========================================================================
+
+def _safe_overlay_text(value, max_len: int = 220) -> str:
+    if not isinstance(value, str):
+        return ""
+    text = " ".join(value.replace("\n", " ").split()).strip()
+    return text[:max_len].strip()
+
+
+def _wrap_overlay_text(draw, text: str, font, max_width: int, max_lines: int) -> list[str]:
+    words = text.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        bbox = draw.textbbox((0, 0), candidate, font=font)
+        if bbox[2] - bbox[0] <= max_width or not current:
+            current = candidate
+            continue
+        lines.append(current)
+        current = word
+        if len(lines) >= max_lines:
+            break
+    if current and len(lines) < max_lines:
+        lines.append(current)
+    if len(lines) == max_lines and len(words) > len(" ".join(lines).split()):
+        lines[-1] = lines[-1].rstrip(" .") + "..."
+    return lines[:max_lines]
+
+
+def _probe_video(path: str) -> tuple[int, int, float]:
+    import subprocess
+
+    dim = subprocess.run(
+        [
+            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "csv=s=x:p=0", path,
+        ],
+        capture_output=True, text=True,
+    )
+    width, height = 1280, 720
+    if "x" in dim.stdout:
+        try:
+            width, height = map(int, dim.stdout.strip().split("x")[:2])
+        except Exception:
+            width, height = 1280, 720
+
+    dur = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", path,
+        ],
+        capture_output=True, text=True,
+    )
+    try:
+        duration = float(dur.stdout.strip())
+    except Exception:
+        duration = 0.0
+    return width, height, max(duration, 0.1)
+
+
+def _render_overlay_png(path: str, width: int, height: int, element: dict, safe_area: int):
+    from PIL import Image, ImageDraw, ImageFont
+
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    font_regular = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    font_bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+    kind = element.get("kind")
+    position = element.get("position")
+    text = _safe_overlay_text(element.get("text"), 220)
+    subtext = _safe_overlay_text(element.get("subtext"), 180)
+    if not text:
+        image.save(path)
+        return
+
+    title_font = ImageFont.truetype(font_bold, max(24, int(height * 0.045)))
+    body_font = ImageFont.truetype(font_regular, max(18, int(height * 0.03)))
+    small_font = ImageFont.truetype(font_bold, max(16, int(height * 0.024)))
+
+    if kind == "caption":
+        max_w = int(width * 0.78)
+        lines = _wrap_overlay_text(draw, text, body_font, max_w, 3)
+        line_h = int(height * 0.043)
+        box_w = max(draw.textbbox((0, 0), line, font=body_font)[2] for line in lines) + 44
+        box_h = len(lines) * line_h + 30
+        x = (width - box_w) // 2
+        y = height - safe_area - box_h
+        draw.rounded_rectangle((x, y, x + box_w, y + box_h), radius=18, fill=(0, 0, 0, 150))
+        for idx, line in enumerate(lines):
+            draw.text((x + 22, y + 15 + idx * line_h), line, fill=(255, 255, 255, 238), font=body_font)
+    elif kind == "source_card":
+        max_w = int(width * 0.42)
+        lines = _wrap_overlay_text(draw, text, small_font, max_w, 2)
+        line_h = int(height * 0.034)
+        box_w = max([draw.textbbox((0, 0), line, font=small_font)[2] for line in lines] + [100]) + 36
+        box_h = 34 + len(lines) * line_h + 22
+        x = safe_area
+        y = safe_area
+        draw.rounded_rectangle((x, y, x + box_w, y + box_h), radius=18, fill=(0, 0, 0, 130))
+        draw.text((x + 18, y + 14), "SOURCE", fill=(170, 190, 255, 230), font=small_font)
+        for idx, line in enumerate(lines):
+            draw.text((x + 18, y + 42 + idx * line_h), line, fill=(255, 255, 255, 235), font=small_font)
+    else:
+        max_w = int(width * 0.62)
+        title_lines = _wrap_overlay_text(draw, text, title_font, max_w, 2)
+        sub_lines = _wrap_overlay_text(draw, subtext, body_font, max_w, 2) if subtext else []
+        line_h = int(height * 0.058)
+        sub_h = int(height * 0.04)
+        box_w = max(
+            [draw.textbbox((0, 0), line, font=title_font)[2] for line in title_lines]
+            + [draw.textbbox((0, 0), line, font=body_font)[2] for line in sub_lines]
+            + [240]
+        ) + 56
+        box_h = len(title_lines) * line_h + len(sub_lines) * sub_h + 42
+        if position == "top":
+            x, y = safe_area, safe_area
+        elif position == "center":
+            x, y = (width - box_w) // 2, (height - box_h) // 2
+        else:
+            x, y = safe_area, height - safe_area - box_h
+        draw.rounded_rectangle((x, y, x + box_w, y + box_h), radius=20, fill=(0, 0, 0, 145))
+        cursor = y + 20
+        for line in title_lines:
+            draw.text((x + 28, cursor), line, fill=(255, 255, 255, 245), font=title_font)
+            cursor += line_h
+        for line in sub_lines:
+            draw.text((x + 28, cursor), line, fill=(230, 230, 230, 225), font=body_font)
+            cursor += sub_h
+
+    image.save(path)
+
+
+def _render_brand_png(path: str, width: int, height: int, brand: dict, safe_area: int):
+    from PIL import Image, ImageDraw, ImageFont
+
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    watermark = _safe_overlay_text(brand.get("watermark_text"), 60)
+    if watermark:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", max(18, int(height * 0.03)))
+        bbox = draw.textbbox((0, 0), watermark, font=font)
+        opacity = brand.get("logo_opacity") if isinstance(brand.get("logo_opacity"), (int, float)) else 0.55
+        alpha = max(45, min(180, int(255 * float(opacity) * 0.55)))
+        x = width - safe_area - (bbox[2] - bbox[0])
+        y = safe_area
+        draw.text((x, y), watermark, fill=(255, 255, 255, alpha), font=font)
+    image.save(path)
+
+
+@app.function(image=overlay_image, secrets=[secrets], timeout=600, retries=0)
+def apply_overlays_to_video(video_url: str, job_id: str, overlay_plan: dict) -> str:
+    """Burn deterministic text/brand overlays onto a completed video and upload a copy."""
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    import httpx
+
+    if not isinstance(overlay_plan, dict) or not overlay_plan.get("enabled"):
+        return video_url
+
+    print(f"[overlay] job={job_id} downloading source video...")
+    with httpx.Client(timeout=90) as client:
+        resp = client.get(video_url)
+        resp.raise_for_status()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        input_path = tmp / "input.mp4"
+        output_path = tmp / "overlay.mp4"
+        input_path.write_bytes(resp.content)
+
+        width, height, duration = _probe_video(str(input_path))
+        safe_pct = overlay_plan.get("safe_area_pct")
+        safe_area = int(min(width, height) * ((safe_pct if isinstance(safe_pct, (int, float)) else 5) / 100))
+        print(f"[overlay] source {width}x{height}, {duration:.2f}s, safe={safe_area}px")
+
+        overlays: list[tuple[Path, float, float]] = []
+        brand = overlay_plan.get("brand") if isinstance(overlay_plan.get("brand"), dict) else {}
+        brand_path = tmp / "brand.png"
+        _render_brand_png(str(brand_path), width, height, brand, safe_area)
+        overlays.append((brand_path, 0.0, duration))
+
+        elements = overlay_plan.get("elements") if isinstance(overlay_plan.get("elements"), list) else []
+        for idx, element in enumerate(elements[:80]):
+            if not isinstance(element, dict):
+                continue
+            start = element.get("start_sec")
+            end = element.get("end_sec")
+            start_sec = float(start) if isinstance(start, (int, float)) else 0.0
+            end_sec = float(end) if isinstance(end, (int, float)) else min(duration, start_sec + 4.0)
+            if end_sec <= start_sec or start_sec >= duration:
+                continue
+            png_path = tmp / f"overlay_{idx:03d}.png"
+            _render_overlay_png(str(png_path), width, height, element, safe_area)
+            overlays.append((png_path, max(0.0, start_sec), min(duration, end_sec)))
+
+        if not overlays:
+            return video_url
+
+        cmd = ["ffmpeg", "-y", "-i", str(input_path)]
+        for png_path, _, _ in overlays:
+            cmd += ["-loop", "1", "-i", str(png_path)]
+
+        current = "[0:v]"
+        filter_parts = []
+        for idx, (_, start, end) in enumerate(overlays, start=1):
+            out = f"[v{idx}]"
+            filter_parts.append(
+                f"{current}[{idx}:v]overlay=0:0:enable='between(t,{start:.3f},{end:.3f})'{out}"
+            )
+            current = out
+
+        cmd += [
+            "-filter_complex", ";".join(filter_parts),
+            "-map", current,
+            "-map", "0:a?",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
+            "-shortest",
+            str(output_path),
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"ffmpeg overlay failed: {result.stderr[-500:]}")
+
+        output_url = upload_to_r2(output_path.read_bytes(), job_id, suffix="_overlay")
+        print(f"[overlay] job={job_id} uploaded {output_url}")
+        return output_url
+
 
 @app.function(
     image=base_image,
@@ -1667,6 +1908,34 @@ def webhook():
             print(f"[webhook /apply-voiceover] spawn failed: {e}")
             raise HTTPException(status_code=500, detail=str(e)[:200])
         return {"success": True, "job_id": req.job_id}
+
+    class OverlayRequest(BaseModel):
+        job_id: str
+        video_url: str
+        overlay_plan: dict
+
+    @web.post("/apply-overlays")
+    async def apply_overlays(req: OverlayRequest, x_webhook_secret: str = Header(None)):
+        """Burn deterministic post-production overlays onto a completed video.
+
+        Runs on a CPU image (ffmpeg + Pillow). This endpoint returns the
+        branded URL synchronously so the SaaS can keep the raw video_url and
+        write the branded copy to output_url_final. If this endpoint fails, the
+        SaaS route falls back to the raw video.
+        """
+        expected = os.environ.get("MODAL_WEBHOOK_SECRET")
+        if expected and x_webhook_secret != expected:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        try:
+            output_url = await apply_overlays_to_video.remote.aio(
+                req.video_url,
+                req.job_id,
+                req.overlay_plan,
+            )
+        except Exception as e:
+            print(f"[webhook /apply-overlays] failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e)[:200])
+        return {"success": True, "job_id": req.job_id, "output_url": output_url}
 
     class SocialExportRequest(BaseModel):
         job_id: str
