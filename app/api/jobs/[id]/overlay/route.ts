@@ -59,7 +59,10 @@ export async function POST(
       return NextResponse.json({ error: "Overlay can only be applied to completed jobs" }, { status: 400 });
     }
 
-    const rawVideoUrl = job.video_url || job.output_url_final;
+    // Brand the most finished cut: a voiced output (T-1113) takes precedence
+    // over the raw clip so voice-over + branding chain (voice first, then
+    // overlay). Falls back to the raw video when no voiced copy exists.
+    const rawVideoUrl = job.output_url_final || job.video_url;
     if (!rawVideoUrl) {
       return NextResponse.json({ error: "Job has no video to overlay" }, { status: 400 });
     }

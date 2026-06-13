@@ -97,6 +97,37 @@ export async function triggerApplyVoiceover(jobId: string): Promise<void> {
 }
 
 /**
+ * Mux a Research Story's TTS voice-over into its final video (T-1113). Modal
+ * reads video_url + voiceover_url server-side, ducks the native audio, mixes the
+ * voice on top, uploads a `_voiced` copy, and returns its URL. Like overlays,
+ * this returns the URL so the explicit route writes it to output_url_final while
+ * keeping video_url raw; on failure the route falls back to the raw video.
+ */
+export async function triggerApplyResearchVoiceover(jobId: string): Promise<string> {
+  const url = `${modalBase()}/apply-research-voiceover`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-webhook-secret": secret(),
+    },
+    body: JSON.stringify({ job_id: jobId }),
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(`Modal /apply-research-voiceover ${res.status}: ${detail.slice(0, 200)}`);
+  }
+
+  const data = (await res.json().catch(() => null)) as { output_url?: unknown } | null;
+  const outputUrl = typeof data?.output_url === "string" ? data.output_url : null;
+  if (!outputUrl) {
+    throw new Error("Modal /apply-research-voiceover returned no output_url");
+  }
+  return outputUrl;
+}
+
+/**
  * Apply deterministic post-production overlays to an already completed video.
  * Unlike the other Modal calls in this file, this returns the branded video URL
  * because the explicit overlay route writes it to jobs.output_url_final.

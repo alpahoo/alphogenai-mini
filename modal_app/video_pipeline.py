@@ -1098,6 +1098,88 @@ def apply_voiceover_to_job(job_id: str) -> str:
         raise
 
 
+@app.function(image=overlay_image, secrets=[secrets], timeout=600, retries=0)
+def apply_research_voiceover_to_video(job_id: str) -> str:
+    """Mux a Research Story's TTS voice-over into its final video (T-1113).
+
+    Reads jobs.video_url (raw base) + jobs.voiceover_url server-side — neither is
+    trusted from the client. Ducks the clip's native audio and mixes the voice on
+    top, uploads a `_voiced` copy, and RETURNS the URL. The SaaS route writes it
+    to jobs.output_url_final while keeping video_url raw, so a failure here never
+    destroys the original (the route falls back to the raw video).
+    """
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    import httpx
+
+    sb = get_supabase_client()
+    job_row = sb.table("jobs") \
+        .select("video_url, voiceover_url") \
+        .eq("id", job_id).single().execute()
+    job_data = job_row.data or {}
+    video_url = job_data.get("video_url")
+    voiceover_url = job_data.get("voiceover_url")
+    if not video_url or not voiceover_url:
+        raise RuntimeError(
+            f"apply_research_voiceover: missing video_url={bool(video_url)} "
+            f"voiceover_url={bool(voiceover_url)}"
+        )
+
+    print(f"[research_voiceover] job={job_id} downloading video + voice...")
+    with httpx.Client(timeout=120, follow_redirects=True) as client:
+        v = client.get(video_url); v.raise_for_status()
+        a = client.get(voiceover_url); a.raise_for_status()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        video_path = tmp / "input.mp4"
+        voice_path = tmp / "voice.mp3"
+        output_path = tmp / "voiced.mp4"
+        video_path.write_bytes(v.content)
+        voice_path.write_bytes(a.content)
+
+        # Duck native audio (~0.18) and mix the voice (~1.6) on top. amix
+        # default-normalizes by 1/n, so the pre-scale keeps the voice clearly
+        # dominant while the clip ambience stays faintly audible.
+        # duration=first anchors the result to the video's length.
+        duck_cmd = [
+            "ffmpeg", "-y",
+            "-i", str(video_path),
+            "-i", str(voice_path),
+            "-filter_complex",
+            "[0:a]volume=0.18[bg];[1:a]volume=1.6[vo];"
+            "[bg][vo]amix=inputs=2:duration=first:dropout_transition=0[a]",
+            "-map", "0:v", "-map", "[a]",
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+            "-movflags", "+faststart",
+            str(output_path),
+        ]
+        result = subprocess.run(duck_cmd, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            # Fallback: clip has no usable native audio track — just lay the
+            # voice over the video (replace), anchored to the shorter stream.
+            print(f"[research_voiceover] duck+mix failed, replacing audio: {result.stderr[-300:]}")
+            replace_cmd = [
+                "ffmpeg", "-y",
+                "-i", str(video_path),
+                "-i", str(voice_path),
+                "-map", "0:v", "-map", "1:a",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                "-movflags", "+faststart",
+                "-shortest",
+                str(output_path),
+            ]
+            result = subprocess.run(replace_cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                raise RuntimeError(f"ffmpeg voiceover mux failed: {result.stderr[-500:]}")
+
+        output_url = upload_to_r2(output_path.read_bytes(), job_id, suffix="_voiced")
+        print(f"[research_voiceover] job={job_id} uploaded {output_url}")
+        return output_url
+
+
 # ---------------------------------------------------------------------------
 # Audio generation (AudioLDM2 on A10G — for Wan only, Seedance has native audio)
 # ---------------------------------------------------------------------------
@@ -1908,6 +1990,25 @@ def webhook():
             print(f"[webhook /apply-voiceover] spawn failed: {e}")
             raise HTTPException(status_code=500, detail=str(e)[:200])
         return {"success": True, "job_id": req.job_id}
+
+    @web.post("/apply-research-voiceover")
+    async def apply_research_voiceover(req: ConcatRequest, x_webhook_secret: str = Header(None)):
+        """Mux a Research Story's TTS voice-over into its final video (T-1113).
+
+        Reads video_url + voiceover_url server-side from Supabase (never trusts
+        the client). Returns the voiced URL synchronously so the SaaS keeps the
+        raw video_url and writes the voiced copy to output_url_final. On failure
+        the SaaS route falls back to the raw video.
+        """
+        expected = os.environ.get("MODAL_WEBHOOK_SECRET")
+        if expected and x_webhook_secret != expected:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        try:
+            output_url = await apply_research_voiceover_to_video.remote.aio(req.job_id)
+        except Exception as e:
+            print(f"[webhook /apply-research-voiceover] failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e)[:200])
+        return {"success": True, "job_id": req.job_id, "output_url": output_url}
 
     class OverlayRequest(BaseModel):
         job_id: str

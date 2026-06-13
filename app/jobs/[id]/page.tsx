@@ -190,6 +190,7 @@ export default function JobPage() {
   const [channelNames, setChannelNames] = useState<Record<string, string>>({});
   const [socialToast, setSocialToast] = useState<string | null>(null);
   const [overlayBusy, setOverlayBusy] = useState(false);
+  const [voiceoverBusy, setVoiceoverBusy] = useState(false);
 
   // ── Detect OAuth callback redirect (youtube_connected=true etc) ────────
   const searchParams = useSearchParams();
@@ -429,6 +430,27 @@ export default function JobPage() {
       setSocialToast("Could not apply branding.");
     } finally {
       setOverlayBusy(false);
+    }
+  };
+  // Research Story jobs: mux the TTS narration into the video (voice-over, not
+  // lip-sync). Writes a voiced output_url_final; falls back cleanly server-side.
+  const applyVoiceover = async () => {
+    setVoiceoverBusy(true);
+    try {
+      const res = await fetch(`/api/jobs/${params.id}/voiceover`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setSocialToast("Voice-over added to your video.");
+        await fetchJob();
+      } else if (data.fallback) {
+        setSocialToast("Voice-over unavailable right now — original video kept.");
+      } else {
+        setSocialToast(data.error || "Could not add voice-over.");
+      }
+    } catch {
+      setSocialToast("Could not add voice-over.");
+    } finally {
+      setVoiceoverBusy(false);
     }
   };
   const shareVideo = () => {
@@ -948,6 +970,17 @@ export default function JobPage() {
                         >
                           {copiedPrompt ? <><Check className="h-4 w-4 text-green-400" /> Copied</> : <><ClipboardCopy className="h-4 w-4" /> Copy prompt</>}
                         </button>
+                        {Boolean(job.metadata?.research_job_id) && (
+                          <button
+                            onClick={applyVoiceover}
+                            disabled={voiceoverBusy}
+                            title="Mix the narration over your video as a voice-over (audio track — not lip-sync)."
+                            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-medium text-sky-800 transition hover:bg-sky-100 disabled:opacity-60"
+                          >
+                            <Volume2 className="h-4 w-4" />
+                            {voiceoverBusy ? "Adding voice-over…" : "Add voice-over"}
+                          </button>
+                        )}
                         {Boolean(job.metadata?.research_job_id) && (
                           <button
                             onClick={applyOverlay}
