@@ -124,12 +124,14 @@ export async function POST(
         raw_video_url: job.video_url,
       });
     } catch (error) {
-      console.warn("[jobs/voiceover] mux failed; keeping original video", error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error("[jobs/voiceover] mux failed; keeping original video:", errorMsg);
       return NextResponse.json({
         success: false,
         fallback: true,
         video_url: rawVideoUrl,
-        error: "Voice-over mux failed; original video kept",
+        error: `Voice-over mux failed: ${errorMsg}`,
+        raw_error: errorMsg,
       });
     }
   } catch (error) {
