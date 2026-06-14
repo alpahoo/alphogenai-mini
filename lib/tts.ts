@@ -74,19 +74,35 @@ export function isTTSAvailable(): boolean {
 // Main function
 // ---------------------------------------------------------------------------
 export async function generateVoiceover(options: TTSOptions): Promise<TTSResult> {
-  const provider = getAvailableTTSProvider();
+  const hasElevenLabs = Boolean(process.env.ELEVENLABS_API_KEY);
+  const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
 
-  if (!provider) {
+  if (!hasElevenLabs && !hasOpenAI) {
     throw new Error(
       "No TTS provider configured. Set ELEVENLABS_API_KEY or OPENAI_API_KEY."
     );
   }
 
-  if (provider === "elevenlabs") {
-    return generateElevenLabs(options);
-  }
+  // Prefer ElevenLabs (quality), but fall back to OpenAI when it is available
+  // and ElevenLabs fails (invalid key, quota, outage). Previously a failing
+  // ElevenLabs call threw outright even with an OpenAI key configured.
+  const attempts: Array<{ provider: "elevenlabs" | "openai"; run: () => Promise<TTSResult> }> = [];
+  if (hasElevenLabs) attempts.push({ provider: "elevenlabs", run: () => generateElevenLabs(options) });
+  if (hasOpenAI) attempts.push({ provider: "openai", run: () => generateOpenAI(options) });
 
-  return generateOpenAI(options);
+  let lastError: unknown;
+  for (const attempt of attempts) {
+    try {
+      return await attempt.run();
+    } catch (e) {
+      lastError = e;
+      console.error(
+        `[tts] ${attempt.provider} failed${attempts.length > 1 ? ", trying next provider" : ""}:`,
+        e instanceof Error ? e.message : e
+      );
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("All TTS providers failed");
 }
 
 // ---------------------------------------------------------------------------
