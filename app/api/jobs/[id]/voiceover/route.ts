@@ -44,9 +44,9 @@ export async function POST(
     const supabase = createServiceClient();
     const { data: job, error: jobError } = await supabase
       .from("jobs")
-      .select("id, user_id, status, video_url, output_url_final, voiceover_url, voiceover_text, engine_used")
+      .select("id, user_id, status, video_url, output_url_final, voiceover_url, voiceover_text, engine_used, target_duration_seconds")
       .eq("id", id)
-      .single<JobRow>();
+      .single<JobRow & { target_duration_seconds?: number }>();
 
     if (jobError || !job || job.user_id !== user.id) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
@@ -85,9 +85,26 @@ export async function POST(
       // Synthesis and storage are split so the failure is diagnosable: a TTS
       // provider error and an R2 storage error surface as distinct messages
       // (provider name is never leaked to the client — only logged server-side).
+
+      // Limit voiceover_text to fit within video duration (~3 chars/sec for TTS).
+      // This prevents audio from extending beyond the video frame.
+      let textToSpeak = text;
+      const videoDuration = job.target_duration_seconds || 5;
+      const maxChars = Math.max(50, Math.floor(videoDuration * 3)); // min 50 chars
+      if (textToSpeak.length > maxChars) {
+        textToSpeak = textToSpeak.slice(0, maxChars).trim();
+        const lastDot = textToSpeak.lastIndexOf(".");
+        if (lastDot > maxChars * 0.7) {
+          textToSpeak = textToSpeak.slice(0, lastDot + 1);
+        }
+        console.log(
+          `[jobs/voiceover] Limited voiceover_text: ${text.length} chars → ${textToSpeak.length} chars (video=${videoDuration}s, max=${maxChars})`
+        );
+      }
+
       let audio: ArrayBuffer;
       try {
-        const tts = await generateVoiceover({ text, format: "mp3" });
+        const tts = await generateVoiceover({ text: textToSpeak, format: "mp3" });
         audio = tts.audio;
       } catch (e) {
         console.error("[jobs/voiceover] TTS synthesis failed:", e instanceof Error ? e.message : e);
