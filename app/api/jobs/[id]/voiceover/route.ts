@@ -82,10 +82,20 @@ export async function POST(
       if (!isTTSAvailable()) {
         return NextResponse.json({ error: "Voice-over synthesis is unavailable" }, { status: 503 });
       }
+      // Synthesis and storage are split so the failure is diagnosable: a TTS
+      // provider error and an R2 storage error surface as distinct messages
+      // (provider name is never leaked to the client — only logged server-side).
+      let audio: ArrayBuffer;
       try {
         const tts = await generateVoiceover({ text, format: "mp3" });
+        audio = tts.audio;
+      } catch (e) {
+        console.error("[jobs/voiceover] TTS synthesis failed:", e instanceof Error ? e.message : e);
+        return NextResponse.json({ error: "Voice-over synthesis failed" }, { status: 502 });
+      }
+      try {
         voiceoverUrl = await uploadBufferToR2(
-          Buffer.from(tts.audio),
+          Buffer.from(audio),
           `audio/voiceover/${job.id}.mp3`,
           "audio/mpeg"
         );
@@ -94,8 +104,8 @@ export async function POST(
           .update({ voiceover_url: voiceoverUrl, updated_at: new Date().toISOString() })
           .eq("id", job.id);
       } catch (e) {
-        console.warn("[jobs/voiceover] TTS generation failed", e);
-        return NextResponse.json({ error: "Could not synthesize the voice-over" }, { status: 502 });
+        console.error("[jobs/voiceover] voice-over storage failed:", e instanceof Error ? e.message : e);
+        return NextResponse.json({ error: "Could not save the voice-over audio" }, { status: 502 });
       }
     }
 
