@@ -1139,10 +1139,19 @@ def apply_research_voiceover_to_video(job_id: str) -> str:
         video_path.write_bytes(v.content)
         voice_path.write_bytes(a.content)
 
-        # Mux the voice-over as the audio track. Seedance clips have minimal
-        # native audio (mostly silence), so we simply replace it with the TTS
-        # narration. Use -t to anchor output to the video's length if the voice
-        # is longer (avoids stream length mismatch that crashes ffmpeg).
+        # Log file sizes for diagnostics
+        video_size = len(v.content) / 1e6
+        audio_size = len(a.content) / 1e6
+        print(f"[research_voiceover] Downloaded: video={video_size:.1f}MB, voice={audio_size:.1f}MB")
+
+        # Probe both files to confirm they're readable
+        for label, fpath in [("video", video_path), ("voice", voice_path)]:
+            probe_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(fpath)]
+            probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
+            duration = probe_result.stdout.strip()
+            print(f"[research_voiceover] {label} duration: {duration}s (probe returncode={probe_result.returncode})")
+
+        # Mux the voice-over as the audio track.
         mux_cmd = [
             "ffmpeg", "-y",
             "-i", str(video_path),
@@ -1152,9 +1161,10 @@ def apply_research_voiceover_to_video(job_id: str) -> str:
             "-movflags", "+faststart",
             str(output_path),
         ]
+        print(f"[research_voiceover] Running ffmpeg: {' '.join(mux_cmd)}")
         result = subprocess.run(mux_cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            raise RuntimeError(f"ffmpeg voiceover mux failed: {result.stderr[-500:]}")
+            raise RuntimeError(f"ffmpeg voiceover mux failed (code={result.returncode}): {result.stderr[-800:]}")
 
         output_url = upload_to_r2(output_path.read_bytes(), job_id, suffix="_voiced")
         print(f"[research_voiceover] job={job_id} uploaded {output_url}")
