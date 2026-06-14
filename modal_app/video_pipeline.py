@@ -1139,41 +1139,22 @@ def apply_research_voiceover_to_video(job_id: str) -> str:
         video_path.write_bytes(v.content)
         voice_path.write_bytes(a.content)
 
-        # Duck native audio (~0.18) and mix the voice (~1.6) on top. amix
-        # default-normalizes by 1/n, so the pre-scale keeps the voice clearly
-        # dominant while the clip ambience stays faintly audible.
-        # duration=first anchors the result to the video's length.
-        duck_cmd = [
+        # Mux the voice-over as the audio track. Seedance clips have minimal
+        # native audio (mostly silence), so we simply replace it with the TTS
+        # narration, anchored to the video's length.
+        mux_cmd = [
             "ffmpeg", "-y",
             "-i", str(video_path),
             "-i", str(voice_path),
-            "-filter_complex",
-            "[0:a]volume=0.18[bg];[1:a]volume=1.6[vo];"
-            "[bg][vo]amix=inputs=2:duration=first:dropout_transition=0[a]",
-            "-map", "0:v", "-map", "[a]",
+            "-map", "0:v", "-map", "1:a",
             "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
             "-movflags", "+faststart",
+            "-shortest",
             str(output_path),
         ]
-        result = subprocess.run(duck_cmd, capture_output=True, text=True)
-
+        result = subprocess.run(mux_cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            # Fallback: clip has no usable native audio track — just lay the
-            # voice over the video (replace), anchored to the shorter stream.
-            print(f"[research_voiceover] duck+mix failed, replacing audio: {result.stderr[-300:]}")
-            replace_cmd = [
-                "ffmpeg", "-y",
-                "-i", str(video_path),
-                "-i", str(voice_path),
-                "-map", "0:v", "-map", "1:a",
-                "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-                "-movflags", "+faststart",
-                "-shortest",
-                str(output_path),
-            ]
-            result = subprocess.run(replace_cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                raise RuntimeError(f"ffmpeg voiceover mux failed: {result.stderr[-500:]}")
+            raise RuntimeError(f"ffmpeg voiceover mux failed: {result.stderr[-500:]}")
 
         output_url = upload_to_r2(output_path.read_bytes(), job_id, suffix="_voiced")
         print(f"[research_voiceover] job={job_id} uploaded {output_url}")
