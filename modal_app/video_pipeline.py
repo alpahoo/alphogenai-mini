@@ -62,7 +62,8 @@ models_volume = modal.Volume.from_name("alphogenai-models", create_if_missing=Tr
 GPU = "A100-80GB"
 
 SDXL_TURBO_PATH = "/models/sdxl-turbo"
-WAN_PATH        = "/models/wan2.2-i2v-a14b"
+WAN_27_PATH     = "/models/wan2.7-t2v-a14b"  # Default: Text-to-Video
+WAN_PATH        = "/models/wan2.2-i2v-a14b"  # Legacy: Image-to-Video (kept for compatibility)
 ENABLE_SVI_LORA = False  # disabled — stabilise pipeline first
 SVI_LORA_PATH   = "/models/svi-lora/SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors"
 
@@ -335,6 +336,81 @@ def generate_clip(prompt: str, job_id: str, image_url: Optional[str] = None) -> 
     del pipe; gc.collect(); torch.cuda.empty_cache()
 
     # --- step 3: encode MP4 -------------------------------------------
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mp4_path = str(Path(tmpdir) / f"{job_id}.mp4")
+        frames_to_mp4(frames, mp4_path, fps=FPS)
+        with open(mp4_path, "rb") as f:
+            video_bytes = f.read()
+        log(job_id, f"encoded {len(video_bytes)/1e6:.1f} MB")
+        return video_bytes
+
+
+@app.function(image=base_image, volumes={"/models": models_volume}, timeout=600, retries=0)
+def generate_wan_27(prompt: str, job_id: str, duration_seconds: int = 5) -> bytes:
+    """
+    Wan 2.7 Text-to-Video (T2V) generation.
+    Direct prompt → video without needing a seed image.
+
+    Args:
+      prompt: Video description
+      job_id: For logging
+      duration_seconds: Target video length (5-30s, default 5)
+
+    Returns: MP4 bytes
+    """
+    import torch
+    import gc
+    from diffusers import WanVideoPipeline
+    import tempfile
+    from pathlib import Path
+
+    log(job_id, f"generate_wan_27 start | GPU={GPU} steps={NUM_STEPS} duration={duration_seconds}s")
+
+    # Validate model path
+    if not Path(WAN_27_PATH).exists():
+        vol = Path("/models")
+        contents = [c.name for c in vol.iterdir()] if vol.exists() else []
+        raise FileNotFoundError(f"Wan 2.7 missing at {WAN_27_PATH}. Volume has: {contents}")
+    log(job_id, "Wan 2.7-T2V OK")
+
+    # Calculate frames based on duration (16 fps default)
+    num_frames = max(48, min(256, int(duration_seconds * FPS)))
+    log(job_id, f"loading Wan 2.7-T2V ({num_frames} frames @ {FPS} fps = {num_frames/FPS:.1f}s)")
+
+    try:
+        pipe = WanVideoPipeline.from_pretrained(
+            WAN_27_PATH, torch_dtype=torch.bfloat16, local_files_only=True,
+        ).to("cuda")
+        log(job_id, "Wan 2.7-T2V on GPU")
+    except torch.cuda.OutOfMemoryError:
+        gc.collect(); torch.cuda.empty_cache()
+        pipe = WanVideoPipeline.from_pretrained(
+            WAN_27_PATH, torch_dtype=torch.bfloat16, local_files_only=True,
+        )
+        pipe.enable_model_cpu_offload()
+        log(job_id, "Wan 2.7-T2V with CPU offload (fallback)")
+
+    gen_device = "cuda" if next(pipe.transformer.parameters()).is_cuda else "cpu"
+    generator = torch.Generator(device=gen_device).manual_seed(42)
+
+    log(job_id, f"T2V inference: {num_frames} frames, {NUM_STEPS} steps, {IMG_WIDTH}x{IMG_HEIGHT}")
+    output = pipe(
+        prompt=prompt,
+        negative_prompt="static, blurry, worst quality, distorted, watermark",
+        height=IMG_HEIGHT,
+        width=IMG_WIDTH,
+        num_frames=num_frames,
+        num_inference_steps=NUM_STEPS,
+        guidance_scale=GUIDANCE_SCALE,
+        generator=generator,
+        output_type="np",
+    )
+    frames = output.frames[0]
+    log(job_id, f"got {len(frames)} frames @ {frames.shape[1:]} resolution")
+
+    del pipe; gc.collect(); torch.cuda.empty_cache()
+
+    # Encode to MP4
     with tempfile.TemporaryDirectory() as tmpdir:
         mp4_path = str(Path(tmpdir) / f"{job_id}.mp4")
         frames_to_mp4(frames, mp4_path, fps=FPS)

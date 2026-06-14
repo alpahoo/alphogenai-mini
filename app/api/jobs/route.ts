@@ -44,7 +44,9 @@ import { buildVoiceoverScript, type VoiceoverScene } from "@/lib/voiceover/voice
 export const maxDuration = 60;
 
 // All valid engine keys (Modal + EvoLink + Bailian + HeyGen)
+// wan_2_7 is the default open-source T2V model (replaces wan_i2v)
 const VALID_ENGINES = [
+  "wan_27",
   "wan_i2v",
   "seedance",
   "heygen_avatar_iv",
@@ -627,7 +629,7 @@ export async function POST(req: Request) {
       storyboard = capped.map((s, i) => ({
         scene_index: i,
         prompt: (s.prompt || enhancedPrompt).slice(0, 2000),
-        engine: (s.engine || safePreferredEngine || "wan_i2v") as import("@/lib/types").EngineKey,
+        engine: (s.engine || safePreferredEngine || "wan_2_7") as import("@/lib/types").EngineKey,
         duration_sec: Math.max(3, Math.min(10, s.duration_sec ?? 5)),
       }));
     } else {
@@ -762,7 +764,7 @@ export async function POST(req: Request) {
     // ── Route: Bailian vs EvoLink vs Modal (GPU) ──────────────────────────
     // (HeyGen avatar jobs are handled earlier and return before this point.)
     // Feature flag: transparently reroute a % of EvoLink traffic to Bailian
-    const rawEngineKey = safePreferredEngine ?? "wan_i2v";
+    const rawEngineKey = safePreferredEngine ?? "wan_2_7";
     const engineKey = maybeRerouteToBailian(rawEngineKey);
 
     if (isBailianEngine(engineKey)) {
@@ -937,7 +939,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, jobId: job.id, job });
     }
 
-    // ── Modal path: GPU models (wan_i2v, seedance legacy) ─────────────
+    // ── Modal path: GPU models (wan_2_7, seedance legacy) ─────────────
     const modalUrl = process.env.MODAL_WEBHOOK_URL;
     if (!modalUrl) {
       await supabase
@@ -968,7 +970,7 @@ export async function POST(req: Request) {
           ...(safeImageUrl && { image_url: safeImageUrl }),
           ...(safeReferences && { references: safeReferences }),
           // Only pass wan/seedance engines to Modal
-          preferred_engine: engineKey === "wan_i2v" ? "wan_i2v" : undefined,
+          preferred_engine: engineKey === "wan_2_7" ? "wan_2_7" : undefined,
         }),
       });
 
