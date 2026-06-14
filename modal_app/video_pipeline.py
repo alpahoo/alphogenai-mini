@@ -1141,7 +1141,8 @@ def apply_research_voiceover_to_video(job_id: str) -> str:
 
         # Mux the voice-over as the audio track. Seedance clips have minimal
         # native audio (mostly silence), so we simply replace it with the TTS
-        # narration, anchored to the video's length.
+        # narration. Use -t to anchor output to the video's length if the voice
+        # is longer (avoids stream length mismatch that crashes ffmpeg).
         mux_cmd = [
             "ffmpeg", "-y",
             "-i", str(video_path),
@@ -1149,7 +1150,6 @@ def apply_research_voiceover_to_video(job_id: str) -> str:
             "-map", "0:v", "-map", "1:a",
             "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
             "-movflags", "+faststart",
-            "-shortest",
             str(output_path),
         ]
         result = subprocess.run(mux_cmd, capture_output=True, text=True)
