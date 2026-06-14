@@ -50,7 +50,7 @@ webhook_image = (
 overlay_image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("ffmpeg", "fonts-dejavu-core")
-    .pip_install("pillow", "httpx", "boto3", "sentry-sdk", "cryptography")
+    .pip_install("pillow", "httpx", "boto3", "supabase", "sentry-sdk", "cryptography")
 )
 
 # ---------------------------------------------------------------------------
