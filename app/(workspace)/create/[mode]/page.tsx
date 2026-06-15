@@ -230,6 +230,7 @@ export default function CreateModePage({
   const composerRef = useRef<PromptComposerHandle>(null);
   const referenceJobPrefillRef = useRef<string | null>(null);
   const researchHandoffAppliedRef = useRef(false);
+  const promptParamAppliedRef = useRef(false);
   const [researchJobId, setResearchJobId] = useState<string | null>(null);
   const [composerRefs, setComposerRefs] = useState<ComposerReference[]>([]);
   // Images uploaded straight from the composer toolbar (→ @image chips). Kept
@@ -870,6 +871,22 @@ export default function CreateModePage({
       setError("Could not load the research storyboard handoff.");
     }
   }, [searchParams, planLoaded, planMaxScenes, planMaxDuration, selectedEngine, engineOptions]);
+
+  // Template Hub composer handoff: pre-fill the prompt from ?prompt=<encoded text>
+  // when arriving from the home page's "Tell your agent what to create" composer.
+  useEffect(() => {
+    if (!planLoaded) return;
+    if (promptParamAppliedRef.current) return;
+    if (searchParams.get("research_handoff") === "1") return;
+
+    const promptParam = searchParams.get("prompt");
+    if (!promptParam) return;
+
+    promptParamAppliedRef.current = true;
+    const decoded = decodeURIComponent(promptParam);
+    setPrompt(decoded);
+    composerRef.current?.setText(decoded);
+  }, [searchParams, planLoaded]);
 
   // Loading overlay steps — shows progress while waiting for job creation + redirect
   const loadingSteps = [
