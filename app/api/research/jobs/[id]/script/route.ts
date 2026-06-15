@@ -168,7 +168,7 @@ export async function POST(
       .eq('user_id', userId);
 
     // Generate via LLM
-    const prompt = buildScriptPrompt(job.topic, job.mode, angle, sourceSummaries);
+    const prompt = buildScriptPrompt(job.topic, job.mode, angle, sourceSummaries, job.target_duration_seconds ?? null);
     const llm = await callLLMForScript(prompt, RESEARCH_LLM_TIMEOUT_MS);
 
     if (llm.error) {

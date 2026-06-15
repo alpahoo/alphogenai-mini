@@ -139,6 +139,28 @@ function clampDuration(value: unknown): number {
   return Math.max(3, Math.min(10, Math.round(n)));
 }
 
+/**
+ * Proportionally rescale scene durations toward `target` seconds, each still
+ * clamped to [3,10] and rounded to an integer, with the rounding remainder
+ * applied to the last scene so the total matches as closely as the clamps allow.
+ * Mutates `plans` in place.
+ */
+function rebalanceDurations(plans: CinematicScenePlan[], target: number): void {
+  const total = plans.reduce((sum, p) => sum + p.duration_sec, 0);
+  if (total === 0) return;
+  const scale = target / total;
+  let allocated = 0;
+  for (const plan of plans) {
+    plan.duration_sec = Math.max(3, Math.min(10, Math.round(plan.duration_sec * scale)));
+    allocated += plan.duration_sec;
+  }
+  const remainder = Math.round(target) - allocated;
+  if (remainder !== 0) {
+    const last = plans[plans.length - 1];
+    last.duration_sec = Math.max(3, Math.min(10, last.duration_sec + remainder));
+  }
+}
+
 function domainOf(url: string): string | null {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
@@ -276,7 +298,13 @@ export function planCinematicScenes(input: PlannerInput): CinematicScenePlan[] {
     const baseVisual = str(raw.visual_intent) || str(raw.prompt) || title;
     const visual_intent = cap(baseVisual, VISUAL_MAX);
 
-    const camera_shot = pickEnum(raw.camera_shot, SHOTS, shotForPosition(profile, i, total));
+    let camera_shot = pickEnum(raw.camera_shot, SHOTS, shotForPosition(profile, i, total));
+    if (i > 0 && camera_shot === plans[i - 1].camera_shot) {
+      const fallbackShot = shotForPosition(profile, i, total);
+      camera_shot = fallbackShot !== plans[i - 1].camera_shot
+        ? fallbackShot
+        : SHOTS[(SHOTS.indexOf(plans[i - 1].camera_shot) + 1) % SHOTS.length];
+    }
     const camera_motion = pickEnum(raw.camera_motion, MOTIONS, profile.motion);
     const lighting = pickEnum(raw.lighting, LIGHTINGS, profile.lighting);
     const mood = pickEnum(raw.mood, MOODS, i === 0 ? 'curious' : profile.mood);
@@ -320,6 +348,15 @@ export function planCinematicScenes(input: PlannerInput): CinematicScenePlan[] {
       source_citation: asset.citation,
       risk_note,
     });
+  }
+
+  // Rebalance total duration toward the requested target if it deviates meaningfully.
+  const target = input.targetDurationSeconds;
+  if (target && target > 0) {
+    const totalDuration = plans.reduce((sum, p) => sum + p.duration_sec, 0);
+    if (Math.abs(totalDuration - target) / target > 0.15) {
+      rebalanceDurations(plans, target);
+    }
   }
 
   // Enforce DB size cap: drop trailing scenes, then truncate prompts if needed.

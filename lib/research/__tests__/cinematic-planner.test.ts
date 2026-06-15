@@ -43,7 +43,10 @@ describe('planCinematicScenes', () => {
 
   it('clamps duration to [3,10]', () => {
     const out = planCinematicScenes(
-      baseInput({ scenes: [{ title: 'A', prompt: 'p', duration_sec: 99 }, { title: 'B', prompt: 'p', duration_sec: 0 }] }),
+      baseInput({
+        targetDurationSeconds: null,
+        scenes: [{ title: 'A', prompt: 'p', duration_sec: 99 }, { title: 'B', prompt: 'p', duration_sec: 0 }],
+      }),
     );
     expect(out[0].duration_sec).toBe(10);
     expect(out[1].duration_sec).toBe(3);
@@ -151,6 +154,101 @@ describe('planCinematicScenes', () => {
     const out = planCinematicScenes(baseInput({ scenes: many }));
     expect(out.length).toBeGreaterThan(0);
     expect(JSON.stringify(out).length).toBeLessThanOrEqual(102400);
+  });
+
+  it('rebalances scene durations to match targetDurationSeconds when within reach', () => {
+    const out = planCinematicScenes(
+      baseInput({
+        targetDurationSeconds: 20,
+        scenes: [
+          { title: 'A', prompt: 'p', duration_sec: 3 },
+          { title: 'B', prompt: 'p', duration_sec: 3 },
+          { title: 'C', prompt: 'p', duration_sec: 4 },
+        ],
+      }),
+    );
+    expect(out.reduce((sum, s) => sum + s.duration_sec, 0)).toBe(20);
+    for (const s of out) {
+      expect(s.duration_sec).toBeGreaterThanOrEqual(3);
+      expect(s.duration_sec).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it('rebalances scene durations down when total is too high, clamped to [3,10]', () => {
+    const manyScenes = Array.from({ length: 8 }, (_, i) => ({ title: `S${i}`, prompt: 'p', duration_sec: 10 }));
+    const out = planCinematicScenes(baseInput({ targetDurationSeconds: 30, scenes: manyScenes }));
+    const total = out.reduce((sum, s) => sum + s.duration_sec, 0);
+    expect(total).toBeLessThan(80);
+    for (const s of out) {
+      expect(s.duration_sec).toBeGreaterThanOrEqual(3);
+      expect(s.duration_sec).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it('does not rebalance when total duration is already within tolerance of target', () => {
+    const out = planCinematicScenes(
+      baseInput({
+        targetDurationSeconds: 60,
+        scenes: [
+          { title: 'A', prompt: 'p', duration_sec: 9 },
+          { title: 'B', prompt: 'p', duration_sec: 10 },
+          { title: 'C', prompt: 'p', duration_sec: 10 },
+          { title: 'D', prompt: 'p', duration_sec: 10 },
+          { title: 'E', prompt: 'p', duration_sec: 10 },
+          { title: 'F', prompt: 'p', duration_sec: 9 },
+        ],
+      }),
+    );
+    expect(out.map((s) => s.duration_sec)).toEqual([9, 10, 10, 10, 10, 9]);
+  });
+
+  it('does not rebalance when targetDurationSeconds is null', () => {
+    const out = planCinematicScenes(
+      baseInput({
+        targetDurationSeconds: null,
+        scenes: [
+          { title: 'A', prompt: 'p', duration_sec: 3 },
+          { title: 'B', prompt: 'p', duration_sec: 3 },
+          { title: 'C', prompt: 'p', duration_sec: 3 },
+        ],
+      }),
+    );
+    expect(out.map((s) => s.duration_sec)).toEqual([3, 3, 3]);
+  });
+
+  it('overrides repeated consecutive camera_shot hints from the LLM', () => {
+    const out = planCinematicScenes(
+      baseInput({
+        mode: 'news',
+        targetDurationSeconds: null,
+        scenes: [
+          { title: 'A', prompt: 'p', camera_shot: 'medium' },
+          { title: 'B', prompt: 'p', camera_shot: 'medium' },
+          { title: 'C', prompt: 'p', camera_shot: 'medium' },
+        ],
+      }),
+    );
+    expect(out[0].camera_shot).toBe('medium');
+    expect(out[1].camera_shot).not.toBe(out[0].camera_shot);
+    expect(out[2].camera_shot).not.toBe(out[1].camera_shot);
+  });
+
+  it('falls back to the next vocabulary shot when both the LLM hint and the mode default repeat the previous shot', () => {
+    const out = planCinematicScenes(
+      baseInput({
+        mode: 'tutorial',
+        targetDurationSeconds: null,
+        sources: [],
+        scenes: [
+          { title: 'A', prompt: 'p' },
+          { title: 'B', prompt: 'p', camera_shot: 'medium' },
+          { title: 'C', prompt: 'p', camera_shot: 'medium' },
+        ],
+      }),
+    );
+    expect(out[1].camera_shot).toBe('medium');
+    expect(out[2].camera_shot).toBe('close_up');
+    expect(out[2].camera_shot).not.toBe(out[1].camera_shot);
   });
 
   it('never leaks provider/model names into output', () => {

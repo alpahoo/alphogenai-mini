@@ -232,6 +232,21 @@ export function computeQualityScore(subscores: Record<string, unknown>): number 
 }
 
 /**
+ * Build the pacing-guidance line for buildScriptPrompt: ties the suggested
+ * scene count and total duration to the job's target_duration_seconds
+ * (optional, 3-600s). Falls back to the previous flexible framing when unset.
+ */
+export function buildPacingGuidance(targetDurationSeconds?: number | null): string {
+  if (!targetDurationSeconds || targetDurationSeconds <= 0) {
+    return 'Pacing: no fixed duration was requested — aim for natural short-form pacing, typically 4-6 scenes.';
+  }
+  const minScenes = Math.max(1, Math.min(10, Math.ceil(targetDurationSeconds / 10)));
+  const maxScenes = Math.max(minScenes, Math.min(10, Math.round(targetDurationSeconds / 4)));
+  const sceneCountText = minScenes === maxScenes ? `${minScenes}` : `${minScenes}-${maxScenes}`;
+  return `Pacing: the finished video should be about ${targetDurationSeconds} seconds long. Plan ${sceneCountText} scenes so the SUM of all "duration_sec" values is close to ${targetDurationSeconds} (within a couple of seconds).`;
+}
+
+/**
  * Build the LLM prompt from job + angle + extracted source excerpts.
  */
 export function buildScriptPrompt(
@@ -239,11 +254,14 @@ export function buildScriptPrompt(
   mode: string,
   angle: { title: string; hook: string; positioning?: string | null },
   sourceSummaries: string[],
+  targetDurationSeconds?: number | null,
 ): string {
   const sourceExcerpts = sourceSummaries
     .slice(0, 5)
     .map((s) => s.slice(0, 500))
     .join('\n---\n');
+
+  const pacing = buildPacingGuidance(targetDurationSeconds);
 
   return `Topic: ${topic}
 Content Mode: ${mode}
@@ -257,6 +275,8 @@ Extracted Sources Summary:
 ${sourceExcerpts || '(no extracted sources available)'}
 
 Produce a complete short-form video script for this angle, plus a cinematic storyboard.
+
+${pacing}
 
 Return ONLY a JSON object (no markdown, no code fences) with this shape:
 {
@@ -289,7 +309,9 @@ Return ONLY a JSON object (no markdown, no code fences) with this shape:
 
 Rules:
 - Each scene needs a non-empty title and prompt, duration_sec between 3 and 10.
-- For camera_shot/camera_motion/lighting/mood, pick exactly ONE value from the listed options; make scenes cinematic and varied (not generic).
+- For camera_shot/camera_motion/lighting/mood, pick exactly ONE value from the listed options.
+- Each scene's "visual_intent" must depict a DIFFERENT concrete subject, action, or location than every other scene — do not reuse the same setting or subject across scenes unless showing a clear progression (e.g. before vs. after). Ground it in specifics from the sources above, not generic filler like "a person looking at a screen".
+- Do not repeat the same "camera_shot" value in two consecutive scenes.
 - Tailor cinematic choices to the Content Mode (news=reportage/citations; tutorial=screen capture/steps/zoom; product=product shots/benefit/demo; competitor=split-screen/neutral benchmark).
 - Do not invent asset references, asset IDs, or face IDs, and never make "exact try-on"/"exact face" claims; reference_asset_hint may only describe real provided/extracted source media, else null.`;
 }
