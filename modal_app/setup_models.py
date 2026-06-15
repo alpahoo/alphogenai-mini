@@ -9,7 +9,7 @@ Usage:
 
 Models downloaded:
   - stabilityai/sdxl-turbo             (T2I, ~3.5GB)  — Free plan
-  - Wan-AI/Wan2.7-T2V-A14B-Diffusers   (T2V, ~28GB)   — Free plan (default, replaces Wan 2.2)
+  - Wan-AI/Wan2.2-I2V-A14B-Diffusers   (I2V, ~28GB)   — Free plan (SVI, MoE 27B/14B active)
   - Kijai/WanVideo_comfy LoRA           (SVI 2.0 Pro)  — Free plan
   - Lightricks/LTX-Video               (T2V, ~9GB)    — Pro plan
 """
@@ -87,9 +87,9 @@ def download_all_models():
         print("[1/4] SDXL-Turbo ✓ (all tokenizer files verified)")
 
     # ------------------------------------------------------------------
-    # 2. Wan2.7-T2V-A14B (Text-to-Video — default, replaces Wan 2.2)
+    # 2. Wan2.2-I2V-A14B (Image-to-Video for SVI — MoE 27B total, 14B active)
     # ------------------------------------------------------------------
-    wan_path = Path(MODEL_DIR) / "wan2.7-t2v-a14b"
+    wan_path = Path(MODEL_DIR) / "wan2.2-i2v-a14b"
     # Wan 14B uses T5 tokenizer (SentencePiece) — verify spiece.model exists
     wan_required = [
         wan_path / "model_index.json",
@@ -97,26 +97,26 @@ def download_all_models():
     ]
     wan_complete = wan_path.exists() and all(f.exists() for f in wan_required)
     if wan_complete:
-        print("[2/4] Wan2.7-T2V-A14B — already downloaded (tokenizer OK), skipping")
+        print("[2/4] Wan2.2-I2V-A14B — already downloaded (tokenizer OK), skipping")
     else:
         if wan_path.exists():
             import shutil
             missing = [str(f.relative_to(wan_path)) for f in wan_required if not f.exists()]
-            print(f"[2/4] Wan2.7-T2V-A14B — incomplete (missing: {missing}), re-downloading...")
+            print(f"[2/4] Wan2.2-I2V-A14B — incomplete (missing: {missing}), re-downloading...")
             shutil.rmtree(str(wan_path))
         else:
-            print("[2/4] Downloading Wan2.7-T2V-A14B-Diffusers (~28GB)...")
+            print("[2/4] Downloading Wan2.2-I2V-A14B-Diffusers (~28GB)...")
         # Use snapshot_download to get ALL files (save_pretrained misses tokenizer files)
         from huggingface_hub import snapshot_download
         snapshot_download(
-            repo_id="Wan-AI/Wan2.7-T2V-A14B-Diffusers",
+            repo_id="Wan-AI/Wan2.2-I2V-A14B-Diffusers",
             local_dir=str(wan_path),
             local_dir_use_symlinks=False,
         )
         missing = [str(f.relative_to(wan_path)) for f in wan_required if not f.exists()]
         if missing:
-            raise RuntimeError(f"Wan 2.7 download incomplete, still missing: {missing}")
-        print("[2/4] Wan2.7-T2V-A14B ✓ (tokenizer verified)")
+            raise RuntimeError(f"Wan 14B download incomplete, still missing: {missing}")
+        print("[2/4] Wan2.2-I2V-A14B ✓ (tokenizer verified)")
 
     # ------------------------------------------------------------------
     # 3. SVI 2.0 Pro LoRA weights (for Wan2.2-I2V-A14B)
@@ -235,7 +235,7 @@ def download_all_models():
     print("=" * 60)
     print("All models downloaded to /models/")
     print("  /models/sdxl-turbo/")
-    print("  /models/wan2.7-t2v-a14b/")
+    print("  /models/wan2.2-i2v-a14b/")
     print(f"  /models/svi-lora/{lora_filename}")
     print("  /models/ltx-video/")
     print("  /models/realesrgan-x4plus/")
