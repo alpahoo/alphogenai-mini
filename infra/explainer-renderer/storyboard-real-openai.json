@@ -1,0 +1,65 @@
+{
+  "meta": {
+    "note": "REAL research storyboard from job a793528d (OpenAI news, mode=news). Old format (title/prompt only, French) — title -> onscreen_text, prompt -> voiceover_line. For e2e demo on real DB data.",
+    "brand": {
+      "name": "OpenAI",
+      "primary": "#0d0d0d",
+      "accent": "#10a37f",
+      "logo_url": "",
+      "product_url": "https://openai.com/news/",
+      "font": "Inter"
+    }
+  },
+  "scenes": [
+    {
+      "title": "Hook shot",
+      "duration_sec": 5,
+      "camera_motion": "slow_push_in",
+      "onscreen_text": "Les dernières nouveautés OpenAI",
+      "voiceover_line": "Une personne regarde un ordinateur avec un écran vide, puis soudain, une vidéo de haute qualité apparaît.",
+      "template": "hero"
+    },
+    {
+      "title": "GPT-5.4 mini",
+      "duration_sec": 6,
+      "camera_motion": "slow_push_in",
+      "onscreen_text": "GPT-5.4 mini",
+      "voiceover_line": "Une interface de ChatGPT avec le modèle GPT cinq point quatre mini sélectionné, montrant les capacités de traitement avancées.",
+      "template": "screenshot_zoom"
+    },
+    {
+      "title": "Sora",
+      "duration_sec": 6,
+      "camera_motion": "static",
+      "onscreen_text": "Sora : du texte à la vidéo",
+      "voiceover_line": "Une personne utilise Sora pour créer une vidéo à partir de texte, avec des éléments visuels et des animations qui apparaissent.",
+      "template": "hero"
+    },
+    {
+      "title": "Cas d'usage",
+      "duration_sec": 5,
+      "camera_motion": "static",
+      "onscreen_text": "Des cas d'usage concrets",
+      "voiceover_line": "Des exemples de contenus visuels créés avec GPT cinq point quatre mini et Sora, comme des vidéos éducatives et des publicités.",
+      "template": "bullets",
+      "bullets": ["Vidéos éducatives", "Publicités", "Contenu marketing"]
+    },
+    {
+      "title": "Limites",
+      "duration_sec": 5,
+      "camera_motion": "static",
+      "onscreen_text": "Les limites à connaître",
+      "voiceover_line": "Un écran d'ordinateur montre des messages d'erreur ou des limitations de débit, et une personne regarde avec déception.",
+      "template": "comparison",
+      "comparison": { "before_label": "Limites", "before": "Quotas et débits", "after_label": "Bientôt", "after": "Accès élargi" }
+    },
+    {
+      "title": "Conclusion",
+      "duration_sec": 5,
+      "camera_motion": "static",
+      "onscreen_text": "À suivre sur openai.com",
+      "voiceover_line": "Vous avez maintenant compris les capacités et les limites de GPT cinq point quatre mini et de Sora.",
+      "template": "cta"
+    }
+  ]
+}

@@ -171,6 +171,9 @@ export default function ResearchDetailPage() {
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [explainerJob, setExplainerJob] = useState<
+    { id: string; status: string; url: string | null } | null
+  >(null);
 
   async function authHeaders() {
     const {
@@ -378,6 +381,45 @@ export default function ResearchDetailPage() {
       setError("Could not prepare the Director handoff.");
     }
   }
+
+  async function generateExplainer() {
+    if (!job || !script?.approved || scenes.length === 0) {
+      setError("Approve the storyboard before rendering an explainer.");
+      return;
+    }
+    setAction("explainer");
+    setError(null);
+    try {
+      const res = await fetch(`/api/research/jobs/${jobId}/explainer`, {
+        method: "POST",
+        headers: await authHeaders(),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Explainer render failed to start.");
+      setExplainerJob({ id: data.job_id, status: "in_progress", url: null });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not start the explainer render.");
+    } finally {
+      setAction(null);
+    }
+  }
+
+  // Poll the explainer job until it finishes (render is async, ~minutes).
+  useEffect(() => {
+    if (!explainerJob || explainerJob.status !== "in_progress") return;
+    const timer = setInterval(async () => {
+      const { data } = await supabase
+        .from("jobs")
+        .select("status, output_url_final")
+        .eq("id", explainerJob.id)
+        .single();
+      if (data && (data.status === "done" || data.status === "failed")) {
+        setExplainerJob({ id: explainerJob.id, status: data.status, url: data.output_url_final ?? null });
+        clearInterval(timer);
+      }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [explainerJob, supabase]);
 
   const readySources = sources.filter((s) => s.extraction_status === "success").length;
   const selectedAngle = angles.find((a) => a.selected);
@@ -823,6 +865,46 @@ export default function ResearchDetailPage() {
                 {script?.approved ? "Send to Director" : "Approve first"}
                 <ArrowRight className="h-4 w-4" />
               </button>
+            </div>
+
+            <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+              <h2 className="text-sm font-semibold text-neutral-950">Explainer video</h2>
+              <p className="mt-2 text-sm leading-6 text-neutral-500">
+                Render a code-based explainer (screenshots, animated text, voice-over) — a few cents,
+                no AI footage. Appears in Library when ready.
+              </p>
+              <button
+                type="button"
+                onClick={generateExplainer}
+                disabled={!!action || !canSendToDirector || explainerJob?.status === "in_progress"}
+                className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${
+                  canSendToDirector && explainerJob?.status !== "in_progress"
+                    ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                    : "cursor-not-allowed bg-neutral-100 text-neutral-400"
+                }`}
+              >
+                {action === "explainer" || explainerJob?.status === "in_progress" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Wand2 className="h-4 w-4" />
+                )}
+                {script?.approved ? "Generate Explainer" : "Approve first"}
+              </button>
+              {explainerJob && (
+                <p className="mt-3 text-sm">
+                  {explainerJob.status === "in_progress" && (
+                    <span className="text-neutral-500">Rendering… (a few minutes)</span>
+                  )}
+                  {explainerJob.status === "done" && (
+                    <Link href="/library" className="font-medium text-emerald-600 hover:underline">
+                      Ready — view in Library →
+                    </Link>
+                  )}
+                  {explainerJob.status === "failed" && (
+                    <span className="text-red-600">Render failed. Try again.</span>
+                  )}
+                </p>
+              )}
             </div>
           </aside>
         </div>

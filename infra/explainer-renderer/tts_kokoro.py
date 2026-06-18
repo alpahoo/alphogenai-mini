@@ -25,6 +25,13 @@ from kokoro_onnx import Kokoro
 MODEL_DIR = os.environ.get("KOKORO_MODEL_DIR", ".")
 DEFAULT_VOICE = "af_heart"  # warm female; product-promo friendly
 
+# Kokoro voice prefix -> language code (first letter encodes the accent/lang).
+LANG_BY_PREFIX = {"a": "en-us", "b": "en-gb", "f": "fr-fr", "j": "ja", "z": "zh", "h": "hi", "i": "it", "p": "pt-br", "e": "es"}
+
+
+def lang_for_voice(voice: str) -> str:
+    return LANG_BY_PREFIX.get((voice or "a")[0], "en-us")
+
 
 def main():
     if len(sys.argv) < 3:
@@ -48,7 +55,7 @@ def main():
         line = (scene.get("voiceover_line") or "").strip()
         if not line:
             continue
-        samples, sr = kokoro.create(line, voice=voice, speed=1.0, lang="en-us")
+        samples, sr = kokoro.create(line, voice=voice, speed=1.0, lang=lang_for_voice(voice))
         rel = f"assets/vo-{i}.wav"
         path = os.path.join(out_dir, f"vo-{i}.wav")
         sf.write(path, samples, sr)

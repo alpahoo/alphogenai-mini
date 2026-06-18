@@ -128,6 +128,44 @@ export async function triggerApplyResearchVoiceover(jobId: string): Promise<stri
 }
 
 /**
+ * Trigger a code-based explainer render (slides + Kokoro voice) on Modal for a
+ * research-backed job. Fire-and-forget: Modal renders (CPU), uploads to R2, and
+ * sets jobs.output_url_final + status="done"; the Next.js poller / Library then
+ * observes it. Mirrors the other webhook triggers in this file.
+ */
+export async function triggerRenderExplainer(
+  jobId: string,
+  payload: {
+    storyboard: unknown;
+    brand?: Record<string, unknown> | null;
+    product_url?: string | null;
+    voice?: string;
+  }
+): Promise<void> {
+  const url = `${modalBase()}/render-explainer`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-webhook-secret": secret(),
+    },
+    body: JSON.stringify({
+      job_id: jobId,
+      storyboard: payload.storyboard,
+      brand: payload.brand ?? null,
+      product_url: payload.product_url ?? null,
+      voice: payload.voice ?? "af_heart",
+    }),
+    // Webhook returns in <1 s after Modal accepts the spawn
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(`Modal /render-explainer ${res.status}: ${detail.slice(0, 200)}`);
+  }
+}
+
+/**
  * Apply deterministic post-production overlays to an already completed video.
  * Unlike the other Modal calls in this file, this returns the branded video URL
  * because the explicit overlay route writes it to jobs.output_url_final.

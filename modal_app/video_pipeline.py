@@ -82,6 +82,35 @@ overlay_image = (
     .pip_install("pillow", "httpx", "boto3", "supabase", "sentry-sdk", "cryptography")
 )
 
+# Explainer renderer (code-based slides + Kokoro voice) — CPU only, no GPU.
+# Mirrors infra/explainer-renderer/Dockerfile: Node 22 (HyperFrames) + chromium
+# + ffmpeg + python/kokoro-onnx + the model baked in. Renderer scripts (build.js,
+# tts_kokoro.py) are mounted from infra/explainer-renderer/.
+explainer_image = (
+    modal.Image.from_registry("node:22-bookworm-slim", add_python="3.11")
+    .apt_install(
+        "ffmpeg", "chromium", "espeak-ng", "curl", "ca-certificates",
+        "fonts-liberation", "fonts-noto-color-emoji",
+        "libnss3", "libatk1.0-0", "libatk-bridge2.0-0", "libcups2", "libdrm2",
+        "libxkbcommon0", "libxcomposite1", "libxdamage1", "libxfixes3",
+        "libxrandr2", "libgbm1", "libasound2", "libpango-1.0-0", "libcairo2",
+    )
+    .pip_install("kokoro-onnx", "soundfile", "supabase", "boto3", "sentry-sdk", "cryptography")
+    .run_commands(
+        "mkdir -p /models",
+        "curl -fsSL -o /models/kokoro-v1.0.onnx https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
+        "curl -fsSL -o /models/voices-v1.0.bin https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
+        "npx --yes hyperframes@0.6.110 --help >/dev/null 2>&1 || true",
+    )
+    .env({
+        "PUPPETEER_EXECUTABLE_PATH": "/usr/bin/chromium",
+        "PUPPETEER_SKIP_DOWNLOAD": "1",
+        "KOKORO_MODEL_DIR": "/models",
+    })
+    .add_local_file("infra/explainer-renderer/build.js", "/app/build.js", copy=True)
+    .add_local_file("infra/explainer-renderer/tts_kokoro.py", "/app/tts_kokoro.py", copy=True)
+)
+
 # ---------------------------------------------------------------------------
 # Infra
 # ---------------------------------------------------------------------------
@@ -1814,6 +1843,73 @@ def generate_clip_ltx23(
 
 
 # ===========================================================================
+# Explainer (code-based slides + Kokoro voice) — CPU only, ~cents/video
+# ===========================================================================
+@app.function(image=explainer_image, secrets=[secrets], timeout=1200, retries=0)
+def render_explainer(job_id: str, storyboard: dict, brand: Optional[dict] = None,
+                     product_url: Optional[str] = None, voice: str = "af_heart") -> str:
+    """Render an explainer MP4 from a research storyboard and write it to the job.
+
+    Pipeline (all CPU): product screenshot (chromium) -> Kokoro TTS per scene ->
+    HyperFrames composition (build.js) -> render -> upload R2 -> update_job done.
+    Reuses the same renderer scripts as the VPS service (build.js, tts_kokoro.py).
+    """
+    import json
+    import subprocess
+    import tempfile
+    from pathlib import Path
+
+    try:
+        update_job(job_id, status="in_progress", current_stage="rendering_explainer")
+        sb = dict(storyboard or {})
+        sb.setdefault("meta", {})
+        if brand:
+            sb["meta"]["brand"] = brand
+        eff_voice = (brand or {}).get("voice") or voice
+
+        with tempfile.TemporaryDirectory() as work:
+            assets = Path(work) / "assets"
+            assets.mkdir(parents=True, exist_ok=True)
+            sb_path = Path(work) / "storyboard.json"
+            sb_path.write_text(json.dumps(sb))
+
+            if product_url and str(product_url).startswith(("http://", "https://")):
+                try:
+                    subprocess.run([
+                        "chromium", "--headless=new", "--no-sandbox", "--disable-gpu",
+                        "--hide-scrollbars", "--window-size=1440,900",
+                        "--virtual-time-budget=9000",
+                        f"--screenshot={assets / 'shot.png'}", product_url,
+                    ], timeout=70, check=False)
+                except Exception as e:
+                    log(job_id, f"[explainer] screenshot skipped: {e}")
+
+            subprocess.run(["python3", "/app/tts_kokoro.py", str(sb_path), str(assets), eff_voice],
+                           check=True, timeout=400)
+            subprocess.run(["node", "/app/build.js", str(sb_path), work], check=True, timeout=120)
+            subprocess.run(["npx", "--yes", "hyperframes@0.6.110", "render"],
+                           cwd=work, check=True, timeout=900)
+
+            renders = sorted((Path(work) / "renders").glob("*.mp4"))
+            if not renders:
+                raise RuntimeError("no mp4 produced")
+            video_bytes = renders[-1].read_bytes()
+
+        url = upload_to_r2(video_bytes, job_id, suffix="_explainer")
+        update_job(job_id, status="done", current_stage="completed",
+                   video_url=url, output_url_final=url)
+        log(job_id, f"[explainer] DONE → {url} ({len(video_bytes)//1024} KB)")
+        return url
+    except Exception as e:
+        import traceback
+        log(job_id, f"[explainer] FAILED:\n{traceback.format_exc()}")
+        update_job(job_id, status="failed", current_stage="failed",
+                   error_message=normalize_error(e)[:500])
+        _report_sentry(e, job_id=job_id)
+        raise
+
+
+# ===========================================================================
 # Orchestrator (no GPU — just coordinates)
 # ===========================================================================
 
@@ -2099,6 +2195,13 @@ def webhook():
     class ConcatRequest(BaseModel):
         job_id: str
 
+    class RenderExplainerRequest(BaseModel):
+        job_id: str
+        storyboard: dict
+        brand: Optional[dict] = None
+        product_url: Optional[str] = None
+        voice: str = "af_heart"
+
     @web.post("/webhook")
     async def trigger(req: JobRequest, x_webhook_secret: str = Header(None)):
         expected = os.environ.get("MODAL_WEBHOOK_SECRET")
@@ -2168,6 +2271,25 @@ def webhook():
             await concat_and_finalize.spawn.aio(req.job_id)
         except Exception as e:
             print(f"[webhook /concat-scenes] spawn failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e)[:200])
+        return {"success": True, "job_id": req.job_id}
+
+    @web.post("/render-explainer")
+    async def render_explainer_ep(req: RenderExplainerRequest, x_webhook_secret: str = Header(None)):
+        """Render a code-based explainer (slides + Kokoro voice) for a research job.
+
+        Spawns render_explainer (CPU, no GPU). The job is marked done with
+        output_url_final when finished; the Next.js poller / Library observes it.
+        """
+        expected = os.environ.get("MODAL_WEBHOOK_SECRET")
+        if expected and x_webhook_secret != expected:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        try:
+            await render_explainer.spawn.aio(
+                req.job_id, req.storyboard, req.brand, req.product_url, req.voice,
+            )
+        except Exception as e:
+            print(f"[webhook /render-explainer] spawn failed: {e}")
             raise HTTPException(status_code=500, detail=str(e)[:200])
         return {"success": True, "job_id": req.job_id}
 
