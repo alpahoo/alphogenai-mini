@@ -1,0 +1,13 @@
+{
+  "name": "explainer-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AlphoGenAI explainer render service — storyboard -> Kokoro TTS -> HyperFrames -> MP4 (CPU, VPS)",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

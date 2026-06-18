@@ -1,0 +1,15 @@
+services:
+  explainer-renderer:
+    build: .
+    image: explainer-renderer:dev
+    container_name: explainer-renderer
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # 127.0.0.1 only — reached via the existing gateway ingress + bearer token,
+      # same pattern as research-gateway.
+      - "127.0.0.1:9100:9100"
+    # Respect VPS RAM: one render at a time (server enforces concurrency=1 too).
+    mem_limit: 3g
+    cpus: "1.5"
+    shm_size: "1g"   # headless Chrome needs shared memory for stable rendering

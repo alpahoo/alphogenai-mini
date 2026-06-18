@@ -1,0 +1,96 @@
+{
+  "meta": {
+    "note": "Sample Product-mode storyboard for the explainer POC. Shape mirrors CinematicScenePlan[] from lib/research/cinematic-planner.ts. Used only to judge render quality offline.",
+    "brand": {
+      "name": "Wise",
+      "primary": "#163300",
+      "accent": "#9fe870",
+      "logo_url": "https://wise.com/public-resources/assets/logos/wise/brand_logo.svg",
+      "product_url": "https://wise.com",
+      "font": "Inter"
+    }
+  },
+  "scenes": [
+    {
+      "title": "Opening hook",
+      "duration_sec": 6,
+      "camera_shot": "establishing",
+      "camera_motion": "slow_push_in",
+      "lighting": "clean_ui",
+      "mood": "trustworthy",
+      "onscreen_text": "International payments without hidden fees",
+      "voiceover_line": "Sending money across borders shouldn't cost you a fortune.",
+      "visual_intent": "Brand hero with logo and headline",
+      "template": "hero",
+      "source_citation": null
+    },
+    {
+      "title": "Product in action",
+      "duration_sec": 7,
+      "camera_shot": "screen_capture",
+      "camera_motion": "slow_push_in",
+      "lighting": "clean_ui",
+      "mood": "trustworthy",
+      "onscreen_text": "Hold and convert 40+ currencies",
+      "voiceover_line": "Hold and convert over 40 currencies at the real mid-market exchange rate.",
+      "visual_intent": "Product screenshot with ken-burns zoom",
+      "template": "screenshot_zoom",
+      "source_citation": null
+    },
+    {
+      "title": "Key benefits",
+      "duration_sec": 8,
+      "camera_shot": "insert",
+      "camera_motion": "static",
+      "lighting": "clean_ui",
+      "mood": "authoritative",
+      "onscreen_text": "Built for a world without borders",
+      "voiceover_line": "Send to family, pay suppliers, or get paid like a local with your own account details.",
+      "visual_intent": "Three animated benefit bullets",
+      "template": "bullets",
+      "bullets": ["Real mid-market rate", "No hidden markups", "Your own local account details"],
+      "source_citation": null
+    },
+    {
+      "title": "Why it's different",
+      "duration_sec": 7,
+      "camera_shot": "split_screen",
+      "camera_motion": "static",
+      "lighting": "clean_ui",
+      "mood": "authoritative",
+      "onscreen_text": "No surprise fees",
+      "voiceover_line": "No hidden markups, no surprise fees, just money that moves the way it should.",
+      "visual_intent": "Before/after comparison",
+      "template": "comparison",
+      "comparison": { "before_label": "Traditional banks", "before": "2–5% hidden markup", "after_label": "Wise", "after": "Real rate + small upfront fee" },
+      "source_citation": null
+    },
+    {
+      "title": "Social proof",
+      "duration_sec": 6,
+      "camera_shot": "insert",
+      "camera_motion": "slow_push_in",
+      "lighting": "studio_key",
+      "mood": "trustworthy",
+      "onscreen_text": "Trusted by 16M+ people and businesses",
+      "voiceover_line": "Over 16 million people and businesses already trust Wise with their money.",
+      "visual_intent": "Large statistic reveal",
+      "template": "stat",
+      "stat": { "value": "16M+", "label": "people & businesses trust Wise" },
+      "source_citation": "wise.com"
+    },
+    {
+      "title": "Call to action",
+      "duration_sec": 5,
+      "camera_shot": "medium",
+      "camera_motion": "static",
+      "lighting": "studio_key",
+      "mood": "energetic",
+      "onscreen_text": "Join them at wise.com",
+      "voiceover_line": "One account, 40+ currencies, zero nonsense. Start sending money the smarter way.",
+      "visual_intent": "CTA with URL",
+      "template": "cta",
+      "source_citation": null
+    }
+  ]
+}
