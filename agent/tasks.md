@@ -1019,3 +1019,13 @@ Contraintes :
 - Reste V1+ : polish thumbnails, éventuelle édition du rôle de référence,
   e2e visuel authentifié après déploiement.
 
+### [T-1120] Premium UI — Research / Explainer / Render Studio — `status: todo` · `owner: claude`
+- T-1120a livré (docs-only) : `docs/product/research-explainer-premium-ui-spec.md` —
+  vision UX premium 4 écrans (Research Home command center, Plan Review, Explainer
+  Studio éditable + détails cinématiques, Render/Post-production) + navigation
+  Home→Review→Studio→Render→Job/Social Pack + wireframes + existant/manquant + non-goals.
+- Scope : docs-only, aucun runtime/route/composant/migration ; fidèle au mockup
+  validé avec Codex. Review Paul requise avant toute implémentation UI.
+- Reste : T-1120b Research Home polish, T-1120c Plan Review layout, T-1120d Explainer
+  Studio layout, T-1120e Render/Post-production panel, T-1120f Visual QA desktop/mobile.
+

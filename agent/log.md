@@ -12,11 +12,22 @@ EntrÃ©e la plus rÃ©cente en haut. Format :
 
 ---
 
-## 2026-06-12 — Codex — T-1110d Research source media handoff
-- Fait : affichage `Suggested references` sur `/research/[id]`, sélection explicite des médias collectés, copie serveur vers le bucket privé `references`, puis passage des références sélectionnées au Create flow via le handoff Research.
-- Fichiers modifiés : `app/(workspace)/research/[id]/page.tsx`, `app/(workspace)/create/[mode]/page.tsx`, `app/api/research/jobs/[id]/media/[mediaId]/select/route.ts`, `agent/tasks.md`.
+## 2026-06-18 â€” Claude â€” T-1120a Premium UI spec (docs-only)
+- Fait : crÃ©Ã© `docs/product/research-explainer-premium-ui-spec.md` â€” spec visuelle premium
+  pour Research/Explainer/Render Studio (4 Ã©crans + wireframes ASCII + navigation
+  Homeâ†’Reviewâ†’Studioâ†’Renderâ†’Job/Social Pack + existant/manquant + non-goals + dÃ©coupage T-1120bâ€¦f).
+- Fichiers modifiÃ©s : `docs/product/research-explainer-premium-ui-spec.md` (nouveau),
+  `agent/tasks.md`, `agent/log.md`.
+- Tests : docs-only, aucun runtime touchÃ© (pas de build requis).
+- Prochaine Ã©tape : review Paul avant toute implÃ©mentation UI ; puis T-1120b (Research Home).
+
+---
+
+## 2026-06-12 ï¿½ Codex ï¿½ T-1110d Research source media handoff
+- Fait : affichage `Suggested references` sur `/research/[id]`, sï¿½lection explicite des mï¿½dias collectï¿½s, copie serveur vers le bucket privï¿½ `references`, puis passage des rï¿½fï¿½rences sï¿½lectionnï¿½es au Create flow via le handoff Research.
+- Fichiers modifiï¿½s : `app/(workspace)/research/[id]/page.tsx`, `app/(workspace)/create/[mode]/page.tsx`, `app/api/research/jobs/[id]/media/[mediaId]/select/route.ts`, `agent/tasks.md`.
 - Tests : `npm test -- --run` 585/585, `npx tsc --noEmit -p tsconfig.json` clean, `npm run build` OK.
-- Prochaine étape : e2e authentifié après déploiement Vercel ; polish V1+ si besoin (rôle de référence éditable, thumbnails fallback plus riche).
+- Prochaine ï¿½tape : e2e authentifiï¿½ aprï¿½s dï¿½ploiement Vercel ; polish V1+ si besoin (rï¿½le de rï¿½fï¿½rence ï¿½ditable, thumbnails fallback plus riche).
 
 ---
 ## 2026-06-11 â€” Claude (Fable 5) â€” Docs + research schema fix
