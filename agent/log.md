@@ -11,6 +11,13 @@ EntrÃ©e la plus rÃ©cente en haut. Format :
 ```
 
 ---
+## 2026-06-19 - Codex - T-1201 Premium Research/Explainer Studio UI spec
+- Fait : spec docs-only pour transformer le moteur Research/Explainer existant en experience studio premium review-first, sans runtime/DB/provider/migration.
+- Fichiers modifies : `docs/product/research-explainer-premium-ui-spec.md`, `agent/tasks.md`, `agent/log.md`.
+- Tests : non lances (docs-only).
+- Prochaine etape : review Claude/CTO puis T-1202 Research Home clarity/loading pass ou T-1204 Explainer Studio review-before-render.
+
+---
 
 ## 2026-06-12 — Codex — T-1110d Research source media handoff
 - Fait : affichage `Suggested references` sur `/research/[id]`, sélection explicite des médias collectés, copie serveur vers le bucket privé `references`, puis passage des références sélectionnées au Create flow via le handoff Research.

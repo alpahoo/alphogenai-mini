@@ -1019,3 +1019,19 @@ Contraintes :
 - Reste V1+ : polish thumbnails, éventuelle édition du rôle de référence,
   e2e visuel authentifié après déploiement.
 
+
+---
+
+## Axe 12 - Research / Explainer Premium Studio `status: in_progress`
+
+Goal: transform the working Research/Explainer engine into a premium, review-first studio experience without changing providers, DB, or runtime contracts in the spec phase.
+
+| Task | Status | Owner | Notes |
+|---|---|---|---|
+| T-1201 Premium Research/Explainer UI spec | done | Codex | Docs-only spec: `docs/product/research-explainer-premium-ui-spec.md`. |
+| T-1202 Research Home clarity/loading pass | todo | Codex/Claude | Tooltips, examples, loading feedback, clearer recent plans. No DB. |
+| T-1203 Research Plan Review compact UX | todo | Codex/Claude | Compact source list, selected references tray, clearer angle/script/storyboard review. |
+| T-1204 Explainer Studio review-before-render | todo | Codex/Claude | Script/scenes/assets/voice/brand/render tabs before calling render. |
+| T-1205 Voice and brand controls | todo | Codex/Claude | Voice preview, honest voice mode labels, brand/overlay controls. |
+| T-1206 Post-generation action center | todo | Codex/Claude | Consolidate Add voice-over, Apply branding, export, reference, duplicate. |
+| T-1207 Visual QA and mobile pass | todo | Codex/Claude | Desktop/mobile screenshots, text overflow, sticky rail, auth smoke. |
