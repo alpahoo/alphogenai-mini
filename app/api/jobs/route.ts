@@ -46,6 +46,7 @@ export const maxDuration = 60;
 // All valid engine keys (Modal + EvoLink + Bailian + HeyGen)
 const VALID_ENGINES = [
   "wan_i2v",
+  "ltx_2_3",
   "seedance",
   "heygen_avatar_iv",
   "heygen_avatar_shots",
@@ -967,8 +968,10 @@ export async function POST(req: Request) {
           scene_count: storyboard.length,
           ...(safeImageUrl && { image_url: safeImageUrl }),
           ...(safeReferences && { references: safeReferences }),
-          // Only pass wan/seedance engines to Modal
-          preferred_engine: engineKey === "wan_i2v" ? "wan_i2v" : undefined,
+          // Pass Modal-local engines (wan_i2v, ltx_2_3) as the preferred engine
+          // so generate_video_complete routes to the right adapter.
+          preferred_engine:
+            engineKey === "wan_i2v" || engineKey === "ltx_2_3" ? engineKey : undefined,
         }),
       });
 

@@ -223,6 +223,17 @@ export async function assertCanCreateJob(
       };
     }
   }
+  // LTX-2.3 (Modal H100, FP8) — Pro+ only (GPU H100 = coûteux).
+  if (preferredEngine === "ltx_2_3" && plan !== "pro" && plan !== "premium") {
+    return {
+      ok: false,
+      status: 403,
+      body: {
+        error: "This model requires a higher plan. Upgrade to Pro or Premium.",
+        upgrade: true,
+      },
+    };
+  }
   // HeyGen Avatar engines — Premium only.
   if (preferredEngine && isHeyGenEngine(preferredEngine)) {
     if (plan !== "premium") {

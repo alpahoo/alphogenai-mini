@@ -11,7 +11,7 @@ Models downloaded:
   - stabilityai/sdxl-turbo             (T2I, ~3.5GB)  — Free plan
   - Wan-AI/Wan2.2-I2V-A14B-Diffusers   (I2V, ~28GB)   — Free plan (SVI, MoE 27B/14B active)
   - Kijai/WanVideo_comfy LoRA           (SVI 2.0 Pro)  — Free plan
-  - Lightricks/LTX-Video               (T2V, ~9GB)    — Pro plan
+  - Lightricks/LTX-2.3                  (T2V+Audio, BF16 full pipeline) — Pro plan (experimental)
 """
 import modal
 
@@ -143,33 +143,35 @@ def download_all_models():
         print("[3/4] SVI 2.0 Pro LoRA (14B) ✓")
 
     # ------------------------------------------------------------------
-    # 4. LTX-Video (Pro plan — text-to-video)
+    # 4. LTX-2.3 (BF16 full pipeline) — experimental T2V+Audio (Pro plan)
+    #    Note: LTX-2.3-fp8 (transformer-only weights) is a separate repo —
+    #    load that as a transformer override on top of this full pipeline.
     # ------------------------------------------------------------------
-    ltx_path = Path(MODEL_DIR) / "ltx-video"
+    ltx_path = Path(MODEL_DIR) / "ltx-2.3"
     ltx_required = [ltx_path / "model_index.json"]
     ltx_complete = ltx_path.exists() and all(f.exists() for f in ltx_required)
     if ltx_complete:
-        print("[4/4] LTX-Video — already downloaded, skipping")
+        print("[4/4] LTX-2.3 — already downloaded, skipping")
     else:
         if ltx_path.exists():
             import shutil
-            print("[4/4] LTX-Video — incomplete, re-downloading...")
+            print("[4/4] LTX-2.3 — incomplete, re-downloading...")
             shutil.rmtree(str(ltx_path))
         else:
-            print("[4/4] Downloading LTX-Video (~9GB)...")
+            print("[4/4] Downloading LTX-2.3 (~30GB)...")
         from huggingface_hub import snapshot_download
         snapshot_download(
-            repo_id="Lightricks/LTX-Video",
+            repo_id="Lightricks/LTX-2.3",
             local_dir=str(ltx_path),
             local_dir_use_symlinks=False,
         )
-        print("[4/4] LTX-Video ✓")
+        print("[4/4] LTX-2.3 ✓")
 
     # ------------------------------------------------------------------
     # 5. Real-ESRGAN 4x Upscaler (~67MB)
     # ------------------------------------------------------------------
     esrgan_path = Path(MODEL_DIR) / "realesrgan-x4plus"
-    esrgan_file = esrgan_path / "RealESRGAN_x4plus.pth"
+    esrgan_file = esrgan_path / "RealESRGAN_x4.pth"
     if esrgan_file.exists():
         print("[5/7] Real-ESRGAN 4x — already downloaded, skipping")
     else:
@@ -178,7 +180,7 @@ def download_all_models():
         esrgan_path.mkdir(parents=True, exist_ok=True)
         hf_hub_download(
             repo_id="ai-forever/Real-ESRGAN",
-            filename="RealESRGAN_x4plus.pth",
+            filename="RealESRGAN_x4.pth",
             local_dir=str(esrgan_path),
         )
         print("[5/7] Real-ESRGAN 4x ✓")
@@ -237,7 +239,7 @@ def download_all_models():
     print("  /models/sdxl-turbo/")
     print("  /models/wan2.2-i2v-a14b/")
     print(f"  /models/svi-lora/{lora_filename}")
-    print("  /models/ltx-video/")
+    print("  /models/ltx-2.3/")
     print("  /models/realesrgan-x4plus/")
     print("  /models/vace-14b/")
     print("  /models/echomimic-v2/")

@@ -47,6 +47,35 @@ webhook_image = (
     .pip_install("fastapi", "pydantic", "supabase", "httpx", "boto3", "sentry-sdk", "cryptography")
 )
 
+# LTX-2.3 — SDK officiel Lightricks (ltx-core + ltx-pipelines), checkpoint FP8.
+# Deps validées dans modal_app/ltx_video.py (app de test isolée). Image dédiée
+# à cette seule fonction : torch 2.7 n'impacte pas base_image (Wan reste 2.5.1).
+ltx23_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("git", "ffmpeg", "libsndfile1")
+    .pip_install(
+        "torch==2.7.0",
+        "torchvision",
+        "torchaudio==2.7.0",
+        "git+https://github.com/Lightricks/LTX-2.git#subdirectory=packages/ltx-core",
+        "git+https://github.com/Lightricks/LTX-2.git#subdirectory=packages/ltx-pipelines",
+        "transformers>=4.44.0",
+        "accelerate>=0.33.0",
+        "sentencepiece",
+        "pillow",
+        "soundfile",
+        "scipy",
+        "numpy",
+        "huggingface_hub",
+        "requests",
+        "einops",
+        "omegaconf",
+        "boto3",
+        "supabase",
+        "httpx",
+    )
+)
+
 overlay_image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("ffmpeg", "fonts-dejavu-core")
@@ -58,6 +87,9 @@ overlay_image = (
 # ---------------------------------------------------------------------------
 secrets = modal.Secret.from_name("alphogenai-secrets-corrected-v2")
 models_volume = modal.Volume.from_name("alphogenai-models", create_if_missing=True)
+# Volume partagé avec l'app de test ltx_video.py — contient déjà le checkpoint FP8
+# + Gemma (téléchargés et validés). Monté à /cache pour generate_clip_ltx23.
+hf_volume = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
 
 GPU = "A100-80GB"
 
@@ -65,6 +97,9 @@ SDXL_TURBO_PATH = "/models/sdxl-turbo"
 WAN_PATH        = "/models/wan2.2-i2v-a14b"
 ENABLE_SVI_LORA = False  # disabled — stabilise pipeline first
 SVI_LORA_PATH   = "/models/svi-lora/SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors"
+# LTX-2.3 FP8 (SDK officiel) — exige H100 (FP8 e4m3 scaled_mm = Hopper/Ada only).
+LTX23_FP8       = "/cache/ltx23-base/ltx-2.3-22b-distilled-fp8.safetensors"
+LTX23_GEMMA     = "/cache/ltx23-distilled"
 
 # ---------------------------------------------------------------------------
 # Pipeline params
@@ -611,7 +646,10 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferre
     # Initialize engines in this container (separate from orchestrator).
     # Required for generate_with_fallback() to access WanEngine for fallback.
     from modal_app.engines import init_engines
-    init_engines(generate_clip_fn=generate_clip.remote)
+    init_engines(
+        generate_clip_fn=generate_clip.remote,
+        generate_clip_ltx23_fn=generate_clip_ltx23.remote,
+    )
 
     total = len(scenes)
 
@@ -1610,6 +1648,172 @@ def add_watermark(video_bytes: bytes) -> bytes:
 
 
 # ===========================================================================
+# Experimental T2I/T2V candidates (model lab Step 1) — NOT wired into
+# generate_clip() or generate_video_complete(). Reachable only via
+# `modal run modal_app/video_pipeline.py::test_<name>`.
+# ===========================================================================
+
+# NVIDIA NIM FLUX endpoints — verify current names at build.nvidia.com
+_NIM_FLUX_MODELS = [
+    "black-forest-labs/flux.1-dev",      # best quality
+    "black-forest-labs/flux.1-schnell",  # fast, Apache 2.0
+    "black-forest-labs/flux.2-klein",    # compact tertiary fallback (verify endpoint name)
+]
+
+
+@app.function(image=base_image, secrets=[secrets, modal.Secret.from_name("Nvidia")], timeout=180, retries=0)
+def generate_image_flux_nim(prompt: str) -> bytes:
+    """Generate an image via NVIDIA NIM: tries flux.1-dev → schnell → flux.2-klein.
+
+    All 3 are ACTIVE on the existing NVIDIA NGC account. Returns PNG bytes.
+    No GPU needed — NIM is a hosted REST API.
+    """
+    import base64
+    import httpx
+
+    api_key = os.environ.get("NVIDIA_API_KEY")
+    if not api_key:
+        raise RuntimeError("NVIDIA_API_KEY missing in Modal secrets")
+
+    headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
+
+    def _call(model: str) -> bytes:
+        resp = httpx.post(
+            f"https://ai.api.nvidia.com/v1/genai/{model}",
+            headers=headers,
+            json={"prompt": prompt[:1000]},
+            timeout=120,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        # Handle multiple possible NIM response shapes
+        b64 = (
+            data.get("image")
+            or (data.get("images") or [None])[0]
+            or (data.get("artifacts") or [{}])[0].get("base64")
+        )
+        if not b64:
+            raise RuntimeError(f"NVIDIA NIM response missing image data: {str(data)[:200]}")
+        if isinstance(b64, str) and b64.startswith("data:"):
+            b64 = b64.split(",", 1)[1]
+        return base64.b64decode(b64)
+
+    last_exc: Exception = RuntimeError("no NIM models configured")
+    for model in _NIM_FLUX_MODELS:
+        try:
+            print(f"[flux_nim] requesting {model}...")
+            return _call(model)
+        except Exception as e:
+            print(f"[flux_nim] {model} failed ({e}), trying next...")
+            last_exc = e
+    raise last_exc
+
+
+@app.function(
+    image=ltx23_image,
+    gpu="H100",  # FP8 e4m3 scaled_mm exige Hopper/Ada — A100 ne supporte pas FP8
+    timeout=1800,
+    retries=0,
+    volumes={"/cache": hf_volume},
+)
+def generate_clip_ltx23(
+    prompt: str,
+    job_id: Optional[str] = None,
+    image_url: Optional[str] = None,
+    duration_seconds: float = 5.0,
+    seed: int = 42,
+) -> bytes:
+    """Génère un clip LTX-2.3 (SDK officiel Lightricks, checkpoint FP8), MP4 bytes.
+
+    Mode auto : image_url fourni → I2V (image animée) ; sinon → T2V direct.
+    Audio natif embarqué dans le MP4 (pas d'AudioLDM2 séparé).
+    Config validée : TI2VidOneStagePipeline + FP8 scaled_mm + offload NONE +
+    inference_mode (cf. modal_app/ltx_video.py). Scale-to-zero (plain @app.function).
+    """
+    import time
+    import tempfile
+    from io import BytesIO
+    from pathlib import Path
+
+    import torch
+    import requests as _req
+    from PIL import Image
+    from ltx_pipelines.ti2vid_one_stage import TI2VidOneStagePipeline
+    from ltx_pipelines.utils.types import OffloadMode
+    from ltx_pipelines.utils.args import ImageConditioningInput
+    from ltx_pipelines.utils.media_io import encode_video
+    from ltx_core.components.guiders import MultiModalGuiderParams
+    from ltx_core.quantization import QuantizationPolicy
+    from ltx_core.quantization.fp8_scaled_mm import (
+        get_fp8_swap_module_ops,
+        fp8_scaled_mm_fuse_rule,
+    )
+
+    if not Path(LTX23_FP8).exists():
+        raise FileNotFoundError(f"Checkpoint FP8 manquant: {LTX23_FP8}")
+
+    mode = "I2V" if image_url else "T2V"
+    print(f"[ltx23] {mode} | job={job_id} | chargement pipeline FP8 (H100)...")
+
+    fp8_policy = QuantizationPolicy(
+        module_ops=get_fp8_swap_module_ops(LTX23_FP8),
+        fuse_rule=fp8_scaled_mm_fuse_rule,
+    )
+    pipeline = TI2VidOneStagePipeline(
+        checkpoint_path=LTX23_FP8,
+        gemma_root=LTX23_GEMMA,
+        loras=[],
+        quantization=fp8_policy,
+        offload_mode=OffloadMode.NONE,
+    )
+
+    # Params prod validés
+    width, height, frame_rate, steps = 768, 512, 25.0, 8
+    num_frames = max(9, int(round(duration_seconds * frame_rate)))
+    negative_prompt = "worst quality, inconsistent motion, blurry, jittery, distorted, static"
+
+    # stg_scale=0 : désactive Skip-Transformer-Guidance (économie VRAM)
+    video_params = MultiModalGuiderParams(
+        cfg_scale=3.0, stg_scale=0.0, rescale_scale=0.7, modality_scale=3.0, stg_blocks=[],
+    )
+    audio_params = MultiModalGuiderParams(
+        cfg_scale=7.0, stg_scale=0.0, rescale_scale=0.7, modality_scale=3.0, stg_blocks=[],
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        images = []
+        if image_url:
+            img_bytes = _req.get(image_url, timeout=30).content
+            img_path = f"{tmpdir}/input.jpg"
+            Image.open(BytesIO(img_bytes)).convert("RGB").save(img_path)
+            images = [ImageConditioningInput(img_path, 0, 1.0, 0)]
+
+        out_path = f"{tmpdir}/output.mp4"
+        t0 = time.time()
+        # inference_mode englobe encode_video : décodage VAE paresseux (sinon
+        # RuntimeError: Inference tensors do not track version counter).
+        with torch.inference_mode():
+            video, audio = pipeline(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                seed=seed,
+                height=height,
+                width=width,
+                num_frames=num_frames,
+                frame_rate=frame_rate,
+                num_inference_steps=steps,
+                video_guider_params=video_params,
+                audio_guider_params=audio_params,
+                images=images,
+            )
+            encode_video(video, fps=frame_rate, audio=audio, output_path=out_path, video_chunks_number=1)
+        video_bytes = Path(out_path).read_bytes()
+
+    print(f"[ltx23] {mode} terminé en {time.time()-t0:.1f}s — {len(video_bytes)//1024} KB")
+    return video_bytes
+
+
+# ===========================================================================
 # Orchestrator (no GPU — just coordinates)
 # ===========================================================================
 
@@ -1631,7 +1835,10 @@ def generate_video_complete(
 ):
     import traceback
     from modal_app.engines import init_engines
-    init_engines(generate_clip_fn=generate_clip.remote)
+    init_engines(
+        generate_clip_fn=generate_clip.remote,
+        generate_clip_ltx23_fn=generate_clip_ltx23.remote,
+    )
 
     log(job_id, f"orchestrator start | prompt={prompt[:60]}"
         f"{f' | preferred={preferred_engine}' if preferred_engine else ''}")
@@ -2153,3 +2360,32 @@ def check_volume():
 def test():
     result = generate_video_complete.remote("test-001", "A rocket launching into space at sunset")
     print(result)
+
+
+@app.local_entrypoint()
+def test_flux_nim(prompt: str = "A futuristic city skyline at sunset, cinematic lighting"):
+    image_bytes = generate_image_flux_nim.remote(prompt)
+    out_path = "output_flux_nim_test.png"
+    with open(out_path, "wb") as f:
+        f.write(image_bytes)
+    print(f"Saved {len(image_bytes)/1024:.1f} KB → {out_path}")
+
+
+@app.local_entrypoint()
+def test_ltx23(
+    prompt: str = "A futuristic city skyline at sunset, cinematic lighting",
+    image_url: str = "",
+):
+    """Test l'intégration generate_clip_ltx23 (FP8/SDK) — T2V par défaut.
+    Passer --image-url <url> pour tester le mode I2V.
+    Usage: modal run modal_app/video_pipeline.py::test_ltx23
+    """
+    mode = "I2V" if image_url else "T2V"
+    print(f"[test_ltx23] mode={mode}")
+    video_bytes = generate_clip_ltx23.remote(
+        prompt, job_id="test-ltx23", image_url=(image_url or None),
+    )
+    out_path = f"output_ltx23_integration_{mode.lower()}.mp4"
+    with open(out_path, "wb") as f:
+        f.write(video_bytes)
+    print(f"Saved {len(video_bytes)/1e6:.1f} MB → {out_path}")

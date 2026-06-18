@@ -75,6 +75,22 @@ export async function GET() {
     });
   }
 
+  // LTX-2.3 (Modal H100, FP8, scale-to-zero) — Pro/Premium. I2V if an image is
+  // provided, else T2V. Native audio embedded. Toggle independent from "modal".
+  if (isProviderEnabled("ltx")) {
+    engines.push({
+      key: "ltx_2_3",
+      label: "LTX-2.3",
+      desc: "GPU H100 · I2V/T2V · audio natif · 5s",
+      gate: "pro",
+      supportsRefs: false,
+      supportsI2v: true,
+      maxDuration: 5,
+      minDuration: null,
+      quality: "768p",
+    });
+  }
+
   // EvoLink engines from registry
   if (isProviderEnabled("evolink")) {
     for (const [key, cfg] of Object.entries(EVOLINK_ENGINES)) {

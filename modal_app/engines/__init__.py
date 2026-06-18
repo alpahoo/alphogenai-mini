@@ -29,6 +29,7 @@ from .generic_api import GenericApiEngine
 from .router import select_engine
 from .seedance import SeedanceEngine
 from .wan import WanEngine
+from .ltx23 import LTX23Engine
 from .vace import VACEEngine
 from .echomimic import EchoMimicEngine
 from .realesrgan import RealESRGANEngine
@@ -39,10 +40,12 @@ logger = logging.getLogger(__name__)
 # Static adapters (hardcoded)
 # ---------------------------------------------------------------------------
 _wan = WanEngine()
+_ltx23 = LTX23Engine()
 _seedance_legacy = SeedanceEngine()   # fallback if DB has no Kie.ai config
 
 _STATIC_ADAPTERS: dict[str, BaseEngine] = {
     "wan_i2v": _wan,
+    "ltx_2_3": _ltx23,
     "seedance": _seedance_legacy,  # legacy fallback — overridden by DB config if available
     # EvoLink engines are handled directly by Next.js — no Modal needed
 }
@@ -50,10 +53,12 @@ _STATIC_ADAPTERS: dict[str, BaseEngine] = {
 _initialized = False
 
 
-def init_engines(generate_clip_fn: Callable) -> None:
-    """Inject the generate_clip.remote callable into the Wan adapter."""
+def init_engines(generate_clip_fn: Callable, generate_clip_ltx23_fn: Callable | None = None) -> None:
+    """Inject the Modal generate.remote callables into the GPU-local adapters."""
     global _initialized
     _wan.set_generate_fn(generate_clip_fn)
+    if generate_clip_ltx23_fn is not None:
+        _ltx23.set_generate_fn(generate_clip_ltx23_fn)
     _initialized = True
 
 

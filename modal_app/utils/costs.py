@@ -21,6 +21,12 @@ HARDCODED_COSTS: dict[str, dict] = {
         "billing_model": "per_second",
         "per_second_usd": 0.015,
     },
+    "ltx_2_3": {
+        # H100 + cold start scale-to-zero (~150s GPU pour un clip 5s) ramené
+        # par seconde de vidéo. Tracking interne approximatif, pas de la facturation.
+        "billing_model": "per_second",
+        "per_second_usd": 0.035,
+    },
     "seedance": {
         "billing_model": "per_second",
         "per_second_usd": 0.025,

@@ -82,6 +82,7 @@ export type EngineKey =
   | "vace_14b"
   | "echomimic_v3"
   | "realesrgan_4x"
+  | "ltx_2_3"
   | "heygen_avatar_iv"
   | "heygen_avatar_shots"
   | "seedance15pro_byteplus"
@@ -240,6 +241,7 @@ export const ENGINE_DISPLAY_NAMES: Record<string, string> = {
   vace_14b: "VACE 14B",
   echomimic_v3: "EchoMimic V3",
   realesrgan_4x: "Real-ESRGAN 4x",
+  ltx_2_3: "LTX-2.3",
   heygen_avatar_iv: "Avatar IV",
   heygen_avatar_shots: "Avatar Shots (Seedance 2)",
   seedance15pro_byteplus: "Seedance 1.5 Pro · 1080p (Direct)",

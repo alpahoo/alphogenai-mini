@@ -76,6 +76,16 @@ HARDCODED_ENGINES: dict[str, dict] = {
         "clip_duration": 10.0,
         "priority": 80,
     },
+    "ltx_2_3": {
+        "name": "LTX-2.3 (FP8)",
+        "type": "modal_local",
+        "status": "active",
+        "plans": ["pro", "premium"],
+        "max_duration": 5.0,
+        "gpu": "H100",  # FP8 e4m3 scaled_mm = Hopper/Ada only (A100 ne supporte pas FP8)
+        "clip_duration": 5.0,
+        "priority": 75,
+    },
     "realesrgan_4x": {
         "name": "Real-ESRGAN 4x Upscaler",
         "type": "modal_local",
