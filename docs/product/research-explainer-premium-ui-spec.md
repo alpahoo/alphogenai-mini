@@ -236,3 +236,62 @@ Ordre conseillé : **b → c → e** (gains rapides : Home, Review, post-prod) p
 - Voix premium (ElevenLabs) : activé V1 ou Kokoro-only d'abord ?
 
 > **Review requise auprès de Paul avant toute implémentation UI.** Cette spec est un premier jet d'alignement ; aucun code runtime n'est touché.
+
+---
+
+## 13. Addendum — Implementation guardrails (retours produit/tech consolidés)
+
+> Ajout **docs-only** avant toute implémentation T-1120. Intègre les retours consolidés. Aucun runtime/route/composant/migration ; ne modifie pas le pipeline.
+
+### 13.1 Preview live = risque majeur → 2 niveaux explicites
+La preview est le point le plus risqué (latence, coût, complexité). On distingue **explicitement** :
+- **V1 — Low-fi browser preview** : aperçu **statique/léger** rendu **dans le navigateur** (HTML/CSS/GSAP du template à frame courante, ou vignette par scène), **sans appeler le moteur de rendu**. Sert à valider mise en page, textes, ordre des scènes, timing approximatif.
+- **V2 — High-fi HyperFrames preview** : aperçu fidèle via le vrai moteur (HyperFrames `preview` / clip court), **explicitement déclenché** par l'utilisateur.
+- **Règle dure : aucun rendu coûteux automatique.** Le rendu complet (Modal/VPS) n'est lancé **que** sur action explicite « Rendre la vidéo ». La preview ne consomme jamais de GPU/Modal sans clic.
+
+### 13.2 Storyboard édité ≠ storyboard Research
+- **Ne jamais écraser `research_storyboards`** (source de vérité du plan validé).
+- À l'entrée dans l'Explainer Studio, **créer une copie éditable séparée** (« working storyboard » / draft d'édition), distincte de `research_storyboards.scenes_json`.
+- Le plan Research reste réutilisable (re-générer un explainer, ou « Send to Director ») même après édition dans le Studio.
+- *(Choix de stockage = décision d'implémentation T-1120d ; cette spec impose seulement la séparation.)*
+
+### 13.3 Brand Kit minimal dès V1
+- **V1 (minimal)** : `logo_url`, `brand_name`, `couleur principale`. Injectés dans le branding (remplace la dérivation actuelle nom-de-domaine + palette par défaut).
+- **V2 (complet)** : palette secondaire, typographies, watermark presets, plusieurs marques, etc.
+- Rappel : **logo AlphoGen par défaut** tant qu'aucun logo utilisateur ; **jamais de logo tiers sans confirmation**.
+
+### 13.4 Voice-over vs Lip-sync — séparation UX + coût/routing explicites
+Deux capacités **distinctes**, présentées séparément (jamais confondues) :
+- **Voice-off (TTS)** : piste audio ajoutée à la vidéo. Providers : **Kokoro** (local, ~0 €) / **ElevenLabs** (premium, payant). Sélecteur + preview. Routing : pipeline explainer/overlay (mux).
+- **Lip-sync (avatar)** : un personnage **parle** (HeyGen). Capacité et **coût** différents, parcours différent. **Pas de promesse « exact lip-sync » sans contrat technique.**
+- L'UI doit afficher pour chaque option : **coût indicatif** + **ce que ça produit** (audio seul vs personnage parlant).
+
+### 13.5 Captions déterministes — V1 vs V2
+- **V1** : captions générées **depuis le `script` / `voiceover_text`** avec **timing par scène** (déterministe, via overlays — `lib/overlay/overlay-plan.ts`). Pas de dépendance au modèle vidéo.
+- **V2** : **STT word-level** (alignement mot-à-mot sur l'audio TTS) + **édition fine** des captions.
+
+### 13.6 Explainer Studio — Simple par défaut, Advanced replié
+- **Mode Simple (défaut)** : texte à l'écran, voix, durée, image/asset par scène. Suffit à 80 % des cas.
+- **Mode Advanced (replié)** : `camera_shot`, `camera_motion`, `lighting`, `mood`, `motion/rythme`, intention visuelle (les détails cinématiques de `CinematicScenePlan`). Accessible mais non imposé → évite de noyer l'utilisateur.
+
+### 13.7 Mobile — desktop-first
+- L'**Explainer Studio est desktop-first** (édition dense, inspecteur, preview).
+- **Mobile = consultation / validation / déclenchement de rendu** (Research Home, Plan Review, état d'un job, lecture du résultat). Pas d'édition fine au doigt en V1.
+
+### 13.8 Spike preview avant T-1120d
+Avant de construire l'Explainer Studio, **valider techniquement la preview** (c'est le risque #1).
+
+### 13.9 Découpage révisé (remplace §11 pour la priorité)
+
+| Ticket | Portée | Notes |
+|---|---|---|
+| **T-1120b** | Research Home polish | gain rapide |
+| **T-1120c** | Plan Review layout | gain rapide |
+| **T-1120e** | Render / Post-production panel | gain rapide ; captions V1 déterministes |
+| **T-1120-preview-spike** | **Spike** : valider preview **low-fi (browser)** vs **high-fi (HyperFrames)**, mesurer **latence + coût**, confirmer « aucun rendu coûteux auto » | **préalable bloquant** à T-1120d |
+| **T-1120d** | Explainer Studio layout | dépend du spike ; working storyboard séparé ; Simple/Advanced |
+| **T-1120f** | Visual QA desktop / mobile | desktop-first, mobile = consultation |
+
+**Ordre recommandé :** `T-1120b → T-1120c → T-1120e → T-1120-preview-spike → T-1120d → T-1120f`.
+
+> Tous ces points sont des **garde-fous d'implémentation** ; ils ne changent pas le pipeline et restent à valider par Paul avant tout code.

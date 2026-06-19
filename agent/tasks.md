@@ -1026,6 +1026,14 @@ Contraintes :
   Home→Review→Studio→Render→Job/Social Pack + wireframes + existant/manquant + non-goals.
 - Scope : docs-only, aucun runtime/route/composant/migration ; fidèle au mockup
   validé avec Codex. Review Paul requise avant toute implémentation UI.
-- Reste : T-1120b Research Home polish, T-1120c Plan Review layout, T-1120d Explainer
-  Studio layout, T-1120e Render/Post-production panel, T-1120f Visual QA desktop/mobile.
+- Addendum garde-fous (docs-only, §13 de la spec) : preview V1 low-fi browser vs V2
+  high-fi HyperFrames (aucun rendu coûteux auto) ; working storyboard éditable séparé
+  (ne jamais écraser `research_storyboards`) ; Brand Kit minimal V1 (logo_url/name/couleur) ;
+  voix-off vs lip-sync séparés (coût/routing explicites) ; captions V1 déterministes
+  depuis script/voiceover_text, STT word-level en V2 ; Studio Simple par défaut /
+  Advanced replié (caméra/lumière/mood/motion) ; desktop-first, mobile = consultation.
+- Reste, ordre recommandé : T-1120b Research Home → T-1120c Plan Review →
+  T-1120e Render/Post-production → **T-1120-preview-spike** (préalable bloquant :
+  valider preview low-fi/high-fi, latence, coût) → T-1120d Explainer Studio →
+  T-1120f Visual QA desktop/mobile.
 

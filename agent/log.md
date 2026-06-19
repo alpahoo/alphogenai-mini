@@ -12,6 +12,19 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-18 — Claude — T-1120a addendum: implementation guardrails (docs-only)
+- Fait : addendum §13 à `docs/product/research-explainer-premium-ui-spec.md` —
+  preview low-fi (V1) vs high-fi (V2) sans rendu coûteux auto ; working storyboard
+  éditable séparé de `research_storyboards` ; Brand Kit minimal V1 ; voix-off vs
+  lip-sync séparés (coût/routing) ; captions V1 déterministes / STT V2 ; Studio
+  Simple/Advanced ; desktop-first ; nouveau **T-1120-preview-spike** préalable à T-1120d ;
+  priorité révisée b→c→e→spike→d→f.
+- Fichiers modifiés : `docs/product/research-explainer-premium-ui-spec.md`, `agent/tasks.md`, `agent/log.md`.
+- Tests : docs-only, aucun runtime touché.
+- Prochaine étape : review Paul ; puis T-1120b (Research Home).
+
+---
+
 ## 2026-06-18 — Claude — T-1120a Premium UI spec (docs-only)
 - Fait : créé `docs/product/research-explainer-premium-ui-spec.md` — spec visuelle premium
   pour Research/Explainer/Render Studio (4 écrans + wireframes ASCII + navigation
