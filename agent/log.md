@@ -12,6 +12,20 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-18 — Claude — T-1120b Research Home premium command center
+- Fait : refonte UI de la Research Home — hero compact, chips workflow
+  (News/Tutorial/Product/Competitor) + note Explainer, starter templates qui
+  préremplissent le brief (client-only), Recent research avec compteur,
+  microcopy/tooltips, états loading/empty/error. Mode désormais piloté par les
+  chips (select retiré du composer).
+- Fichiers modifiés : `app/(workspace)/research/page.tsx`, `agent/tasks.md`, `agent/log.md`.
+- Contraintes respectées : aucune route/API/DB, aucun changement pipeline
+  (SearXNG/LiteLLM/Extractor/Modal), handlers + appels API existants inchangés.
+- Tests : `npx tsc --noEmit` clean ; `npm run build` OK (route /research 7.47 kB).
+- Reste : QA visuelle authentifiée desktop/mobile (route auth-gated) → T-1120f.
+
+---
+
 ## 2026-06-18 — Claude — T-1120a addendum: implementation guardrails (docs-only)
 - Fait : addendum §13 à `docs/product/research-explainer-premium-ui-spec.md` —
   preview low-fi (V1) vs high-fi (V2) sans rendu coûteux auto ; working storyboard

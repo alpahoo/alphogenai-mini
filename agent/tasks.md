@@ -1032,7 +1032,14 @@ Contraintes :
   voix-off vs lip-sync séparés (coût/routing explicites) ; captions V1 déterministes
   depuis script/voiceover_text, STT word-level en V2 ; Studio Simple par défaut /
   Advanced replié (caméra/lumière/mood/motion) ; desktop-first, mobile = consultation.
-- Reste, ordre recommandé : T-1120b Research Home → T-1120c Plan Review →
+- T-1120b livré (UI-only) : Research Home premium command center —
+  `app/(workspace)/research/page.tsx` : hero compact, **chips workflow**
+  (News/Tutorial/Product/Competitor + note Explainer), **starter templates**
+  (préremplissent le brief, client-only), Recent research avec compteur,
+  microcopy/tooltips, états loading/empty/error. Aucune route/API/DB/pipeline
+  touché. Validé : `tsc --noEmit` clean + `npm run build` OK. **QA visuelle
+  authentifiée desktop/mobile à faire** (route auth-gated) → T-1120f.
+- Reste, ordre recommandé : T-1120c Plan Review →
   T-1120e Render/Post-production → **T-1120-preview-spike** (préalable bloquant :
   valider preview low-fi/high-fi, latence, coût) → T-1120d Explainer Studio →
   T-1120f Visual QA desktop/mobile.

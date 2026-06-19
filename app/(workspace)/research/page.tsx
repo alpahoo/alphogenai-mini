@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -10,11 +10,18 @@ import {
   Clock,
   Copy,
   Eye,
+  Film,
+  GraduationCap,
   Loader2,
+  Newspaper,
   Plus,
   SearchCheck,
+  ShoppingBag,
   Sparkles,
+  Target,
+  Wand2,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type ResearchMode = "news" | "tutorial" | "product" | "competitor";
@@ -59,6 +66,46 @@ const MODE_LABELS: Record<ResearchMode, string> = {
   product: "Product",
   competitor: "Competitor",
 };
+
+// Workflow chips — pick the research intent. Each preselects a sensible duration.
+const MODE_META: Record<ResearchMode, { label: string; desc: string; duration: number; Icon: LucideIcon }> = {
+  news: { label: "News", desc: "Summarize what changed", duration: 30, Icon: Newspaper },
+  tutorial: { label: "Tutorial", desc: "Teach the steps", duration: 60, Icon: GraduationCap },
+  product: { label: "Product", desc: "Explain the offer", duration: 30, Icon: ShoppingBag },
+  competitor: { label: "Competitor", desc: "Compare positioning", duration: 60, Icon: Target },
+};
+
+// Starter templates — prefill the brief (client-only, no API). The user can edit before launching.
+const STARTERS: { title: string; hint: string; mode: ResearchMode; duration: number; prompt: string }[] = [
+  {
+    title: "Product promo",
+    hint: "URL → 30s promo",
+    mode: "product",
+    duration: 30,
+    prompt: "Create a 30s promo for this product page: a strong hook, 3 key benefits, and a clear call to action.",
+  },
+  {
+    title: "News explainer",
+    hint: "Topic → 30s news",
+    mode: "news",
+    duration: 30,
+    prompt: "Summarize the most important update on this topic in 30s: what changed, why it matters, and what's next.",
+  },
+  {
+    title: "Docs tutorial",
+    hint: "Docs → how-to",
+    mode: "tutorial",
+    duration: 60,
+    prompt: "Turn this docs/product page into a 60s tutorial: short intro, 3 clear steps, limits, and a final action.",
+  },
+  {
+    title: "Competitor compare",
+    hint: "Rival → angle",
+    mode: "competitor",
+    duration: 60,
+    prompt: "Analyze this competitor: positioning, key differentiators, and a comparison angle for a short video.",
+  },
+];
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -113,6 +160,16 @@ export default function ResearchPage() {
   const [copiedWatchlistId, setCopiedWatchlistId] = useState<string | null>(null);
 
   const supabase = useMemo(() => createClient(), []);
+  const briefRef = useRef<HTMLTextAreaElement>(null);
+
+  function applyStarter(starter: (typeof STARTERS)[number]) {
+    setMode(starter.mode);
+    setDuration(starter.duration);
+    setTopic(starter.prompt);
+    setError(null);
+    briefRef.current?.focus();
+    briefRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 
   const loadJobs = useCallback(async () => {
     setLoading(true);
@@ -272,29 +329,51 @@ export default function ResearchPage() {
       <div className="mx-auto max-w-7xl">
         <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-950 text-white shadow-sm">
           <div className="grid gap-8 p-6 lg:grid-cols-[1fr_0.72fr] lg:p-8">
-            <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80">
+            <div className="flex flex-col">
+              <div className="mb-4 inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80">
                 <SearchCheck className="h-3.5 w-3.5" />
                 Research Studio
               </div>
-              <h1 className="max-w-3xl text-4xl font-semibold tracking-tight lg:text-5xl">
+              <h1 className="max-w-xl text-3xl font-semibold tracking-tight lg:text-4xl">
                 Turn a topic, URL, or product into a sourced video plan.
               </h1>
-              <p className="mt-4 max-w-2xl text-sm leading-6 text-white/65">
-                Discover sources, extract useful evidence, generate editorial angles, then prepare a Director-ready storyboard.
+              <p className="mt-3 max-w-lg text-sm leading-6 text-white/65">
+                Pick a workflow, describe what you want — AlphoResearch finds the sources, the angle, and a Director-ready storyboard.
               </p>
 
-              <div className="mt-8 grid gap-3 sm:grid-cols-3">
-                {[
-                  ["Sources", "Search and extract"],
-                  ["Angles", "Pick the strategy"],
-                  ["Storyboard", "Send to Director"],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-white/45">{label}</p>
-                    <p className="mt-2 text-sm font-semibold text-white">{value}</p>
-                  </div>
-                ))}
+              <div className="mt-6">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-white/40">Workflow</p>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {(Object.keys(MODE_META) as ResearchMode[]).map((key) => {
+                    const meta = MODE_META[key];
+                    const active = mode === key;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => {
+                          setMode(key);
+                          setDuration(meta.duration);
+                        }}
+                        title={meta.desc}
+                        aria-pressed={active}
+                        className={`flex flex-col items-start gap-1 rounded-xl border px-3 py-2.5 text-left transition ${
+                          active
+                            ? "border-white/70 bg-white/15"
+                            : "border-white/10 bg-white/5 hover:bg-white/10"
+                        }`}
+                      >
+                        <meta.Icon className="h-4 w-4 text-white/80" />
+                        <span className="text-xs font-semibold text-white">{meta.label}</span>
+                        <span className="text-[11px] leading-4 text-white/45">{meta.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-3 inline-flex items-center gap-1.5 text-[11px] text-white/45">
+                  <Film className="h-3.5 w-3.5" />
+                  Any plan can be rendered as an Explainer video (slides + voice) or sent to the Director.
+                </p>
               </div>
             </div>
 
@@ -309,6 +388,7 @@ export default function ResearchPage() {
                   Describe the video you want, the audience, and the structure. Example: create a 90s French tutorial for beginners with a hook, 3 steps, limits, and a final action.
                 </FieldHelp>
                 <textarea
+                  ref={briefRef}
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
                   rows={4}
@@ -325,21 +405,15 @@ export default function ResearchPage() {
                 <FieldHelp title="Optional URL">
                   Add the official article, product page, docs page, or release note when you already know the source. Leave empty to let Research discover sources.
                 </FieldHelp>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <select
-                    value={mode}
-                    onChange={(e) => setMode(e.target.value as ResearchMode)}
-                    className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm outline-none"
-                  >
-                    {Object.entries(MODE_LABELS).map(([key, label]) => (
-                      <option key={key} value={key}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+                <div className="grid items-center gap-3 sm:grid-cols-2">
+                  <div className="flex items-center justify-between rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm">
+                    <span className="text-neutral-500">Workflow</span>
+                    <span className="font-semibold text-neutral-950">{MODE_LABELS[mode]}</span>
+                  </div>
                   <select
                     value={duration}
                     onChange={(e) => setDuration(Number(e.target.value))}
+                    aria-label="Target duration"
                     className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-sm outline-none"
                   >
                     <option value={30}>30s</option>
@@ -348,8 +422,8 @@ export default function ResearchPage() {
                     <option value={180}>180s</option>
                   </select>
                 </div>
-                <FieldHelp title="Mode and duration">
-                  News summarizes an update, Tutorial teaches steps, Product explains an offer, Competitor analyzes positioning. Duration is the target length for the script/storyboard.
+                <FieldHelp title="Workflow & duration">
+                  Pick the workflow above (News, Tutorial, Product, Competitor). Duration is the target length for the script/storyboard.
                 </FieldHelp>
                 {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">{error}</p>}
                 {createStatus && (
@@ -377,6 +451,34 @@ export default function ResearchPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="mt-8">
+          <div className="mb-3 flex items-center gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-neutral-500">
+              Start from a template
+            </h2>
+            <span className="text-xs text-neutral-400">prefills the brief — edit before launching</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {STARTERS.map((starter) => (
+              <button
+                key={starter.title}
+                type="button"
+                onClick={() => applyStarter(starter)}
+                className="group rounded-2xl border border-neutral-200 bg-white p-4 text-left shadow-sm transition hover:border-neutral-300 hover:shadow-md"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="rounded-lg bg-neutral-100 p-2">
+                    <Wand2 className="h-4 w-4 text-neutral-700" />
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-neutral-300 transition group-hover:translate-x-0.5 group-hover:text-neutral-600" />
+                </div>
+                <p className="mt-3 text-sm font-semibold text-neutral-950">{starter.title}</p>
+                <p className="mt-1 text-xs text-neutral-500">{starter.hint}</p>
+              </button>
+            ))}
           </div>
         </section>
 
@@ -514,7 +616,7 @@ export default function ResearchPage() {
         <section className="mt-8">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-neutral-500">
-              Recent research
+              Recent research{!loading && jobs.length > 0 ? ` (${jobs.length})` : ""}
             </h2>
             <button onClick={loadJobs} className="text-sm font-semibold text-neutral-950 hover:underline">
               Refresh
