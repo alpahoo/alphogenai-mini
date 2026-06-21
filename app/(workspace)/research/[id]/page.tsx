@@ -1042,12 +1042,31 @@ export default function ResearchDetailPage() {
               </button>
             </div>
 
+            {/* T-1120e — Render & post-production (UI-only): render status, Raw vs Final
+                framing, and deep-links to the Job page where overlays/captions/branding/
+                exports already live. No new route/API/DB; reuses generateExplainer + explainerJob. */}
             <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
-              <h2 className="text-sm font-semibold text-neutral-950">Explainer video</h2>
+              <h2 className="text-sm font-semibold text-neutral-950">Render &amp; post-production</h2>
               <p className="mt-2 text-sm leading-6 text-neutral-500">
                 Render a code-based explainer (screenshots, animated text, voice-over) — a few cents,
-                no AI footage. Appears in Library when ready.
+                no AI footage. Finalize with captions, branding and social formats afterwards.
               </p>
+
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-neutral-500">Raw</p>
+                  <p className="mt-1 text-xs leading-5 text-neutral-600">
+                    Slides + voice-over from your approved storyboard.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-neutral-500">Final</p>
+                  <p className="mt-1 text-xs leading-5 text-neutral-600">
+                    Captions, lower-thirds, branding &amp; social formats.
+                  </p>
+                </div>
+              </div>
+
               <button
                 type="button"
                 onClick={generateExplainer}
@@ -1063,22 +1082,47 @@ export default function ResearchDetailPage() {
                 ) : (
                   <Wand2 className="h-4 w-4" />
                 )}
-                {script?.approved ? "Generate Explainer" : "Approve first"}
+                {!script?.approved
+                  ? "Approve first"
+                  : explainerJob?.status === "done"
+                    ? "Re-render explainer"
+                    : "Render explainer (~$0.03)"}
               </button>
-              {explainerJob && (
-                <p className="mt-3 text-sm">
-                  {explainerJob.status === "in_progress" && (
-                    <span className="text-neutral-500">Rendering… (a few minutes)</span>
-                  )}
-                  {explainerJob.status === "done" && (
-                    <Link href="/library" className="font-medium text-emerald-600 hover:underline">
-                      Ready — view in Library →
+
+              {explainerJob?.status === "in_progress" && (
+                <p className="mt-3 text-sm text-neutral-500">Rendering… (a few minutes)</p>
+              )}
+
+              {explainerJob?.status === "failed" && (
+                <p className="mt-3 text-sm text-red-600">Render failed. Try again.</p>
+              )}
+
+              {explainerJob?.status === "done" && (
+                <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                  <p className="flex items-center gap-2 text-sm font-medium text-emerald-700">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Raw explainer ready
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2">
+                    <Link
+                      href={`/jobs/${explainerJob.id}`}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-neutral-950 px-3 py-2 text-sm font-semibold text-white hover:bg-neutral-800"
+                    >
+                      Open post-production
+                      <ArrowRight className="h-4 w-4" />
                     </Link>
-                  )}
-                  {explainerJob.status === "failed" && (
-                    <span className="text-red-600">Render failed. Try again.</span>
-                  )}
-                </p>
+                    <Link
+                      href="/library"
+                      className="inline-flex w-full items-center justify-center rounded-lg border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+                    >
+                      View in Library
+                    </Link>
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-emerald-700/80">
+                    In post-production: add captions, lower-thirds with your angle, source cards, branding,
+                    and export 16:9 / 9:16 / 1:1 for the Social Pack.
+                  </p>
+                </div>
               )}
             </div>
           </aside>

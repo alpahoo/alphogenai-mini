@@ -12,6 +12,34 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-21 — Claude — T-1120e Render & post-production panel (UI-only)
+- Fait : mini-audit (STOP-and-explain) → le panneau post-prod *fonctionnel* complet n'est
+  pas UI-only (overlays/voix/exports = routes qui déclenchent Modal, ou duplication de la
+  page Job qui les expose déjà). Scope « UI-only honnête » validé par Paul. Carte « Explainer
+  video » transformée en panneau **Render & post-production** : cadrage Raw vs Final, bouton
+  render existant réutilisé, états in_progress/done/failed ; au statut *done*, deep-links vers
+  la page Job (post-prod réelle) + Library + description honnête de ce qui s'y finalise.
+- Fichiers modifiés : app/(workspace)/research/[id]/page.tsx (présentation pure : aucun
+  nouvel import/état/effet/requête), agent/tasks.md, agent/log.md.
+- Garde-fous : aucune route/API/DB/migration, aucun changement pipeline, aucun rendu
+  déclenché depuis le panneau, aucun faux contrôle ; §13 respecté.
+- Tests : tsc --noEmit → exit 0 ; npm run build → Compiled successfully, /research/[id] 9.22 kB.
+- Prochaine étape : QA visuelle authentifiée desktop/mobile (T-1120f). Reste : T-1120-preview-spike
+  (bloquant) → T-1120d Explainer Studio → T-1120f. Câblage post-prod fonctionnel = ticket séparé.
+
+---
+
+## 2026-06-21 — Codex (supervisé Claude) — T-1120c-polish
+- Fait : passe polish UI sur la Plan Review — Sources 5 + Show all, Suggested references 9 +
+  Review all, Plan Summary compact (4 tuiles), carte Next action enrichie (`detail`), scroll
+  réduit. Patch écrit par Codex ; Claude a finalisé (commit + validation que Codex ne pouvait
+  pas faire dans son env), normalisé EOL (LF), revu le diff, puis mergé en fast-forward.
+- Fichiers modifiés : app/(workspace)/research/[id]/page.tsx (+99/-11).
+- Tests : tsc --noEmit → exit 0 ; npm run build → OK.
+- Commit 2d7b797 (co-authored Codex), mergé sur main 034fc2a..2d7b797, poussé.
+
+---
+
 ## 2026-06-21 — Claude — T-1120c Plan Review premium layout
 - Fait : refonte UI de la page Review d'un plan Research — barre de progression
   fait/actif/à-faire, colonne droite sticky + carte "Next action" guidée

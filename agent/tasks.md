@@ -1046,8 +1046,21 @@ Contraintes :
   sélectionné mis en avant + line-clamp, script scrollable, durée dans le header. Aucune
   route/API/DB, aucun changement pipeline ; garde-fous §13 préservés. Validé : tsc + build OK.
   QA visuelle authentifiée desktop/mobile à faire → T-1120f.
+- T-1120c-polish livré (UI-only, supervisé Codex puis mergé) — `app/(workspace)/research/[id]/page.tsx` :
+  Sources limitées à 5 (+ Show all), Suggested references à 9 (+ Review all), Plan Summary
+  compact (4 tuiles : angle/durée/scènes/références prêtes), carte Next action enrichie
+  (`detail`), scroll réduit. tsc + build OK. Commit 2d7b797.
+- T-1120e livré (UI-only, scope « honnête » — STOP-and-explain validé par Paul) —
+  `app/(workspace)/research/[id]/page.tsx` : carte Explainer transformée en panneau
+  **Render & post-production** — cadrage **Raw vs Final**, bouton render existant réutilisé,
+  états in_progress/done/failed, et au statut *done* deep-links vers la **page Job**
+  (overlays/captions/branding/exports y existent déjà) + Library, avec description honnête
+  de la post-prod. **Aucun back** : pas de nouvelle route/API/DB, aucun rendu déclenché
+  depuis ce panneau, aucun faux contrôle. tsc + build OK. QA visuelle authentifiée → T-1120f.
+  Note : le panneau post-prod **fonctionnel** complet (overlays/voix/exports actifs) reste
+  hors UI-only — câblerait les routes `app/api/jobs/[id]/{overlay,voiceover,export-social}`
+  (déclenchent Modal = coût ; sémantique à vérifier sur explainer) → ticket séparé si voulu.
 - Reste, ordre recommandé :
-  T-1120e Render/Post-production → **T-1120-preview-spike** (préalable bloquant :
-  valider preview low-fi/high-fi, latence, coût) → T-1120d Explainer Studio →
-  T-1120f Visual QA desktop/mobile.
+  **T-1120-preview-spike** (préalable bloquant : valider preview low-fi/high-fi, latence,
+  coût) → T-1120d Explainer Studio → T-1120f Visual QA desktop/mobile.
 
