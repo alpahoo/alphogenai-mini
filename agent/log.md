@@ -25,7 +25,10 @@ Entrée la plus récente en haut. Format :
   (1,5s)** + indicateur Saving…/Saved ; sous-titre/pied de page mis à jour.
 - Coût : ~0 € (quelques Ko/plan, serverless déjà inclus). Aucun Modal/pipeline générative touché.
 - Vérif : tsc → exit 0 ; vitest lib/explainer → 27 OK ; npm run build → OK sans warning, nouvelle route
-  compilée, /research/[id] 16,2 kB. E2E prod (autosave + survie reload) → à vérifier après déploiement.
+  compilée, /research/[id] 16,2 kB.
+- **E2E prod vérifié (Claude-in-Chrome)** : éditer une scène → indicateur « Saved » → **reload de la
+  page** → réouverture du Studio → l'édit est **persisté** (textarea + preview). « Reset to plan »
+  retire le brouillon. Plan de test nettoyé. Tier B opérationnel en prod.
 
 ## 2026-06-22 — Claude — T-1120f e2e « Render these edits » réussi (prod)
 - E2E complet sur prod (déploiement Tier A 71971e2 live) via Claude-in-Chrome :
