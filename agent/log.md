@@ -12,6 +12,17 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — Tier B : corrections review Codex (P1 versioning + P3 commentaire)
+- P1 (correction) : le brouillon n'était pas lié à la version du storyboard → un plan régénéré
+  pouvait être masqué par un vieux draft. Fix : `working_storyboard` stocke désormais
+  `storyboardId` (route PUT) ; le Studio ne réutilise le draft que si
+  `ws.storyboardId === storyboard.id` (sinon il repart du plan).
+- P1 (vrai clear) : ajout `DELETE /api/research/jobs/[id]/working-storyboard` (→ working_storyboard
+  = null). « Reset to plan » appelle `onClear` ET supprime l'autosave qui aurait réécrit une copie
+  du plan (skipNextSaveRef). Le draft est donc réellement vidé.
+- P3 : commentaire d'en-tête de explainer-studio.tsx corrigé (n'était plus « in-memory only »).
+- Vérif : tsc → exit 0 ; vitest lib/explainer → 27 OK ; build OK sans warning, /research/[id] 16,4 kB.
+
 ## 2026-06-22 — Claude — Tier B : persistance du working copy (autosave)
 - But : les édits du Studio survivent au reload (sérénité tests + bêta-testeurs).
 - DB : migration `20260622_add_working_storyboard.sql` → colonne `research_jobs.working_storyboard jsonb`

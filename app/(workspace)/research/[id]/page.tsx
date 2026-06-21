@@ -38,7 +38,7 @@ interface ResearchJob {
   error_step: string | null;
   created_at: string;
   updated_at: string;
-  working_storyboard: { scenes?: unknown; savedAt?: string } | null;
+  working_storyboard: { scenes?: unknown; savedAt?: string; storyboardId?: string | null } | null;
 }
 
 interface ResearchSource {
@@ -418,16 +418,29 @@ export default function ResearchDetailPage() {
     }
   }
 
-  // Tier B: persist the Studio working copy (autosave). Returns the savedAt ISO.
+  // Tier B: persist the Studio working copy (autosave). Tags the draft with the
+  // current storyboard id so a regenerated plan invalidates it. Returns savedAt ISO.
   async function saveWorkingStoryboard(sb: ExplainerStoryboard): Promise<string> {
     const res = await fetch(`/api/research/jobs/${jobId}/working-storyboard`, {
       method: "PUT",
       headers: await authHeaders(),
-      body: JSON.stringify({ scenes: sb.scenes }),
+      body: JSON.stringify({ scenes: sb.scenes, storyboardId: storyboard?.id ?? null }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.error || "Could not save your edits.");
     return data.savedAt as string;
+  }
+
+  // Tier B: discard the working copy (Reset to plan) — clears the persisted draft.
+  async function clearWorkingStoryboard(): Promise<void> {
+    const res = await fetch(`/api/research/jobs/${jobId}/working-storyboard`, {
+      method: "DELETE",
+      headers: await authHeaders(),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data?.error || "Could not reset your draft.");
+    }
   }
 
   // Poll the explainer job until it finishes (render is async, ~minutes).
@@ -464,11 +477,19 @@ export default function ResearchDetailPage() {
   const studioInitial = useMemo<ExplainerStoryboard | null>(() => {
     if (!explainerStoryboard) return null;
     const ws = job?.working_storyboard;
-    if (ws && Array.isArray(ws.scenes) && ws.scenes.length > 0) {
+    // Only reuse the draft if it was derived from the CURRENT storyboard version —
+    // a regenerated script/storyboard invalidates a stale draft.
+    if (
+      ws &&
+      Array.isArray(ws.scenes) &&
+      ws.scenes.length > 0 &&
+      storyboard?.id &&
+      ws.storyboardId === storyboard.id
+    ) {
       return { meta: explainerStoryboard.meta, scenes: ws.scenes as ExplainerScene[] };
     }
     return explainerStoryboard;
-  }, [explainerStoryboard, job?.working_storyboard]);
+  }, [explainerStoryboard, job?.working_storyboard, storyboard?.id]);
   const visibleSources = showAllSources ? sources : sources.slice(0, 5);
   const hiddenSourcesCount = Math.max(0, sources.length - visibleSources.length);
   const visibleMedia = showAllMedia ? media : media.slice(0, 9);
@@ -1191,6 +1212,7 @@ export default function ResearchDetailPage() {
               onClose={() => setStudioOpen(false)}
               canRender={canSendToDirector}
               onSave={saveWorkingStoryboard}
+              onClear={clearWorkingStoryboard}
               onRender={(sb) => {
                 setStudioOpen(false);
                 generateExplainer(sb);

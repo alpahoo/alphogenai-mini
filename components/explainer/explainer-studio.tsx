@@ -3,12 +3,11 @@
 /**
  * ExplainerStudio — editable explainer working copy with a live WYSIWYG preview.
  *
- * Scope (T-1120d step 3, UI-only): edits a LOCAL working copy of the storyboard
- * (seeded from the research plan) and drives the live preview. It NEVER writes to
- * research_storyboards (§13.2) — the working copy is in-memory only. Persisting
- * edits across reloads, and making the final render use the edits, both require a
- * backend (new table + route + migration) and are intentionally out of scope here;
- * the final render still derives from the saved plan. See
+ * Edits a working copy of the storyboard (seeded from the persisted draft if any,
+ * else the research plan) and drives the live preview. It NEVER writes to
+ * research_storyboards (§13.2). The working copy is autosaved as a separate draft
+ * (Tier B) via onSave, tagged with the storyboard version, and "Render these edits"
+ * renders it; "Reset to plan" clears the draft via onClear. See
  * docs/product/research-explainer-premium-ui-spec.md §13.
  *
  * Simple mode is the default (text / voice / duration / template per scene);
@@ -47,6 +46,7 @@ export function ExplainerStudio({
   onClose,
   onRender,
   onSave,
+  onClear,
   canRender = true,
 }: {
   /** Seed for the editor: the persisted draft if any, else the plan. */
@@ -58,6 +58,8 @@ export function ExplainerStudio({
   onRender?: (storyboard: ExplainerStoryboard) => void;
   /** Persist the working copy (Tier B autosave). Resolves to a savedAt ISO string. */
   onSave?: (storyboard: ExplainerStoryboard) => Promise<string>;
+  /** Discard the persisted draft (Reset to plan). */
+  onClear?: () => Promise<void>;
   /** False when the plan isn't approved yet (render gated upstream). */
   canRender?: boolean;
 }) {
@@ -84,10 +86,17 @@ export function ExplainerStudio({
   // mount (nothing to save yet).
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const firstRef = useRef(true);
+  // Set when "Reset to plan" changes the draft, so autosave doesn't immediately
+  // re-persist a copy of the plan (the reset clears the draft via onClear instead).
+  const skipNextSaveRef = useRef(false);
   useEffect(() => {
     if (!onSave) return;
     if (firstRef.current) {
       firstRef.current = false;
+      return;
+    }
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
       return;
     }
     const t = setTimeout(async () => {
@@ -164,7 +173,12 @@ export function ExplainerStudio({
           )}
           <button
             type="button"
-            onClick={() => setDraft(cloneStoryboard(resetTarget))}
+            onClick={() => {
+              skipNextSaveRef.current = true;
+              setDraft(cloneStoryboard(resetTarget));
+              setSaveState("idle");
+              onClear?.().catch(() => setSaveState("error"));
+            }}
             disabled={!dirty}
             className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
