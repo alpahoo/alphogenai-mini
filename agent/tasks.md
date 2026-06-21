@@ -1068,13 +1068,15 @@ Contraintes :
   renforcé (le spike n'a déclenché aucun rendu). 1ʳᵉ étape de T-1120d = extraire
   `lib/explainer/composition.ts` (partagé build.js + Studio) + composant preview iframe.
   **T-1120d débloqué.**
-- T-1120f en cours — QA via Claude-in-Chrome sur la prod (plan approuvé) : Home/Plan
+- T-1120f livré — QA via Claude-in-Chrome sur la prod (plan approuvé) : Home/Plan
   Review/Render panel/preview/Studio **vérifiés** (édition Studio → preview se met à jour ;
   accès cross-frame OK ; pas d'erreur app en console). Fix robustesse : ExplainerPreview
   pilote la lecture depuis l'**horloge du parent** (rAF parent → `tl.time(t)`) au lieu du
   ticker GSAP de l'iframe (fragile/throttlé). Fluidité temps-réel non confirmable en
-  automation (rAF global throttlé). Reste : e2e « Render these edits » quand le déploiement
-  Tier A est live.
+  automation (rAF global throttlé) — OK pour un vrai utilisateur. **E2E « Render these
+  edits » réussi** : édition → POST storyboard édité → rendu Modal (~95s) → MP4 en page Job
+  + **Library** (job 8314b207). T-1120 (b/c/c-polish/e/preview-spike/d 1-3 + render-edits/f)
+  complet.
 - T-1120d-render-edits livré (Tier A backend, autorisé par Paul — **route**, pas UI-only) :
   `POST /api/research/jobs/[id]/explainer` accepte désormais un `{ storyboard }` édité
   optionnel. **Validé serveur** via `sanitizeEditedScenes` (enum templates/motions, clamp

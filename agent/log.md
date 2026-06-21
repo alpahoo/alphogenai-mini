@@ -12,6 +12,15 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1120f e2e « Render these edits » réussi (prod)
+- E2E complet sur prod (déploiement Tier A 71971e2 live) via Claude-in-Chrome :
+  ouvrir l'Explainer Studio → éditer le texte d'une scène (marqueur) → « Render these
+  edits (~$0.03) » → POST OK → job créé, panneau « Rendering… » → ~95s plus tard
+  « Raw explainer ready ». MP4 confirmé sur la page Job (/jobs/8314b207-73fb-4617-b896-
+  5e9a5610fe51, src R2 signé `…_explainer.mp4`) et **présent en Library**. Coût ~quelques
+  cents (Modal CPU), conforme. Le chemin édité (route Tier A + sanitizeEditedScenes) est
+  donc validé bout-en-bout. T-1120f terminé.
+
 ## 2026-06-22 — Claude — T-1120f QA (Claude-in-Chrome) + fix robustesse preview
 - QA visuelle/e2e sur la prod live (www.alphogen.com, plan approuvé modal.com) via
   Claude-in-Chrome :
