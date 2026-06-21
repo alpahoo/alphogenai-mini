@@ -19,7 +19,11 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { ExplainerPreview } from "@/components/explainer/explainer-preview";
 import { ExplainerStudio } from "@/components/explainer/explainer-studio";
-import { buildExplainerStoryboard, type ExplainerStoryboard } from "@/lib/explainer/storyboard";
+import {
+  buildExplainerStoryboard,
+  type ExplainerScene,
+  type ExplainerStoryboard,
+} from "@/lib/explainer/storyboard";
 
 interface ResearchJob {
   id: string;
@@ -34,6 +38,7 @@ interface ResearchJob {
   error_step: string | null;
   created_at: string;
   updated_at: string;
+  working_storyboard: { scenes?: unknown; savedAt?: string } | null;
 }
 
 interface ResearchSource {
@@ -413,6 +418,18 @@ export default function ResearchDetailPage() {
     }
   }
 
+  // Tier B: persist the Studio working copy (autosave). Returns the savedAt ISO.
+  async function saveWorkingStoryboard(sb: ExplainerStoryboard): Promise<string> {
+    const res = await fetch(`/api/research/jobs/${jobId}/working-storyboard`, {
+      method: "PUT",
+      headers: await authHeaders(),
+      body: JSON.stringify({ scenes: sb.scenes }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || "Could not save your edits.");
+    return data.savedAt as string;
+  }
+
   // Poll the explainer job until it finishes (render is async, ~minutes).
   useEffect(() => {
     if (!explainerJob || explainerJob.status !== "in_progress") return;
@@ -442,6 +459,16 @@ export default function ResearchDetailPage() {
         : null,
     [job, scenes],
   );
+  // Studio seed: a persisted working copy (Tier B) if one exists, else the plan.
+  // The panel preview always stays on the plan; only the Studio uses the draft.
+  const studioInitial = useMemo<ExplainerStoryboard | null>(() => {
+    if (!explainerStoryboard) return null;
+    const ws = job?.working_storyboard;
+    if (ws && Array.isArray(ws.scenes) && ws.scenes.length > 0) {
+      return { meta: explainerStoryboard.meta, scenes: ws.scenes as ExplainerScene[] };
+    }
+    return explainerStoryboard;
+  }, [explainerStoryboard, job?.working_storyboard]);
   const visibleSources = showAllSources ? sources : sources.slice(0, 5);
   const hiddenSourcesCount = Math.max(0, sources.length - visibleSources.length);
   const visibleMedia = showAllMedia ? media : media.slice(0, 9);
@@ -1155,13 +1182,15 @@ export default function ResearchDetailPage() {
         </div>
       </div>
 
-      {studioOpen && explainerStoryboard && (
+      {studioOpen && studioInitial && (
         <div className="fixed inset-0 z-50 overflow-auto bg-white p-6">
           <div className="mx-auto max-w-6xl">
             <ExplainerStudio
-              initial={explainerStoryboard}
+              initial={studioInitial}
+              plan={explainerStoryboard ?? undefined}
               onClose={() => setStudioOpen(false)}
               canRender={canSendToDirector}
+              onSave={saveWorkingStoryboard}
               onRender={(sb) => {
                 setStudioOpen(false);
                 generateExplainer(sb);

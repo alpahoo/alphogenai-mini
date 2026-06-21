@@ -15,8 +15,8 @@
  * Advanced (camera motion, citation) is collapsed (§13.6).
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Copy, RotateCcw, Trash2, Wand2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, ChevronUp, Copy, Loader2, RotateCcw, Trash2, Wand2, X } from "lucide-react";
 import { ExplainerPreview } from "@/components/explainer/explainer-preview";
 import { compositionDurationSec } from "@/lib/explainer/composition";
 import type { ExplainerScene, ExplainerStoryboard, ExplainerTemplate } from "@/lib/explainer/storyboard";
@@ -43,14 +43,21 @@ function cloneStoryboard(sb: ExplainerStoryboard): ExplainerStoryboard {
 
 export function ExplainerStudio({
   initial,
+  plan,
   onClose,
   onRender,
+  onSave,
   canRender = true,
 }: {
+  /** Seed for the editor: the persisted draft if any, else the plan. */
   initial: ExplainerStoryboard;
+  /** The pristine plan-derived storyboard, used by "Reset to plan". Defaults to initial. */
+  plan?: ExplainerStoryboard;
   onClose?: () => void;
   /** Render the current working copy. Provided by the page (auth + job state). */
   onRender?: (storyboard: ExplainerStoryboard) => void;
+  /** Persist the working copy (Tier B autosave). Resolves to a savedAt ISO string. */
+  onSave?: (storyboard: ExplainerStoryboard) => Promise<string>;
   /** False when the plan isn't approved yet (render gated upstream). */
   canRender?: boolean;
 }) {
@@ -66,8 +73,34 @@ export function ExplainerStudio({
     return () => clearTimeout(t);
   }, [draft]);
 
+  const resetTarget = plan ?? initial;
   const totalDuration = useMemo(() => compositionDurationSec(draft), [draft]);
-  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(initial), [draft, initial]);
+  const dirty = useMemo(
+    () => JSON.stringify(draft) !== JSON.stringify(resetTarget),
+    [draft, resetTarget],
+  );
+
+  // Tier B autosave: debounce edits and persist the working copy. Skips the initial
+  // mount (nothing to save yet).
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const firstRef = useRef(true);
+  useEffect(() => {
+    if (!onSave) return;
+    if (firstRef.current) {
+      firstRef.current = false;
+      return;
+    }
+    const t = setTimeout(async () => {
+      setSaveState("saving");
+      try {
+        await onSave(draft);
+        setSaveState("saved");
+      } catch {
+        setSaveState("error");
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [draft, onSave]);
 
   const sel = draft.scenes[selected] ?? draft.scenes[0];
 
@@ -110,13 +143,28 @@ export function ExplainerStudio({
         <div>
           <h2 className="text-lg font-semibold text-neutral-950">Explainer Studio</h2>
           <p className="text-xs text-neutral-500">
-            Editing a working copy — changes drive the preview only and are not saved to your plan.
+            Editing a working copy — autosaved as a draft, separate from your approved plan.
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {onSave && (
+            <span className="mr-1 inline-flex items-center gap-1.5 text-xs text-neutral-500">
+              {saveState === "saving" && (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
+                </>
+              )}
+              {saveState === "saved" && (
+                <>
+                  <Check className="h-3.5 w-3.5 text-emerald-500" /> Saved
+                </>
+              )}
+              {saveState === "error" && <span className="text-red-600">Save failed</span>}
+            </span>
+          )}
           <button
             type="button"
-            onClick={() => setDraft(cloneStoryboard(initial))}
+            onClick={() => setDraft(cloneStoryboard(resetTarget))}
             disabled={!dirty}
             className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -325,8 +373,8 @@ export function ExplainerStudio({
 
       <p className="border-t border-neutral-200 pt-3 text-xs leading-5 text-neutral-400">
         &ldquo;Render these edits&rdquo; renders this working copy (~$0.03); the result appears in
-        Library. Your saved plan is never modified, and edits aren&rsquo;t kept after you close —
-        render them before leaving.
+        Library. Edits autosave as a draft (kept across reloads) and your approved plan is never
+        modified. &ldquo;Reset to plan&rdquo; discards the draft.
       </p>
     </div>
   );

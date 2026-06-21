@@ -12,6 +12,21 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — Tier B : persistance du working copy (autosave)
+- But : les édits du Studio survivent au reload (sérénité tests + bêta-testeurs).
+- DB : migration `20260622_add_working_storyboard.sql` → colonne `research_jobs.working_storyboard jsonb`
+  (stocke `{ scenes, savedAt }`). **Appliquée sur la prod qbrpzmuedfugbhoeytdj via Supabase MCP**
+  (apply_migration, success). RLS existante par utilisateur protège la colonne. `research_storyboards`
+  jamais touché.
+- Route : `PUT /api/research/jobs/[id]/working-storyboard` (auth + ownership + `sanitizeEditedScenes`
+  → écrit `{ scenes, savedAt }`). Lecture : la page lit déjà `research_jobs` en `select("*")`.
+- UI : page seed le Studio depuis `working_storyboard` si présent (sinon le plan) via `studioInitial` ;
+  passe `plan` séparément pour que « Reset to plan » vise bien le plan. Studio : **autosave débouncé
+  (1,5s)** + indicateur Saving…/Saved ; sous-titre/pied de page mis à jour.
+- Coût : ~0 € (quelques Ko/plan, serverless déjà inclus). Aucun Modal/pipeline générative touché.
+- Vérif : tsc → exit 0 ; vitest lib/explainer → 27 OK ; npm run build → OK sans warning, nouvelle route
+  compilée, /research/[id] 16,2 kB. E2E prod (autosave + survie reload) → à vérifier après déploiement.
+
 ## 2026-06-22 — Claude — T-1120f e2e « Render these edits » réussi (prod)
 - E2E complet sur prod (déploiement Tier A 71971e2 live) via Claude-in-Chrome :
   ouvrir l'Explainer Studio → éditer le texte d'une scène (marqueur) → « Render these

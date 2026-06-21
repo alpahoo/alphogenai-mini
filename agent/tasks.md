@@ -1019,7 +1019,12 @@ Contraintes :
 - Reste V1+ : polish thumbnails, éventuelle édition du rôle de référence,
   e2e visuel authentifié après déploiement.
 
-### [T-1120] Premium UI — Research / Explainer / Render Studio — `status: todo` · `owner: claude`
+### [T-1120] Premium UI — Research / Explainer / Render Studio — `status: done` · `owner: claude`
+- Tier B livré (persistance working copy, autorisé par Paul) : migration prod (colonne
+  `research_jobs.working_storyboard jsonb`, via Supabase MCP) + route PUT
+  `/api/research/jobs/[id]/working-storyboard` (sanitisée) + autosave débouncé dans le Studio
+  (indicateur Saving…/Saved) + seed du Studio depuis le brouillon persisté ; `research_storyboards`
+  intact ; coût ~0 €. tsc + build + 27 tests OK. E2E prod (survie reload) à vérifier post-déploiement.
 - T-1120a livré (docs-only) : `docs/product/research-explainer-premium-ui-spec.md` —
   vision UX premium 4 écrans (Research Home command center, Plan Review, Explainer
   Studio éditable + détails cinématiques, Render/Post-production) + navigation
