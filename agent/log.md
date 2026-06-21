@@ -12,6 +12,22 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-21 — Claude — T-1120-preview-spike (docs-only)
+- Fait : spike de décision sur la prévisualisation de l'explainer. Examen de build.js
+  (composition = HTML/CSS + timeline GSAP pure), storyboard.ts (modèle déterministe) et
+  render_explainer Modal (CPU-only, async, ~minutes, ~2-5¢). Finding central : le même
+  HTML de composition tourne tel quel dans un navigateur → preview low-fi **WYSIWYG**
+  ($0, instantané, sans Modal), fidélité visuelle ≈ rendu final (deltas = voix Kokoro +
+  screenshot live). Reco : preview client-side dans le Studio ; high-fi = render existant
+  au clic uniquement. Garde-fou « aucun rendu coûteux auto » confirmé (aucun rendu
+  déclenché par le spike).
+- Fichiers : docs/product/t1120-preview-spike.md (nouveau), agent/tasks.md, agent/log.md.
+- Tests : docs-only — pas de code compilé modifié (pas de tsc/build requis).
+- Prochaine étape : T-1120d Explainer Studio — débloqué. 1ʳᵉ étape = extraire
+  lib/explainer/composition.ts (partagé build.js + Studio) + composant preview iframe.
+
+---
+
 ## 2026-06-21 — Claude — T-1120e Render & post-production panel (UI-only)
 - Fait : mini-audit (STOP-and-explain) → le panneau post-prod *fonctionnel* complet n'est
   pas UI-only (overlays/voix/exports = routes qui déclenchent Modal, ou duplication de la

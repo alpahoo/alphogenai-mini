@@ -1060,7 +1060,15 @@ Contraintes :
   Note : le panneau post-prod **fonctionnel** complet (overlays/voix/exports actifs) reste
   hors UI-only — câblerait les routes `app/api/jobs/[id]/{overlay,voiceover,export-social}`
   (déclenchent Modal = coût ; sémantique à vérifier sur explainer) → ticket séparé si voulu.
+- T-1120-preview-spike livré (docs-only) — `docs/product/t1120-preview-spike.md` :
+  décision = preview **low-fi client-side WYSIWYG** dans le Studio (la composition est
+  du HTML/CSS+GSAP pur, donc le même HTML tourne dans le navigateur → fidélité ≈ rendu
+  final, $0, instantané, sans Modal) ; high-fi = render Modal CPU existant, **au clic
+  uniquement** (~minutes, ~2-5¢). Garde-fou « aucun rendu coûteux auto » confirmé et
+  renforcé (le spike n'a déclenché aucun rendu). 1ʳᵉ étape de T-1120d = extraire
+  `lib/explainer/composition.ts` (partagé build.js + Studio) + composant preview iframe.
+  **T-1120d débloqué.**
 - Reste, ordre recommandé :
-  **T-1120-preview-spike** (préalable bloquant : valider preview low-fi/high-fi, latence,
-  coût) → T-1120d Explainer Studio → T-1120f Visual QA desktop/mobile.
+  T-1120d Explainer Studio (commencer par l'extraction `composition.ts` partagée, puis
+  preview iframe — UI-first, pas de back) → T-1120f Visual QA desktop/mobile.
 
