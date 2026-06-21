@@ -1068,6 +1068,16 @@ Contraintes :
   renforcé (le spike n'a déclenché aucun rendu). 1ʳᵉ étape de T-1120d = extraire
   `lib/explainer/composition.ts` (partagé build.js + Studio) + composant preview iframe.
   **T-1120d débloqué.**
+- T-1120d en cours — étape 3/n livrée : **Explainer Studio éditable** (UI-only, scope
+  confirmé par Paul) — `components/explainer/explainer-studio.tsx`, ouvert en overlay
+  depuis le panneau Render. Édite un **working copy local** (seedé du plan, jamais persisté
+  → `research_storyboards` intact, §13.2) : liste de scènes (réordonner/dupliquer/supprimer),
+  inspecteur **Simple** (template, texte écran, voix-off, durée, bullets) + **Advanced replié**
+  (camera_motion, citation) §13.6, **preview live débouncé** (350 ms) qui reflète chaque édit,
+  Reset to plan. Note honnête : le **rendu final reste basé sur le plan sauvegardé** (wiring
+  édits→rendu + persistance = ticket backend suivant, le point ouvert §13). Aucune route/API/
+  DB, aucun pipeline. tsc + build OK (sans warning), /research/[id] 15,6 kB ; 21 tests explainer
+  OK. QA visuelle live non réalisable (cwd worktree ≠ alphogenai-mini) → T-1120f.
 - T-1120d en cours — étape 2/n livrée : composant **preview WYSIWYG**
   `components/explainer/explainer-preview.tsx` — charge le HTML de `composition.ts`
   dans un `<iframe srcdoc>` (scale-to-fit 1920×1080), pilote la timeline GSAP in-frame

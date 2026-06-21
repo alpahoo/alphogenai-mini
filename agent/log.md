@@ -12,6 +12,31 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-21 — Claude — T-1120d étape 3 : Explainer Studio éditable (UI-only)
+- Fait : `components/explainer/explainer-studio.tsx` — Studio éditable ouvert en overlay
+  depuis le panneau Render de la page plan. Édite un working copy LOCAL (cloné du storyboard
+  explainer dérivé du plan), jamais écrit dans research_storyboards (§13.2). Fonctions :
+  liste scènes (sélection, monter/descendre, dupliquer, supprimer) ; inspecteur Simple
+  (template parmi 6, texte écran, voix-off, durée, bullets si template=bullets) + Advanced
+  replié (camera_motion, source_citation) §13.6 ; preview live débouncé 350 ms (évite le
+  reload iframe à chaque frappe) ; Reset to plan ; bannière + note « rendu final = plan
+  sauvegardé ».
+- Scope (validé par Paul) : UI-only. Le rendu final NE tient PAS compte des édits (la route
+  /explainer reconstruit depuis research_storyboards) ; rendre les édits + persistance =
+  ticket backend suivant (point ouvert §13 : working_storyboard table/route/migration).
+- Vérif : tsc → exit 0 ; npm run build → OK sans warning, /research/[id] 15,6 kB ; vitest
+  lib/explainer → 21 OK. QA visuelle live non réalisable (cwd = worktree silly-lovelace,
+  édition d'alphogenai-mini en chemins absolus → infra preview non liée) → T-1120f.
+- Fichiers : components/explainer/explainer-studio.tsx (nouveau),
+  app/(workspace)/research/[id]/page.tsx (import + state studioOpen + bouton + overlay),
+  agent/tasks.md, agent/log.md.
+- Garde-fous : UI-only, aucune route/API/DB, aucun pipeline, research_storyboards intact,
+  aucun rendu déclenché par le Studio.
+- Prochaine étape : T-1120f Visual QA (desktop/mobile, confirmer preview + studio) ; puis,
+  si voulu, ticket backend persistance/working-storyboard pour rendre les édits.
+
+---
+
 ## 2026-06-21 — Claude — T-1120d étape 2 : composant preview WYSIWYG
 - Fait : `components/explainer/explainer-preview.tsx` (client) — rend le HTML de
   composition.ts dans un `<iframe srcdoc>` mis à l'échelle (1920×1080 → largeur dispo via

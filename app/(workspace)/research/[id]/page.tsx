@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ExplainerPreview } from "@/components/explainer/explainer-preview";
+import { ExplainerStudio } from "@/components/explainer/explainer-studio";
 import { buildExplainerStoryboard } from "@/lib/explainer/storyboard";
 
 interface ResearchJob {
@@ -180,6 +181,7 @@ export default function ResearchDetailPage() {
   >(null);
   const [showAllSources, setShowAllSources] = useState(false);
   const [showAllMedia, setShowAllMedia] = useState(false);
+  const [studioOpen, setStudioOpen] = useState(false);
 
   async function authHeaders() {
     const {
@@ -1080,6 +1082,13 @@ export default function ResearchDetailPage() {
               {explainerStoryboard && (
                 <div className="mt-4">
                   <ExplainerPreview storyboard={explainerStoryboard} />
+                  <button
+                    type="button"
+                    onClick={() => setStudioOpen(true)}
+                    className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-neutral-300 px-4 py-2.5 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-50"
+                  >
+                    Open Explainer Studio
+                  </button>
                 </div>
               )}
 
@@ -1144,6 +1153,14 @@ export default function ResearchDetailPage() {
           </aside>
         </div>
       </div>
+
+      {studioOpen && explainerStoryboard && (
+        <div className="fixed inset-0 z-50 overflow-auto bg-white p-6">
+          <div className="mx-auto max-w-6xl">
+            <ExplainerStudio initial={explainerStoryboard} onClose={() => setStudioOpen(false)} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
