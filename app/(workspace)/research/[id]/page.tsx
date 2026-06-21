@@ -19,7 +19,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { ExplainerPreview } from "@/components/explainer/explainer-preview";
 import { ExplainerStudio } from "@/components/explainer/explainer-studio";
-import { buildExplainerStoryboard } from "@/lib/explainer/storyboard";
+import { buildExplainerStoryboard, type ExplainerStoryboard } from "@/lib/explainer/storyboard";
 
 interface ResearchJob {
   id: string;
@@ -390,7 +390,7 @@ export default function ResearchDetailPage() {
     }
   }
 
-  async function generateExplainer() {
+  async function generateExplainer(editedStoryboard?: ExplainerStoryboard) {
     if (!job || !script?.approved || scenes.length === 0) {
       setError("Approve the storyboard before rendering an explainer.");
       return;
@@ -401,6 +401,7 @@ export default function ResearchDetailPage() {
       const res = await fetch(`/api/research/jobs/${jobId}/explainer`, {
         method: "POST",
         headers: await authHeaders(),
+        ...(editedStoryboard ? { body: JSON.stringify({ storyboard: editedStoryboard }) } : {}),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "Explainer render failed to start.");
@@ -1094,7 +1095,7 @@ export default function ResearchDetailPage() {
 
               <button
                 type="button"
-                onClick={generateExplainer}
+                onClick={() => generateExplainer()}
                 disabled={!!action || !canSendToDirector || explainerJob?.status === "in_progress"}
                 className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${
                   canSendToDirector && explainerJob?.status !== "in_progress"
@@ -1157,7 +1158,15 @@ export default function ResearchDetailPage() {
       {studioOpen && explainerStoryboard && (
         <div className="fixed inset-0 z-50 overflow-auto bg-white p-6">
           <div className="mx-auto max-w-6xl">
-            <ExplainerStudio initial={explainerStoryboard} onClose={() => setStudioOpen(false)} />
+            <ExplainerStudio
+              initial={explainerStoryboard}
+              onClose={() => setStudioOpen(false)}
+              canRender={canSendToDirector}
+              onRender={(sb) => {
+                setStudioOpen(false);
+                generateExplainer(sb);
+              }}
+            />
           </div>
         </div>
       )}

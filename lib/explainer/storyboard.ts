@@ -129,6 +129,75 @@ export function mapScenes(rawScenes: unknown): ExplainerScene[] {
   });
 }
 
+const ALLOWED_TEMPLATES: ReadonlySet<string> = new Set([
+  "hero",
+  "screenshot_zoom",
+  "bullets",
+  "comparison",
+  "stat",
+  "cta",
+]);
+const ALLOWED_MOTIONS: ReadonlySet<string> = new Set(["slow_push_in", "pull_back", "pan"]);
+
+const MAX_EDITED_SCENES = 30;
+
+function clampDuration(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return 6;
+  return Math.max(2, Math.min(30, Math.round(n)));
+}
+
+function cap(v: unknown, max: number): string {
+  return str(v).slice(0, max);
+}
+
+/**
+ * Sanitize a client-edited scene list (from the Explainer Studio) into trusted
+ * ExplainerScene[]. NEVER trust the client: each field is coerced, length-capped,
+ * and enum-validated; the template the user picked is preserved (unlike mapScenes,
+ * which reassigns templates by position). The brand is derived server-side by the
+ * caller — it is intentionally NOT taken from client input.
+ */
+export function sanitizeEditedScenes(input: unknown): ExplainerScene[] {
+  const arr = Array.isArray(input) ? input : [];
+  return arr.slice(0, MAX_EDITED_SCENES).map((raw, i): ExplainerScene => {
+    const s = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    const template = (ALLOWED_TEMPLATES.has(str(s.template)) ? str(s.template) : "hero") as ExplainerTemplate;
+    const motion = ALLOWED_MOTIONS.has(str(s.camera_motion)) ? str(s.camera_motion) : null;
+    const bulletsRaw = Array.isArray(s.bullets) ? s.bullets : [];
+    const bullets = bulletsRaw.map((b) => cap(b, 200)).filter(Boolean).slice(0, 6);
+    const citation = cap(s.source_citation, 300);
+
+    const c = (s.comparison && typeof s.comparison === "object" ? s.comparison : null) as Record<
+      string,
+      unknown
+    > | null;
+    const st = (s.stat && typeof s.stat === "object" ? s.stat : null) as Record<string, unknown> | null;
+
+    return {
+      title: cap(s.title, 200) || `Scene ${i + 1}`,
+      duration_sec: clampDuration(s.duration_sec),
+      camera_motion: motion,
+      onscreen_text: cap(s.onscreen_text, 600),
+      voiceover_line: cap(s.voiceover_line, 1200),
+      source_citation: citation || null,
+      template,
+      ...(bullets.length ? { bullets } : {}),
+      ...(c
+        ? {
+            comparison: {
+              before_label: cap(c.before_label, 80),
+              before: cap(c.before, 300),
+              after_label: cap(c.after_label, 80),
+              after: cap(c.after, 300),
+            },
+          }
+        : {}),
+      ...(st ? { stat: { value: cap(st.value, 80), label: cap(st.label, 160) } } : {}),
+    };
+  });
+}
+
 export interface ExplainerStoryboard {
   meta: { brand: ExplainerBrand };
   scenes: ExplainerScene[];

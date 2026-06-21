@@ -3,7 +3,53 @@ import {
   deriveBrand,
   mapScenes,
   buildExplainerStoryboard,
+  sanitizeEditedScenes,
 } from '@/lib/explainer/storyboard';
+
+describe('sanitizeEditedScenes', () => {
+  it('preserves a valid user-picked template (unlike mapScenes positional assignment)', () => {
+    const out = sanitizeEditedScenes([
+      { template: 'stat', onscreen_text: 'A', duration_sec: 5 },
+      { template: 'comparison', onscreen_text: 'B', duration_sec: 6 },
+    ]);
+    expect(out.map((s) => s.template)).toEqual(['stat', 'comparison']);
+  });
+
+  it('falls back invalid templates/motions to safe defaults', () => {
+    const [s] = sanitizeEditedScenes([{ template: 'evil', camera_motion: 'zoom_warp', onscreen_text: 'x' }]);
+    expect(s.template).toBe('hero');
+    expect(s.camera_motion).toBeNull();
+  });
+
+  it('clamps duration to [2,30] and defaults non-positive values', () => {
+    expect(sanitizeEditedScenes([{ duration_sec: 999 }])[0].duration_sec).toBe(30);
+    expect(sanitizeEditedScenes([{ duration_sec: 0 }])[0].duration_sec).toBe(6);
+    expect(sanitizeEditedScenes([{ duration_sec: 1 }])[0].duration_sec).toBe(2);
+  });
+
+  it('coerces + length-caps text fields and ignores non-string junk', () => {
+    const long = 'a'.repeat(2000);
+    const [s] = sanitizeEditedScenes([
+      { onscreen_text: long, voiceover_line: { evil: true }, title: 42, source_citation: '' },
+    ]);
+    expect(s.onscreen_text.length).toBe(600);
+    expect(s.voiceover_line).toBe('');
+    expect(s.title).toBe('Scene 1');
+    expect(s.source_citation).toBeNull();
+  });
+
+  it('caps scene count at 30 and bullets at 6', () => {
+    const many = Array.from({ length: 50 }, () => ({ template: 'hero', onscreen_text: 'x' }));
+    expect(sanitizeEditedScenes(many)).toHaveLength(30);
+    const [s] = sanitizeEditedScenes([{ template: 'bullets', bullets: Array.from({ length: 20 }, (_, i) => `b${i}`) }]);
+    expect(s.bullets).toHaveLength(6);
+  });
+
+  it('returns [] for non-array input', () => {
+    expect(sanitizeEditedScenes(null)).toEqual([]);
+    expect(sanitizeEditedScenes('nope')).toEqual([]);
+  });
+});
 
 describe('deriveBrand', () => {
   it('derives name + product_url from input_url', () => {

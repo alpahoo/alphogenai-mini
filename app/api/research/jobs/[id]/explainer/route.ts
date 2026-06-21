@@ -1,6 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { buildExplainerStoryboard } from '@/lib/explainer/storyboard';
+import {
+  buildExplainerStoryboard,
+  deriveBrand,
+  sanitizeEditedScenes,
+  type ExplainerStoryboard,
+} from '@/lib/explainer/storyboard';
 import { triggerRenderExplainer } from '@/lib/modal-client';
 
 function getSupabaseService() {
@@ -72,10 +77,29 @@ export async function POST(
       );
     }
 
-    const storyboard = buildExplainerStoryboard(
-      { input_url: job.input_url, topic: job.topic },
-      rawScenes,
-    );
+    // Optional client-edited storyboard from the Explainer Studio. The body is
+    // never trusted: scenes are sanitized server-side and the brand is re-derived
+    // from the research job (clients cannot inject an arbitrary brand / logo URL).
+    // research_storyboards is NOT modified — the edited copy is used for this render
+    // only (§13.2).
+    const body = (await request.json().catch(() => null)) as { storyboard?: unknown } | null;
+    const editedScenesRaw =
+      body && typeof body === 'object' && body.storyboard && typeof body.storyboard === 'object'
+        ? (body.storyboard as { scenes?: unknown }).scenes
+        : null;
+
+    let storyboard: ExplainerStoryboard;
+    let edited = false;
+    if (Array.isArray(editedScenesRaw) && editedScenesRaw.length > 0) {
+      const scenes = sanitizeEditedScenes(editedScenesRaw);
+      if (scenes.length === 0) {
+        return NextResponse.json({ error: 'The edited storyboard is empty or invalid.' }, { status: 400 });
+      }
+      storyboard = { meta: { brand: deriveBrand(job.input_url, job.topic) }, scenes };
+      edited = true;
+    } else {
+      storyboard = buildExplainerStoryboard({ input_url: job.input_url, topic: job.topic }, rawScenes);
+    }
     const totalDuration = Math.round(
       storyboard.scenes.reduce((acc, s) => acc + (s.duration_sec || 0), 0),
     );
@@ -91,7 +115,7 @@ export async function POST(
         current_stage: 'rendering_explainer',
         engine_used: 'explainer',
         target_duration_seconds: totalDuration || 30,
-        metadata: { research_job_id: id, render_mode: 'explainer' },
+        metadata: { research_job_id: id, render_mode: 'explainer', edited },
       })
       .select('id')
       .single();

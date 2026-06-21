@@ -16,7 +16,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Copy, RotateCcw, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, RotateCcw, Trash2, Wand2, X } from "lucide-react";
 import { ExplainerPreview } from "@/components/explainer/explainer-preview";
 import { compositionDurationSec } from "@/lib/explainer/composition";
 import type { ExplainerScene, ExplainerStoryboard, ExplainerTemplate } from "@/lib/explainer/storyboard";
@@ -44,9 +44,15 @@ function cloneStoryboard(sb: ExplainerStoryboard): ExplainerStoryboard {
 export function ExplainerStudio({
   initial,
   onClose,
+  onRender,
+  canRender = true,
 }: {
   initial: ExplainerStoryboard;
   onClose?: () => void;
+  /** Render the current working copy. Provided by the page (auth + job state). */
+  onRender?: (storyboard: ExplainerStoryboard) => void;
+  /** False when the plan isn't approved yet (render gated upstream). */
+  canRender?: boolean;
 }) {
   const [draft, setDraft] = useState<ExplainerStoryboard>(() => cloneStoryboard(initial));
   const [selected, setSelected] = useState(0);
@@ -116,6 +122,17 @@ export function ExplainerStudio({
           >
             <RotateCcw className="h-3.5 w-3.5" /> Reset to plan
           </button>
+          {onRender && (
+            <button
+              type="button"
+              onClick={() => onRender(draft)}
+              disabled={!canRender}
+              title={canRender ? undefined : "Approve the storyboard first"}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
+            >
+              <Wand2 className="h-3.5 w-3.5" /> Render these edits (~$0.03)
+            </button>
+          )}
           {onClose && (
             <button
               type="button"
@@ -307,8 +324,9 @@ export function ExplainerStudio({
       </div>
 
       <p className="border-t border-neutral-200 pt-3 text-xs leading-5 text-neutral-400">
-        The final render currently uses your saved plan. Studio edits change this preview only —
-        rendering your edits is the next step (needs a saved working copy).
+        &ldquo;Render these edits&rdquo; renders this working copy (~$0.03); the result appears in
+        Library. Your saved plan is never modified, and edits aren&rsquo;t kept after you close —
+        render them before leaving.
       </p>
     </div>
   );

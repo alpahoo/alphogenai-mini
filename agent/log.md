@@ -12,6 +12,33 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1120d-render-edits : route accepte le storyboard édité (Tier A)
+- Fait : la route POST /api/research/jobs/[id]/explainer accepte un body optionnel
+  `{ storyboard: { scenes } }` (le working copy du Studio). Si présent : scènes validées par
+  `sanitizeEditedScenes` (nouveau, dans storyboard.ts — enum templates/camera_motion, clamp
+  durée [2,30], cap longueurs texte/bullets, max 30 scènes, **template choisi par l'user
+  préservé**), marque **re-dérivée serveur** via deriveBrand (jamais depuis le client), puis
+  passée à triggerRenderExplainer. Sinon : comportement inchangé (build depuis
+  research_storyboards). research_storyboards jamais modifié ; metadata.edited taggé.
+  Studio : bouton « Render these edits (~$0.03) » (prop onRender + canRender) ; page :
+  generateExplainer accepte un storyboard édité optionnel et l'envoie en body ; fix du
+  onClick du bouton render existant (passait l'event React comme arg).
+- Décision : Tier A (autorisé par Paul). Aucune migration, aucun changement Modal (Modal
+  acceptait déjà un storyboard arbitraire). Tier B (persistance/autosave du working copy) =
+  non fait (nécessiterait table + migration).
+- Sécurité : body jamais fait confiance — sanitation + caps + brand serveur ; auth/ownership
+  inchangés.
+- Vérif : tsc → exit 0 ; vitest lib/explainer → 27 OK (+6 sanitize) ; npm run build → OK sans
+  warning, /research/[id] 15,8 kB. e2e réel (cliquer Render these edits → MP4 édité en Library)
+  → T-1120f.
+- Fichiers : app/api/research/jobs/[id]/explainer/route.ts, lib/explainer/storyboard.ts
+  (+ sanitizeEditedScenes), lib/explainer/__tests__/storyboard.test.ts,
+  components/explainer/explainer-studio.tsx, app/(workspace)/research/[id]/page.tsx,
+  agent/tasks.md, agent/log.md.
+- Prochaine étape : T-1120f QA visuelle + e2e ; éventuellement Tier B persistance.
+
+---
+
 ## 2026-06-21 — Claude — T-1120d étape 3 : Explainer Studio éditable (UI-only)
 - Fait : `components/explainer/explainer-studio.tsx` — Studio éditable ouvert en overlay
   depuis le panneau Render de la page plan. Édite un working copy LOCAL (cloné du storyboard

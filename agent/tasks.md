@@ -1068,6 +1068,17 @@ Contraintes :
   renforcé (le spike n'a déclenché aucun rendu). 1ʳᵉ étape de T-1120d = extraire
   `lib/explainer/composition.ts` (partagé build.js + Studio) + composant preview iframe.
   **T-1120d débloqué.**
+- T-1120d-render-edits livré (Tier A backend, autorisé par Paul — **route**, pas UI-only) :
+  `POST /api/research/jobs/[id]/explainer` accepte désormais un `{ storyboard }` édité
+  optionnel. **Validé serveur** via `sanitizeEditedScenes` (enum templates/motions, clamp
+  durée [2,30], cap longueurs/bullets/scènes, template user **préservé**), **marque
+  re-dérivée serveur** (le client ne peut pas injecter brand/logo). `research_storyboards`
+  **jamais modifié** (édits utilisés pour ce rendu seulement) ; `metadata.edited` taggé.
+  **Aucune migration, aucun changement Modal** (Modal acceptait déjà un storyboard). Studio :
+  bouton « Render these edits (~$0.03) » → `onRender(draft)` → `generateExplainer(sb)`.
+  Fix : `onClick={() => generateExplainer()}` (évitait de passer l'event comme storyboard).
+  6 tests sanitize ajoutés (27 explainer OK). tsc + build OK sans warning, /research/[id]
+  15,8 kB. QA visuelle/e2e → T-1120f. Persistance (survie reload/autosave) = Tier B, non fait.
 - T-1120d en cours — étape 3/n livrée : **Explainer Studio éditable** (UI-only, scope
   confirmé par Paul) — `components/explainer/explainer-studio.tsx`, ouvert en overlay
   depuis le panneau Render. Édite un **working copy local** (seedé du plan, jamais persisté
