@@ -26,7 +26,8 @@ interface GsapTimeline {
   play: () => void;
   pause: () => void;
   seek: (t: number) => void;
-  time: () => number;
+  /** GSAP time() is a getter (no arg) and a setter (with arg). */
+  time: (t?: number) => number;
   duration: () => number;
 }
 
@@ -48,6 +49,11 @@ export function ExplainerPreview({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const tlRef = useRef<GsapTimeline | null>(null);
+  // Playback is driven by the PARENT clock (parent rAF runs at full speed), not the
+  // iframe's GSAP ticker — an offscreen/throttled iframe rAF would otherwise freeze
+  // playback. We only ever seek the in-frame timeline via time(t) to render a frame.
+  const startWallRef = useRef(0);
+  const startPosRef = useRef(0);
 
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -95,6 +101,8 @@ export function ExplainerPreview({
         | undefined;
       const tl = win?.__timelines?.main;
       if (tl) {
+        tl.pause(); // we drive it ourselves via time(t)
+        tl.time(0);
         tlRef.current = tl;
         setReady(true);
         return;
@@ -104,19 +112,22 @@ export function ExplainerPreview({
     grab();
   }, []);
 
-  // While playing, mirror the timeline position into the scrubber; auto-stop at end.
+  // Drive playback from the parent clock: each parent rAF frame computes elapsed time
+  // and seeks the in-frame timeline. Robust to iframe rAF throttling.
   useEffect(() => {
     if (!playing) return;
     const tick = () => {
       const tl = tlRef.current;
       if (tl) {
-        const t = tl.time();
-        setPos(t);
-        if (t >= duration - 0.05) {
-          tl.pause();
+        const t = startPosRef.current + (performance.now() - startWallRef.current) / 1000;
+        if (t >= duration) {
+          tl.time(duration);
+          setPos(duration);
           setPlaying(false);
           return;
         }
+        tl.time(t);
+        setPos(t);
       }
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -130,29 +141,23 @@ export function ExplainerPreview({
     const tl = tlRef.current;
     if (!tl) return;
     if (playing) {
-      tl.pause();
       setPlaying(false);
     } else {
-      if (pos >= duration - 0.05) {
-        tl.seek(0);
-        setPos(0);
-      }
-      tl.play();
+      startPosRef.current = pos >= duration - 0.05 ? 0 : pos;
+      startWallRef.current = performance.now();
+      tl.time(startPosRef.current);
+      setPos(startPosRef.current);
       setPlaying(true);
     }
   }, [playing, pos, duration]);
 
-  const onScrub = useCallback(
-    (value: number) => {
-      const tl = tlRef.current;
-      if (!tl) return;
-      tl.pause();
-      tl.seek(value);
-      setPlaying(false);
-      setPos(value);
-    },
-    [],
-  );
+  const onScrub = useCallback((value: number) => {
+    const tl = tlRef.current;
+    if (!tl) return;
+    tl.time(value);
+    setPlaying(false);
+    setPos(value);
+  }, []);
 
   return (
     <div className={className}>

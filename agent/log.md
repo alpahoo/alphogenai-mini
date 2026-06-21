@@ -12,6 +12,34 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1120f QA (Claude-in-Chrome) + fix robustesse preview
+- QA visuelle/e2e sur la prod live (www.alphogen.com, plan approuvé modal.com) via
+  Claude-in-Chrome :
+  - Research Home (T-1120b) : chips workflow, composer, templates, watchlists, Recent
+    research (9 + badges) ✅
+  - Plan Review (T-1120c) : progress bar, Plan Summary (4 tuiles), Sources 5 + « Show all
+    (5 hidden) », Suggested references + bannière consentement + « Review all (14 hidden) » ✅
+  - Render & post-production (T-1120e) : Raw/Final, preview présent, « Open Studio »,
+    « Render explainer (~$0.03) » ✅
+  - Preview : iframe charge, accès cross-frame OK (allow-same-origin), `time()` pilote le
+    rendu ✅. Studio : overlay OK, 6 scènes × actions, inspecteur, et **édition → preview
+    se met à jour** (marqueur retrouvé dans le srcdoc après debounce) ✅
+  - Console : seules 3 erreurs d'extension Chrome (message channel) — pas notre app ✅
+- Fix robustesse (bug réel trouvé) : le rAF de l'iframe (et même du parent) est throttlé
+  en contexte automation ; au-delà de l'artefact, se reposer sur le **ticker GSAP interne
+  de l'iframe** est fragile (iframes imbriquées throttlées par certains navigateurs même
+  visibles). ExplainerPreview pilote désormais la lecture depuis **l'horloge du parent**
+  (performance.now + rAF parent → `tl.time(t)`), l'iframe ne servant que de moteur de rendu
+  seekable. Bonus vérifié : durée timeline 45,2s < compositionDuration 54s → la scène finale
+  statique tient sur la fin (clamp), ce qui correspond au MP4 réel.
+- Limite : fluidité temps-réel de la lecture non confirmable ici (rAF global throttlé par
+  l'automation) ; OK pour un vrai utilisateur fenêtre au premier plan.
+- Vérif : tsc → exit 0 ; npm run build → OK sans warning, /research/[id] 15,9 kB.
+- Fichiers : components/explainer/explainer-preview.tsx, agent/log.md, agent/tasks.md.
+- Reste : e2e « Render these edits » dès que le déploiement Tier A (71971e2) est live.
+
+---
+
 ## 2026-06-22 — Claude — T-1120d-render-edits : route accepte le storyboard édité (Tier A)
 - Fait : la route POST /api/research/jobs/[id]/explainer accepte un body optionnel
   `{ storyboard: { scenes } }` (le working copy du Studio). Si présent : scènes validées par
