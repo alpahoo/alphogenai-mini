@@ -12,6 +12,25 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-21 — Claude — T-1120d étape 1 : extraction lib/explainer/composition.ts
+- Fait : extrait la logique de composition de l'explainer dans un module TS pur et testable
+  (`lib/explainer/composition.ts`) — port fidèle de `infra/explainer-renderer/build.js` :
+  6 templates (hero/screenshot_zoom/bullets/comparison/stat/cta), cameraTween, timeline GSAP,
+  `buildCompositionHtml(storyboard, assets) → string` (= le HTML index.html, utilisable en
+  `<iframe srcdoc>` pour le preview Studio) + `compositionDurationSec`. Source unique des
+  templates pour le futur preview → WYSIWYG par construction. Ajout de champs optionnels
+  `comparison`/`stat` à `ExplainerScene` (additif, sûr).
+- Vérif : tsc → exit 0 ; vitest lib/explainer → 21 tests OK (9 nouveaux composition + 12
+  storyboard) ; **parité byte-identique prouvée** entre composition.ts et build.js sur les
+  6 templates via un test one-off (non commité, supprimé après).
+- Fichiers : lib/explainer/composition.ts (nouveau), lib/explainer/__tests__/composition.test.ts
+  (nouveau), lib/explainer/storyboard.ts (champs optionnels), agent/tasks.md, agent/log.md.
+- Garde-fous : aucune route/API/DB, **aucun changement pipeline** (build.js/Modal/VPS non
+  touchés — unifier build.js sur ce module = ticket Modal séparé, délibéré).
+- Prochaine étape : composant preview `<iframe srcdoc>` + GSAP play/scrub, puis layout Studio.
+
+---
+
 ## 2026-06-21 — Claude — T-1120-preview-spike (docs-only)
 - Fait : spike de décision sur la prévisualisation de l'explainer. Examen de build.js
   (composition = HTML/CSS + timeline GSAP pure), storyboard.ts (modèle déterministe) et

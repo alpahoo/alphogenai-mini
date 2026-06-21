@@ -36,6 +36,11 @@ export interface ExplainerScene {
   source_citation: string | null;
   template: ExplainerTemplate;
   bullets?: string[];
+  /** Optional structured data for the `comparison` / `stat` templates. Not set by
+   *  mapScenes today (templates fall back to defaults); reserved for the editable
+   *  Studio storyboard so composition.ts and build.js stay in lockstep. */
+  comparison?: { before_label?: string; before?: string; after_label?: string; after?: string };
+  stat?: { value?: string; label?: string };
 }
 
 /** Permissive shape: research scenes_json varies by generation date. */

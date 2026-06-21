@@ -1068,7 +1068,15 @@ Contraintes :
   renforcé (le spike n'a déclenché aucun rendu). 1ʳᵉ étape de T-1120d = extraire
   `lib/explainer/composition.ts` (partagé build.js + Studio) + composant preview iframe.
   **T-1120d débloqué.**
+- T-1120d en cours — étape 1/n livrée : extraction `lib/explainer/composition.ts`
+  (port fidèle de `build.js` : 6 templates + timeline GSAP, fonction pure
+  `buildCompositionHtml(storyboard, assets) → string` + `compositionDurationSec`).
+  Champs optionnels `comparison`/`stat` ajoutés à `ExplainerScene` (additif). 9 tests
+  vitest + **parité byte-identique prouvée vs build.js** sur les 6 templates (one-off,
+  non commité). build.js / Modal / VPS **non touchés** (unifier build.js dessus = ticket
+  Modal séparé). tsc + tests OK. Reste T-1120d : composant preview `<iframe srcdoc>` +
+  GSAP play/scrub, puis layout Studio (storyboard éditable, inspecteur).
 - Reste, ordre recommandé :
-  T-1120d Explainer Studio (commencer par l'extraction `composition.ts` partagée, puis
-  preview iframe — UI-first, pas de back) → T-1120f Visual QA desktop/mobile.
+  T-1120d (suite : preview iframe + Studio layout — UI-first, pas de back) →
+  T-1120f Visual QA desktop/mobile.
 
