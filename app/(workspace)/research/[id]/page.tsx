@@ -176,6 +176,8 @@ export default function ResearchDetailPage() {
   const [explainerJob, setExplainerJob] = useState<
     { id: string; status: string; url: string | null } | null
   >(null);
+  const [showAllSources, setShowAllSources] = useState(false);
+  const [showAllMedia, setShowAllMedia] = useState(false);
 
   async function authHeaders() {
     const {
@@ -427,6 +429,10 @@ export default function ResearchDetailPage() {
   const selectedAngle = angles.find((a) => a.selected);
   const selectedMediaCount = media.filter((item) => item.selected && item.storage_path).length;
   const scenes = storyboard?.scenes_json ?? [];
+  const visibleSources = showAllSources ? sources : sources.slice(0, 5);
+  const hiddenSourcesCount = Math.max(0, sources.length - visibleSources.length);
+  const visibleMedia = showAllMedia ? media : media.slice(0, 9);
+  const hiddenMediaCount = Math.max(0, media.length - visibleMedia.length);
   const canApprove = Boolean(script && scenes.length > 0 && !script.approved);
   const canSendToDirector = Boolean(script?.approved && scenes.length > 0);
   const visibleJobError = friendlyResearchError(job?.error_message);
@@ -467,22 +473,64 @@ export default function ResearchDetailPage() {
   };
   const activeStepKey = STEPS.find((step) => !stepDone[step.key])?.key ?? "director";
 
-  type NextAction = { label: string; hint: string; onClick?: () => void; disabled: boolean };
+  type NextAction = { label: string; hint: string; detail: string; onClick?: () => void; disabled: boolean };
   const nextAction: NextAction | null =
     sources.length === 0
-      ? { label: "Find sources", hint: "Discover trusted sources for this brief.", onClick: () => runStep("discover", `/api/research/jobs/${jobId}/discover`), disabled: !!action }
+      ? {
+          label: "Find sources",
+          hint: "Kick it off now",
+          detail: "Discover trusted sources and start building your evidence base.",
+          onClick: () => runStep("discover", `/api/research/jobs/${jobId}/discover`),
+          disabled: !!action,
+        }
       : readySources === 0
-        ? { label: "Extract sources", hint: "Pull readable evidence from your sources.", onClick: () => runStep("extract", `/api/research/jobs/${jobId}/extract`), disabled: !!action }
+        ? {
+            label: "Extract sources",
+            hint: "One more step",
+            detail: "Pull readable evidence so angle generation is reliable.",
+            onClick: () => runStep("extract", `/api/research/jobs/${jobId}/extract`),
+            disabled: !!action,
+          }
         : angles.length === 0
-          ? { label: "Generate angles", hint: "Propose editorial directions.", onClick: () => runStep("analyze", `/api/research/jobs/${jobId}/analyze`), disabled: !!action }
+          ? {
+              label: "Generate angles",
+              hint: "Keep going",
+              detail: "Create several editorial directions and pick the strongest one.",
+              onClick: () => runStep("analyze", `/api/research/jobs/${jobId}/analyze`),
+              disabled: !!action,
+            }
           : !selectedAngle
-            ? { label: "Select an angle", hint: "Pick one angle below to continue.", disabled: true }
+            ? {
+                label: "Select an angle",
+                hint: "Need one choice",
+                detail: "Pick an angle below to continue to script generation.",
+                onClick: undefined,
+                disabled: true,
+              }
             : !script
-              ? { label: "Generate script", hint: "Write the script and storyboard.", onClick: () => runStep("script", `/api/research/jobs/${jobId}/script`), disabled: !!action }
+              ? {
+                  label: "Generate script",
+                  hint: "Build your plan",
+                  detail: "Generate scenes and narration from your selected angle.",
+                  onClick: () => runStep("script", `/api/research/jobs/${jobId}/script`),
+                  disabled: !!action,
+                }
               : !script.approved
-                ? { label: "Approve storyboard", hint: "Review, then approve to unlock production.", onClick: approvePlan, disabled: !!action }
+                ? {
+                    label: "Approve storyboard",
+                    hint: "Quick review needed",
+                    detail: "Review quality and approve before running Director or explainer.",
+                    onClick: approvePlan,
+                    disabled: !!action,
+                  }
                 : job.status !== "sent_to_director"
-                  ? { label: "Send to Director", hint: "Hand off as an editable Director plan.", onClick: sendToDirector, disabled: !!action }
+                  ? {
+                      label: "Send to Director",
+                      hint: "Ready to produce",
+                      detail: "Move this storyboard into the Editor as an editable Director plan.",
+                      onClick: sendToDirector,
+                      disabled: !!action,
+                    }
                   : null;
 
   return (
@@ -537,7 +585,7 @@ export default function ResearchDetailPage() {
             </div>
           </div>
 
-          <div className="mt-6 flex items-stretch gap-1.5">
+          <div className="mt-4 flex items-stretch gap-1.5">
             {STEPS.map((step, index) => {
               const done = stepDone[step.key];
               const active = step.key === activeStepKey;
@@ -567,6 +615,27 @@ export default function ResearchDetailPage() {
                 </div>
               );
             })}
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+              <p className="text-xs uppercase tracking-[0.14em] text-neutral-500">Current angle</p>
+              <p className="mt-1 text-sm font-semibold text-neutral-900 line-clamp-2">{selectedAngle?.title ?? "Not chosen yet"}</p>
+            </div>
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+              <p className="text-xs uppercase tracking-[0.14em] text-neutral-500">Target duration</p>
+              <p className="mt-1 text-sm font-semibold text-neutral-900">
+                {job.target_duration_seconds ? `${job.target_duration_seconds}s` : "Not set"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+              <p className="text-xs uppercase tracking-[0.14em] text-neutral-500">Storyboard scenes</p>
+              <p className="mt-1 text-sm font-semibold text-neutral-900">{scenes.length}</p>
+            </div>
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+              <p className="text-xs uppercase tracking-[0.14em] text-neutral-500">Ready references</p>
+              <p className="mt-1 text-sm font-semibold text-neutral-900">{selectedMediaCount}</p>
+            </div>
           </div>
         </section>
 
@@ -626,7 +695,7 @@ export default function ResearchDetailPage() {
                     No sources yet. Start with discovery.
                   </div>
                 ) : (
-                  sources.map((source) => (
+                  visibleSources.map((source) => (
                     <div key={source.id} className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -649,6 +718,15 @@ export default function ResearchDetailPage() {
                       )}
                     </div>
                   ))
+                )}
+                {hiddenSourcesCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllSources(!showAllSources)}
+                    className="mt-1 text-sm font-semibold text-neutral-900 hover:underline"
+                  >
+                    {showAllSources ? "Show fewer sources" : `Show all sources (${hiddenSourcesCount} hidden)`}
+                  </button>
                 )}
               </div>
             </section>
@@ -673,7 +751,7 @@ export default function ResearchDetailPage() {
                 </div>
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {media.map((item) => (
+                  {visibleMedia.map((item) => (
                     <div key={item.id} className="overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50">
                       <div className="relative aspect-video bg-neutral-100">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -725,6 +803,15 @@ export default function ResearchDetailPage() {
                     </div>
                   ))}
                 </div>
+                {hiddenMediaCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllMedia(!showAllMedia)}
+                    className="mt-3 text-sm font-semibold text-neutral-900 hover:underline"
+                  >
+                    {showAllMedia ? "Show fewer references" : `Review all references (${hiddenMediaCount} hidden)`}
+                  </button>
+                )}
               </section>
             )}
 
@@ -898,6 +985,7 @@ export default function ResearchDetailPage() {
               <div className="rounded-2xl border border-neutral-900 bg-neutral-950 p-5 text-white shadow-sm">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/45">Next action</p>
                 <p className="mt-2 text-sm leading-6 text-white/70">{nextAction.hint}</p>
+                <p className="mt-2 text-xs leading-6 text-white/60">{nextAction.detail}</p>
                 <button
                   type="button"
                   onClick={nextAction.onClick}
