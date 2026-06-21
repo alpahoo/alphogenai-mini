@@ -118,12 +118,14 @@ function statusClass(status: string) {
   return "border-neutral-200 bg-neutral-50 text-neutral-600";
 }
 
-function sourceTone(status: string) {
-  if (status === "success") return "text-emerald-700 bg-emerald-50 border-emerald-200";
-  if (status === "failed" || status === "blocked" || status === "timeout") {
-    return "text-red-700 bg-red-50 border-red-200";
+function sourceStatusMeta(status: string): { label: string; cls: string } {
+  if (status === "success") {
+    return { label: "Extracted", cls: "border-emerald-200 bg-emerald-50 text-emerald-700" };
   }
-  return "text-neutral-600 bg-neutral-50 border-neutral-200";
+  if (status === "failed" || status === "blocked" || status === "timeout") {
+    return { label: "Blocked", cls: "border-red-200 bg-red-50 text-red-700" };
+  }
+  return { label: "Pending", cls: "border-neutral-200 bg-white text-neutral-500" };
 }
 
 function clampSceneDuration(value: number | undefined) {
@@ -454,6 +456,35 @@ export default function ResearchDetailPage() {
     );
   }
 
+  // Plan Review progress + single guided next action (UI-only; reuses existing handlers).
+  const stepDone: Record<string, boolean> = {
+    brief: true,
+    sources: sources.length > 0,
+    angles: !!selectedAngle,
+    script: !!script,
+    storyboard: scenes.length > 0,
+    director: job.status === "sent_to_director",
+  };
+  const activeStepKey = STEPS.find((step) => !stepDone[step.key])?.key ?? "director";
+
+  type NextAction = { label: string; hint: string; onClick?: () => void; disabled: boolean };
+  const nextAction: NextAction | null =
+    sources.length === 0
+      ? { label: "Find sources", hint: "Discover trusted sources for this brief.", onClick: () => runStep("discover", `/api/research/jobs/${jobId}/discover`), disabled: !!action }
+      : readySources === 0
+        ? { label: "Extract sources", hint: "Pull readable evidence from your sources.", onClick: () => runStep("extract", `/api/research/jobs/${jobId}/extract`), disabled: !!action }
+        : angles.length === 0
+          ? { label: "Generate angles", hint: "Propose editorial directions.", onClick: () => runStep("analyze", `/api/research/jobs/${jobId}/analyze`), disabled: !!action }
+          : !selectedAngle
+            ? { label: "Select an angle", hint: "Pick one angle below to continue.", disabled: true }
+            : !script
+              ? { label: "Generate script", hint: "Write the script and storyboard.", onClick: () => runStep("script", `/api/research/jobs/${jobId}/script`), disabled: !!action }
+              : !script.approved
+                ? { label: "Approve storyboard", hint: "Review, then approve to unlock production.", onClick: approvePlan, disabled: !!action }
+                : job.status !== "sent_to_director"
+                  ? { label: "Send to Director", hint: "Hand off as an editable Director plan.", onClick: sendToDirector, disabled: !!action }
+                  : null;
+
   return (
     <div className="min-h-screen bg-[#f5f3ee] px-6 py-8 lg:px-10">
       <div className="mx-auto max-w-7xl">
@@ -472,6 +503,11 @@ export default function ResearchDetailPage() {
                 <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-500">
                   {job.mode}
                 </span>
+                {job.target_duration_seconds ? (
+                  <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[11px] font-semibold text-neutral-500">
+                    {job.target_duration_seconds}s target
+                  </span>
+                ) : null}
               </div>
               <h1 className="text-3xl font-semibold tracking-tight text-neutral-950 lg:text-4xl">{job.topic}</h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral-600">
@@ -501,15 +537,36 @@ export default function ResearchDetailPage() {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-2 md:grid-cols-6">
-            {STEPS.map((step, index) => (
-              <div key={step.key} className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
-                  {String(index + 1).padStart(2, "0")}
-                </p>
-                <p className="mt-1 text-sm font-semibold text-neutral-950">{step.label}</p>
-              </div>
-            ))}
+          <div className="mt-6 flex items-stretch gap-1.5">
+            {STEPS.map((step, index) => {
+              const done = stepDone[step.key];
+              const active = step.key === activeStepKey;
+              return (
+                <div key={step.key} className="flex flex-1 flex-col gap-1.5">
+                  <div
+                    className={`h-1.5 w-full rounded-full ${
+                      done ? "bg-emerald-500" : active ? "bg-neutral-900" : "bg-neutral-200"
+                    }`}
+                  />
+                  <div className="flex items-center gap-1">
+                    {done ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                    ) : (
+                      <span className={`text-[10px] font-semibold ${active ? "text-neutral-900" : "text-neutral-400"}`}>
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                    )}
+                    <span
+                      className={`truncate text-[11px] font-semibold ${
+                        done ? "text-neutral-700" : active ? "text-neutral-900" : "text-neutral-400"
+                      }`}
+                    >
+                      {step.label}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
 
@@ -582,8 +639,8 @@ export default function ResearchDetailPage() {
                           <span className="rounded-full border border-neutral-200 bg-white px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-500">
                             {source.source_type}
                           </span>
-                          <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${sourceTone(source.extraction_status)}`}>
-                            {source.extraction_status}
+                          <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold ${sourceStatusMeta(source.extraction_status).cls}`}>
+                            {sourceStatusMeta(source.extraction_status).label}
                           </span>
                         </div>
                       </div>
@@ -608,6 +665,11 @@ export default function ResearchDetailPage() {
                   <span className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">
                     {selectedMediaCount} selected
                   </span>
+                </div>
+
+                <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-700">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  Suggestions only — nothing is added until you select it. No image is downloaded automatically; verify usage rights before publishing.
                 </div>
 
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -688,26 +750,35 @@ export default function ResearchDetailPage() {
                     No angles yet. Extract at least one source first.
                   </div>
                 ) : (
-                  angles.map((angle) => (
+                  [...angles]
+                    .sort((a, b) => Number(b.selected) - Number(a.selected))
+                    .map((angle) => (
                     <button
                       key={angle.id}
                       onClick={() => selectAngle(angle.id)}
                       disabled={action === "select-angle"}
                       className={`rounded-xl border p-4 text-left transition hover:shadow-sm ${
                         angle.selected
-                          ? "border-neutral-950 bg-neutral-950 text-white"
+                          ? "border-neutral-950 bg-neutral-950 text-white shadow-md md:col-span-2"
                           : "border-neutral-200 bg-neutral-50 text-neutral-950 hover:bg-white"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <h3 className="font-semibold">{angle.title}</h3>
+                        <div className="flex items-center gap-2">
+                          {angle.selected && (
+                            <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/80">
+                              Selected
+                            </span>
+                          )}
+                          <h3 className="font-semibold">{angle.title}</h3>
+                        </div>
                         {angle.selected && <CheckCircle2 className="h-5 w-5 shrink-0" />}
                       </div>
-                      <p className={`mt-2 text-sm leading-6 ${angle.selected ? "text-white/75" : "text-neutral-600"}`}>
+                      <p className={`mt-2 text-sm leading-6 ${angle.selected ? "text-white/75" : "line-clamp-3 text-neutral-600"}`}>
                         {angle.hook}
                       </p>
                       {angle.positioning && (
-                        <p className={`mt-3 text-xs leading-5 ${angle.selected ? "text-white/55" : "text-neutral-500"}`}>
+                        <p className={`mt-3 text-xs leading-5 ${angle.selected ? "text-white/55" : "line-clamp-2 text-neutral-500"}`}>
                           {angle.positioning}
                         </p>
                       )}
@@ -749,7 +820,7 @@ export default function ResearchDetailPage() {
                         {script.approved ? "Approved" : "Awaiting approval"}
                       </span>
                     </div>
-                    <p className="whitespace-pre-wrap text-sm leading-7 text-neutral-700">{script.script}</p>
+                    <p className="max-h-72 overflow-y-auto whitespace-pre-wrap pr-1 text-sm leading-7 text-neutral-700">{script.script}</p>
                     {!script.approved && (
                       <button
                         type="button"
@@ -822,7 +893,23 @@ export default function ResearchDetailPage() {
             </section>
           </main>
 
-          <aside className="space-y-4">
+          <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+            {nextAction && (
+              <div className="rounded-2xl border border-neutral-900 bg-neutral-950 p-5 text-white shadow-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/45">Next action</p>
+                <p className="mt-2 text-sm leading-6 text-white/70">{nextAction.hint}</p>
+                <button
+                  type="button"
+                  onClick={nextAction.onClick}
+                  disabled={nextAction.disabled || !nextAction.onClick}
+                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-neutral-950 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {action ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                  {nextAction.label}
+                </button>
+              </div>
+            )}
+
             <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
               <h2 className="text-sm font-semibold text-neutral-950">Readiness</h2>
               <div className="mt-4 space-y-3">

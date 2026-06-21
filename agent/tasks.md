@@ -1039,7 +1039,14 @@ Contraintes :
   microcopy/tooltips, états loading/empty/error. Aucune route/API/DB/pipeline
   touché. Validé : `tsc --noEmit` clean + `npm run build` OK. **QA visuelle
   authentifiée desktop/mobile à faire** (route auth-gated) → T-1120f.
-- Reste, ordre recommandé : T-1120c Plan Review →
+- T-1120c livré (UI-only) : Plan Review premium — `app/(workspace)/research/[id]/page.tsx` :
+  barre de progression fait/actif/à-faire, colonne droite **sticky** + carte **Next action**
+  guidée (réutilise les handlers existants), statuts sources lisibles (Pending/Extracted/Blocked),
+  bandeau **consentement** sur Suggested references (suggestions-only, rien d'auto), angle
+  sélectionné mis en avant + line-clamp, script scrollable, durée dans le header. Aucune
+  route/API/DB, aucun changement pipeline ; garde-fous §13 préservés. Validé : tsc + build OK.
+  QA visuelle authentifiée desktop/mobile à faire → T-1120f.
+- Reste, ordre recommandé :
   T-1120e Render/Post-production → **T-1120-preview-spike** (préalable bloquant :
   valider preview low-fi/high-fi, latence, coût) → T-1120d Explainer Studio →
   T-1120f Visual QA desktop/mobile.

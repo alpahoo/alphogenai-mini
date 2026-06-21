@@ -12,6 +12,23 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-21 — Claude — T-1120c Plan Review premium layout
+- Fait : refonte UI de la page Review d'un plan Research — barre de progression
+  fait/actif/à-faire, colonne droite sticky + carte "Next action" guidée
+  (réutilise les handlers existants), statuts sources Pending/Extracted/Blocked,
+  bandeau consentement sur Suggested references (suggestions-only, aucun download
+  auto), angle sélectionné mis en avant + line-clamp, script scrollable, durée
+  ajoutée au header.
+- Fichiers modifiés : `app/(workspace)/research/[id]/page.tsx`, `agent/tasks.md`, `agent/log.md`.
+- Contraintes : aucune route/API/DB, aucun changement pipeline
+  (SearXNG/Extractor/LiteLLM/Modal) ; handlers + appels existants inchangés ;
+  garde-fous §13 préservés (refs suggestions-only, pas de rendu coûteux auto,
+  research_storyboards non écrasé).
+- Tests : `npx tsc --noEmit` clean ; `npm run build` OK (/research/[id] 8.4 kB).
+- Reste : QA visuelle authentifiée desktop/mobile (route auth-gated) → T-1120f.
+
+---
+
 ## 2026-06-18 — Claude — T-1120b Research Home premium command center
 - Fait : refonte UI de la Research Home — hero compact, chips workflow
   (News/Tutorial/Product/Competitor) + note Explainer, starter templates qui
