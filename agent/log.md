@@ -22,6 +22,10 @@ Entrée la plus récente en haut. Format :
   du plan (skipNextSaveRef). Le draft est donc réellement vidé.
 - P3 : commentaire d'en-tête de explainer-studio.tsx corrigé (n'était plus « in-memory only »).
 - Vérif : tsc → exit 0 ; vitest lib/explainer → 27 OK ; build OK sans warning, /research/[id] 16,4 kB.
+- **E2E prod vérifié (Claude-in-Chrome + SQL)** : édit → Saved (draft taggé storyboardId) →
+  reload → draft **repris** (match version OK) ; « Reset to plan » → reload → draft absent ET
+  `SELECT working_storyboard FROM research_jobs` = **NULL** (vrai clear, pas de copie du plan).
+  P1 + P3 corrigés et validés.
 
 ## 2026-06-22 — Claude — Tier B : persistance du working copy (autosave)
 - But : les édits du Studio survivent au reload (sérénité tests + bêta-testeurs).
