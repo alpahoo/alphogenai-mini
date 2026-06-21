@@ -1068,6 +1068,16 @@ Contraintes :
   renforcé (le spike n'a déclenché aucun rendu). 1ʳᵉ étape de T-1120d = extraire
   `lib/explainer/composition.ts` (partagé build.js + Studio) + composant preview iframe.
   **T-1120d débloqué.**
+- T-1120d en cours — étape 2/n livrée : composant **preview WYSIWYG**
+  `components/explainer/explainer-preview.tsx` — charge le HTML de `composition.ts`
+  dans un `<iframe srcdoc>` (scale-to-fit 1920×1080), pilote la timeline GSAP in-frame
+  (play/pause/scrub via `__timelines.main`, accès cross-frame OK grâce à
+  `sandbox="allow-scripts allow-same-origin"` ; HTML entièrement échappé). Câblé dans la
+  page plan (panneau Render) : preview affiché dès qu'un storyboard existe (avant tout
+  rendu payant). **$0, local, aucun Modal.** UI-only : aucune route/API/DB, aucun
+  pipeline. tsc + build OK (sans warning), /research/[id] 13,6 kB. QA visuelle live non
+  réalisable (route auth-gated + infra preview non liée au worktree) → T-1120f ; parité
+  HTML déjà prouvée à l'étape 1.
 - T-1120d en cours — étape 1/n livrée : extraction `lib/explainer/composition.ts`
   (port fidèle de `build.js` : 6 templates + timeline GSAP, fonction pure
   `buildCompositionHtml(storyboard, assets) → string` + `compositionDurationSec`).

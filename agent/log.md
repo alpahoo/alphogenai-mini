@@ -12,6 +12,28 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-21 — Claude — T-1120d étape 2 : composant preview WYSIWYG
+- Fait : `components/explainer/explainer-preview.tsx` (client) — rend le HTML de
+  composition.ts dans un `<iframe srcdoc>` mis à l'échelle (1920×1080 → largeur dispo via
+  ResizeObserver) et pilote la timeline GSAP in-frame (play/pause/scrub, lecture de
+  `__timelines.main`, auto-stop en fin). Câblé dans app/(workspace)/research/[id]/page.tsx :
+  preview affiché dans le panneau Render dès qu'un storyboard existe (storyboard explainer
+  mémoïsé via buildExplainerStoryboard). Preview gratuit/local, aucun Modal, aucun coût.
+- Détail correctness : `sandbox="allow-scripts allow-same-origin"` requis pour l'accès
+  cross-frame à la timeline (sinon origine opaque) ; sûr car tout le texte dynamique est
+  échappé par composition.ts. Wrap de `scenes` en useMemo (fix warning exhaustive-deps).
+- Vérif : tsc → exit 0 ; npm run build → Compiled successfully, sans warning, /research/[id]
+  13,6 kB. QA visuelle live tentée (page smoke jetable + dev server) mais l'infra preview ne
+  se lie pas à ce worktree → supprimée ; QA visuelle authentifiée reportée à T-1120f. Parité
+  HTML composition.ts↔build.js déjà prouvée (étape 1).
+- Fichiers : components/explainer/explainer-preview.tsx (nouveau),
+  app/(workspace)/research/[id]/page.tsx, agent/tasks.md, agent/log.md.
+- Garde-fous : UI-only, aucune route/API/DB, aucun changement pipeline, aucun rendu
+  déclenché par le preview.
+- Prochaine étape : layout Studio (storyboard éditable + inspecteur cinématique) ou T-1120f.
+
+---
+
 ## 2026-06-21 — Claude — T-1120d étape 1 : extraction lib/explainer/composition.ts
 - Fait : extrait la logique de composition de l'explainer dans un module TS pur et testable
   (`lib/explainer/composition.ts`) — port fidèle de `infra/explainer-renderer/build.js` :

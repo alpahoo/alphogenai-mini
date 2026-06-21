@@ -17,6 +17,8 @@ import {
   Wand2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { ExplainerPreview } from "@/components/explainer/explainer-preview";
+import { buildExplainerStoryboard } from "@/lib/explainer/storyboard";
 
 interface ResearchJob {
   id: string;
@@ -428,7 +430,15 @@ export default function ResearchDetailPage() {
   const readySources = sources.filter((s) => s.extraction_status === "success").length;
   const selectedAngle = angles.find((a) => a.selected);
   const selectedMediaCount = media.filter((item) => item.selected && item.storage_path).length;
-  const scenes = storyboard?.scenes_json ?? [];
+  const scenes = useMemo(() => storyboard?.scenes_json ?? [], [storyboard]);
+  // WYSIWYG explainer storyboard for the live preview (pure, client-side, no cost).
+  const explainerStoryboard = useMemo(
+    () =>
+      job && scenes.length > 0
+        ? buildExplainerStoryboard({ input_url: job.input_url, topic: job.topic }, scenes)
+        : null,
+    [job, scenes],
+  );
   const visibleSources = showAllSources ? sources : sources.slice(0, 5);
   const hiddenSourcesCount = Math.max(0, sources.length - visibleSources.length);
   const visibleMedia = showAllMedia ? media : media.slice(0, 9);
@@ -1066,6 +1076,12 @@ export default function ResearchDetailPage() {
                   </p>
                 </div>
               </div>
+
+              {explainerStoryboard && (
+                <div className="mt-4">
+                  <ExplainerPreview storyboard={explainerStoryboard} />
+                </div>
+              )}
 
               <button
                 type="button"
