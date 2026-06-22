@@ -1029,7 +1029,9 @@ Contraintes :
   Retiré : Advanced Tools / AI Playground / Start-from-scratch / Recent Projects (évite la
   page-dashboard) ; pas de bloc noir Research, pas de watchlists/recent research. Réutilise les
   routes existantes ; **aucune** route/API/DB/migration/pipeline. tsc + build OK (/create 2,13 kB).
-  QA visuelle navigateur (Claude-in-Chrome) après déploiement. Flows détaillés = T-1130b/c/d.
+  **Vérifié fonctionnel en prod (Claude-in-Chrome)** : chaque carte branchée → vrai flow
+  (/create/story, /create/avatar, /create/product=UGC réel, /research) ; Podcast = seule
+  carte disabled. Pas de carte cliquable vide. Flows détaillés = T-1130b/c/d.
 
 ### [T-1120] Premium UI — Research / Explainer / Render Studio — `status: done` · `owner: claude`
 - Tier B livré (persistance working copy, autorisé par Paul) : migration prod (colonne

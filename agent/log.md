@@ -26,6 +26,14 @@ Entrée la plus récente en haut. Format :
 - Vérif : tsc → exit 0 ; npm run build → OK sans warning, /create 2,13 kB (statique).
   QA visuelle navigateur (Claude-in-Chrome) prévue après déploiement (review visuelle Codex).
 - Fichiers : app/(workspace)/create/page.tsx, agent/tasks.md, agent/log.md.
+- Vérif fonctionnelle (audit routes + navigation live Claude-in-Chrome) : le hub est l'entrée
+  RÉELLE de création, pas une couche statique. /create/[mode] supporte story/product/social
+  (MODE_CONFIG) avec logique UGC réelle pour product (ugcAngle/ugcCreator/ugcLooks/
+  getUGCSocialPreset). Navigué chaque carte branchée en prod → vrai flow : /create/story
+  (« Story Video » + Generate), /create/avatar (« Avatar Video »), /create/product
+  (« Product Video » UGC + Generate), /research (Research home). Aucun 404/login. Podcast =
+  seule carte disabled (« Soon », pas de route). href des Link corrects (clic utilisateur
+  navigue ; .click() synthétique ne déclenche pas le routeur Next, quirk d'automation).
 
 ## 2026-06-22 — Claude — Tier B : corrections review Codex (P1 versioning + P3 commentaire)
 - P1 (correction) : le brouillon n'était pas lié à la version du storyboard → un plan régénéré
