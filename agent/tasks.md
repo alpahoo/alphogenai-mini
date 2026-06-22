@@ -1020,6 +1020,11 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1131] Podcast Video backend — `status: in_progress` · `owner: claude`
+- T-1131e-fix livré (review Codex, 2 points) — (P1 bloquant) `modal_app/video_pipeline.py` : `subprocess`
+  importé dans `_podcast_probe_duration()` et `render_podcast()` (était function-local partout ailleurs, mais
+  absent de mes 2 fonctions → `NameError` runtime) ; py_compile OK ; **Modal redéployé**. (P2) `app/api/podcasts/[id]/render/route.ts`
+  vérifie l'`{error}` de l'update `render_status='rendering'` : si échec → log + 500 et **ne déclenche pas**
+  Modal (état DB cohérent). +1 test. 36 tests render/podcast verts ; build OK ; tsc clean.
 - T-1131e livré (**render/compositing two-shot**, Modal CPU) — migration
   `supabase/migrations/20260622_add_podcast_render_columns.sql` **appliquée prod** (podcasts +
   `video_url`/`render_status`(idle|rendering|done|failed)/`render_error`) ; Modal `render_podcast()` +

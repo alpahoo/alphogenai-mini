@@ -120,6 +120,20 @@ describe("POST /api/podcasts/[id]/render", () => {
     expect(updates.some((u) => (u.payload as { render_status?: string }).render_status === "rendering")).toBe(true);
   });
 
+  it("500 and does NOT trigger Modal when marking 'rendering' fails", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: podcast(), error: null }),
+        "podcast_segments:select": () => ({ data: readySegs, error: null }),
+        "podcasts:update": () => ({ data: null, error: { message: "db boom" } }),
+      }) as never,
+    );
+    const res = await POST(req(), ctx("p1"));
+    expect(res.status).toBe(500);
+    expect(triggerRenderPodcast).not.toHaveBeenCalled();
+  });
+
   it("502 + render_status failed when the Modal trigger errors", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     const updates: State[] = [];

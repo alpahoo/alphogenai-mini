@@ -57,7 +57,15 @@ export async function POST(
     }
 
     // Mark rendering before triggering so the UI/poll reflects it immediately.
-    await service.from("podcasts").update({ render_status: "rendering", render_error: null }).eq("id", id);
+    // If this DB write fails, do NOT trigger the render (the state would be wrong).
+    const { error: markErr } = await service
+      .from("podcasts")
+      .update({ render_status: "rendering", render_error: null })
+      .eq("id", id);
+    if (markErr) {
+      console.error("[podcasts/render] could not mark rendering:", markErr);
+      return NextResponse.json({ error: "Could not start the render" }, { status: 500 });
+    }
 
     try {
       await triggerRenderPodcast(id);

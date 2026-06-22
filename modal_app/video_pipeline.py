@@ -2176,6 +2176,7 @@ _PODCAST_COLORS = {"host": (52, 201, 138), "guest": (91, 141, 239)}
 
 def _podcast_probe_duration(path: str) -> float:
     """Real audio duration in seconds via ffprobe (0.0 on failure)."""
+    import subprocess
     try:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -2217,6 +2218,7 @@ def render_podcast(podcast_id: str) -> str:
 
     CPU only. No lip-sync. The TTS provider is never referenced here.
     """
+    import subprocess
     import tempfile
     import urllib.request
     from PIL import Image, ImageDraw, ImageFont

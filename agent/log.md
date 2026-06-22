@@ -12,6 +12,16 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1131e-fix (review Codex, 2 points)
+- Fait : (P1 bloquant) `import subprocess` ajouté dans `_podcast_probe_duration()` et `render_podcast()`
+  (subprocess était importé function-local partout sauf mes 2 fonctions → NameError runtime malgré py_compile OK).
+  Modal redéployé (alphogenai-v2). (P2) route `/render` : vérifie `{error}` de l'update render_status=rendering →
+  500 + pas de trigger Modal si l'update DB échoue.
+- Fichiers : `modal_app/video_pipeline.py`, `app/api/podcasts/[id]/render/route.ts(+test)`, `agent/*`.
+- Tests : 36 tests render/podcast verts (+1 : mark-rendering fail → 500 sans trigger) ; py_compile OK ; build OK ;
+  tsc clean ; Modal redéployé.
+- Prochaine étape : T-1131f (UI /create/podcast).
+
 ## 2026-06-22 — Claude — T-1131e Podcast render/compositing (two-shot, Modal CPU)
 - Fait : assemblage MP4 podcast à partir des segments audio prêts. Migration Option A
   (`20260622_add_podcast_render_columns.sql` : podcasts + video_url/render_status/render_error) **appliquée prod**
