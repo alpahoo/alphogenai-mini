@@ -256,6 +256,9 @@ export default function CreateModePage({
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showReferences, setShowReferences] = useState(false);
+  // T-1130b — story-only guided "how to start" choice. Drives existing state only
+  // (references panel / Director); never changes generation logic. story mode only.
+  const [storyTab, setStoryTab] = useState<"text" | "reference" | "director">("text");
   // AI Director — editable pre-generation plan (submit wired in submitJob)
   const [directorOpen, setDirectorOpen] = useState(false);
   const [directorScenes, setDirectorScenes] = useState<DirectorSceneVM[]>([]);
@@ -1743,6 +1746,71 @@ export default function CreateModePage({
               </div>
             </div>
           </div>
+
+          {/* T-1130b — story-only guided start: visible, functional choices wired to
+              existing state (references panel / AI Director). Hidden for product/social. */}
+          {mode === "story" && (
+            <div className="mb-6">
+              <p className="mb-2 text-sm font-semibold text-neutral-700">How do you want to start?</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {([
+                  { key: "text", title: "Text to Video", hint: "Describe a scene, then generate.", Icon: Type },
+                  {
+                    key: "reference",
+                    title: "Text with Reference",
+                    hint: "Guide it with visual references.",
+                    Icon: ImagePlus,
+                    count: Object.keys(references).length,
+                  },
+                  { key: "director", title: "Director scenes", hint: "Plan a multi-scene sequence.", Icon: Clapperboard },
+                ] as Array<{
+                  key: "text" | "reference" | "director";
+                  title: string;
+                  hint: string;
+                  Icon: typeof Type;
+                  count?: number;
+                }>).map(({ key, title, hint, Icon, count }) => {
+                  const active = storyTab === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        setStoryTab(key);
+                        if (key === "reference") setShowReferences(true);
+                        if (key === "text") setShowReferences(false);
+                        if (key === "director") setDirectorOpen(true);
+                      }}
+                      className={`group flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all ${
+                        active
+                          ? "border-blue-500 bg-blue-50 shadow-sm"
+                          : "border-neutral-200 bg-white hover:border-blue-300 hover:bg-blue-50/40"
+                      }`}
+                    >
+                      <span
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                          active ? "bg-blue-600 text-white" : "bg-neutral-100 text-neutral-600"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
+                          {title}
+                          {typeof count === "number" && count > 0 && (
+                            <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                              {count}
+                            </span>
+                          )}
+                        </span>
+                        <span className="mt-0.5 block text-xs leading-snug text-neutral-500">{hint}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-6 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm sm:p-6">
             {/* ── Prompt ─────────────────────────────────────────── */}

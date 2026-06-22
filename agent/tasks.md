@@ -1020,6 +1020,16 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1130] Guided Creation Hub — `status: in_progress` · `owner: claude`
+- T-1130b livré (couche guidée story-only, option 1 validée par Paul) —
+  `app/(workspace)/create/[mode]/page.tsx` : rangée de chips **« How do you want to start? »**
+  gardée par `mode === "story"` → **Text to Video** / **Text with Reference** (badge compteur de
+  références) / **Director scenes**, câblée sur l'état EXISTANT (`setShowReferences`,
+  `setDirectorOpen`, `storyTab`). Aucune nouvelle logique de génération ; handlers/submitJob
+  intacts. Header story déjà conforme (« Story Video » / « Describe a narrative scene… »),
+  Advanced reste replié, AI Director accessible. **product/social non touchés** (chips gardés
+  story-only). Aucune route/API/DB/migration, aucun backend. tsc + build OK (/create/[mode]
+  36,9 kB). QA : /create/story + non-régression /create/product & /create/social via
+  Claude-in-Chrome après déploiement. Reste T-1130c (URL to Video), T-1130d (Avatar), T-1130e (Podcast).
 - T-1130a livré (UI/navigation only) — `app/(workspace)/create/page.tsx` refait en **hub guidé**
   fidèle au mockup `mockups/alphogen-guided-flows-v2.html` : header « Create a video » + grille de
   **6 cartes visuelles** (mini-visuels gradient, design blanc/soft, accents bleu/cyan). Story /

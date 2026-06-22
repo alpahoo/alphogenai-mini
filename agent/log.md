@@ -12,6 +12,19 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1130b Story guided layer (story-only)
+- Fait : couche guidée additive sur /create/story (mode === "story" uniquement), sans refactor
+  du fichier partagé (2677 l) et sans toucher product/social. Rangée de chips « How do you want
+  to start? » : Text to Video / Text with Reference (badge compteur refs) / Director scenes,
+  câblée sur l'état existant (storyTab + setShowReferences + setDirectorOpen). Header story déjà
+  conforme, Advanced replié, AI Director accessible. Aucune logique de génération modifiée
+  (submitJob, references, duration, aspect, engine, audio intacts).
+- Scope : UI-only, story-guardé. Aucune route/API/DB/migration, aucun backend, aucune route dédiée,
+  pas de duplication de logique.
+- Vérif : tsc → exit 0 ; npm run build → OK sans warning, /create/[mode] 36,9 kB. QA visuelle
+  /create/story + non-régression /create/product & /create/social via Claude-in-Chrome après déploiement.
+- Fichiers : app/(workspace)/create/[mode]/page.tsx, agent/tasks.md, agent/log.md.
+
 ## 2026-06-22 — Claude — T-1130a Guided Creation Hub
 - Fait : `app/(workspace)/create/page.tsx` refait en hub guidé visuel (cible = mockup
   mockups/alphogen-guided-flows-v2.html). Header « Create a video » + grille de 6 cartes :
