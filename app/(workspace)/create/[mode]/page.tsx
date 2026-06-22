@@ -1809,6 +1809,42 @@ export default function CreateModePage({
                   );
                 })}
               </div>
+
+              {/* P2 (Codex): in Text-to-Video, references already attached would still
+                  be sent but stay hidden. Surface them explicitly — no silent removal. */}
+              {storyTab === "text" && Object.keys(references).length > 0 && (
+                <div className="mt-3 flex flex-col gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="flex items-center gap-2 text-sm font-medium text-amber-800">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    {Object.keys(references).length} reference
+                    {Object.keys(references).length > 1 ? "s are" : " is"} still attached and will be sent
+                    with your prompt.
+                  </p>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStoryTab("reference");
+                        setShowReferences(true);
+                      }}
+                      className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100"
+                    >
+                      Review references
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReferences({});
+                        setStoryTab("text");
+                        setShowReferences(false);
+                      }}
+                      className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-amber-700"
+                    >
+                      Remove references
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -12,6 +12,19 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1130b P2 fix (Codex) : références cachées mais attachées
+- Problème (Codex P2) : en « Text to Video », des références déjà ajoutées restaient attachées
+  (encore envoyées au backend) mais cachées → l'utilisateur croyait faire un prompt-only.
+- Audit : `references` (panneau, compté par le badge) et `activeComposerRefs` (@-mentions visibles
+  dans le prompt) sont SÉPARÉS dans submitJob (`allReferences = {...references, ...activeComposerRefs}`).
+  Le piège ne concerne que `references` (les refs du panneau, cachées quand replié).
+- Fix (UI-only, story-only) : warning sous les chips quand `storyTab==="text"` ET
+  `Object.keys(references).length > 0` : « N reference(s) still attached and will be sent ». Deux
+  actions explicites : « Review references » (→ Text with Reference + ouvre le panneau) et
+  « Remove references » (→ `setReferences({})` explicite). Aucune suppression silencieuse, aucun
+  backend touché, product/social inchangés (warning gardé story-only).
+- Vérif : tsc → exit 0 ; build OK sans warning, /create/[mode] 37,1 kB. QA prod via Claude-in-Chrome.
+
 ## 2026-06-22 — Claude — T-1130b Story guided layer (story-only)
 - Fait : couche guidée additive sur /create/story (mode === "story" uniquement), sans refactor
   du fichier partagé (2677 l) et sans toucher product/social. Rangée de chips « How do you want
