@@ -1020,6 +1020,20 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1131] Podcast Video backend — `status: in_progress` · `owner: claude`
+- T-1131b+c livré (**schema + dialogue generator**, backend, fusionnés) — migration
+  `supabase/migrations/20260622_create_podcast_schema.sql` **appliquée en prod** (projet qbrpzmuedfugbhoeytdj) :
+  `podcasts` / `podcast_speakers` / `podcast_segments`, RLS owner (enfants via join podcasts), indexes +
+  uniques (role, order_index), trigger updated_at. API : `POST/GET /api/podcasts`, `GET/PATCH /api/podcasts/[id]`,
+  `POST /api/podcasts/[id]/script`. Auth bearer (`lib/podcast/auth.ts`, user_id toujours du token), service-role
+  pour les requêtes, ownership strict (404 non-owned). POST crée le draft + **2 speakers par défaut** (host/guest).
+  Script : topic (body ou source_topic) → prompt → **LiteLLM gateway** (`lib/podcast/dialogue-llm.ts`, PAS Anthropic
+  direct) → parse/normalize/validate (`lib/podcast/dialogue.ts` : fences ```json, wrapper/array, 6–10 turns,
+  alternance host+guest, caps longueur, **scrub provider names**) → delete+insert segments → status ready ;
+  échec → status failed + error_message ; **aucun TTS/audio, aucun render**. Tests : 34 (helpers + routes :
+  auth requise, 2 speakers créés, ownership 404, insert segments, JSON LLM invalide→failed, scrub providers).
+  build OK, tsc clean. **Pas de `/create/podcast`, carte hub reste « Soon »** (base backend, pas un produit user).
+  Note : 1 test pré-existant `app/api/jobs/[id]/voiceover/route.test.ts` échoue (mismatch message d'erreur mux,
+  hors scope, non touché par ce ticket). Prochaine étape : T-1131d (multi-speaker TTS).
 - T-1131-poc livré (**prototype compositing jetable, off-prod**) — `scripts/poc/podcast/segments.json` +
   `build_poc.py`, rapport `docs/product/podcast-compositing-poc-report.md`. MP4 local two-shot 1280×720
   16:9 24fps H.264+AAC, 34,5 s, ~13 s de rendu CPU (PIL frames + numpy audio placeholder + ffmpeg de

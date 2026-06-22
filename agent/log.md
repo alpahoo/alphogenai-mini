@@ -12,6 +12,25 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1131b+c Podcast schema + dialogue generator (backend)
+- Fait : base backend Podcast Video. Migration `20260622_create_podcast_schema.sql` (podcasts/podcast_speakers/
+  podcast_segments + RLS owner via join + indexes/uniques + trigger updated_at) **appliquée en prod** via
+  Supabase MCP (projet qbrpzmuedfugbhoeytdj) — vérifié : 3 tables, RLS on, 4 policies chacune. API routes :
+  POST/GET /api/podcasts, GET/PATCH /api/podcasts/[id], POST /api/podcasts/[id]/script. Auth bearer
+  (`lib/podcast/auth.ts`), service-role pour requêtes, ownership strict (404). POST crée draft + 2 speakers
+  (host/guest). Script via LiteLLM gateway (`lib/podcast/dialogue-llm.ts`) + helpers purs (`lib/podcast/dialogue.ts` :
+  buildPodcastDialoguePrompt, parsePodcastDialogueResponse fences/wrapper/array, normalizePodcastSegments +
+  scrub provider names, validatePodcastSegments 6–10 + alternance) ; enums/validators (`lib/podcast/podcast.ts`).
+  Aucun TTS/audio/render.
+- Fichiers : migration sql, `lib/podcast/{auth,dialogue,dialogue-llm,podcast}.ts`, `lib/podcast/__tests__/dialogue.test.ts`,
+  `app/api/podcasts/route.ts(+test)`, `app/api/podcasts/[id]/route.ts(+test)`, `app/api/podcasts/[id]/script/route.ts(+test)`,
+  `agent/tasks.md`, `agent/log.md`.
+- Scope : backend + migration autorisés ; pas de render/TTS ; pas de `/create/podcast` ; carte hub reste « Soon » ;
+  flows existants intacts ; LiteLLM only (pas Anthropic direct).
+- Tests : 34 tests podcast verts ; build OK ; tsc clean. NB : 1 test pré-existant hors scope échoue
+  (`app/api/jobs/[id]/voiceover/route.test.ts`, mismatch message mux) — non lié, non touché.
+- Prochaine étape : T-1131d (multi-speaker TTS) — touchera TTS/coût → STOP + validation. Review Codex.
+
 ## 2026-06-22 — Claude — T-1131-poc Podcast compositing prototype (off-prod)
 - Fait : prototype jetable pour juger le concept visuel podcast. `scripts/poc/podcast/segments.json`
   (2 speakers, 8 segments alternés) + `build_poc.py` (PIL frames + numpy audio placeholder + ffmpeg de
