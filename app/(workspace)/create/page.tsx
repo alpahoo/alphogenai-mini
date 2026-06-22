@@ -43,7 +43,7 @@ const TOOLS: Tool[] = [
     description: "Turn a product page, article, or docs page into a guided video. Research works behind the scenes.",
     badge: "URL",
     visual: "linear-gradient(135deg, #fff7db, #f9fbff 50%, #83e8ff)",
-    href: "/research",
+    href: "/create/url",
     status: "live",
   },
   {

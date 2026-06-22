@@ -1,0 +1,365 @@
+"use client";
+
+// T-1130c — URL to Video guided entry.
+// A clean, centered "paste a URL -> create a video" flow that hides the Research
+// complexity (no watchlists / sources / readiness / dashboard here). It reuses the
+// existing Research API: POST /api/research/jobs creates a research_job from the URL,
+// then we hand off to the existing plan workspace at /research/[id]. Research Studio
+// (/research) stays untouched and is linked discreetly for advanced users.
+
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import {
+  ArrowRight,
+  Film,
+  GraduationCap,
+  Link2,
+  Loader2,
+  Newspaper,
+  ShoppingBag,
+  Sparkles,
+  Upload,
+  X,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+
+type UrlMode = "product" | "tutorial" | "news";
+
+// Simple intent choice. Each maps to a Research mode + a sensible auto-topic so the
+// user only has to paste a URL. Duration defaults to 30s (kept off the first screen).
+const MODES: Record<UrlMode, { label: string; desc: string; Icon: LucideIcon; topic: string; duration: number }> = {
+  product: {
+    label: "Product",
+    desc: "Page → promo",
+    Icon: ShoppingBag,
+    topic:
+      "Create a short product video from this page: a strong hook, the key benefits, and a clear call to action.",
+    duration: 30,
+  },
+  tutorial: {
+    label: "Tutorial",
+    desc: "Docs → how-to",
+    Icon: GraduationCap,
+    topic:
+      "Turn this page into a short tutorial: a quick intro, the key steps, limits, and a final action.",
+    duration: 60,
+  },
+  news: {
+    label: "News",
+    desc: "Article → recap",
+    Icon: Newspaper,
+    topic:
+      "Summarize this page as a short news explainer: what changed, why it matters, and what's next.",
+    duration: 30,
+  },
+};
+
+// Example sources — clicking one fills the URL field and picks a fitting intent.
+const EXAMPLES: { label: string; hint: string; url: string; mode: UrlMode; visual: string }[] = [
+  {
+    label: "Product page",
+    hint: "A landing/product page",
+    url: "https://www.apple.com/airpods-pro/",
+    mode: "product",
+    visual: "linear-gradient(135deg, #eafff4, #fff 55%, #f7d8ff)",
+  },
+  {
+    label: "Article",
+    hint: "A blog post or news article",
+    url: "https://en.wikipedia.org/wiki/Artificial_intelligence",
+    mode: "news",
+    visual: "linear-gradient(135deg, #fff7db, #f9fbff 55%, #83e8ff)",
+  },
+  {
+    label: "Docs page",
+    hint: "Documentation or a guide",
+    url: "https://nextjs.org/docs/app/getting-started",
+    mode: "tutorial",
+    visual: "linear-gradient(135deg, #f5f7ff, #fff 55%, #cdf4ff)",
+  },
+];
+
+function isValidHttpUrl(value: string) {
+  return /^https?:\/\/\S+\.\S+/.test(value.trim());
+}
+
+export default function UrlToVideo() {
+  const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+
+  const [url, setUrl] = useState("");
+  const [mode, setMode] = useState<UrlMode>("product");
+  const [creating, setCreating] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+
+  function tryExample(example?: (typeof EXAMPLES)[number]) {
+    const pick = example ?? EXAMPLES[0];
+    setUrl(pick.url);
+    setMode(pick.mode);
+    setError(null);
+  }
+
+  async function createVideo() {
+    const cleanUrl = url.trim();
+    if (!cleanUrl) {
+      setError("Paste a URL to continue, or upload product media manually.");
+      return;
+    }
+    if (!isValidHttpUrl(cleanUrl)) {
+      setError("Enter a valid link starting with http:// or https://");
+      return;
+    }
+
+    setCreating(true);
+    setStatus("Creating your video plan…");
+    setError(null);
+    let navigating = false;
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        router.push("/login");
+        return;
+      }
+
+      const meta = MODES[mode];
+      const res = await fetch("/api/research/jobs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          topic: meta.topic,
+          input_url: cleanUrl,
+          mode,
+          language: "en-US",
+          target_duration_seconds: meta.duration,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Could not start your video.");
+
+      setStatus("Opening your video plan…");
+      navigating = true;
+      router.push(`/research/${json.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start your video.");
+      setStatus(null);
+    } finally {
+      if (!navigating) setCreating(false);
+    }
+  }
+
+  return (
+    <div className="relative mx-auto flex min-h-[calc(100vh-4rem)] max-w-2xl flex-col items-center justify-center px-6 py-16">
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="w-full text-center"
+      >
+        <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-blue-700">
+          <Link2 className="h-3.5 w-3.5" />
+          URL to Video
+        </span>
+        <h1 className="mt-5 text-4xl font-extrabold tracking-tight text-neutral-900 sm:text-5xl">
+          Turn any link into a video
+        </h1>
+        <p className="mx-auto mt-3 max-w-lg text-base leading-relaxed text-neutral-500">
+          Paste a product page, article, or docs link. AlphoGen researches it and builds a
+          ready-to-edit video plan — no setup required.
+        </p>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.08 }}
+        className="mt-8 w-full"
+      >
+        {/* Intent chips */}
+        <div className="mb-3 flex flex-wrap justify-center gap-2">
+          {(Object.keys(MODES) as UrlMode[]).map((key) => {
+            const meta = MODES[key];
+            const active = mode === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setMode(key)}
+                aria-pressed={active}
+                title={meta.desc}
+                className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                  active
+                    ? "border-blue-500 bg-blue-50 text-blue-700"
+                    : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300"
+                }`}
+              >
+                <meta.Icon className="h-4 w-4" />
+                {meta.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* URL field + primary CTA */}
+        <div className="flex flex-col gap-2 rounded-2xl border border-neutral-200 bg-white p-2 shadow-sm sm:flex-row sm:items-center">
+          <div className="flex flex-1 items-center gap-2 px-3">
+            <Link2 className="h-5 w-5 shrink-0 text-neutral-400" />
+            <input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !creating) createVideo();
+              }}
+              placeholder="https://your-product-page.com"
+              inputMode="url"
+              autoFocus
+              className="w-full bg-transparent py-2.5 text-sm text-neutral-900 outline-none placeholder:text-neutral-400"
+            />
+          </div>
+          <button
+            onClick={createVideo}
+            disabled={creating}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-neutral-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-wait disabled:opacity-80"
+          >
+            {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {creating ? "Working…" : "Create video"}
+          </button>
+        </div>
+
+        {/* Try example + manual upload */}
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
+          <button
+            type="button"
+            onClick={() => tryExample()}
+            className="font-semibold text-blue-600 hover:text-blue-700"
+          >
+            Try example
+          </button>
+          <span className="text-neutral-300">·</span>
+          <button
+            type="button"
+            onClick={() => setUploadOpen(true)}
+            className="font-semibold text-neutral-600 hover:text-neutral-900"
+          >
+            No URL? Upload product media manually
+          </button>
+        </div>
+
+        {error && (
+          <p className="mx-auto mt-4 max-w-md rounded-xl bg-red-50 px-3 py-2 text-center text-xs font-medium text-red-700">
+            {error}
+          </p>
+        )}
+        {status && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mx-auto mt-4 flex max-w-md items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-medium text-neutral-700"
+          >
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-neutral-900" />
+            {status}
+          </div>
+        )}
+      </motion.div>
+
+      {/* Example thumbnails */}
+      <motion.div
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.14 }}
+        className="mt-10 w-full"
+      >
+        <p className="mb-3 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400">
+          Or start from an example
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {EXAMPLES.map((ex) => (
+            <button
+              key={ex.label}
+              type="button"
+              onClick={() => tryExample(ex)}
+              className="group overflow-hidden rounded-2xl border border-neutral-200 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
+            >
+              <div className="h-20 w-full" style={{ background: ex.visual }} />
+              <div className="p-3">
+                <p className="text-sm font-semibold text-neutral-900">{ex.label}</p>
+                <p className="mt-0.5 text-xs text-neutral-500">{ex.hint}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* Advanced escape hatch */}
+      <div className="mt-10 flex items-center gap-1.5 text-xs text-neutral-400">
+        <Film className="h-3.5 w-3.5" />
+        Need sources, watchlists, or fine control?
+        <Link href="/research" className="font-semibold text-neutral-600 hover:text-neutral-900">
+          Open Research Studio
+        </Link>
+      </div>
+
+      {/* Manual upload modal — routes to the existing Product / UGC studio (real media upload). */}
+      {uploadOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Upload product media"
+          onClick={() => setUploadOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2">
+                <span className="rounded-xl bg-neutral-100 p-2">
+                  <Upload className="h-5 w-5 text-neutral-700" />
+                </span>
+                <h2 className="text-lg font-bold text-neutral-900">Upload product media</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUploadOpen(false)}
+                aria-label="Close"
+                className="rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="mt-3 text-sm leading-relaxed text-neutral-500">
+              No URL? Build from your own media instead. The Product / UGC studio lets you upload
+              product photos and clips, then guides you to a finished video.
+            </p>
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row-reverse">
+              <Link
+                href="/create/product"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
+              >
+                Open Product studio
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => setUploadOpen(false)}
+                className="inline-flex flex-1 items-center justify-center rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
