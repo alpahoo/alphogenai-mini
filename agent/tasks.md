@@ -1020,6 +1020,14 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1131] Podcast Video backend — `status: done` · `owner: claude`
+- T-1131f-hardening-fix2 livré (review Codex, 1 P1 transactionnel) — l'invalidation du render se fait
+  **AVANT** toute mutation de segments. (1) `script` : reset `podcasts` (video_url/render_status/render_error +
+  status ready) AVANT le delete/insert des segments ; si le reset échoue → 500 et **segments intacts** (ancien
+  dialogue + ancien MP4 cohérents) ; puis seulement delete/insert (restore si insert échoue). (2) `tts` : preview
+  → `invalidateRender()` AVANT l'update du segment ; full → invalidate AVANT la boucle d'update ; si invalidate
+  échoue → 500 **sans muter aucun segment** (upload R2 orphelin accepté). Plus jamais « nouveau dialogue/audio +
+  ancien MP4 » en DB. 73 tests podcast verts (tests ajustés : script reset-fail → 0 mutation segment ; tts
+  full/preview invalidate-fail → 0 update segment) ; build OK ; tsc clean.
 - T-1131f-hardening-fix livré (review Codex, 2 P1) — les updates qui invalident le render vérifient
   désormais `{error}`. (1) `script/route.ts` : si le reset final (status ready + video_url/render_status/
   render_error) échoue → rollback vers l'ancien dialogue (delete + re-insert `previousSegments`) + **500**

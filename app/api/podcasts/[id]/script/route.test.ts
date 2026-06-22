@@ -141,26 +141,19 @@ describe("POST /api/podcasts/[id]/script", () => {
     );
   });
 
-  it("rolls back to the previous dialogue and 500s when the final render-state reset fails", async () => {
+  it("500s and leaves segments UNTOUCHED when the render reset fails (reset runs first)", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
-    const previous = [
-      { id: "old-1", podcast_id: "p1", speaker_id: "host-id", order_index: 0, text: "old host", status: "ready" },
-      { id: "old-2", podcast_id: "p1", speaker_id: "guest-id", order_index: 1, text: "old guest", status: "ready" },
-    ];
-    const inserts: unknown[] = [];
+    const calls: State[] = [];
     vi.mocked(createServiceClient).mockReturnValue(
       makeService({
         "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id, status: "ready", source_topic: "AI tools", language: "en-US" }, error: null }),
         "podcast_speakers:select": () => ({ data: SPEAKERS, error: null }),
-        "podcast_segments:select": () => ({ data: previous, error: null }),
-        "podcast_segments:delete": () => ({ data: null, error: null }),
-        "podcast_segments:insert": (s) => { inserts.push(s.payload); return { data: s.payload, error: null }; },
-        // The early "scripting" update succeeds; the final reset (carries render_status) fails.
+        // The early "scripting" update succeeds; the render reset (carries render_status) fails.
         "podcasts:update": (s) => {
           const p = s.payload as { render_status?: string };
           return p?.render_status ? { data: null, error: { message: "db boom" } } : { data: null, error: null };
         },
-      }) as never,
+      }, calls) as never,
     );
     vi.mocked(callLLMForPodcastDialogue).mockResolvedValue({ content: sixTurns(), tokensUsed: 10, modelUsed: "m" });
 
@@ -169,9 +162,9 @@ describe("POST /api/podcasts/[id]/script", () => {
     const json = await res.json();
     expect(json.error).toMatch(/previous script was kept/i);
     expect(json.status).not.toBe("ready");
-    // new insert (6 turns) + restore insert (previous)
-    expect(inserts).toHaveLength(2);
-    expect(inserts[1]).toEqual(previous);
+    // Because the reset is checked BEFORE mutating segments, no delete/insert ran.
+    const segMutations = calls.filter((c) => c.table === "podcast_segments" && (c.op === "insert" || c.op === "delete"));
+    expect(segMutations).toHaveLength(0);
   });
 
   it("restores the previous dialogue and fails when the new insert errors", async () => {

@@ -261,38 +261,41 @@ describe("POST /api/podcasts/[id]/tts", () => {
     expect(updates.filter((u) => u.table === "podcasts").length).toBe(0);
   });
 
-  it("full mode 500s when audio was generated but the stale render can't be cleared", async () => {
+  it("full mode 500s and does NOT mutate segments when the stale render can't be cleared", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
     vi.mocked(createServiceClient).mockReturnValue(
       makeService({
         "podcasts:select": () => ({ data: okPodcast, error: null }),
         "podcast_speakers:select": () => ({ data: SPEAKERS, error: null }),
         "podcast_segments:select": () => ({ data: [seg(0), seg(1)], error: null }),
-        "podcast_segments:update": () => ({ data: null, error: null }),
         "podcasts:update": () => ({ data: null, error: { message: "db boom" } }),
-      }) as never,
+      }, updates) as never,
     );
     const res = await POST(req({}), ctx("p1"));
     expect(res.status).toBe(500);
     const text = JSON.stringify(await res.json());
     expect(text).toMatch(/stale video could not be cleared/i);
     expect(text.toLowerCase()).not.toContain("elevenlabs");
+    // invalidate runs BEFORE the segment-update loop → no segment was written.
+    expect(updates.filter((u) => u.table === "podcast_segments").length).toBe(0);
   });
 
-  it("preview 500s when audio was generated but the stale render can't be cleared", async () => {
+  it("preview 500s and does NOT update the segment when the stale render can't be cleared", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
     vi.mocked(createServiceClient).mockReturnValue(
       makeService({
         "podcasts:select": () => ({ data: okPodcast, error: null }),
         "podcast_speakers:select": () => ({ data: SPEAKERS, error: null }),
         "podcast_segments:select": () => ({ data: [seg(0), seg(1)], error: null }),
-        "podcast_segments:update": () => ({ data: null, error: null }),
         "podcasts:update": () => ({ data: null, error: { message: "db boom" } }),
-      }) as never,
+      }, updates) as never,
     );
     const res = await POST(req({ preview: "seg-1" }), ctx("p1"));
     expect(res.status).toBe(500);
     expect(JSON.stringify(await res.json())).toMatch(/stale video could not be cleared/i);
+    expect(updates.filter((u) => u.table === "podcast_segments").length).toBe(0);
   });
 
   it("force writes a fresh, unique R2 key (no stale cached audio)", async () => {

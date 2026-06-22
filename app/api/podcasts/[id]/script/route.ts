@@ -89,9 +89,29 @@ export async function POST(
       status: "pending" as const,
     }));
 
-    // Safe regeneration: snapshot the existing dialogue so a failed insert never
-    // destroys a previously-good script. (No multi-statement transaction over the
-    // REST client — we compensate by restoring the snapshot on failure.)
+    // Invalidate the stale render BEFORE mutating any segments, so the DB can
+    // never hold "new dialogue + old MP4". If this reset fails, the existing
+    // dialogue AND video stay untouched and coherent.
+    const { error: resetErr } = await service
+      .from("podcasts")
+      .update({
+        status: "ready",
+        error_message: null,
+        video_url: null,
+        render_status: "idle",
+        render_error: null,
+      })
+      .eq("id", id);
+    if (resetErr) {
+      console.error(`[podcast/script] could not reset render state for ${id}:`, resetErr);
+      return NextResponse.json(
+        { error: "Failed to save the new dialogue state. Your previous script was kept." },
+        { status: 500 },
+      );
+    }
+
+    // Render is cleared — now it's safe to replace the dialogue. Snapshot first so
+    // a failed insert can be rolled back (the already-cleared video is fine).
     const { data: previousSegments } = await service
       .from("podcast_segments")
       .select("*")
@@ -109,33 +129,6 @@ export async function POST(
         await service.from("podcast_segments").insert(previousSegments);
       }
       return failWith("Failed to save the generated dialogue. Your previous script was kept.", 500);
-    }
-
-    // The dialogue changed → any previously rendered MP4 is now stale. Reset the
-    // render state so an old video can never stay attached to a new script.
-    const { error: stateErr } = await service
-      .from("podcasts")
-      .update({
-        status: "ready",
-        error_message: null,
-        video_url: null,
-        render_status: "idle",
-        render_error: null,
-      })
-      .eq("id", id);
-
-    if (stateErr) {
-      // If we can't persist the reset, we'd be left with "new dialogue + old MP4".
-      // Roll back to the previous dialogue so the stored video still matches it.
-      console.error(`[podcast/script] could not reset render state for ${id}:`, stateErr);
-      await service.from("podcast_segments").delete().eq("podcast_id", id);
-      if (previousSegments && previousSegments.length > 0) {
-        await service.from("podcast_segments").insert(previousSegments);
-      }
-      return NextResponse.json(
-        { error: "Failed to save the new dialogue state. Your previous script was kept." },
-        { status: 500 },
-      );
     }
 
     return NextResponse.json({ status: "ready", segments: inserted || [] });

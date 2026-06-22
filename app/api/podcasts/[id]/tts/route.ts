@@ -143,6 +143,11 @@ export async function POST(
       const seg = segments.find((s) => s.id === previewId);
       if (!seg) return NextResponse.json({ error: "Segment not found" }, { status: 404 });
       const updated = await synthOne(seg);
+      // Clear the stale render BEFORE persisting the new audio_url, so the DB can
+      // never hold "new audio + old MP4". (An orphaned R2 upload is acceptable.)
+      if (ready > 0 && !(await invalidateRender())) {
+        return NextResponse.json({ error: STALE_RENDER_ERROR }, { status: 500 });
+      }
       const { error: upErr } = await service
         .from("podcast_segments")
         .update({ audio_url: updated.audio_url, status: updated.status })
@@ -150,9 +155,6 @@ export async function POST(
       if (upErr) {
         console.error(`[podcast/tts] preview update failed for ${seg.id}:`, upErr);
         return NextResponse.json({ error: "Could not save the generated audio" }, { status: 500 });
-      }
-      if (ready > 0 && !(await invalidateRender())) {
-        return NextResponse.json({ error: STALE_RENDER_ERROR }, { status: 500 });
       }
       return NextResponse.json({
         ready,
@@ -183,6 +185,12 @@ export async function POST(
       return estimateDurationSec(s.text);
     });
     const timings = estimateSegmentTimings(durations);
+
+    // Clear the stale render BEFORE writing any new audio to the segments, so the
+    // DB can never hold "new audio + old MP4". If it fails, no segment is mutated.
+    if (ready > 0 && !(await invalidateRender())) {
+      return NextResponse.json({ error: STALE_RENDER_ERROR }, { status: 500 });
+    }
 
     for (let i = 0; i < results.length; i++) {
       const s = results[i];

@@ -12,6 +12,15 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1131f-hardening-fix2 (review Codex, P1 transactionnel)
+- Fait : l'invalidation du render est déplacée AVANT toute mutation de segments. script : reset podcasts
+  (video_url/render_status/render_error + status ready) AVANT delete/insert ; reset échoue → 500, segments
+  intacts. tts : invalidateRender() AVANT update segment (preview) / AVANT la boucle (full) ; échec → 500 sans
+  muter de segment. Plus jamais « nouveau dialogue/audio + ancien MP4 » persisté.
+- Fichiers : `app/api/podcasts/[id]/script/route.ts`, `app/api/podcasts/[id]/tts/route.ts`, + leurs tests, `agent/*`.
+- Tests : 73 tests podcast verts (ajustés : reset-fail → 0 mutation segment ; invalidate-fail → 0 update segment) ;
+  build OK ; tsc clean.
+
 ## 2026-06-22 — Claude — T-1131f-hardening-fix (review Codex, 2 P1)
 - Fait : les updates d'invalidation du render vérifient maintenant `{error}`. (1) script : reset final échoué →
   rollback vers l'ancien dialogue (`previousSegments`) + 500 « ...Your previous script was kept. ». (2) tts :
