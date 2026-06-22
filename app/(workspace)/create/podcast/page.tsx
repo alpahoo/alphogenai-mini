@@ -11,7 +11,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   AlertTriangle, ArrowLeft, CheckCircle2, Loader2, Mic, Pause, Play,
-  Podcast, Sparkles, Film, FileText, Clapperboard,
+  Podcast, Sparkles, Film, FileText, Clapperboard, Clock, Globe2, Link2, Upload,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -48,6 +48,21 @@ const ROLE_COLOR: Record<string, string> = { host: "#34c98a", guest: "#5b8def" }
 
 const RENDER_POLL_TIMEOUT_MS = 5 * 60 * 1000; // stop polling a stuck render after 5 min
 
+const DURATION_OPTIONS = [
+  { value: 30, label: "30s" },
+  { value: 60, label: "60s" },
+  { value: 120, label: "2 min" },
+  { value: 300, label: "5 min" },
+];
+
+const STYLE_OPTIONS = [
+  { value: "casual", label: "Casual", desc: "Warm conversation" },
+  { value: "news", label: "News", desc: "Context and what changed" },
+  { value: "expert", label: "Expert", desc: "Analysis and tradeoffs" },
+  { value: "debate", label: "Debate", desc: "Two viewpoints" },
+  { value: "documentary", label: "Documentary", desc: "Narrative explainer" },
+];
+
 const STEPS = [
   { n: 1, label: "Write dialogue", Icon: FileText },
   { n: 2, label: "Generate voices", Icon: Mic },
@@ -60,6 +75,9 @@ export default function CreatePodcastPage() {
 
   const [topic, setTopic] = useState("");
   const [language, setLanguage] = useState("en-US");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [targetDuration, setTargetDuration] = useState(120);
+  const [podcastStyle, setPodcastStyle] = useState("casual");
 
   const [podcast, setPodcast] = useState<PodcastRow | null>(null);
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
@@ -98,6 +116,11 @@ export default function CreatePodcastPage() {
   async function generateDialogue() {
     const clean = topic.trim();
     if (clean.length < 3) { setError("Add a topic (a sentence or two) to start."); return; }
+    const cleanUrl = sourceUrl.trim();
+    if (cleanUrl && !/^https?:\/\//i.test(cleanUrl)) {
+      setError("The source link must start with http:// or https://");
+      return;
+    }
     setError(null);
     setPhase("scripting");
     try {
@@ -110,7 +133,13 @@ export default function CreatePodcastPage() {
         const res = await fetch("/api/podcasts", {
           method: "POST",
           headers,
-          body: JSON.stringify({ source_mode: "generate", source_topic: clean, language, layout: "two_shot" }),
+          body: JSON.stringify({
+            source_mode: "generate",
+            source_topic: clean,
+            source_asset_url: cleanUrl || undefined,
+            language,
+            layout: "two_shot",
+          }),
         });
         const json = await res.json();
         if (!res.ok) throw new Error(json?.error || "Could not create the podcast.");
@@ -122,7 +151,11 @@ export default function CreatePodcastPage() {
       const res = await fetch(`/api/podcasts/${pid}/script`, {
         method: "POST",
         headers,
-        body: JSON.stringify({ topic: clean }),
+        body: JSON.stringify({
+          topic: clean,
+          target_duration_seconds: targetDuration,
+          style: podcastStyle,
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Could not write the dialogue.");
@@ -270,35 +303,120 @@ export default function CreatePodcastPage() {
         })}
       </div>
 
-      {/* Entry / brief */}
+      {/* Entry / setup */}
       <div className="mt-8 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
-        <label className="mb-2 block text-sm font-semibold text-neutral-800">What should the podcast be about?</label>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <label className="block text-sm font-semibold text-neutral-900">Podcast setup</label>
+            <p className="mt-1 text-xs text-neutral-500">
+              Script engine: LiteLLM. Voices are selected and generated after the dialogue.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold text-neutral-500">
+            <Film className="h-3.5 w-3.5" /> 16:9 two-shot
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm font-semibold text-amber-800"
+          >
+            <FileText className="mr-2 inline h-4 w-4" /> Text idea
+          </button>
+          <button
+            type="button"
+            disabled
+            title="Upload script/audio will be added in a later Podcast ticket."
+            className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-left text-sm font-semibold text-neutral-400"
+          >
+            <Upload className="mr-2 inline h-4 w-4" /> Upload script/audio (Soon)
+          </button>
+        </div>
+
         <textarea
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
-          placeholder="e.g. How small teams can ship AI video ads faster in 2026"
-          rows={3}
+          placeholder="Enter your raw idea, audience, or angle. Example: how creators can automate AI video production without losing quality."
+          rows={4}
           maxLength={2000}
-          className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+          className="mt-4 w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
         />
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <select
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-            className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700"
+
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2">
+          <Link2 className="h-4 w-4 text-neutral-400" />
+          <input
+            value={sourceUrl}
+            onChange={(e) => setSourceUrl(e.target.value)}
+            placeholder="Optional source link (article, YouTube, product page)"
+            className="min-w-0 flex-1 bg-transparent text-sm text-neutral-800 outline-none placeholder:text-neutral-400"
+          />
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <label className="block">
+            <span className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-neutral-500">
+              <Clock className="h-3.5 w-3.5" /> Duration
+            </span>
+            <select
+              value={targetDuration}
+              onChange={(e) => setTargetDuration(Number(e.target.value))}
+              className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700"
+            >
+              {DURATION_OPTIONS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-neutral-500">
+              <Sparkles className="h-3.5 w-3.5" /> Style
+            </span>
+            <select
+              value={podcastStyle}
+              onChange={(e) => setPodcastStyle(e.target.value)}
+              className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700"
+            >
+              {STYLE_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+            <span className="mt-1 block text-[11px] text-neutral-400">
+              {STYLE_OPTIONS.find((s) => s.value === podcastStyle)?.desc}
+            </span>
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-neutral-500">
+              <Globe2 className="h-3.5 w-3.5" /> Language
+            </span>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700"
+            >
+              {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setTopic("Create a practical podcast about how creators can use AI video automation without losing originality or quality.");
+              setSourceUrl("");
+              setPodcastStyle("expert");
+              setTargetDuration(120);
+            }}
+            className="rounded-lg border border-neutral-200 px-3 py-2 text-sm font-semibold text-neutral-600 transition hover:bg-neutral-50"
           >
-            {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
-          </select>
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-medium text-neutral-500">
-            Format 16:9 · Two-shot
-          </span>
+            Try sample
+          </button>
           <button
             onClick={generateDialogue}
             disabled={phase === "scripting"}
             className="ml-auto inline-flex items-center gap-2 rounded-xl bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-60"
           >
             {phase === "scripting" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {phase === "scripting" ? "Writing dialogue…" : hasDialogue ? "Rewrite dialogue" : "Generate dialogue"}
+            {phase === "scripting" ? "Writing dialogue..." : hasDialogue ? "Rewrite dialogue" : "Generate dialogue"}
           </button>
         </div>
       </div>

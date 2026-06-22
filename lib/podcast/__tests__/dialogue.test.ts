@@ -36,6 +36,19 @@ describe("buildPodcastDialoguePrompt", () => {
     expect(p).toMatch(/JSON/i);
     expect(p).toContain("speaker_role");
   });
+
+  it("includes target duration and style guidance when provided", () => {
+    const p = buildPodcastDialoguePrompt({
+      topic: "AI video tools",
+      language: "en-US",
+      targetDurationSeconds: 120,
+      style: "debate",
+      sourceUrl: "https://example.com/article",
+    });
+    expect(p).toContain("TARGET DURATION: about 120 seconds");
+    expect(p).toContain("STYLE: balanced debate");
+    expect(p).toContain("SOURCE URL: https://example.com/article");
+  });
 });
 
 describe("parsePodcastDialogueResponse", () => {

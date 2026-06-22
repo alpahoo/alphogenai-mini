@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
-import { TOPIC_MAX } from "@/lib/podcast/podcast";
+import {
+  TOPIC_MAX,
+  isPodcastStyle,
+  isPodcastTargetDuration,
+} from "@/lib/podcast/podcast";
 import { buildPodcastDialoguePrompt, parseAndValidateDialogue } from "@/lib/podcast/dialogue";
 import { callLLMForPodcastDialogue } from "@/lib/podcast/dialogue-llm";
 
@@ -45,6 +49,26 @@ export async function POST(
         { status: 400 },
       );
     }
+    const targetDurationSeconds =
+      body.target_duration_seconds === undefined || body.target_duration_seconds === null
+        ? null
+        : Number(body.target_duration_seconds);
+    if (
+      targetDurationSeconds !== null &&
+      !isPodcastTargetDuration(targetDurationSeconds)
+    ) {
+      return NextResponse.json(
+        { error: "target_duration_seconds must be 30, 60, 120 or 300" },
+        { status: 400 },
+      );
+    }
+    const style = typeof body.style === "string" ? body.style : "casual";
+    if (!isPodcastStyle(style)) {
+      return NextResponse.json(
+        { error: "style must be casual | news | expert | debate | documentary" },
+        { status: 400 },
+      );
+    }
 
     const { data: speakers } = await service
       .from("podcast_speakers")
@@ -69,6 +93,9 @@ export async function POST(
       language: podcast.language,
       hostName: host.name,
       guestName: guest.name,
+      targetDurationSeconds,
+      style,
+      sourceUrl: podcast.source_asset_url,
     });
 
     const llm = await callLLMForPodcastDialogue(prompt);

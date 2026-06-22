@@ -1019,6 +1019,16 @@ Contraintes :
 - Reste V1+ : polish thumbnails, éventuelle édition du rôle de référence,
   e2e visuel authentifié après déploiement.
 
+### [T-1132] Podcast UX quality — `status: in_progress` · `owner: codex`
+- T-1132a livré (Podcast setup controls, UI + prompt contract) — `app/(workspace)/create/podcast/page.tsx`,
+  `app/api/podcasts/[id]/script/route.ts`, `lib/podcast/dialogue.ts`, `lib/podcast/podcast.ts` + tests.
+  Ajout d'un vrai setup avant génération : durée cible (30s/60s/2min/5min), style (casual/news/expert/debate/
+  documentary), langue, URL source optionnelle et distinction claire **Script engine LiteLLM** vs voix générées
+  après dialogue. La route `/api/podcasts/[id]/script` valide `target_duration_seconds` + `style` et transmet
+  durée/style/source URL au prompt LiteLLM. Upload script/audio reste disabled/Soon (pas de faux bouton). Aucun
+  nouveau backend, aucune migration, podcast-only. Tests ciblés 30/30 verts ; build OK ; tsc clean.
+  Prochaine étape recommandée : T-1132b Voice Lab (choix/preview de voix, normalisation volume).
+
 ### [T-1131] Podcast Video backend — `status: done` · `owner: claude`
 - T-1131f-hardening-fix3 livré (review Codex, P2 cleanup) — supprimé l'appel **dupliqué** à `invalidateRender()`
   resté après la boucle d'update en full mode (`tts/route.ts`) : une seule invalidation (avant la boucle),

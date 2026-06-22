@@ -39,18 +39,39 @@ export function buildPodcastDialoguePrompt(opts: {
   language?: string;
   hostName?: string;
   guestName?: string;
+  targetDurationSeconds?: number | null;
+  style?: string | null;
+  sourceUrl?: string | null;
 }): string {
   const { topic } = opts;
   const language = opts.language || "en-US";
   const hostName = (opts.hostName || "Host").trim();
   const guestName = (opts.guestName || "Guest").trim();
+  const targetDurationSeconds = opts.targetDurationSeconds || null;
+  const style = (opts.style || "casual").trim().toLowerCase();
+  const sourceUrl = (opts.sourceUrl || "").trim();
+
+  const durationGuidance = targetDurationSeconds
+    ? `TARGET DURATION: about ${targetDurationSeconds} seconds. Use ${targetDurationSeconds <= 60 ? "6-8 concise" : "8-10 richer"} turns and keep the total spoken script close to that length.`
+    : `TARGET DURATION: short-form default. Use 6-8 concise turns.`;
+
+  const styleGuidance: Record<string, string> = {
+    casual: "STYLE: casual podcast. Warm, direct, lightly conversational, no hype.",
+    news: "STYLE: news briefing. Clear context, what changed, why it matters, concise evidence.",
+    expert: "STYLE: expert analysis. Practical insight, tradeoffs, concrete examples, confident tone.",
+    debate: "STYLE: balanced debate. Let host and guest challenge each other politely before converging.",
+    documentary: "STYLE: documentary explainer. More narrative, scene-setting, and reflective transitions.",
+  };
 
   return [
     `Write a short, natural two-person podcast dialogue about the following topic.`,
     ``,
     `TOPIC: ${topic}`,
+    sourceUrl ? `SOURCE URL: ${sourceUrl}` : null,
     `LANGUAGE: ${language}`,
     `SPEAKERS: a host (${hostName}) and a guest (${guestName}).`,
+    durationGuidance,
+    styleGuidance[style] || styleGuidance.casual,
     ``,
     `Rules:`,
     `- Produce between ${MIN_SEGMENTS} and ${MAX_SEGMENTS} dialogue turns.`,
@@ -63,7 +84,7 @@ export function buildPodcastDialoguePrompt(opts: {
     ``,
     `Return ONLY a valid JSON object, no markdown or code fences:`,
     `{ "segments": [ { "speaker_role": "host", "text": "..." }, { "speaker_role": "guest", "text": "..." } ] }`,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 /**

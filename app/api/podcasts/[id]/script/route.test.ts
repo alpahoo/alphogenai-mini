@@ -75,6 +75,22 @@ describe("POST /api/podcasts/[id]/script", () => {
     expect(res.status).toBe(400);
   });
 
+  it("400 on invalid duration or podcast style", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id, status: "draft", source_topic: "AI tools", language: "en-US" }, error: null }),
+      }) as never,
+    );
+
+    const badDuration = await POST(req({ target_duration_seconds: 999 }), ctx("p1"));
+    expect(badDuration.status).toBe(400);
+
+    const badStyle = await POST(req({ target_duration_seconds: 120, style: "salesy" }), ctx("p1"));
+    expect(badStyle.status).toBe(400);
+    expect(callLLMForPodcastDialogue).not.toHaveBeenCalled();
+  });
+
   it("marks the podcast failed when the LLM JSON is invalid", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     const updates: unknown[] = [];
@@ -139,6 +155,26 @@ describe("POST /api/podcasts/[id]/script", () => {
     expect(updates).toContainEqual(
       expect.objectContaining({ video_url: null, render_status: "idle", render_error: null }),
     );
+  });
+
+  it("passes duration and style controls to the dialogue prompt", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id, status: "draft", source_topic: "AI tools", language: "en-US" }, error: null }),
+        "podcast_speakers:select": () => ({ data: SPEAKERS, error: null }),
+        "podcast_segments:delete": () => ({ data: null, error: null }),
+        "podcast_segments:insert": (s) => ({ data: s.payload, error: null }),
+        "podcasts:update": () => ({ data: null, error: null }),
+      }) as never,
+    );
+    vi.mocked(callLLMForPodcastDialogue).mockResolvedValue({ content: sixTurns(), tokensUsed: 10, modelUsed: "m" });
+
+    const res = await POST(req({ target_duration_seconds: 300, style: "documentary" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    const prompt = vi.mocked(callLLMForPodcastDialogue).mock.calls[0][0];
+    expect(prompt).toContain("TARGET DURATION: about 300 seconds");
+    expect(prompt).toContain("STYLE: documentary explainer");
   });
 
   it("500s and leaves segments UNTOUCHED when the render reset fails (reset runs first)", async () => {

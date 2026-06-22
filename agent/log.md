@@ -12,6 +12,14 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 - Codex - T-1132a Podcast setup controls
+- Fait : ajout des controles reels avant generation podcast : duree cible, style, langue, URL source optionnelle,
+  et microcopy separant le moteur de script LiteLLM des voix generees ensuite. La route script valide duree/style
+  et transmet duree/style/source URL au prompt. Upload script/audio reste explicitement disabled/Soon.
+- Fichiers : `app/(workspace)/create/podcast/page.tsx`, `app/api/podcasts/[id]/script/route.ts`,
+  `lib/podcast/dialogue.ts`, `lib/podcast/podcast.ts`, tests associes, `agent/*`.
+- Tests : cibles podcast 30/30 verts ; build OK ; tsc clean.
+- Prochaine etape : T-1132b Voice Lab (selection/preview de voix, normalisation volume).
 ## 2026-06-22 — Claude — T-1131f-hardening-fix3 (review Codex, P2 cleanup)
 - Fait : suppression de l'appel dupliqué à invalidateRender() après la boucle d'update (full mode, tts route).
   Il ne reste qu'une invalidation, avant toute mutation segment → pas de 2ᵉ update Supabase inutile, pas de faux
