@@ -12,6 +12,20 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1130e Podcast Video guided flow (Option B, docs-only)
+- Fait : mini-audit read-only (Podcast) → aucune brique réelle. Confirmé : pas de route `/create/podcast` ;
+  hub card `status:"soon"` sans href (non-cliquable) ; pas de génération script dialogue multi-speaker
+  (`lib/research/script.ts` mono-voix) ; pas de TTS multi-speaker (`lib/tts.ts` = 1 texte→1 voix) ;
+  pas de layout two-shot/split-screen/talk-show (`VALID_ENGINES` tous mono-sortie) ; pas de
+  render/compositing podcast ; pas de DB. Option C écartée (rien de réutilisable sans tromper). Option B
+  validée par Paul → spec docs-only `docs/product/podcast-video-guided-flow-spec.md` : UX cible (entry +
+  editor), data model proposé (non appliqué), gaps backend explicites, découpage futur T-1131a..f.
+- Fichiers modifiés : `docs/product/podcast-video-guided-flow-spec.md` (nouveau), `agent/tasks.md`, `agent/log.md`.
+- Docs-only : aucun runtime, aucune route, aucune migration, aucun backend ; `/create/podcast` non créé ;
+  carte hub inchangée (reste « Soon ») ; flows Story/URL/Avatar/Product + /research intacts.
+- Tests : n/a (docs-only, aucun code touché).
+- Prochaine étape : si priorisé, démarrer T-1131a (spec backend). Review Codex. Série T-1130 (a→e) close.
+
 ## 2026-06-22 — Claude — T-1130d Avatar guided polish (Option A)
 - Fait : polish UI-only de `/create/avatar` (page existante conservée, pas de refonte). Ajout d'un
   stepper visuel 3 étapes en haut (1 Select avatar · 2 Modify script · 3 Voice & render) dérivé de

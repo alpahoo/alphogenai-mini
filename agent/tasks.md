@@ -1020,6 +1020,17 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1130] Guided Creation Hub — `status: in_progress` · `owner: claude`
+- T-1130e livré (Podcast — **Option B docs-only** validée par Paul) — **`docs/product/podcast-video-guided-flow-spec.md`**.
+  Mini-audit read-only : **aucune brique podcast réelle** (pas de route `/create/podcast`, pas de script
+  dialogue multi-speaker — `lib/research/script.ts` est mono-voix, pas de TTS multi-speaker — `lib/tts.ts`
+  = 1 texte→1 voix, pas de layout two-shot/split/talk-show — `VALID_ENGINES` tous mono-sortie, pas de
+  render/compositing podcast, pas de DB). Donc Option C écartée, pas de fausse page. Spec docs-only décrit
+  l'UX cible (entry « Turn your ideas into podcasts » : Generate script / Upload script or audio, input
+  central, trending/exemples, podcasts récents ; editor : speakers/layouts à gauche, dialogue host/guest
+  à droite, voix par speaker, Render) + les gaps backend + découpage futur **T-1131a..f** (spec backend,
+  schema, script dialogue, TTS multi-speaker, render/compositing, UI). **Aucun runtime**, `/create/podcast`
+  non créé, carte hub reste « Soon » (non-cliquable, sans href) jusqu'à T-1131f. Flows existants intacts.
+  Série T-1130 close (a→e).
 - T-1130d livré (Avatar guided polish, **Option A** validée par Paul) — **`app/(workspace)/create/avatar/page.tsx`**.
   Polish **UI-only** de la page existante (pas de refonte) : **stepper visuel 3 étapes** en haut
   (1 Select avatar · 2 Modify script · 3 Voice & render) dérivé de l'état du formulaire existant
