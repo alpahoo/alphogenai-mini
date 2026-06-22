@@ -12,6 +12,21 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1130a Guided Creation Hub
+- Fait : `app/(workspace)/create/page.tsx` refait en hub guidé visuel (cible = mockup
+  mockups/alphogen-guided-flows-v2.html). Header « Create a video » + grille de 6 cartes :
+  Story/Cinematic (featured sombre, Core, → /create/story), URL to Video (→ /research),
+  Avatar (→ /create/avatar), Podcast (Soon, disabled), Product/UGC (→ /create/product),
+  Explainer (Low cost, → /research). Mini-visuels gradient repris du mockup, design blanc/soft,
+  accents bleu/cyan, états hover + disabled. Retiré l'ancien dashboard (Advanced Tools, AI
+  Playground, Start-from-scratch, Recent Projects + fetch Supabase) → plus de page longue,
+  pas de bloc noir Research, pas de watchlists.
+- Scope : UI/navigation only. Réutilise les routes existantes ; aucune route/API/DB/migration,
+  aucun changement pipeline. Flows détaillés URL/Avatar/Podcast/UGC = T-1130b/c/d.
+- Vérif : tsc → exit 0 ; npm run build → OK sans warning, /create 2,13 kB (statique).
+  QA visuelle navigateur (Claude-in-Chrome) prévue après déploiement (review visuelle Codex).
+- Fichiers : app/(workspace)/create/page.tsx, agent/tasks.md, agent/log.md.
+
 ## 2026-06-22 — Claude — Tier B : corrections review Codex (P1 versioning + P3 commentaire)
 - P1 (correction) : le brouillon n'était pas lié à la version du storyboard → un plan régénéré
   pouvait être masqué par un vieux draft. Fix : `working_storyboard` stocke désormais

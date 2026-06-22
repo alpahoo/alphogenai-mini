@@ -1019,6 +1019,18 @@ Contraintes :
 - Reste V1+ : polish thumbnails, éventuelle édition du rôle de référence,
   e2e visuel authentifié après déploiement.
 
+### [T-1130] Guided Creation Hub — `status: in_progress` · `owner: claude`
+- T-1130a livré (UI/navigation only) — `app/(workspace)/create/page.tsx` refait en **hub guidé**
+  fidèle au mockup `mockups/alphogen-guided-flows-v2.html` : header « Create a video » + grille de
+  **6 cartes visuelles** (mini-visuels gradient, design blanc/soft, accents bleu/cyan). Story /
+  Cinematic = **carte featured** (sombre, première, badge Core) → /create/story. Autres : URL to
+  Video → /research, Avatar → /create/avatar, Product/UGC → /create/product, Explainer → /research
+  (badge Low cost), Podcast → **Soon** (disabled, pas de route). États hover + disabled/Soon.
+  Retiré : Advanced Tools / AI Playground / Start-from-scratch / Recent Projects (évite la
+  page-dashboard) ; pas de bloc noir Research, pas de watchlists/recent research. Réutilise les
+  routes existantes ; **aucune** route/API/DB/migration/pipeline. tsc + build OK (/create 2,13 kB).
+  QA visuelle navigateur (Claude-in-Chrome) après déploiement. Flows détaillés = T-1130b/c/d.
+
 ### [T-1120] Premium UI — Research / Explainer / Render Studio — `status: done` · `owner: claude`
 - Tier B livré (persistance working copy, autorisé par Paul) : migration prod (colonne
   `research_jobs.working_storyboard jsonb`, via Supabase MCP) + route PUT
