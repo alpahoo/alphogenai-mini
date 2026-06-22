@@ -394,6 +394,22 @@ export default function CreateAvatarPage() {
   const clonedVoices = filteredVoices.filter((v) => v.isCloned);
   const stockVoices = filteredVoices.filter((v) => !v.isCloned);
 
+  // ── Guided stepper (visual only — derived from existing form state) ─────
+  const isReusingLook = mode === "cinematic" && Boolean(selectedLookId);
+  const step1Done = Boolean(avatarId) || isReusingLook;
+  const step2Done =
+    mode === "presenter"
+      ? scriptText.trim().length > 10
+      : isReusingLook
+        ? scriptText.trim().length > 0
+        : scenePrompt.trim().length > 10;
+  const step3Done = Boolean(voiceId);
+  const steps = [
+    { n: 1, label: "Select avatar", hint: mode === "cinematic" ? "or a saved look" : "or a photo", done: step1Done },
+    { n: 2, label: "Modify script", hint: mode === "cinematic" ? "shot + dialogue" : "what they say", done: step2Done },
+    { n: 3, label: "Voice & render", hint: "pick a voice", done: step3Done },
+  ];
+
   // ── Plan gate ──────────────────────────────────────────────────────────
   if (planLoaded && plan !== "premium") {
     return (
@@ -454,6 +470,32 @@ export default function CreateAvatarPage() {
             </div>
           </div>
 
+          {/* ── Guided stepper (visual) ─────────────────────────────── */}
+          <div className="mt-6 flex items-center gap-2">
+            {steps.map((s, i) => (
+              <div key={s.n} className="flex flex-1 items-center gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors ${
+                      s.done
+                        ? "bg-green-500/20 text-green-400"
+                        : "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400"
+                    }`}
+                  >
+                    {s.done ? <CheckCircle2 className="h-4 w-4" /> : s.n}
+                  </div>
+                  <div className="hidden sm:block">
+                    <div className="text-sm font-semibold leading-tight text-foreground">{s.label}</div>
+                    <div className="text-[11px] leading-tight text-muted-foreground">{s.hint}</div>
+                  </div>
+                </div>
+                {i < steps.length - 1 && (
+                  <div className={`h-px flex-1 ${s.done ? "bg-green-500/30" : "bg-border/50"}`} />
+                )}
+              </div>
+            ))}
+          </div>
+
           {/* ── Mode toggle: Presenter vs Cinematic ─────────────────── */}
           <div className="mt-6 inline-flex rounded-xl border border-border/50 bg-muted/20 p-1">
             <button
@@ -468,7 +510,7 @@ export default function CreateAvatarPage() {
               <User className="h-4 w-4" />
               <div className="text-left">
                 <div className="font-semibold">Presenter</div>
-                <div className="text-[10px] opacity-70">Avatar IV · talking head</div>
+                <div className="text-[10px] opacity-70">Talking head from a photo</div>
               </div>
             </button>
             <button
@@ -483,10 +525,17 @@ export default function CreateAvatarPage() {
               <Clapperboard className="h-4 w-4" />
               <div className="text-left">
                 <div className="font-semibold">Cinematic</div>
-                <div className="text-[10px] opacity-70">Seedance 2 · lip-sync</div>
+                <div className="text-[10px] opacity-70">Cinematic shot + lip-sync</div>
               </div>
             </button>
           </div>
+
+          {/* Short, plain-language explanation of the active mode */}
+          <p className="mt-2 max-w-xl text-xs leading-relaxed text-muted-foreground">
+            {mode === "presenter"
+              ? "Presenter — your avatar talks straight to camera. Pick an avatar, write a script, choose a voice."
+              : "Cinematic — generate a film-style shot (or reuse a saved look) and lip-sync your dialogue onto it."}
+          </p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-8">
             {/* ── Reuse a saved Look (cinematic) ───────────────────── */}
