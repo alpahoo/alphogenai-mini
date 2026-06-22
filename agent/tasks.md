@@ -1020,6 +1020,14 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1131] Podcast Video backend — `status: done` · `owner: claude`
+- T-1131f-hardening-fix livré (review Codex, 2 P1) — les updates qui invalident le render vérifient
+  désormais `{error}`. (1) `script/route.ts` : si le reset final (status ready + video_url/render_status/
+  render_error) échoue → rollback vers l'ancien dialogue (delete + re-insert `previousSegments`) + **500**
+  « Failed to save the new dialogue state. Your previous script was kept. » (jamais « nouveau dialogue + ancien
+  MP4 »). (2) `tts/route.ts` : `invalidateRender()` renvoie un booléen ; si `ready>0` et l'invalidation échoue
+  (preview ou full) → **500** « Audio was generated but the stale video could not be cleared. Please retry. »
+  (provider toujours caché ; audio déjà sauvé conservé). 73 tests podcast verts (+3 : script reset fail→rollback+500,
+  tts full invalidate fail→500, tts preview invalidate fail→500) ; build OK ; tsc clean.
 - T-1131f-hardening livré (invalidation des renders obsolètes) — `script/route.ts` + `tts/route.ts` +
   `create/podcast/page.tsx`. (1) `/script` : sur nouveau dialogue, reset `video_url=null`/`render_status='idle'`/
   `render_error=null` (un ancien MP4 ne reste jamais sur un nouveau script). (2) `/tts` : si ≥1 segment audio

@@ -261,6 +261,40 @@ describe("POST /api/podcasts/[id]/tts", () => {
     expect(updates.filter((u) => u.table === "podcasts").length).toBe(0);
   });
 
+  it("full mode 500s when audio was generated but the stale render can't be cleared", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: okPodcast, error: null }),
+        "podcast_speakers:select": () => ({ data: SPEAKERS, error: null }),
+        "podcast_segments:select": () => ({ data: [seg(0), seg(1)], error: null }),
+        "podcast_segments:update": () => ({ data: null, error: null }),
+        "podcasts:update": () => ({ data: null, error: { message: "db boom" } }),
+      }) as never,
+    );
+    const res = await POST(req({}), ctx("p1"));
+    expect(res.status).toBe(500);
+    const text = JSON.stringify(await res.json());
+    expect(text).toMatch(/stale video could not be cleared/i);
+    expect(text.toLowerCase()).not.toContain("elevenlabs");
+  });
+
+  it("preview 500s when audio was generated but the stale render can't be cleared", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: okPodcast, error: null }),
+        "podcast_speakers:select": () => ({ data: SPEAKERS, error: null }),
+        "podcast_segments:select": () => ({ data: [seg(0), seg(1)], error: null }),
+        "podcast_segments:update": () => ({ data: null, error: null }),
+        "podcasts:update": () => ({ data: null, error: { message: "db boom" } }),
+      }) as never,
+    );
+    const res = await POST(req({ preview: "seg-1" }), ctx("p1"));
+    expect(res.status).toBe(500);
+    expect(JSON.stringify(await res.json())).toMatch(/stale video could not be cleared/i);
+  });
+
   it("force writes a fresh, unique R2 key (no stale cached audio)", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     vi.mocked(uploadBufferToR2).mockImplementation(async (_buf, path) => `https://cdn.example.com/${path}`);

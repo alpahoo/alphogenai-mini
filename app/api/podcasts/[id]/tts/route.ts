@@ -103,12 +103,20 @@ export async function POST(
 
     // New/regenerated audio makes any previously rendered MP4 stale — reset the
     // render state so an old video can never stay attached to changed audio.
-    const invalidateRender = async () => {
-      await service
+    // Returns false if the reset could not be persisted (caller must 500).
+    const invalidateRender = async (): Promise<boolean> => {
+      const { error } = await service
         .from("podcasts")
         .update({ video_url: null, render_status: "idle", render_error: null })
         .eq("id", id);
+      if (error) {
+        console.error(`[podcast/tts] could not clear stale render for ${id}:`, error);
+        return false;
+      }
+      return true;
     };
+
+    const STALE_RENDER_ERROR = "Audio was generated but the stale video could not be cleared. Please retry.";
 
     const synthOne = async (seg: SegmentRow): Promise<SegmentRow> => {
       const voice = voiceBySpeaker[seg.speaker_id] || undefined;
@@ -143,7 +151,9 @@ export async function POST(
         console.error(`[podcast/tts] preview update failed for ${seg.id}:`, upErr);
         return NextResponse.json({ error: "Could not save the generated audio" }, { status: 500 });
       }
-      if (ready > 0) await invalidateRender();
+      if (ready > 0 && !(await invalidateRender())) {
+        return NextResponse.json({ error: STALE_RENDER_ERROR }, { status: 500 });
+      }
       return NextResponse.json({
         ready,
         failed,
@@ -200,7 +210,9 @@ export async function POST(
     }
 
     // Only invalidate when audio actually changed (skip if everything was skipped).
-    if (ready > 0) await invalidateRender();
+    if (ready > 0 && !(await invalidateRender())) {
+      return NextResponse.json({ error: STALE_RENDER_ERROR }, { status: 500 });
+    }
 
     return NextResponse.json({
       ready,

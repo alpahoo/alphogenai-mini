@@ -12,6 +12,14 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1131f-hardening-fix (review Codex, 2 P1)
+- Fait : les updates d'invalidation du render vérifient maintenant `{error}`. (1) script : reset final échoué →
+  rollback vers l'ancien dialogue (`previousSegments`) + 500 « ...Your previous script was kept. ». (2) tts :
+  invalidateRender() renvoie bool ; ready>0 + échec → 500 « Audio was generated but the stale video could not be
+  cleared. Please retry. » (provider caché, audio sauvé conservé).
+- Fichiers : `app/api/podcasts/[id]/script/route.ts`, `app/api/podcasts/[id]/tts/route.ts`, + leurs tests, `agent/*`.
+- Tests : 73 tests podcast verts (+3) ; build OK ; tsc clean. Pas de migration, podcast-only.
+
 ## 2026-06-22 — Claude — T-1131f-hardening (stale render invalidation)
 - Fait : un ancien MP4 ne peut plus rester affiché/associé après modif du script ou de l'audio.
   (1) `/api/podcasts/[id]/script` : sur succès (nouveaux segments), reset video_url=null / render_status=idle /
