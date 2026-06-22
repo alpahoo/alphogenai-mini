@@ -12,6 +12,24 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1130d Avatar guided polish (Option A)
+- Fait : polish UI-only de `/create/avatar` (page existante conservée, pas de refonte). Ajout d'un
+  stepper visuel 3 étapes en haut (1 Select avatar · 2 Modify script · 3 Voice & render) dérivé de
+  l'état du formulaire (coche verte quand une étape est faite). Libellés de mode en clair : Presenter
+  = « Talking head from a photo », Cinematic = « Cinematic shot + lip-sync » + une phrase courte
+  d'explication selon le mode. Pas d'AI writer inline ni de toggle sous-titres (auraient demandé du
+  backend → exclus du scope par consigne).
+- Fichiers modifiés : `app/(workspace)/create/avatar/page.tsx` (1 fichier, +51/-2).
+- UI-only : aucun backend / route / migration ; HeyGen (avatars, voix, clone voice), looks, lip-sync,
+  POST /api/jobs et tous les handlers existants intacts.
+- Tests : npm run build OK (ordre build→tsc pour éviter le faux négatif `.next/types` signalé par Codex),
+  puis tsc clean (exit 0).
+- QA prod (Claude-in-Chrome, compte premium) : page rendue (pas de gate), stepper présent et réactif
+  (sélection d'un avatar → étape 1 cochée + « Avatar ready » dans l'aside), 10 avatars HeyGen + 8 voix
+  chargés, toggle Presenter/Cinematic met à jour les hints du stepper + la description, bouton Generate
+  présent. Screenshot capturé.
+- Prochaine étape : T-1130e (Podcast). Review Codex.
+
 ## 2026-06-22 — Claude — T-1130c URL to Video guided entry (Option A)
 - Fait : entrée guidée « coller une URL → créer une vidéo » qui masque la complexité Research.
   Nouvelle page `/create/url` centrée : titre + sous-titre, champ URL + CTA « Create video »,

@@ -1020,6 +1020,17 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1130] Guided Creation Hub — `status: in_progress` · `owner: claude`
+- T-1130d livré (Avatar guided polish, **Option A** validée par Paul) — **`app/(workspace)/create/avatar/page.tsx`**.
+  Polish **UI-only** de la page existante (pas de refonte) : **stepper visuel 3 étapes** en haut
+  (1 Select avatar · 2 Modify script · 3 Voice & render) dérivé de l'état du formulaire existant
+  (coche verte quand l'étape est faite) ; libellés mode en clair (**Presenter** = « Talking head from a
+  photo », **Cinematic** = « Cinematic shot + lip-sync ») + une phrase d'explication courte selon le mode.
+  **Aucun** backend / route / migration ; HeyGen avatars, voix, clone voice, looks, lip-sync, jobs **intacts**
+  (handlers préservés). Pas d'AI writer ni toggle sous-titres (auraient nécessité du backend → hors scope).
+  build OK puis tsc clean (ordre Codex). QA prod Claude-in-Chrome (compte premium) : page rendue,
+  stepper présent + réactif (sélection avatar → étape 1 cochée + « Avatar ready »), 10 avatars HeyGen +
+  8 voix chargés, toggle Presenter/Cinematic met à jour hints + description, bouton Generate présent.
+  Reste T-1130e (Podcast).
 - T-1130c livré (URL to Video guided entry, Option A) — nouvelle page **`app/(workspace)/create/url/page.tsx`**
   centrée et épurée : grand titre, champ URL unique + CTA **« Create video »**, **Try example**,
   3 minidiapos d'exemple (Product page / Article / Docs → préremplissent l'URL + l'intention),
