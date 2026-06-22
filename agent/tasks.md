@@ -1020,6 +1020,20 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1130] Guided Creation Hub — `status: in_progress` · `owner: claude`
+- T-1130c livré (URL to Video guided entry, Option A) — nouvelle page **`app/(workspace)/create/url/page.tsx`**
+  centrée et épurée : grand titre, champ URL unique + CTA **« Create video »**, **Try example**,
+  3 minidiapos d'exemple (Product page / Article / Docs → préremplissent l'URL + l'intention),
+  chips d'intention simples (Product / Tutorial / News), lien discret **« Open Research Studio »**.
+  **« Create video »** appelle la route EXISTANTE `POST /api/research/jobs` (URL en `input_url`,
+  topic auto + durée selon intention) puis handoff vers `/research/[id]` — **vrai** research_job,
+  pas de mock. **« No URL? Upload product media manually »** ouvre une petite modale qui route vers
+  le studio Product/UGC existant (`/create/product`, upload média réel) — pas de backend upload neuf.
+  Le hub `/create` pointe désormais URL to Video vers `/create/url` (au lieu de `/research`).
+  **UI-only** : aucune route handler/API/DB neuve, aucune migration, aucun pipeline ; Research Studio
+  (`/research`) + watchlists **intacts**. tsc + build OK (/create/url 4,65 kB static). QA prod
+  Claude-in-Chrome OK : hub→/create/url, Try example, miniature (URL+mode), modale→/create/product,
+  Create video crée le job `0bf65257…` (mode=product, input_url, topic auto, 30s) + nav /research/[id],
+  /research avancé intact. Reste T-1130d (Avatar), T-1130e (Podcast).
 - T-1130b livré (couche guidée story-only, option 1 validée par Paul) —
   `app/(workspace)/create/[mode]/page.tsx` : rangée de chips **« How do you want to start? »**
   gardée par `mode === "story"` → **Text to Video** / **Text with Reference** (badge compteur de

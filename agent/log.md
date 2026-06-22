@@ -12,6 +12,23 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1130c URL to Video guided entry (Option A)
+- Fait : entrée guidée « coller une URL → créer une vidéo » qui masque la complexité Research.
+  Nouvelle page `/create/url` centrée : titre + sous-titre, champ URL + CTA « Create video »,
+  Try example, 3 miniatures d'exemple (préremplissent URL + intention), chips Product/Tutorial/News,
+  lien discret « Open Research Studio ». Create video → `POST /api/research/jobs` (route existante,
+  URL en input_url, topic auto + durée par intention) → handoff `/research/[id]` (vrai job).
+  « No URL? Upload product media manually » → modale → studio Product/UGC existant `/create/product`.
+  Hub `/create` : carte URL to Video pointe vers `/create/url`.
+- Fichiers modifiés : `app/(workspace)/create/url/page.tsx` (nouveau), `app/(workspace)/create/page.tsx`.
+- UI-only : aucune route/API/DB neuve, aucune migration, aucun pipeline ; Research Studio + watchlists intacts.
+- Tests : tsc clean ; npm run build OK sans warning (/create/url 4,65 kB static).
+- QA prod (Claude-in-Chrome) : hub→/create/url ✓, page épurée (pas de watchlists/recent) ✓,
+  Try example remplit ✓, miniature Docs remplit URL + active Tutorial ✓, modale upload→/create/product ✓,
+  Create video crée job `0bf65257-5beb-48fc-ae73-c2216de1699f` (mode=product, input_url apple, topic auto,
+  30s, draft) + navigue /research/[id] ✓, /research avancé intact ✓.
+- Prochaine étape : T-1130d (Avatar guided flow), T-1130e (Podcast). Review Codex.
+
 ## 2026-06-22 — Claude — T-1130b P2 fix (Codex) : références cachées mais attachées
 - Problème (Codex P2) : en « Text to Video », des références déjà ajoutées restaient attachées
   (encore envoyées au backend) mais cachées → l'utilisateur croyait faire un prompt-only.
