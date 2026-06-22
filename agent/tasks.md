@@ -1019,7 +1019,16 @@ Contraintes :
 - Reste V1+ : polish thumbnails, éventuelle édition du rôle de référence,
   e2e visuel authentifié après déploiement.
 
-### [T-1131] Podcast Video backend — `status: in_progress` · `owner: claude`
+### [T-1131] Podcast Video backend — `status: done` · `owner: claude`
+- T-1131f livré (**UI `/create/podcast` V1 + e2e vérifié + hub live**) — `app/(workspace)/create/podcast/page.tsx`
+  (page guidée : topic → dialogue → voices → render → MP4, endpoints existants seuls, bearer auth, stepper 4
+  étapes, dialogue lecture seule host/guest, status par segment + preview audio, render gated sur tous ready,
+  poll GET jusqu'à done/failed, `<video>` final). **QA e2e prod réelle OK** : create → 8 tours → 8 voix ready →
+  render → **MP4 43s 1280×720 two-shot** (speaker actif, captions, lower-thirds, marques publiques conservées).
+  **Fix runtime trouvé en QA** : Modal `render_podcast` téléchargeait l'audio R2 via `urllib` → **403** (UA bloqué
+  par l'edge R2) ; remplacé par **httpx** (comme le reste du pipeline) ; Modal redéployé → render OK. Puis **carte
+  hub Podcast passée « Soon »→live** (`href:/create/podcast`, overlay « Coming soon » conditionné sur status soon).
+  build OK, tsc clean. V1 only : pas d'upload/édition dialogue/voice picker/split-talk (V1.1). **Série T-1131 close.**
 - T-1131e-fix livré (review Codex, 2 points) — (P1 bloquant) `modal_app/video_pipeline.py` : `subprocess`
   importé dans `_podcast_probe_duration()` et `render_podcast()` (était function-local partout ailleurs, mais
   absent de mes 2 fonctions → `NameError` runtime) ; py_compile OK ; **Modal redéployé**. (P2) `app/api/podcasts/[id]/render/route.ts`

@@ -2220,7 +2220,7 @@ def render_podcast(podcast_id: str) -> str:
     """
     import subprocess
     import tempfile
-    import urllib.request
+    import httpx
     from PIL import Image, ImageDraw, ImageFont
 
     sb = get_supabase_client()
@@ -2263,15 +2263,20 @@ def render_podcast(podcast_id: str) -> str:
 
         workdir = tempfile.mkdtemp(prefix="podcast-")
         # 1) Download + transcode each segment to a uniform wav, probe real duration.
+        # Use httpx (not urllib) — R2's edge rejects the default urllib UA (403).
         seg_wavs, durations = [], []
-        for i, seg in enumerate(segments):
-            mp3 = os.path.join(workdir, f"seg{i}.mp3")
-            wav = os.path.join(workdir, f"seg{i}.wav")
-            urllib.request.urlretrieve(seg["audio_url"], mp3)
-            subprocess.run(["ffmpeg", "-y", "-i", mp3, "-ar", "44100", "-ac", "1", wav],
-                           capture_output=True, timeout=120)
-            seg_wavs.append(wav)
-            durations.append(_podcast_probe_duration(wav))
+        with httpx.Client(timeout=120, follow_redirects=True) as client:
+            for i, seg in enumerate(segments):
+                mp3 = os.path.join(workdir, f"seg{i}.mp3")
+                wav = os.path.join(workdir, f"seg{i}.wav")
+                resp = client.get(seg["audio_url"])
+                resp.raise_for_status()
+                with open(mp3, "wb") as fh:
+                    fh.write(resp.content)
+                subprocess.run(["ffmpeg", "-y", "-i", mp3, "-ar", "44100", "-ac", "1", wav],
+                               capture_output=True, timeout=120)
+                seg_wavs.append(wav)
+                durations.append(_podcast_probe_duration(wav))
 
         # 2) Build the dialogue track: seg + silence gap between turns.
         gap = os.path.join(workdir, "gap.wav")

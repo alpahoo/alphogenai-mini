@@ -61,7 +61,8 @@ const TOOLS: Tool[] = [
     description: "Two speakers, podcast layout, per-speaker dialogue, separate voices.",
     badge: "Podcast",
     visual: "linear-gradient(135deg, #10131a, #35405a 48%, #ffce7d)",
-    status: "soon",
+    href: "/create/podcast",
+    status: "live",
   },
   {
     id: "ugc",
@@ -188,7 +189,7 @@ function CardVisual({ tool }: { tool: Tool }) {
           </svg>
         </div>
       );
-    case "podcast": // two mics / two speakers (disabled, Coming soon)
+    case "podcast": // two mics / two speakers
       return (
         <div className={`${common} relative`} style={{ background: tool.visual }}>
           <svg viewBox="0 0 220 128" className="h-full w-full" preserveAspectRatio="xMidYMid meet">
@@ -201,9 +202,11 @@ function CardVisual({ tool }: { tool: Tool }) {
               </g>
             ))}
           </svg>
-          <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
-            Coming soon
-          </span>
+          {tool.status === "soon" && (
+            <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+              Coming soon
+            </span>
+          )}
         </div>
       );
     default:

@@ -12,6 +12,22 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1131f UI /create/podcast V1 + e2e + hub live
+- Fait : page guidée `app/(workspace)/create/podcast/page.tsx` (topic → dialogue → voices → render → MP4),
+  endpoints existants seuls, bearer auth, stepper 4 étapes, dialogue lecture seule, status/segment + preview
+  audio, render gated (tous ready), poll GET jusqu'à done/failed, <video> final. QA e2e prod réelle :
+  create → 8 tours → 8 voix ready → render → MP4 43s 1280×720 two-shot (speaker actif, captions, lower-thirds ;
+  marques publiques conservées type Netflix/Uber). Carte hub Podcast « Soon »→live (href /create/podcast,
+  overlay Coming soon conditionné).
+- Fix runtime (trouvé en QA) : Modal render_podcast téléchargeait l'audio R2 via urllib → HTTP 403 (UA bloqué
+  par l'edge R2) ; remplacé par httpx (timeout 120, follow_redirects) comme le reste du pipeline ; Modal redéployé.
+- Fichiers : `app/(workspace)/create/podcast/page.tsx`, `modal_app/video_pipeline.py` (urllib→httpx),
+  `app/(workspace)/create/page.tsx` (hub flip), `agent/*`.
+- Scope : pas de nouvelle route API/migration ; pas de lip-sync ; two_shot only ; Story/Avatar/Research/URL intacts.
+- Tests : 67 tests podcast verts ; py_compile OK ; build OK ; tsc clean ; Modal déployé ; e2e prod vert.
+- Série T-1131 (a→f) close. V1.1 possible : upload audio/script, édition dialogue (PATCH segment), voice picker
+  (PATCH speaker), layouts split_screen/talk_show.
+
 ## 2026-06-22 — Claude — T-1131e-fix (review Codex, 2 points)
 - Fait : (P1 bloquant) `import subprocess` ajouté dans `_podcast_probe_duration()` et `render_podcast()`
   (subprocess était importé function-local partout sauf mes 2 fonctions → NameError runtime malgré py_compile OK).
