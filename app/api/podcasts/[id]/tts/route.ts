@@ -101,6 +101,15 @@ export async function POST(
     let failed = 0;
     let skipped = 0;
 
+    // New/regenerated audio makes any previously rendered MP4 stale — reset the
+    // render state so an old video can never stay attached to changed audio.
+    const invalidateRender = async () => {
+      await service
+        .from("podcasts")
+        .update({ video_url: null, render_status: "idle", render_error: null })
+        .eq("id", id);
+    };
+
     const synthOne = async (seg: SegmentRow): Promise<SegmentRow> => {
       const voice = voiceBySpeaker[seg.speaker_id] || undefined;
       try {
@@ -134,6 +143,7 @@ export async function POST(
         console.error(`[podcast/tts] preview update failed for ${seg.id}:`, upErr);
         return NextResponse.json({ error: "Could not save the generated audio" }, { status: 500 });
       }
+      if (ready > 0) await invalidateRender();
       return NextResponse.json({
         ready,
         failed,
@@ -188,6 +198,9 @@ export async function POST(
       s.start_ms = t.start_ms;
       s.end_ms = t.end_ms;
     }
+
+    // Only invalidate when audio actually changed (skip if everything was skipped).
+    if (ready > 0) await invalidateRender();
 
     return NextResponse.json({
       ready,

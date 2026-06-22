@@ -111,7 +111,18 @@ export async function POST(
       return failWith("Failed to save the generated dialogue. Your previous script was kept.", 500);
     }
 
-    await service.from("podcasts").update({ status: "ready", error_message: null }).eq("id", id);
+    // The dialogue changed → any previously rendered MP4 is now stale. Reset the
+    // render state so an old video can never stay attached to a new script.
+    await service
+      .from("podcasts")
+      .update({
+        status: "ready",
+        error_message: null,
+        video_url: null,
+        render_status: "idle",
+        render_error: null,
+      })
+      .eq("id", id);
 
     return NextResponse.json({ status: "ready", segments: inserted || [] });
   } catch (err) {

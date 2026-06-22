@@ -1020,6 +1020,14 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1131] Podcast Video backend — `status: done` · `owner: claude`
+- T-1131f-hardening livré (invalidation des renders obsolètes) — `script/route.ts` + `tts/route.ts` +
+  `create/podcast/page.tsx`. (1) `/script` : sur nouveau dialogue, reset `video_url=null`/`render_status='idle'`/
+  `render_error=null` (un ancien MP4 ne reste jamais sur un nouveau script). (2) `/tts` : si ≥1 segment audio
+  (re)généré (`ready>0`), même reset ; pas de reset si tout skipped. (3) UI : « Rewrite dialogue » et
+  « Generate/Regenerate voices » vident l'état vidéo local (si génération effective) ; **timeout polling render
+  5 min** → stop + message « Render is taking longer than expected. You can refresh… » (ne casse pas le podcast).
+  70 tests podcast verts (+3 : script clear, tts clear si audio changé, tts skip-only ne clear pas) ; build OK ;
+  tsc clean. Pas de migration, podcast-only, autres flows intacts.
 - T-1131f livré (**UI `/create/podcast` V1 + e2e vérifié + hub live**) — `app/(workspace)/create/podcast/page.tsx`
   (page guidée : topic → dialogue → voices → render → MP4, endpoints existants seuls, bearer auth, stepper 4
   étapes, dialogue lecture seule host/guest, status par segment + preview audio, render gated sur tous ready,

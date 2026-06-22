@@ -233,6 +233,34 @@ describe("POST /api/podcasts/[id]/tts", () => {
     expect(json.segments.every((s: { status: string }) => s.status === "failed")).toBe(true);
   });
 
+  it("clears the stale rendered video when audio is (re)generated", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(service([seg(0), seg(1)], updates) as never);
+    const res = await POST(req({}), ctx("p1"));
+    expect((await res.json()).ready).toBe(2);
+    const podcastUpdates = updates.filter((u) => u.table === "podcasts");
+    expect(podcastUpdates.some((u) => {
+      const p = u.payload as { video_url?: unknown; render_status?: unknown };
+      return p.video_url === null && p.render_status === "idle";
+    })).toBe(true);
+  });
+
+  it("does NOT clear the render when every segment is skipped", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
+    const segs = [
+      seg(0, { status: "ready", audio_url: "https://cdn/0.mp3" }),
+      seg(1, { status: "ready", audio_url: "https://cdn/1.mp3" }),
+    ];
+    vi.mocked(createServiceClient).mockReturnValue(service(segs, updates) as never);
+    const res = await POST(req({}), ctx("p1"));
+    const json = await res.json();
+    expect(json.skipped).toBe(2);
+    expect(json.ready).toBe(0);
+    expect(updates.filter((u) => u.table === "podcasts").length).toBe(0);
+  });
+
   it("force writes a fresh, unique R2 key (no stale cached audio)", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     vi.mocked(uploadBufferToR2).mockImplementation(async (_buf, path) => `https://cdn.example.com/${path}`);

@@ -135,6 +135,10 @@ describe("POST /api/podcasts/[id]/script", () => {
     expect(inserted.some((s) => /heygen/i.test(s.text))).toBe(false);
     // ends ready
     expect(updates).toContainEqual(expect.objectContaining({ status: "ready" }));
+    // a new dialogue invalidates any previously rendered MP4
+    expect(updates).toContainEqual(
+      expect.objectContaining({ video_url: null, render_status: "idle", render_error: null }),
+    );
   });
 
   it("restores the previous dialogue and fails when the new insert errors", async () => {

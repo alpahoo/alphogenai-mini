@@ -46,6 +46,8 @@ const LANGUAGES = [
 
 const ROLE_COLOR: Record<string, string> = { host: "#34c98a", guest: "#5b8def" };
 
+const RENDER_POLL_TIMEOUT_MS = 5 * 60 * 1000; // stop polling a stuck render after 5 min
+
 const STEPS = [
   { n: 1, label: "Write dialogue", Icon: FileText },
   { n: 2, label: "Generate voices", Icon: Mic },
@@ -68,6 +70,7 @@ export default function CreatePodcastPage() {
   const [playing, setPlaying] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollStartRef = useRef<number>(0);
 
   const speakerById = useMemo(() => Object.fromEntries(speakers.map((s) => [s.id, s])), [speakers]);
   const hasDialogue = segments.length > 0;
@@ -124,6 +127,8 @@ export default function CreatePodcastPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Could not write the dialogue.");
       setSegments(json.segments || []);
+      // New dialogue → drop any previously rendered video locally (backend reset it too).
+      setPodcast((p) => (p ? { ...p, video_url: null, render_status: "idle", render_error: null } : p));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not write the dialogue.");
     } finally {
@@ -149,6 +154,10 @@ export default function CreatePodcastPage() {
       // Merge returned segment statuses/urls back in.
       const byId = Object.fromEntries((json.segments || []).map((s: Segment) => [s.id, s]));
       setSegments((prev) => prev.map((s) => (byId[s.id] ? { ...s, ...byId[s.id] } : s)));
+      // Audio actually changed → drop the stale rendered video locally (backend reset it).
+      if (json.ready > 0) {
+        setPodcast((p) => (p ? { ...p, video_url: null, render_status: "idle", render_error: null } : p));
+      }
       if (json.failed > 0) setError(`${json.failed} segment(s) couldn't be voiced — try “Regenerate voices”.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not generate the voices.");
@@ -173,6 +182,13 @@ export default function CreatePodcastPage() {
   // ── Step 3: render + poll ─────────────────────────────────────────────
   const pollPodcast = useCallback(async () => {
     if (!podcast) return;
+    // Give up after the timeout so a stuck render never polls forever.
+    if (pollStartRef.current && Date.now() - pollStartRef.current > RENDER_POLL_TIMEOUT_MS) {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      setPhase("idle");
+      setError("Render is taking longer than expected. You can refresh this page or try again.");
+      return;
+    }
     const headers = await authHeaders();
     if (!headers) return;
     const res = await fetch(`/api/podcasts/${podcast.id}`, { headers });
@@ -200,6 +216,7 @@ export default function CreatePodcastPage() {
       if (!res.ok) throw new Error(json?.error || "Could not start the render.");
       setPodcast((p) => (p ? { ...p, render_status: "rendering", video_url: null } : p));
       if (pollRef.current) clearInterval(pollRef.current);
+      pollStartRef.current = Date.now();
       pollRef.current = setInterval(pollPodcast, 3500);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not start the render.");
@@ -210,6 +227,7 @@ export default function CreatePodcastPage() {
   // resume polling if we land on a rendering podcast
   useEffect(() => {
     if (podcast?.render_status === "rendering" && !pollRef.current) {
+      if (!pollStartRef.current) pollStartRef.current = Date.now();
       pollRef.current = setInterval(pollPodcast, 3500);
     }
   }, [podcast?.render_status, pollPodcast]);

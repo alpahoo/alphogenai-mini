@@ -12,6 +12,17 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1131f-hardening (stale render invalidation)
+- Fait : un ancien MP4 ne peut plus rester affiché/associé après modif du script ou de l'audio.
+  (1) `/api/podcasts/[id]/script` : sur succès (nouveaux segments), reset video_url=null / render_status=idle /
+  render_error=null. (2) `/api/podcasts/[id]/tts` : invalidateRender() si ready>0 (preview ou full) ; rien si
+  tout skipped. (3) UI `/create/podcast` : Rewrite dialogue + Generate/Regenerate voices vident l'état vidéo
+  local (voices seulement si json.ready>0) ; timeout polling render 5 min → stop + message propre.
+- Fichiers : `app/api/podcasts/[id]/script/route.ts`, `app/api/podcasts/[id]/tts/route.ts`,
+  `app/(workspace)/create/podcast/page.tsx`, `app/api/podcasts/[id]/script/route.test.ts`,
+  `app/api/podcasts/[id]/tts/route.test.ts`, `agent/*`.
+- Tests : 70 tests podcast verts (+3) ; build OK ; tsc clean. Pas de migration, podcast-only, autres flows intacts.
+
 ## 2026-06-22 — Claude — T-1131f UI /create/podcast V1 + e2e + hub live
 - Fait : page guidée `app/(workspace)/create/podcast/page.tsx` (topic → dialogue → voices → render → MP4),
   endpoints existants seuls, bearer auth, stepper 4 étapes, dialogue lecture seule, status/segment + preview
