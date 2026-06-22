@@ -24,6 +24,10 @@ Entrée la plus récente en haut. Format :
 - Vérif : tsc → exit 0 ; npm run build → OK sans warning, /create/[mode] 36,9 kB. QA visuelle
   /create/story + non-régression /create/product & /create/social via Claude-in-Chrome après déploiement.
 - Fichiers : app/(workspace)/create/[mode]/page.tsx, agent/tasks.md, agent/log.md.
+- E2E prod vérifié (Claude-in-Chrome) : /create/story affiche les 3 chips ; « Text with Reference »
+  s'active + ouvre le panneau références ; « Director scenes » s'active + ouvre l'AI Director
+  (« Turn the prompt into an editable shot plan »). Non-régression : /create/product (« Product
+  Video ») et /create/social (« Social Clip ») n'ont PAS de chips et gardent Generate. ✅
 
 ## 2026-06-22 — Claude — T-1130a Guided Creation Hub
 - Fait : `app/(workspace)/create/page.tsx` refait en hub guidé visuel (cible = mockup
