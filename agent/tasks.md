@@ -1020,6 +1020,17 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1131] Podcast Video backend — `status: in_progress` · `owner: claude`
+- T-1131d livré (**multi-speaker TTS**, backend, pas de render/lip-sync) — `lib/podcast/voices.ts`,
+  `app/api/podcasts/[id]/tts/route.ts` + tests. Audit validé : **schéma suffisant, aucune migration**.
+  `resolveSpeakerVoices` (host/guest voix distinctes, défauts rachel/adam, respecte voice_id, collision→nudge) ;
+  `estimateSegmentTimings` (start/end ms cumulés + gap 300ms, provisoires jusqu'au render). Route `POST /tts` :
+  auth+ownership(404), 503 si TTS indispo, **preview** (1 segment), **force** (régénère les ready), full
+  (génère pending/failed/sans audio, **skip ready** sauf force), `generateVoiceover` (ElevenLabs→OpenAI fallback)
+  → `uploadBufferToR2(audio/podcast/{id}/{segId}.mp3)` → update segment `audio_url`+timings+`status=ready`.
+  Échec segment : retry 1×, `status=failed`, **garde l'ancien audio_url** (non-destructif), n'abort pas les autres ;
+  **podcasts.status jamais passé à failed** pour un échec audio (état au niveau segment). `maxDuration=60`, cap 10.
+  **Provider jamais exposé** (`{ready, failed, skipped, segments}`). 55 tests podcast verts ; build OK ; tsc clean.
+  Pas de migration, pas de render/lip-sync, pas d'UI, carte hub « Soon ». Prochaine étape : T-1131e (render/compositing).
 - T-1131c-fix livré (review Codex, 4 points) — `lib/podcast/dialogue.ts`, `app/api/podcasts/[id]/script/route.ts`
   + tests. **P1** prompt : ne plus interdire toutes les marques ; n'interdire que les providers/infra internes
   AlphoGen sauf si le sujet les demande explicitement. **P2** scrubber : blocklist réduite aux seules infra

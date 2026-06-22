@@ -12,6 +12,21 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1131d Podcast multi-speaker TTS (backend)
+- Fait : audio réel par segment (pas de render/lip-sync). Helper pur `lib/podcast/voices.ts` :
+  resolveSpeakerVoices (host/guest distinctes, défauts rachel/adam, respecte voice_id, nudge sur collision) +
+  estimateSegmentTimings (start/end ms cumulés + gap 300ms, provisoires). Route `POST /api/podcasts/[id]/tts` :
+  auth+ownership 404, 503 si TTS indispo, preview (1 segment), force, full (skip ready sauf force),
+  generateVoiceover (ElevenLabs→OpenAI fallback) → uploadBufferToR2 (audio/podcast/{id}/{segId}.mp3) →
+  update audio_url+timings+status ready. Échec : retry 1× → status failed, ancien audio_url conservé,
+  autres segments continuent ; podcasts.status non modifié. maxDuration=60, cap 10, provider jamais exposé.
+- Fichiers : `lib/podcast/voices.ts`, `app/api/podcasts/[id]/tts/route.ts`,
+  `lib/podcast/__tests__/voices.test.ts`, `app/api/podcasts/[id]/tts/route.test.ts`, `agent/*`.
+- Scope : aucune migration ; pas de render/lip-sync ; pas d'UI ; pas de `/create/podcast` ; carte hub « Soon » ;
+  pas de Modal (réservé T-1131e). LiteLLM/TTS providers internes non exposés.
+- Tests : 55 tests podcast verts (17 nouveaux : voices + route tts). build OK ; tsc clean.
+- Prochaine étape : T-1131e (render/compositing — probablement Modal, où la durée audio réelle sera mesurée).
+
 ## 2026-06-22 — Claude — T-1131c-fix (review Codex, 4 points)
 - Fait : P1 prompt moins restrictif (autorise marques/modèles du sujet ; interdit seulement les providers/infra
   internes AlphoGen sauf si le sujet les demande). P2 scrubber : blocklist réduite aux infra internes
