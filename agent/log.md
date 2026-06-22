@@ -12,6 +12,16 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1131d-fix (review Codex, 3 points)
+- Fait : (1) gestion des erreurs `{error}` sur les updates `podcast_segments` (preview→500 si update échoue ;
+  full→segment marqué failed, plus compté ready, si update échoue). (2) clé R2 versionnée par génération
+  (`{segId}-{randomUUID()}.mp3`) pour éviter le cache sur `force` ; audio_url maj seulement après upload OK.
+  (3) host+guest requis avant génération → 500 « Podcast is missing its speakers ».
+- Fichiers : `app/api/podcasts/[id]/tts/route.ts`, `app/api/podcasts/[id]/tts/route.test.ts`, `agent/*`.
+- Tests : 59 tests podcast verts (4 nouveaux : speaker manquant→500, preview update fail→500, full update
+  fail→segment failed, force→clé R2 unique). build OK ; tsc clean.
+- Scope : pas de migration, pas de render, pas d'UI. Prochaine étape : T-1131e (render/compositing).
+
 ## 2026-06-22 — Claude — T-1131d Podcast multi-speaker TTS (backend)
 - Fait : audio réel par segment (pas de render/lip-sync). Helper pur `lib/podcast/voices.ts` :
   resolveSpeakerVoices (host/guest distinctes, défauts rachel/adam, respecte voice_id, nudge sur collision) +

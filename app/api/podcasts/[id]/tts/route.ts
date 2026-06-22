@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
@@ -74,6 +75,12 @@ export async function POST(
       .from("podcast_speakers")
       .select("id, role, voice_id")
       .eq("podcast_id", id);
+    // Require both speakers — never synthesize with a silent/default-only cast.
+    const hasHost = (speakers || []).some((s) => s.role === "host");
+    const hasGuest = (speakers || []).some((s) => s.role === "guest");
+    if (!hasHost || !hasGuest) {
+      return NextResponse.json({ error: "Podcast is missing its speakers" }, { status: 500 });
+    }
     const voiceBySpeaker = resolveSpeakerVoices(speakers || []);
 
     const { data: segmentsData } = await service
@@ -98,9 +105,10 @@ export async function POST(
       const voice = voiceBySpeaker[seg.speaker_id] || undefined;
       try {
         const tts = await synthesizeWithRetry(seg.text, voice as string);
+        // Unique key per generation so `force` never serves a cached older audio.
         const url = await uploadBufferToR2(
           Buffer.from(tts.audio),
-          `audio/podcast/${id}/${seg.id}.mp3`,
+          `audio/podcast/${id}/${seg.id}-${randomUUID()}.mp3`,
           "audio/mpeg",
         );
         ready++;
@@ -118,10 +126,14 @@ export async function POST(
       const seg = segments.find((s) => s.id === previewId);
       if (!seg) return NextResponse.json({ error: "Segment not found" }, { status: 404 });
       const updated = await synthOne(seg);
-      await service
+      const { error: upErr } = await service
         .from("podcast_segments")
         .update({ audio_url: updated.audio_url, status: updated.status })
         .eq("id", seg.id);
+      if (upErr) {
+        console.error(`[podcast/tts] preview update failed for ${seg.id}:`, upErr);
+        return NextResponse.json({ error: "Could not save the generated audio" }, { status: 500 });
+      }
       return NextResponse.json({
         ready,
         failed,
@@ -155,7 +167,7 @@ export async function POST(
     for (let i = 0; i < results.length; i++) {
       const s = results[i];
       const t = timings[i];
-      await service
+      const { error: upErr } = await service
         .from("podcast_segments")
         .update({
           audio_url: s.audio_url, // unchanged for skipped/failed-with-prior-audio
@@ -164,6 +176,15 @@ export async function POST(
           end_ms: t.end_ms,
         })
         .eq("id", s.id);
+      if (upErr) {
+        // DB save failed → don't report this segment as successfully saved.
+        console.error(`[podcast/tts] update failed for ${s.id}:`, upErr);
+        if (s.status === "ready") {
+          ready--;
+          failed++;
+        }
+        s.status = "failed";
+      }
       s.start_ms = t.start_ms;
       s.end_ms = t.end_ms;
     }

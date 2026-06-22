@@ -1020,6 +1020,13 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1131] Podcast Video backend — `status: in_progress` · `owner: claude`
+- T-1131d-fix livré (review Codex, 3 points) — `app/api/podcasts/[id]/tts/route.ts` + tests. (1) updates
+  `podcast_segments` vérifient désormais `{error}` : preview→500 propre si l'update échoue ; full→le segment
+  n'est plus compté `ready` (passe `failed`) si son update DB échoue. (2) clé R2 **versionnée par génération**
+  (`{segId}-{randomUUID()}.mp3`) → `force` ne sert plus un audio caché ; `audio_url` mis à jour seulement
+  après upload réussi, ancien conservé sinon. (3) **host+guest requis** avant génération → 500
+  « Podcast is missing its speakers » (plus de voix par défaut silencieuse). 59 tests podcast verts (4 nouveaux) ;
+  build OK ; tsc clean. Pas de migration/render/UI. Prochaine étape : T-1131e.
 - T-1131d livré (**multi-speaker TTS**, backend, pas de render/lip-sync) — `lib/podcast/voices.ts`,
   `app/api/podcasts/[id]/tts/route.ts` + tests. Audit validé : **schéma suffisant, aucune migration**.
   `resolveSpeakerVoices` (host/guest voix distinctes, défauts rachel/adam, respecte voice_id, collision→nudge) ;

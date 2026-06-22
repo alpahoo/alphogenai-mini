@@ -185,4 +185,64 @@ describe("POST /api/podcasts/[id]/tts", () => {
     expect(text.toLowerCase()).not.toContain("openai");
     expect(text.toLowerCase()).not.toContain("provider");
   });
+
+  // ── T-1131d-fix ──────────────────────────────────────────────────────────
+
+  it("500s when the podcast is missing a speaker (no silent default)", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: okPodcast, error: null }),
+        "podcast_speakers:select": () => ({ data: [{ id: "host-id", role: "host", voice_id: null }], error: null }),
+        "podcast_segments:select": () => ({ data: [seg(0), seg(1)], error: null }),
+      }) as never,
+    );
+    const res = await POST(req({}), ctx("p1"));
+    expect(res.status).toBe(500);
+    expect(generateVoiceover).not.toHaveBeenCalled();
+  });
+
+  it("preview returns 500 when the DB update fails", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: okPodcast, error: null }),
+        "podcast_speakers:select": () => ({ data: SPEAKERS, error: null }),
+        "podcast_segments:select": () => ({ data: [seg(0), seg(1)], error: null }),
+        "podcast_segments:update": () => ({ data: null, error: { message: "db boom" } }),
+      }) as never,
+    );
+    const res = await POST(req({ preview: "seg-1" }), ctx("p1"));
+    expect(res.status).toBe(500);
+  });
+
+  it("full mode does not report a segment ready when its DB update fails", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: okPodcast, error: null }),
+        "podcast_speakers:select": () => ({ data: SPEAKERS, error: null }),
+        "podcast_segments:select": () => ({ data: [seg(0), seg(1)], error: null }),
+        "podcast_segments:update": () => ({ data: null, error: { message: "db boom" } }),
+      }) as never,
+    );
+    const res = await POST(req({}), ctx("p1"));
+    const json = await res.json();
+    expect(json.ready).toBe(0);
+    expect(json.failed).toBe(2);
+    expect(json.segments.every((s: { status: string }) => s.status === "failed")).toBe(true);
+  });
+
+  it("force writes a fresh, unique R2 key (no stale cached audio)", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(uploadBufferToR2).mockImplementation(async (_buf, path) => `https://cdn.example.com/${path}`);
+    const segs = [seg(0, { status: "ready", audio_url: "https://cdn.example.com/audio/podcast/p1/seg-0.mp3" }), seg(1)];
+    vi.mocked(createServiceClient).mockReturnValue(service(segs) as never);
+    const res = await POST(req({ force: true }), ctx("p1"));
+    const json = await res.json();
+    const s0 = json.segments.find((s: { id: string }) => s.id === "seg-0");
+    // versioned key with a uuid suffix, and different from the old flat key
+    expect(s0.audio_url).toMatch(/audio\/podcast\/p1\/seg-0-[0-9a-f-]{36}\.mp3$/);
+    expect(s0.audio_url).not.toContain("/seg-0.mp3");
+  });
 });
