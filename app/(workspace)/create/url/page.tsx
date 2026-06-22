@@ -7,17 +7,22 @@
 // then we hand off to the existing plan workspace at /research/[id]. Research Studio
 // (/research) stays untouched and is linked discreetly for advanced users.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
+  Check,
+  FileText,
   Film,
   GraduationCap,
+  Image as ImageIcon,
   Link2,
   Loader2,
   Newspaper,
+  PlayCircle,
+  Search,
   ShoppingBag,
   Sparkles,
   Upload,
@@ -82,6 +87,58 @@ const EXAMPLES: { label: string; hint: string; url: string; mode: UrlMode; visua
   },
 ];
 
+// Guided loading steps shown while the plan is being created. These mirror what
+// the Research API does behind the scenes (one POST /api/research/jobs, then the
+// plan opens) — purely informative so the wait feels guided, not a blank spinner.
+const LOADING_STEPS: { label: string; Icon: LucideIcon }[] = [
+  { label: "Analyze URL", Icon: Search },
+  { label: "Collect media", Icon: ImageIcon },
+  { label: "Write script", Icon: FileText },
+  { label: "Open plan", Icon: PlayCircle },
+];
+
+// Meaningful example thumbnail (a tiny page mock per source type) over the soft
+// tint — replaces the abstract gradient so each example reads as what it is.
+function ExampleThumb({ mode, visual }: { mode: UrlMode; visual: string }) {
+  return (
+    <div className="relative h-20 w-full" style={{ background: visual }}>
+      <svg viewBox="0 0 200 80" className="h-full w-full" preserveAspectRatio="xMidYMid meet">
+        {mode === "product" && (
+          <g transform="translate(36 10)">
+            <rect x="0" y="0" width="128" height="60" rx="7" fill="#fff" stroke="#9ed8b8" strokeWidth="2" />
+            <rect x="10" y="10" width="44" height="40" rx="5" fill="#d8f5e6" />
+            <rect x="24" y="22" width="16" height="16" rx="4" fill="#8fdcb4" />
+            <rect x="64" y="12" width="52" height="7" rx="3.5" fill="#a9d8c1" />
+            <rect x="64" y="25" width="52" height="5" rx="2.5" fill="#d6ece1" />
+            <rect x="64" y="40" width="34" height="10" rx="5" fill="#34c98a" />
+          </g>
+        )}
+        {mode === "news" && (
+          <g transform="translate(36 10)">
+            <rect x="0" y="0" width="128" height="60" rx="7" fill="#fff" stroke="#9cc7ea" strokeWidth="2" />
+            <rect x="12" y="10" width="80" height="8" rx="4" fill="#8fb8e0" />
+            <rect x="12" y="24" width="104" height="5" rx="2.5" fill="#cfe0f2" />
+            <rect x="12" y="34" width="104" height="5" rx="2.5" fill="#cfe0f2" />
+            <rect x="12" y="44" width="72" height="5" rx="2.5" fill="#cfe0f2" />
+          </g>
+        )}
+        {mode === "tutorial" && (
+          <g transform="translate(36 10)">
+            <rect x="0" y="0" width="128" height="60" rx="7" fill="#fff" stroke="#a8cdea" strokeWidth="2" />
+            <rect x="0" y="0" width="38" height="60" rx="7" fill="#eef4fb" />
+            <rect x="8" y="12" width="22" height="5" rx="2.5" fill="#bcd4ee" />
+            <rect x="8" y="22" width="22" height="5" rx="2.5" fill="#d6e3f2" />
+            <rect x="8" y="32" width="22" height="5" rx="2.5" fill="#d6e3f2" />
+            <rect x="50" y="12" width="66" height="6" rx="3" fill="#9fc2e8" />
+            <rect x="50" y="26" width="66" height="5" rx="2.5" fill="#cfe0f2" />
+            <rect x="50" y="36" width="50" height="5" rx="2.5" fill="#cfe0f2" />
+          </g>
+        )}
+      </svg>
+    </div>
+  );
+}
+
 function isValidHttpUrl(value: string) {
   return /^https?:\/\/\S+\.\S+/.test(value.trim());
 }
@@ -96,6 +153,21 @@ export default function UrlToVideo() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(0);
+
+  // Advance the guided loading steps while the plan is being created. The real
+  // work is a single POST then a navigation, so we pace the first steps and let
+  // createVideo() jump to the final "Open plan" step right before it routes.
+  useEffect(() => {
+    if (!creating) {
+      setLoadingStep(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setLoadingStep((s) => (s < 2 ? s + 1 : s));
+    }, 850);
+    return () => clearInterval(id);
+  }, [creating]);
 
   function tryExample(example?: (typeof EXAMPLES)[number]) {
     const pick = example ?? EXAMPLES[0];
@@ -147,6 +219,7 @@ export default function UrlToVideo() {
       if (!res.ok) throw new Error(json?.error || "Could not start your video.");
 
       setStatus("Opening your video plan…");
+      setLoadingStep(3);
       navigating = true;
       router.push(`/research/${json.id}`);
     } catch (err) {
@@ -289,7 +362,7 @@ export default function UrlToVideo() {
               onClick={() => tryExample(ex)}
               className="group overflow-hidden rounded-2xl border border-neutral-200 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md"
             >
-              <div className="h-20 w-full" style={{ background: ex.visual }} />
+              <ExampleThumb mode={ex.mode} visual={ex.visual} />
               <div className="p-3">
                 <p className="text-sm font-semibold text-neutral-900">{ex.label}</p>
                 <p className="mt-0.5 text-xs text-neutral-500">{ex.hint}</p>
@@ -358,6 +431,70 @@ export default function UrlToVideo() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Guided loading overlay — shows the steps the Research API runs behind the
+          scenes so the wait feels guided rather than a blank spinner. */}
+      {creating && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 px-4 backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+          aria-label="Creating your video plan"
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.25 }}
+            className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl"
+          >
+            <p className="text-center text-sm font-bold text-neutral-900">Building your video plan</p>
+            <p className="mt-1 text-center text-xs text-neutral-500">This usually takes a few seconds.</p>
+            <ol className="mt-5 space-y-2.5">
+              {LOADING_STEPS.map((step, i) => {
+                const done = i < loadingStep;
+                const active = i === loadingStep;
+                return (
+                  <li
+                    key={step.label}
+                    className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 transition ${
+                      active
+                        ? "border-blue-300 bg-blue-50"
+                        : done
+                          ? "border-emerald-200 bg-emerald-50/60"
+                          : "border-neutral-200 bg-white"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+                        done
+                          ? "bg-emerald-500 text-white"
+                          : active
+                            ? "bg-blue-600 text-white"
+                            : "bg-neutral-100 text-neutral-400"
+                      }`}
+                    >
+                      {done ? (
+                        <Check className="h-4 w-4" />
+                      ) : active ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <step.Icon className="h-4 w-4" />
+                      )}
+                    </span>
+                    <span
+                      className={`text-sm font-semibold ${
+                        active ? "text-blue-800" : done ? "text-emerald-700" : "text-neutral-500"
+                      }`}
+                    >
+                      {step.label}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          </motion.div>
         </div>
       )}
     </div>

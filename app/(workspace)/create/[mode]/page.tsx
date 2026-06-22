@@ -1898,6 +1898,26 @@ export default function CreateModePage({
                 <span className="text-xs text-muted-foreground/50">
                   or type <span className="font-medium text-foreground/70">@</span> to insert a saved face / image
                 </span>
+                {/* T-1130f — story-only: a visible entry to visual references right
+                    in the brief zone (opens the existing references panel). */}
+                {mode === "story" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStoryTab("reference");
+                      setShowReferences(true);
+                    }}
+                    className="ml-auto flex items-center gap-1.5 rounded-lg border border-violet-300/60 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:border-violet-400 hover:bg-violet-100"
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" />
+                    Add visual references
+                    {Object.keys(references).length > 0 && (
+                      <span className="rounded-full bg-violet-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                        {Object.keys(references).length}
+                      </span>
+                    )}
+                  </button>
+                )}
               </div>
               {ugcComposerReferenceSlots}
               {referencePrefillStatus !== "idle" && (

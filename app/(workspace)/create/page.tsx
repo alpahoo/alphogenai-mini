@@ -84,14 +84,138 @@ const TOOLS: Tool[] = [
   },
 ];
 
+// Business-meaningful mini-illustration per flow — shows the *outcome*, not an
+// abstract gradient. Pure inline SVG (no new deps), drawn over the card's soft
+// tint so each card reads at a glance.
+function CardVisual({ tool }: { tool: Tool }) {
+  const common = "h-32 w-full rounded-2xl border border-white/50 shadow-inner overflow-hidden";
+  switch (tool.id) {
+    case "story": // director clapperboard + scene frames (dark featured card)
+      return (
+        <div className={common} style={{ background: tool.visual }}>
+          <svg viewBox="0 0 220 128" className="h-full w-full" preserveAspectRatio="xMidYMid meet">
+            <g transform="translate(26 30) rotate(-6)">
+              <rect x="0" y="14" width="92" height="60" rx="6" fill="#0c1322" stroke="#e7b66a" strokeWidth="2" />
+              <rect x="0" y="0" width="92" height="18" rx="4" fill="#101a2e" stroke="#e7b66a" strokeWidth="2" />
+              <path d="M4 18 L18 0 M26 18 L40 0 M48 18 L62 0 M70 18 L84 0" stroke="#e7b66a" strokeWidth="2.5" />
+            </g>
+            <g transform="translate(128 22)">
+              <rect x="0" y="0" width="66" height="40" rx="5" fill="#1b2746" stroke="#5b76c4" strokeWidth="2" />
+              <rect x="0" y="48" width="66" height="40" rx="5" fill="#1b2746" stroke="#5b76c4" strokeWidth="2" />
+              <polygon points="26,12 26,28 40,20" fill="#9fd3ff" />
+              <polygon points="26,60 26,76 40,68" fill="#9fd3ff" />
+            </g>
+          </svg>
+        </div>
+      );
+    case "url": // web page -> video output
+      return (
+        <div className={common} style={{ background: tool.visual }}>
+          <svg viewBox="0 0 220 128" className="h-full w-full" preserveAspectRatio="xMidYMid meet">
+            <g transform="translate(18 26)">
+              <rect x="0" y="0" width="84" height="76" rx="7" fill="#fff" stroke="#7aa7d8" strokeWidth="2" />
+              <rect x="0" y="0" width="84" height="16" rx="7" fill="#e8f1fb" />
+              <circle cx="10" cy="8" r="2.4" fill="#7aa7d8" /><circle cx="18" cy="8" r="2.4" fill="#bcd4ee" /><circle cx="26" cy="8" r="2.4" fill="#bcd4ee" />
+              <rect x="10" y="26" width="34" height="30" rx="4" fill="#cfe6ff" />
+              <rect x="50" y="26" width="24" height="6" rx="3" fill="#9fc2e8" />
+              <rect x="50" y="38" width="24" height="6" rx="3" fill="#cfe0f2" />
+              <rect x="10" y="62" width="64" height="6" rx="3" fill="#cfe0f2" />
+            </g>
+            <path d="M108 64 H134" stroke="#2f6fb0" strokeWidth="3" strokeLinecap="round" />
+            <path d="M130 58 L138 64 L130 70 Z" fill="#2f6fb0" />
+            <g transform="translate(146 30)">
+              <rect x="0" y="0" width="60" height="68" rx="7" fill="#0e2238" stroke="#83e8ff" strokeWidth="2" />
+              <circle cx="30" cy="34" r="16" fill="#0a3050" />
+              <polygon points="25,26 25,42 39,34" fill="#83e8ff" />
+            </g>
+          </svg>
+        </div>
+      );
+    case "avatar": // talking head + voice waveform + script lines
+      return (
+        <div className={common} style={{ background: tool.visual }}>
+          <svg viewBox="0 0 220 128" className="h-full w-full" preserveAspectRatio="xMidYMid meet">
+            <g transform="translate(24 22)">
+              <rect x="0" y="0" width="78" height="84" rx="8" fill="#fff" stroke="#c79ad8" strokeWidth="2" />
+              <circle cx="39" cy="32" r="16" fill="#f0d8f6" />
+              <path d="M16 76 a23 18 0 0 1 46 0 Z" fill="#f0d8f6" />
+            </g>
+            <g transform="translate(118 40)">
+              <rect x="0" y="18" width="4" height="10" rx="2" fill="#a86fc4" />
+              <rect x="9" y="10" width="4" height="26" rx="2" fill="#a86fc4" />
+              <rect x="18" y="2" width="4" height="42" rx="2" fill="#a86fc4" />
+              <rect x="27" y="12" width="4" height="22" rx="2" fill="#a86fc4" />
+              <rect x="36" y="18" width="4" height="10" rx="2" fill="#a86fc4" />
+            </g>
+            <g transform="translate(118 78)">
+              <rect x="0" y="0" width="78" height="6" rx="3" fill="#d9c2e6" />
+              <rect x="0" y="12" width="58" height="6" rx="3" fill="#e7d6ef" />
+            </g>
+          </svg>
+        </div>
+      );
+    case "ugc": // phone with product + social engagement
+      return (
+        <div className={common} style={{ background: tool.visual }}>
+          <svg viewBox="0 0 220 128" className="h-full w-full" preserveAspectRatio="xMidYMid meet">
+            <g transform="translate(78 14)">
+              <rect x="0" y="0" width="64" height="100" rx="12" fill="#fff" stroke="#74c79a" strokeWidth="2" />
+              <rect x="8" y="10" width="48" height="48" rx="6" fill="#d8f5e6" />
+              <rect x="20" y="22" width="24" height="24" rx="5" fill="#8fdcb4" />
+              <rect x="8" y="66" width="34" height="6" rx="3" fill="#bfe8d2" />
+              <rect x="8" y="78" width="24" height="6" rx="3" fill="#d8efe2" />
+              <path d="M50 74 c-3-4-9-2-9 3 c0 4 9 9 9 9 c0 0 9-5 9-9 c0-5-6-7-9-3 Z" fill="#ff6f91" />
+            </g>
+          </svg>
+        </div>
+      );
+    case "explainer": // slide with bullets + caption bar
+      return (
+        <div className={common} style={{ background: tool.visual }}>
+          <svg viewBox="0 0 220 128" className="h-full w-full" preserveAspectRatio="xMidYMid meet">
+            <g transform="translate(34 22)">
+              <rect x="0" y="0" width="152" height="70" rx="8" fill="#fff" stroke="#7fb0d8" strokeWidth="2" />
+              <rect x="14" y="14" width="48" height="42" rx="6" fill="#cfe6ff" />
+              <circle cx="38" cy="30" r="9" fill="#8fc2ee" />
+              <rect x="76" y="16" width="62" height="7" rx="3.5" fill="#9fc2e8" />
+              <rect x="76" y="30" width="62" height="6" rx="3" fill="#cfe0f2" />
+              <rect x="76" y="42" width="44" height="6" rx="3" fill="#cfe0f2" />
+            </g>
+            <g transform="translate(34 98)">
+              <rect x="0" y="0" width="152" height="16" rx="6" fill="#0e2238" />
+              <rect x="10" y="6" width="86" height="4" rx="2" fill="#83e8ff" />
+            </g>
+          </svg>
+        </div>
+      );
+    case "podcast": // two mics / two speakers (disabled, Coming soon)
+      return (
+        <div className={`${common} relative`} style={{ background: tool.visual }}>
+          <svg viewBox="0 0 220 128" className="h-full w-full" preserveAspectRatio="xMidYMid meet">
+            {[58, 138].map((cx, idx) => (
+              <g key={idx} transform={`translate(${cx} 30)`}>
+                <rect x="-9" y="0" width="18" height="34" rx="9" fill="#ffce7d" opacity="0.85" />
+                <path d="M-16 30 a16 16 0 0 0 32 0" fill="none" stroke="#ffce7d" strokeWidth="2.5" opacity="0.85" />
+                <line x1="0" y1="46" x2="0" y2="58" stroke="#ffce7d" strokeWidth="2.5" opacity="0.85" />
+                <line x1="-10" y1="58" x2="10" y2="58" stroke="#ffce7d" strokeWidth="2.5" opacity="0.85" />
+              </g>
+            ))}
+          </svg>
+          <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/40 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+            Coming soon
+          </span>
+        </div>
+      );
+    default:
+      return <div className={common} style={{ background: tool.visual }} />;
+  }
+}
+
 function CardInner({ tool }: { tool: Tool }) {
   const featured = tool.featured;
   return (
     <>
-      <div
-        className="h-32 rounded-2xl border border-white/50 shadow-inner"
-        style={{ background: tool.visual }}
-      />
+      <CardVisual tool={tool} />
       <div className="mt-4 flex flex-1 flex-col">
         <div className="mb-2 flex items-center gap-2">
           <span
