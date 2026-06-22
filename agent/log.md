@@ -12,6 +12,21 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1131a Podcast Video backend spec (docs-only)
+- Fait : spec technique du backend Podcast Video. Audit des briques (TTS mono `lib/tts.ts`, script narratif
+  mono `lib/research/script.ts`, lip-sync HeyGen, mux audio→vidéo existant `app/api/jobs/[id]/voiceover`,
+  Modal `lib/modal-client.ts`/`modal_app`, post-prod overlay/captions, `lib/lipsync-cost.ts` ; pas de DB
+  podcast). Architecture V1 (pipeline 9 étapes). Reco moteur : Option B voice-first en V1 (audio multi-speaker
+  + speakers cadrés, pas de lip-sync exact), Option A lip-sync en V1.1 sur le même contrat ; Option C écartée.
+  Data model proposé (4 tables, RLS owner) non appliqué. API contract (POST/GET/PATCH /api/podcasts +
+  /script /tts /render). Failure model (jamais débiter/render sans confirmation, fallbacks sans abort).
+  Cost model V1. Découpage T-1131a..f. Non-goals.
+- Fichiers modifiés : `docs/product/podcast-video-backend-spec.md` (nouveau), `agent/tasks.md`, `agent/log.md`.
+- Docs-only : aucun runtime, aucune migration, aucun changement UI ; `/create/podcast` non créé ; flows
+  Story/URL/Avatar/Product/Research intacts.
+- Tests : n/a (docs-only).
+- Prochaine étape : si priorisé, T-1131b (schema) — touche DB/migration → STOP + validation avant code. Review Codex.
+
 ## 2026-06-22 — Claude — T-1130f Visual guided flow pass (UI-only)
 - Fait : rapprochement visuel des flows validés (style Jogg/Topview, sans clone).
   P1 Hub `/create` : remplacé les blocs gradient abstraits par des mini-illustrations métier inline-SVG

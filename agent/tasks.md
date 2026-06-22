@@ -1019,6 +1019,19 @@ Contraintes :
 - Reste V1+ : polish thumbnails, éventuelle édition du rôle de référence,
   e2e visuel authentifié après déploiement.
 
+### [T-1131] Podcast Video backend — `status: in_progress` · `owner: claude`
+- T-1131a livré (**backend spec docs-only**) — **`docs/product/podcast-video-backend-spec.md`**.
+  Audit des briques réutilisables (TTS mono `lib/tts.ts`, lip-sync HeyGen, **mux audio→vidéo existant**
+  `app/api/jobs/[id]/voiceover`, Modal pipeline, post-prod overlay/captions, `lipsync-cost`) ; architecture
+  V1 (pipeline 9 étapes : dialogue → speaker assign → TTS/segment → timeline → visuel/speaker → compositing
+  → mux → upload → job page) ; **reco moteur : Option B voice-first** (multi-speaker audio + speakers cadrés,
+  pas de lip-sync exact) en V1, **Option A lip-sync** en upgrade V1.1 sur le **même** contrat timeline/compositing ;
+  data model proposé (podcasts/podcast_speakers/podcast_segments/podcast_renders, RLS owner) **non appliqué** ;
+  API contract (POST/GET/PATCH /api/podcasts + /script /tts /render, `render.confirm` = seul point de débit) ;
+  failure model (jamais render/débit sans confirmation ; fallbacks TTS/lip-sync sans abort) ; cost model V1 ;
+  découpage T-1131a..f ; non-goals (pas de live, pas de 3+ speakers, pas de fake lip-sync, pas de route UI
+  avant backend). Docs-only : aucun runtime/migration/UI ; `/create/podcast` non créé ; flows existants intacts.
+
 ### [T-1130] Guided Creation Hub — `status: in_progress` · `owner: claude`
 - T-1130f livré (Visual guided flow pass, **UI-only**) — `app/(workspace)/create/page.tsx`,
   `create/url/page.tsx`, `create/[mode]/page.tsx`. **P1 Hub** : blocs gradient abstraits remplacés par
