@@ -1020,6 +1020,16 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1131] Podcast Video backend — `status: in_progress` · `owner: claude`
+- T-1131-poc livré (**prototype compositing jetable, off-prod**) — `scripts/poc/podcast/segments.json` +
+  `build_poc.py`, rapport `docs/product/podcast-compositing-poc-report.md`. MP4 local two-shot 1280×720
+  16:9 24fps H.264+AAC, 34,5 s, ~13 s de rendu CPU (PIL frames + numpy audio placeholder + ffmpeg de
+  `imageio_ffmpeg` ; aucun TTS provider, aucun réseau, aucun coût). Valide : layout two-shot lisible,
+  alternance Host/Guest claire, speaker actif identifiable (bordure couleur + panneau éclairci + waveform +
+  lower-third), captions déterministes exactes, mux audio. Timeline = liste de « clips » par segment →
+  extensible lip-sync (le clip statique serait remplacé par un clip lip-syncé, même contrat). Reco :
+  **hybride voice-first d'abord** (cheap/rapide/crédible, pas de GPU), lip-sync en `render_mode` premium
+  plus tard. MP4/intermédiaires NON commités (`tmp/` ajouté au `.gitignore`). Aucun changement prod ;
+  `/create/podcast` non créé. Prochaine étape : T-1131b (schema).
 - T-1131a livré (**backend spec docs-only**) — **`docs/product/podcast-video-backend-spec.md`**.
   Audit des briques réutilisables (TTS mono `lib/tts.ts`, lip-sync HeyGen, **mux audio→vidéo existant**
   `app/api/jobs/[id]/voiceover`, Modal pipeline, post-prod overlay/captions, `lipsync-cost`) ; architecture

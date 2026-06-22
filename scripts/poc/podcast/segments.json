@@ -1,0 +1,34 @@
+{
+  "title": "AlphoGen Weekly — POC",
+  "layout": "two_shot",
+  "aspect_ratio": "16:9",
+  "language": "en-US",
+  "speakers": [
+    {
+      "id": "host",
+      "name": "Maya (Host)",
+      "position": 0,
+      "voice": "elevenlabs:rachel",
+      "color": "#34c98a",
+      "tone_hz": 220
+    },
+    {
+      "id": "guest",
+      "name": "Leo (Guest)",
+      "position": 1,
+      "voice": "elevenlabs:adam",
+      "color": "#5b8def",
+      "tone_hz": 150
+    }
+  ],
+  "segments": [
+    { "order": 0, "speaker": "host",  "text": "Welcome back to AlphoGen Weekly. Today: turning a single link into a finished video." },
+    { "order": 1, "speaker": "guest", "text": "Love it. So I paste a product page and the system does the research for me?" },
+    { "order": 2, "speaker": "host",  "text": "Exactly. It reads the page, collects the media, and drafts a script automatically." },
+    { "order": 3, "speaker": "guest", "text": "And I can still edit everything before anything gets rendered, right?" },
+    { "order": 4, "speaker": "host",  "text": "Always. Nothing is charged until you confirm the final render." },
+    { "order": 5, "speaker": "guest", "text": "What about a two-person format like this — a real podcast layout?" },
+    { "order": 6, "speaker": "host",  "text": "That's exactly what this prototype is testing: timing, captions, and the layout." },
+    { "order": 7, "speaker": "guest", "text": "Nice. Voice-first now, lip-sync as a premium upgrade later. Let's ship it." }
+  ]
+}

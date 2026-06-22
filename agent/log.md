@@ -12,6 +12,21 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1131-poc Podcast compositing prototype (off-prod)
+- Fait : prototype jetable pour juger le concept visuel podcast. `scripts/poc/podcast/segments.json`
+  (2 speakers, 8 segments alternés) + `build_poc.py` (PIL frames + numpy audio placeholder + ffmpeg de
+  `imageio_ffmpeg`). Sortie locale `tmp/podcast-poc/output.mp4` : two-shot 1280×720 16:9 24fps H.264+AAC,
+  34,5 s, ~13 s rendu CPU. Validé via 2 frames extraites (6s Guest actif, 9s Host actif) : layout lisible,
+  alternance claire, speaker actif identifiable (bordure+panneau+waveform+lower-third), captions exactes
+  depuis le JSON, mux audio OK. Timeline structurée en clips/segment → extensible lip-sync.
+- Fichiers : `scripts/poc/podcast/{segments.json,build_poc.py}` (nouveaux), `docs/product/podcast-compositing-poc-report.md`
+  (nouveau), `.gitignore` (+`tmp/`), `agent/tasks.md`, `agent/log.md`.
+- Off-prod : aucun API/DB/migration/route ; `/create/podcast` non créé ; flows existants intacts ;
+  MP4 + intermédiaires NON commités (tmp/ ignoré) — aucun coût (pas de TTS provider, pas de réseau).
+- Tests : MP4 valide (ffprobe h264/aac), critères d'acceptation tous verts (voir rapport).
+- Reco : hybride voice-first d'abord (cheap/rapide/crédible), lip-sync en render_mode premium. Prochaine
+  étape : T-1131b (schema) — touche DB/migration → STOP + validation avant code. Review Codex.
+
 ## 2026-06-22 — Claude — T-1131a Podcast Video backend spec (docs-only)
 - Fait : spec technique du backend Podcast Video. Audit des briques (TTS mono `lib/tts.ts`, script narratif
   mono `lib/research/script.ts`, lip-sync HeyGen, mux audio→vidéo existant `app/api/jobs/[id]/voiceover`,

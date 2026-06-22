@@ -55,3 +55,6 @@ revlon_*.csv
 
 # IDE
 .continue/
+
+# POC / local render artifacts (T-1131-poc) — keep MP4s & intermediates local
+tmp/
