@@ -12,6 +12,27 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1130f Visual guided flow pass (UI-only)
+- Fait : rapprochement visuel des flows validés (style Jogg/Topview, sans clone).
+  P1 Hub `/create` : remplacé les blocs gradient abstraits par des mini-illustrations métier inline-SVG
+  par carte (Story clap+frames, URL page→vidéo, Avatar tête+waveform+script, UGC phone+produit+cœur,
+  Explainer slide+captions, Podcast 2 micros + « Coming soon » dimmé). P3 `/create/url` : vraies vignettes
+  d'exemple (mocks page produit/article/docs) au lieu des gradients + overlay de loading guidé
+  (Analyze URL → Collect media → Write script → Open plan). P2 `/create/story` : bouton « Add visual
+  references » visible dans la zone de brief (story-only, ouvre le panneau références existant).
+- Fichiers modifiés : `app/(workspace)/create/page.tsx`, `app/(workspace)/create/url/page.tsx`,
+  `app/(workspace)/create/[mode]/page.tsx`, `agent/tasks.md`, `agent/log.md`.
+- UI-only : aucun backend/route/API/DB/migration ; handlers de génération inchangés ; `POST /api/research/jobs`
+  réutilisé tel quel ; Product/Social/`/research` intacts ; `/create/podcast` non créé.
+- Tests : npm run build OK puis tsc clean (exit 0) — /create 3,38 kB, /create/url 5,83 kB, /create/[mode] 37,1 kB.
+- QA prod (Claude-in-Chrome, premium) : Hub 6 cartes visuelles rendues + podcast DIV non-cliquable
+  (« Coming soon » + « Soon ») ; url 3 vignettes mocks + overlay 4 étapes affiché, vrai job
+  `16b0c2a3-2cdf-4e2c-bfa6-36ff74294d97` créé puis nav `/research/[id]` ; story « Add visual references »
+  ouvre le panneau (chip Text with Reference activée) ; product : pas de chips/bouton, Generate conservé.
+  Note : framer-motion (opacity d'entrée) throttlé sous automation (rAF gelé) — vérifs faites via
+  textContent + style `!important` ; en usage réel l'animation se termine normalement.
+- Prochaine étape : review Codex. Série T-1130 (a→f) close.
+
 ## 2026-06-22 — Claude — T-1130e Podcast Video guided flow (Option B, docs-only)
 - Fait : mini-audit read-only (Podcast) → aucune brique réelle. Confirmé : pas de route `/create/podcast` ;
   hub card `status:"soon"` sans href (non-cliquable) ; pas de génération script dialogue multi-speaker

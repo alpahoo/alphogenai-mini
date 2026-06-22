@@ -1020,6 +1020,20 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1130] Guided Creation Hub — `status: in_progress` · `owner: claude`
+- T-1130f livré (Visual guided flow pass, **UI-only**) — `app/(workspace)/create/page.tsx`,
+  `create/url/page.tsx`, `create/[mode]/page.tsx`. **P1 Hub** : blocs gradient abstraits remplacés par
+  des mini-illustrations métier inline-SVG par carte (Story clap+frames, URL page→vidéo, Avatar
+  tête+waveform+script, UGC phone+produit+cœur, Explainer slide+captions, Podcast 2 micros + « Coming
+  soon »). **P3 /create/url** : vraies vignettes d'exemple (mocks page produit/article/docs) au lieu des
+  gradients + overlay de loading guidé (Analyze URL → Collect media → Write script → Open plan) ; même
+  `POST /api/research/jobs`. **P2 /create/story** : bouton « Add visual references » visible dans la zone
+  de brief (story-only, ouvre le panneau références existant). Aucun backend/route/DB/migration ; handlers
+  de génération inchangés ; Product/Social intacts. build OK puis tsc clean (/create 3,38 kB, /create/url
+  5,83 kB, /create/[mode] 37,1 kB). QA prod Claude-in-Chrome : 6 cartes visuelles OK + podcast non-cliquable ;
+  url vignettes + overlay 4 étapes + vrai job `16b0c2a3…` créé & nav /research/[id] ; story bouton ouvre le
+  panneau (chip « Text with Reference » activée) ; product sans chips/bouton, Generate conservé.
+  Note QA : framer-motion (opacity d'entrée) est throttlé sous automation (rAF gelé) → vérifs via
+  textContent + override `!important` ; comportement réel utilisateur OK.
 - T-1130e livré (Podcast — **Option B docs-only** validée par Paul) — **`docs/product/podcast-video-guided-flow-spec.md`**.
   Mini-audit read-only : **aucune brique podcast réelle** (pas de route `/create/podcast`, pas de script
   dialogue multi-speaker — `lib/research/script.ts` est mono-voix, pas de TTS multi-speaker — `lib/tts.ts`
