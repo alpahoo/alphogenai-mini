@@ -2166,6 +2166,230 @@ def _report_sentry(exc: Exception, **context) -> None:
 
 
 # ===========================================================================
+# Podcast render (T-1131e) — two-shot voice-first compositing, CPU only.
+# ===========================================================================
+
+PODCAST_GAP_MS = 300
+PODCAST_FPS = 24
+_PODCAST_COLORS = {"host": (52, 201, 138), "guest": (91, 141, 239)}
+
+
+def _podcast_probe_duration(path: str) -> float:
+    """Real audio duration in seconds via ffprobe (0.0 on failure)."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", path],
+            capture_output=True, text=True, timeout=60,
+        )
+        return max(0.0, float(out.stdout.strip()))
+    except Exception:
+        return 0.0
+
+
+def _podcast_avatar(name: str, color, size: int = 200):
+    """Generate a placeholder avatar (circle + initial). No external fetch (V1)."""
+    from PIL import Image, ImageDraw, ImageFont
+    img = Image.new("RGB", (size, size), (18, 22, 32))
+    d = ImageDraw.Draw(img)
+    dark = tuple(int(c * 0.35) for c in color)
+    d.ellipse([8, 8, size - 8, size - 8], fill=dark, outline=color, width=6)
+    initial = (name.strip()[:1] or "?").upper()
+    try:
+        f = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(size * 0.42))
+    except Exception:
+        f = ImageFont.load_default()
+    bb = d.textbbox((0, 0), initial, font=f)
+    d.text(((size - (bb[2] - bb[0])) / 2, (size - (bb[3] - bb[1])) / 2 - bb[1]), initial, font=f, fill=(240, 244, 250))
+    return img
+
+
+@app.function(image=overlay_image, secrets=[secrets], timeout=600, retries=0)
+def render_podcast(podcast_id: str) -> str:
+    """Render a two-shot voice-first podcast MP4 from ready segments.
+
+    Reads everything server-side from Supabase (never trusts a client payload):
+    podcast (layout/aspect/title), speakers (host/guest), and segments
+    (audio_url/text/order). Probes the REAL audio durations with ffprobe and
+    rewrites start_ms/end_ms, composes a two-shot timeline with deterministic
+    captions, muxes the concatenated dialogue, uploads to R2 and writes
+    podcasts.video_url + render_status='done'. On failure: render_status='failed'.
+
+    CPU only. No lip-sync. The TTS provider is never referenced here.
+    """
+    import tempfile
+    import urllib.request
+    from PIL import Image, ImageDraw, ImageFont
+
+    sb = get_supabase_client()
+
+    def fail(msg: str):
+        log(podcast_id, f"render_podcast failed: {msg}")
+        try:
+            sb.table("podcasts").update({"render_status": "failed", "render_error": msg[:2000]}).eq("id", podcast_id).execute()
+        except Exception as e:
+            log(podcast_id, f"failed-status update error: {e}")
+        return ""
+
+    try:
+        sb.table("podcasts").update({"render_status": "rendering", "render_error": None}).eq("id", podcast_id).execute()
+
+        podcast = sb.table("podcasts").select("*").eq("id", podcast_id).single().execute().data
+        if not podcast:
+            return fail("Podcast not found")
+        if podcast.get("layout") != "two_shot":
+            return fail("Only the two_shot layout is supported in V1")
+
+        speakers = sb.table("podcast_speakers").select("*").eq("podcast_id", podcast_id).execute().data or []
+        host = next((s for s in speakers if s["role"] == "host"), None)
+        guest = next((s for s in speakers if s["role"] == "guest"), None)
+        if not host or not guest:
+            return fail("Podcast is missing its speakers")
+
+        segments = (
+            sb.table("podcast_segments").select("*").eq("podcast_id", podcast_id)
+            .order("order_index").execute().data or []
+        )
+        if not segments:
+            return fail("Podcast has no segments")
+        if any(s.get("status") != "ready" or not s.get("audio_url") for s in segments):
+            return fail("All segments must have ready audio before rendering")
+
+        spk_by_id = {s["id"]: s for s in speakers}
+        W = 1280 if podcast.get("aspect_ratio", "16:9") == "16:9" else 720
+        H = 720 if podcast.get("aspect_ratio", "16:9") == "16:9" else 1280
+
+        workdir = tempfile.mkdtemp(prefix="podcast-")
+        # 1) Download + transcode each segment to a uniform wav, probe real duration.
+        seg_wavs, durations = [], []
+        for i, seg in enumerate(segments):
+            mp3 = os.path.join(workdir, f"seg{i}.mp3")
+            wav = os.path.join(workdir, f"seg{i}.wav")
+            urllib.request.urlretrieve(seg["audio_url"], mp3)
+            subprocess.run(["ffmpeg", "-y", "-i", mp3, "-ar", "44100", "-ac", "1", wav],
+                           capture_output=True, timeout=120)
+            seg_wavs.append(wav)
+            durations.append(_podcast_probe_duration(wav))
+
+        # 2) Build the dialogue track: seg + silence gap between turns.
+        gap = os.path.join(workdir, "gap.wav")
+        subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i",
+                        f"anullsrc=r=44100:cl=mono", "-t", str(PODCAST_GAP_MS / 1000.0), gap],
+                       capture_output=True, timeout=60)
+        concat_list = os.path.join(workdir, "audio.txt")
+        with open(concat_list, "w") as f:
+            for i, wav in enumerate(seg_wavs):
+                f.write(f"file '{wav}'\n")
+                if i < len(seg_wavs) - 1:
+                    f.write(f"file '{gap}'\n")
+        full_audio = os.path.join(workdir, "full.wav")
+        subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_list, "-c", "copy", full_audio],
+                       capture_output=True, timeout=120)
+
+        # 3) Timeline from REAL durations; rewrite start_ms/end_ms in DB.
+        timeline, cursor = [], 0.0
+        for i, seg in enumerate(segments):
+            start = cursor
+            end = start + durations[i]
+            timeline.append((start, end, seg))
+            sb.table("podcast_segments").update({
+                "start_ms": int(start * 1000), "end_ms": int(end * 1000),
+            }).eq("id", seg["id"]).execute()
+            cursor = end + PODCAST_GAP_MS / 1000.0
+        total = max(cursor, 1.0)
+
+        # 4) Avatars + fonts.
+        host_av = _podcast_avatar(host.get("name", "Host"), _PODCAST_COLORS["host"])
+        guest_av = _podcast_avatar(guest.get("name", "Guest"), _PODCAST_COLORS["guest"])
+        host_dim = Image.eval(host_av, lambda v: int(v * 0.55))
+        guest_dim = Image.eval(guest_av, lambda v: int(v * 0.55))
+        fb = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        f_name = ImageFont.truetype(fb, 26)
+        f_cap = ImageFont.truetype(fb, 32)
+
+        def wrap(draw, text, font, maxw, maxlines=3):
+            words, lines, cur = text.split(), [], ""
+            for w_ in words:
+                t = (cur + " " + w_).strip()
+                if draw.textlength(t, font=font) <= maxw:
+                    cur = t
+                else:
+                    lines.append(cur); cur = w_
+                    if len(lines) >= maxlines:
+                        break
+            if cur and len(lines) < maxlines:
+                lines.append(cur)
+            return lines
+
+        panel_w, panel_h, gap_px = int(W * 0.42), int(H * 0.52), 40
+        x0 = (W - (panel_w * 2 + gap_px)) // 2
+        y0 = int(H * 0.16)
+
+        def render_frame(t):
+            img = Image.new("RGB", (W, H), (12, 14, 20))
+            d = ImageDraw.Draw(img)
+            active = next((s for (st, en, s) in timeline if st <= t < en), timeline[-1][2])
+            active_role = spk_by_id.get(active["speaker_id"], {}).get("role", "host")
+            for idx, (sp, av, av_dim, role) in enumerate([
+                (host, host_av, host_dim, "host"), (guest, guest_av, guest_dim, "guest"),
+            ]):
+                col = _PODCAST_COLORS[role]
+                is_active = role == active_role
+                px = x0 + idx * (panel_w + gap_px)
+                box = [px, y0, px + panel_w, y0 + panel_h]
+                if is_active:
+                    d.rounded_rectangle([box[0] - 6, box[1] - 6, box[2] + 6, box[3] + 6], radius=24, outline=col, width=6)
+                    d.rounded_rectangle(box, radius=20, fill=(26, 31, 44))
+                else:
+                    d.rounded_rectangle(box, radius=20, fill=(20, 23, 32))
+                avi = (av if is_active else av_dim)
+                img.paste(avi, (px + (panel_w - avi.width) // 2, y0 + 40))
+                nm = sp.get("name", role.title())
+                lt_w = d.textlength(nm, font=f_name) + 36
+                d.rounded_rectangle([px + 22, y0 + panel_h - 50, px + 22 + lt_w, y0 + panel_h - 12],
+                                    radius=16, fill=col if is_active else (40, 46, 60))
+                d.text((px + 40, y0 + panel_h - 46), nm, font=f_name,
+                       fill=(8, 12, 18) if is_active else (170, 178, 195))
+            acol = _PODCAST_COLORS[active_role]
+            cy = H - int(H * 0.16)
+            for ln in wrap(d, active["text"], f_cap, W - 240):
+                tw = d.textlength(ln, font=f_cap)
+                d.text(((W - tw) / 2, cy), ln, font=f_cap, fill=(238, 242, 248))
+                cy += 38
+            d.ellipse([60, H - int(H * 0.16) + 4, 84, H - int(H * 0.16) + 28], fill=acol)
+            d.rectangle([0, H - 6, int(W * min(1.0, t / total)), H], fill=acol)
+            return img
+
+        # 5) Pipe frames → ffmpeg with the dialogue track → MP4.
+        out_path = os.path.join(workdir, "output.mp4")
+        proc = subprocess.Popen(
+            ["ffmpeg", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}",
+             "-r", str(PODCAST_FPS), "-i", "-", "-i", full_audio,
+             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-preset", "veryfast",
+             "-c:a", "aac", "-b:a", "128k", "-shortest", out_path],
+            stdin=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        )
+        n_frames = int(total * PODCAST_FPS) + 1
+        for fi in range(n_frames):
+            proc.stdin.write(render_frame(fi / PODCAST_FPS).tobytes())
+        proc.stdin.close()
+        if proc.wait() != 0:
+            return fail("ffmpeg encode failed")
+
+        with open(out_path, "rb") as f:
+            mp4 = f.read()
+        video_url = upload_to_r2(mp4, podcast_id, suffix="-podcast", content_type="video/mp4", extension="mp4")
+
+        sb.table("podcasts").update({
+            "video_url": video_url, "render_status": "done", "render_error": None,
+        }).eq("id", podcast_id).execute()
+        log(podcast_id, f"render_podcast done → {video_url} ({total:.1f}s)")
+        return video_url
+    except Exception as e:
+        return fail(normalize_error(e))
+
+
+# ===========================================================================
 # Webhook (FastAPI)
 # ===========================================================================
 
@@ -2201,6 +2425,9 @@ def webhook():
         brand: Optional[dict] = None
         product_url: Optional[str] = None
         voice: str = "af_heart"
+
+    class RenderPodcastRequest(BaseModel):
+        podcast_id: str
 
     @web.post("/webhook")
     async def trigger(req: JobRequest, x_webhook_secret: str = Header(None)):
@@ -2292,6 +2519,22 @@ def webhook():
             print(f"[webhook /render-explainer] spawn failed: {e}")
             raise HTTPException(status_code=500, detail=str(e)[:200])
         return {"success": True, "job_id": req.job_id}
+
+    @web.post("/render-podcast")
+    async def render_podcast_ep(req: RenderPodcastRequest, x_webhook_secret: str = Header(None)):
+        """Render a two-shot voice-first podcast (T-1131e). Spawns render_podcast
+        (CPU). Modal reads podcast/speakers/segments server-side, writes
+        podcasts.video_url + render_status when done; the Next.js poller observes it.
+        """
+        expected = os.environ.get("MODAL_WEBHOOK_SECRET")
+        if expected and x_webhook_secret != expected:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        try:
+            await render_podcast.spawn.aio(req.podcast_id)
+        except Exception as e:
+            print(f"[webhook /render-podcast] spawn failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e)[:200])
+        return {"success": True, "podcast_id": req.podcast_id}
 
     @web.post("/apply-voiceover")
     async def apply_voiceover(req: ConcatRequest, x_webhook_secret: str = Header(None)):

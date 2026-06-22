@@ -1020,6 +1020,19 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1131] Podcast Video backend — `status: in_progress` · `owner: claude`
+- T-1131e livré (**render/compositing two-shot**, Modal CPU) — migration
+  `supabase/migrations/20260622_add_podcast_render_columns.sql` **appliquée prod** (podcasts +
+  `video_url`/`render_status`(idle|rendering|done|failed)/`render_error`) ; Modal `render_podcast()` +
+  webhook `/render-podcast` (`modal_app/video_pipeline.py`, **déployé**) ; `lib/modal-client.ts`
+  `triggerRenderPodcast()` ; route SaaS `POST /api/podcasts/[id]/render`. Flow : route (auth+ownership 404,
+  **400 si layout≠two_shot**, **400 si tous segments pas ready+audio_url**, 409 si déjà rendering) →
+  set render_status=rendering → trigger Modal (spawn, payload `{podcast_id}` seul) → Modal lit
+  podcast/speakers/segments **server-side**, **ffprobe** des vraies durées, **réécrit start_ms/end_ms**,
+  compose two-shot (avatars placeholder, speaker actif, lower-thirds, **captions déterministes**), concat audio
+  + gap, encode MP4 (libx264+aac), upload R2 → écrit `video_url`+`render_status=done` (ou failed+render_error,
+  video_url inchangé). **CPU, pas de GPU, pas de lip-sync, pas d'UI, pas de débit crédit** ; provider TTS jamais
+  référencé ; Story/Avatar/Research intacts. 67 tests podcast verts ; py_compile OK ; build OK ; tsc clean ;
+  Modal déployé (alphogenai-v2). split_screen/talk_show = V1.1. Prochaine étape : T-1131f (UI /create/podcast).
 - T-1131d-fix livré (review Codex, 3 points) — `app/api/podcasts/[id]/tts/route.ts` + tests. (1) updates
   `podcast_segments` vérifient désormais `{error}` : preview→500 propre si l'update échoue ; full→le segment
   n'est plus compté `ready` (passe `failed`) si son update DB échoue. (2) clé R2 **versionnée par génération**

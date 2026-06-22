@@ -206,3 +206,26 @@ export async function triggerApplyOverlays(
   }
   return outputUrl;
 }
+
+/**
+ * Trigger a two-shot voice-first podcast render (T-1131e) on Modal. Fire-and-forget:
+ * Modal reads the podcast/speakers/segments server-side, composites + muxes (CPU),
+ * uploads to R2, and sets podcasts.video_url + render_status; the SaaS poller
+ * observes it. Only the podcast_id is sent — no client-supplied content.
+ */
+export async function triggerRenderPodcast(podcastId: string): Promise<void> {
+  const url = `${modalBase()}/render-podcast`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-webhook-secret": secret(),
+    },
+    body: JSON.stringify({ podcast_id: podcastId }),
+    signal: AbortSignal.timeout(15000), // webhook returns after Modal accepts the spawn
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(`Modal /render-podcast ${res.status}: ${detail.slice(0, 200)}`);
+  }
+}

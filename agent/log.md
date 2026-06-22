@@ -12,6 +12,23 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1131e Podcast render/compositing (two-shot, Modal CPU)
+- Fait : assemblage MP4 podcast à partir des segments audio prêts. Migration Option A
+  (`20260622_add_podcast_render_columns.sql` : podcasts + video_url/render_status/render_error) **appliquée prod**
+  (vérifié). Modal `render_podcast()` (overlay_image, CPU, timeout 600) + webhook `/render-podcast` (spawn)
+  **déployés** (alphogenai-v2). `lib/modal-client.ts` triggerRenderPodcast (fire-and-forget, payload {podcast_id}).
+  Route SaaS `POST /api/podcasts/[id]/render` : auth+ownership 404, 400 si layout≠two_shot, 400 si segments pas
+  tous ready+audio_url, 409 si déjà rendering ; set render_status=rendering ; trigger Modal ; 202. Modal lit tout
+  server-side, ffprobe vraies durées → réécrit start_ms/end_ms, compose two-shot (placeholder avatars, speaker
+  actif, lower-thirds, captions déterministes), concat audio+gap, encode libx264+aac, upload R2 → video_url +
+  render_status=done ; échec → failed+render_error, video_url inchangé.
+- Fichiers : `supabase/migrations/20260622_add_podcast_render_columns.sql`, `modal_app/video_pipeline.py`
+  (render_podcast + /render-podcast), `lib/modal-client.ts`, `app/api/podcasts/[id]/render/route.ts(+test)`, `agent/*`.
+- Scope : Modal CPU only, pas de GPU/lip-sync/UI/débit crédit ; provider TTS jamais exposé ; Story/Avatar/Research
+  intacts ; render explicite uniquement. split_screen/talk_show → V1.1 (400 propre en attendant).
+- Tests : 67 tests podcast verts (8 nouveaux render route) ; py_compile OK ; build OK ; tsc clean ; Modal déployé.
+- Prochaine étape : T-1131f (UI /create/podcast — flip carte hub « Soon »→live seulement quand e2e vérifié).
+
 ## 2026-06-22 — Claude — T-1131d-fix (review Codex, 3 points)
 - Fait : (1) gestion des erreurs `{error}` sur les updates `podcast_segments` (preview→500 si update échoue ;
   full→segment marqué failed, plus compté ready, si update échoue). (2) clé R2 versionnée par génération
