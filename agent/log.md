@@ -12,6 +12,13 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1131f-hardening-fix3 (review Codex, P2 cleanup)
+- Fait : suppression de l'appel dupliqué à invalidateRender() après la boucle d'update (full mode, tts route).
+  Il ne reste qu'une invalidation, avant toute mutation segment → pas de 2ᵉ update Supabase inutile, pas de faux
+  500 après sauvegarde réussie des segments.
+- Fichiers : `app/api/podcasts/[id]/tts/route.ts`, `app/api/podcasts/[id]/tts/route.test.ts`, `agent/*`.
+- Tests : 74 tests podcast verts (+1 : full ready>0 → exactly one podcasts update) ; build OK ; tsc clean.
+
 ## 2026-06-22 — Claude — T-1131f-hardening-fix2 (review Codex, P1 transactionnel)
 - Fait : l'invalidation du render est déplacée AVANT toute mutation de segments. script : reset podcasts
   (video_url/render_status/render_error + status ready) AVANT delete/insert ; reset échoue → 500, segments

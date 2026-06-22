@@ -217,11 +217,6 @@ export async function POST(
       s.end_ms = t.end_ms;
     }
 
-    // Only invalidate when audio actually changed (skip if everything was skipped).
-    if (ready > 0 && !(await invalidateRender())) {
-      return NextResponse.json({ error: STALE_RENDER_ERROR }, { status: 500 });
-    }
-
     return NextResponse.json({
       ready,
       failed,

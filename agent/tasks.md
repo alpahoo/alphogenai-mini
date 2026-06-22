@@ -1020,6 +1020,10 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1131] Podcast Video backend — `status: done` · `owner: claude`
+- T-1131f-hardening-fix3 livré (review Codex, P2 cleanup) — supprimé l'appel **dupliqué** à `invalidateRender()`
+  resté après la boucle d'update en full mode (`tts/route.ts`) : une seule invalidation (avant la boucle),
+  plus de 2ᵉ update Supabase inutile ni de faux 500 après segments sauvés. +1 test (full ready>0 → 1 seul update
+  podcasts). 74 tests podcast verts ; build OK ; tsc clean.
 - T-1131f-hardening-fix2 livré (review Codex, 1 P1 transactionnel) — l'invalidation du render se fait
   **AVANT** toute mutation de segments. (1) `script` : reset `podcasts` (video_url/render_status/render_error +
   status ready) AVANT le delete/insert des segments ; si le reset échoue → 500 et **segments intacts** (ancien

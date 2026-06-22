@@ -246,6 +246,16 @@ describe("POST /api/podcasts/[id]/tts", () => {
     })).toBe(true);
   });
 
+  it("full mode invalidates the render exactly once when audio changed", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(service([seg(0), seg(1)], updates) as never);
+    const res = await POST(req({}), ctx("p1"));
+    expect((await res.json()).ready).toBe(2);
+    const podcastUpdates = updates.filter((u) => u.table === "podcasts");
+    expect(podcastUpdates).toHaveLength(1);
+  });
+
   it("does NOT clear the render when every segment is skipped", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     const updates: State[] = [];
