@@ -1020,6 +1020,16 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1131] Podcast Video backend — `status: in_progress` · `owner: claude`
+- T-1131c-fix livré (review Codex, 4 points) — `lib/podcast/dialogue.ts`, `app/api/podcasts/[id]/script/route.ts`
+  + tests. **P1** prompt : ne plus interdire toutes les marques ; n'interdire que les providers/infra internes
+  AlphoGen sauf si le sujet les demande explicitement. **P2** scrubber : blocklist réduite aux seules infra
+  internes confidentielles (heygen/byteplus/atlascloud/evolink/bailian/kie.ai/litellm) — OpenAI/Seedance/Kling/
+  Wan/LTX/ElevenLabs ne sont plus censurés ; scrub désormais **conditionnel** (un terme présent dans le topic
+  utilisateur est conservé). **P3** alternance : `validatePodcastSegments` refuse >2 tours consécutifs du même
+  speaker (host,host,host,guest,guest,guest échoue) + 2 tests. **P4** régénération non-destructive : snapshot des
+  anciens segments avant delete ; si l'insert échoue → restauration des anciens + status failed (REST, pas de
+  transaction multi-statement) + test. 38 tests podcast verts ; build OK ; tsc clean. Pas de migration, pas de
+  TTS/render, carte hub reste « Soon ». Prochaine étape : T-1131d (multi-speaker TTS).
 - T-1131b+c livré (**schema + dialogue generator**, backend, fusionnés) — migration
   `supabase/migrations/20260622_create_podcast_schema.sql` **appliquée en prod** (projet qbrpzmuedfugbhoeytdj) :
   `podcasts` / `podcast_speakers` / `podcast_segments`, RLS owner (enfants via join podcasts), indexes +

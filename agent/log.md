@@ -12,6 +12,20 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-22 — Claude — T-1131c-fix (review Codex, 4 points)
+- Fait : P1 prompt moins restrictif (autorise marques/modèles du sujet ; interdit seulement les providers/infra
+  internes AlphoGen sauf si le sujet les demande). P2 scrubber : blocklist réduite aux infra internes
+  confidentielles (heygen/byteplus/atlascloud/evolink/bailian/kie.ai/litellm), OpenAI/Seedance/Kling/Wan/LTX/
+  ElevenLabs conservés ; scrub conditionnel (terme du topic non supprimé). P3 alternance : refus de >2 tours
+  consécutifs du même speaker. P4 régénération non-destructive : snapshot + restauration des anciens segments
+  si l'insert échoue.
+- Fichiers : `lib/podcast/dialogue.ts`, `app/api/podcasts/[id]/script/route.ts`,
+  `lib/podcast/__tests__/dialogue.test.ts`, `app/api/podcasts/[id]/script/route.test.ts`, `agent/*`.
+- Tests : 38 tests podcast verts (helpers + routes, dont nouveaux : scrub conditionnel, brands publics conservés,
+  >2 consécutifs rejeté, restore après insert échoué). build OK ; tsc clean.
+- Scope : pas de migration, pas de TTS/render, pas de `/create/podcast`, carte hub « Soon ».
+- Prochaine étape : T-1131d (multi-speaker TTS).
+
 ## 2026-06-22 — Claude — T-1131b+c Podcast schema + dialogue generator (backend)
 - Fait : base backend Podcast Video. Migration `20260622_create_podcast_schema.sql` (podcasts/podcast_speakers/
   podcast_segments + RLS owner via join + indexes/uniques + trigger updated_at) **appliquée en prod** via

@@ -95,14 +95,23 @@ describe("normalizePodcastSegments", () => {
     expect(out).toEqual([{ speaker_role: "host", text: "keep" }]);
   });
 
-  it("scrubs provider / brand names", () => {
+  it("scrubs internal infra names but KEEPS public brands/models", () => {
     const out = normalizePodcastSegments([
-      { speaker_role: "host", text: "We use HeyGen and ElevenLabs with Seedance." },
+      { speaker_role: "host", text: "Built on HeyGen, but we love OpenAI, Seedance and Kling." },
     ]);
     const t = out[0].text.toLowerCase();
-    expect(t).not.toContain("heygen");
-    expect(t).not.toContain("elevenlabs");
-    expect(t).not.toContain("seedance");
+    expect(t).not.toContain("heygen"); // internal infra → scrubbed
+    expect(t).toContain("openai"); // public brand → kept
+    expect(t).toContain("seedance"); // model that may be the topic → kept
+    expect(t).toContain("kling"); // kept
+  });
+
+  it("keeps an internal name when the user's topic is about it", () => {
+    const out = normalizePodcastSegments(
+      [{ speaker_role: "host", text: "Today we review HeyGen in depth." }],
+      { topic: "An honest HeyGen review" },
+    );
+    expect(out[0].text.toLowerCase()).toContain("heygen");
   });
 });
 
@@ -131,6 +140,31 @@ describe("validatePodcastSegments", () => {
       text: `t${i}`,
     }));
     expect(validatePodcastSegments(allHost).ok).toBe(false);
+  });
+
+  it("rejects more than 2 consecutive turns by the same speaker", () => {
+    // both speak 3 times (count check passes) but it's not alternating
+    const blocky: DialogueSegment[] = [
+      { speaker_role: "host", text: "a" },
+      { speaker_role: "host", text: "b" },
+      { speaker_role: "host", text: "c" },
+      { speaker_role: "guest", text: "d" },
+      { speaker_role: "guest", text: "e" },
+      { speaker_role: "guest", text: "f" },
+    ];
+    expect(validatePodcastSegments(blocky).ok).toBe(false);
+  });
+
+  it("allows up to 2 consecutive turns by the same speaker", () => {
+    const ok: DialogueSegment[] = [
+      { speaker_role: "host", text: "a" },
+      { speaker_role: "host", text: "b" },
+      { speaker_role: "guest", text: "c" },
+      { speaker_role: "guest", text: "d" },
+      { speaker_role: "host", text: "e" },
+      { speaker_role: "guest", text: "f" },
+    ];
+    expect(validatePodcastSegments(ok).ok).toBe(true);
   });
 });
 

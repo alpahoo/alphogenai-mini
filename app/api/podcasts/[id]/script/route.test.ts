@@ -136,4 +136,37 @@ describe("POST /api/podcasts/[id]/script", () => {
     // ends ready
     expect(updates).toContainEqual(expect.objectContaining({ status: "ready" }));
   });
+
+  it("restores the previous dialogue and fails when the new insert errors", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const previous = [
+      { id: "old-1", podcast_id: "p1", speaker_id: "host-id", order_index: 0, text: "old host", status: "pending" },
+      { id: "old-2", podcast_id: "p1", speaker_id: "guest-id", order_index: 1, text: "old guest", status: "pending" },
+    ];
+    let insertCalls = 0;
+    let restored: unknown = null;
+    const updates: unknown[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id, status: "ready", source_topic: "AI tools", language: "en-US" }, error: null }),
+        "podcast_speakers:select": () => ({ data: SPEAKERS, error: null }),
+        "podcast_segments:select": () => ({ data: previous, error: null }),
+        "podcast_segments:delete": () => ({ data: null, error: null }),
+        "podcast_segments:insert": (s) => {
+          insertCalls++;
+          if (insertCalls === 1) return { data: null, error: { message: "insert boom" } };
+          restored = s.payload; // the compensating restore
+          return { data: s.payload, error: null };
+        },
+        "podcasts:update": (s) => { updates.push(s.payload); return { data: null, error: null }; },
+      }) as never,
+    );
+    vi.mocked(callLLMForPodcastDialogue).mockResolvedValue({ content: sixTurns(), tokensUsed: 10, modelUsed: "m" });
+
+    const res = await POST(req({}), ctx("p1"));
+    expect(res.status).toBe(500);
+    expect(insertCalls).toBe(2); // new insert (failed) + restore
+    expect(restored).toEqual(previous);
+    expect(updates).toContainEqual(expect.objectContaining({ status: "failed" }));
+  });
 });

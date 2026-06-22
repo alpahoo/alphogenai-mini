@@ -76,13 +76,10 @@ export async function POST(
       return failWith(llm.error || "The dialogue generator returned nothing.", 502);
     }
 
-    const result = parseAndValidateDialogue(llm.content);
+    const result = parseAndValidateDialogue(llm.content, { topic });
     if (!result.ok) {
       return failWith(result.error, 422);
     }
-
-    // Replace any prior segments, then insert the fresh dialogue.
-    await service.from("podcast_segments").delete().eq("podcast_id", id);
 
     const rows = result.segments.map((seg, i) => ({
       podcast_id: id,
@@ -92,12 +89,26 @@ export async function POST(
       status: "pending" as const,
     }));
 
+    // Safe regeneration: snapshot the existing dialogue so a failed insert never
+    // destroys a previously-good script. (No multi-statement transaction over the
+    // REST client — we compensate by restoring the snapshot on failure.)
+    const { data: previousSegments } = await service
+      .from("podcast_segments")
+      .select("*")
+      .eq("podcast_id", id);
+
+    await service.from("podcast_segments").delete().eq("podcast_id", id);
+
     const { data: inserted, error: insertErr } = await service
       .from("podcast_segments")
       .insert(rows)
       .select();
     if (insertErr) {
-      return failWith("Failed to save the generated dialogue.", 500);
+      // Restore the prior dialogue so regeneration is non-destructive on failure.
+      if (previousSegments && previousSegments.length > 0) {
+        await service.from("podcast_segments").insert(previousSegments);
+      }
+      return failWith("Failed to save the generated dialogue. Your previous script was kept.", 500);
     }
 
     await service.from("podcasts").update({ status: "ready", error_message: null }).eq("id", id);
