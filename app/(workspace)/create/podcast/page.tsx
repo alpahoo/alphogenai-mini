@@ -3,9 +3,9 @@
 // T-1131f — Podcast Video guided entry (V1).
 // A simple, guided "topic -> dialogue -> voices -> render -> MP4" flow that drives
 // the existing podcast backend (no new API, no migration, no Modal change).
-// V1 scope: Generate-script only (no upload), read-only dialogue (no segment
-// edit), two_shot layout only, no lip-sync. T-1132b adds a Voice Lab: host/guest
-// voice pickers + per-voice preview (cached) wired to PATCH /speakers + /voice-preview.
+// V1 scope: Generate-script only (no upload), editable dialogue lines,
+// two_shot layout only, no lip-sync. T-1132b adds a Voice Lab: host/guest voice
+// pickers + per-voice preview (cached) wired to PATCH /speakers + /voice-preview.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -102,6 +102,7 @@ export default function CreatePodcastPage() {
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [savingSegmentId, setSavingSegmentId] = useState<string | null>(null);
+  const [voicingSegmentId, setVoicingSegmentId] = useState<string | null>(null);
 
   const hostSpeaker = useMemo(() => speakers.find((s) => s.role === "host"), [speakers]);
   const guestSpeaker = useMemo(() => speakers.find((s) => s.role === "guest"), [speakers]);
@@ -112,6 +113,7 @@ export default function CreatePodcastPage() {
   const hasDialogue = segments.length > 0;
   const allReady = hasDialogue && segments.every((s) => s.status === "ready" && s.audio_url);
   const anyAudio = segments.some((s) => s.audio_url);
+  const pendingVoiceCount = segments.filter((s) => s.status !== "ready" || !s.audio_url).length;
   const rendering = podcast?.render_status === "rendering" || phase === "rendering";
   const currentStep = !hasDialogue ? 1 : !anyAudio ? 2 : podcast?.video_url ? 4 : 3;
 
@@ -276,6 +278,35 @@ export default function CreatePodcastPage() {
     }
   }
 
+  async function generateSegmentVoice(seg: Segment) {
+    if (!podcast) return;
+    setError(null);
+    setVoicingSegmentId(seg.id);
+    try {
+      const headers = await authHeaders();
+      if (!headers) { setError("Please sign in again."); return; }
+      const res = await fetch(`/api/podcasts/${podcast.id}/tts`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ preview: seg.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Could not generate this line.");
+      const updated = Array.isArray(json.segments) ? json.segments[0] : null;
+      if (updated) {
+        setSegments((prev) => prev.map((s) => (s.id === seg.id ? { ...s, ...updated } : s)));
+      }
+      if (json.ready > 0) {
+        setPodcast((p) => (p ? { ...p, video_url: null, render_status: "idle", render_error: null } : p));
+      }
+      if (json.failed > 0) setError("This line could not be voiced. Try again or edit it.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not generate this line.");
+    } finally {
+      setVoicingSegmentId(null);
+    }
+  }
+
   // ── preview a single segment's audio ──────────────────────────────────
   function togglePlay(seg: Segment) {
     if (!seg.audio_url) return;
@@ -324,6 +355,10 @@ export default function CreatePodcastPage() {
       const json = await res.json();
       if (!res.ok || !json.segment) throw new Error(json?.error || "Could not save this line.");
       setSegments((prev) => prev.map((s) => (s.id === seg.id ? { ...s, ...json.segment } : s)));
+      if (playing === seg.id && audioRef.current) {
+        audioRef.current.pause();
+        setPlaying(null);
+      }
       setPodcast((p) => (p ? { ...p, video_url: null, render_status: "idle", render_error: null } : p));
       cancelEditSegment();
     } catch (e) {
@@ -554,13 +589,15 @@ export default function CreatePodcastPage() {
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-bold text-neutral-900">Dialogue</h2>
             {anyAudio ? (
-              <button onClick={() => generateVoices(true)} disabled={phase === "voicing"}
+              <button onClick={() => generateVoices(pendingVoiceCount === 0)} disabled={phase === "voicing" || Boolean(voicingSegmentId)}
                 className="inline-flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-semibold text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-60">
                 {phase === "voicing" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />}
-                Regenerate voices
+                {pendingVoiceCount > 0
+                  ? `Generate ${pendingVoiceCount} pending voice${pendingVoiceCount === 1 ? "" : "s"}`
+                  : "Regenerate all voices"}
               </button>
             ) : (
-              <button onClick={() => generateVoices(false)} disabled={phase === "voicing"}
+              <button onClick={() => generateVoices(false)} disabled={phase === "voicing" || Boolean(voicingSegmentId)}
                 className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60">
                 {phase === "voicing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
                 {phase === "voicing" ? "Generating voices…" : "Generate voices"}
@@ -603,6 +640,13 @@ export default function CreatePodcastPage() {
               </p>
             )}
           </div>
+
+          {pendingVoiceCount > 0 && (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {pendingVoiceCount} line{pendingVoiceCount === 1 ? "" : "s"} need voice generation before render.
+              Use the line button or generate all pending voices.
+            </div>
+          )}
 
           <div className="space-y-2.5">
             {segments.map((seg) => {
@@ -658,6 +702,23 @@ export default function CreatePodcastPage() {
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      onClick={() => generateSegmentVoice(seg)}
+                      title={seg.audio_url ? "Regenerate this line voice" : "Generate this line voice"}
+                      disabled={
+                        phase === "voicing" ||
+                        Boolean(voicingSegmentId) ||
+                        editingSegmentId === seg.id ||
+                        savingSegmentId === seg.id
+                      }
+                      className={`rounded-full border p-2 transition disabled:opacity-50 ${
+                        seg.status !== "ready" || !seg.audio_url
+                          ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                          : "border-neutral-200 text-neutral-500 hover:bg-neutral-50"
+                      }`}
+                    >
+                      {voicingSegmentId === seg.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
+                    </button>
                     {seg.audio_url && (
                       <button onClick={() => togglePlay(seg)} title="Preview"
                         className="rounded-full border border-neutral-200 p-2 text-neutral-600 transition hover:bg-neutral-50">

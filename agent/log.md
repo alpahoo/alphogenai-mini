@@ -12,6 +12,15 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-23 - Codex - T-1133b Podcast targeted voice regeneration
+- Fait : ajout de la generation/régénération ciblée d'une ligne de dialogue dans `/create/podcast`.
+  L'UI utilise la route TTS existante avec `{ preview: segment_id }` pour produire une seule voix, ajoute un bouton
+  micro par ligne, affiche le nombre de lignes `pending`, et le bouton global génère désormais seulement les voix
+  manquantes tant qu'il en reste. La régénération complète reste disponible seulement quand toutes les lignes sont déjà prêtes.
+- Fichiers : `app/(workspace)/create/podcast/page.tsx`, `agent/tasks.md`, `agent/log.md`.
+- Tests : TTS route ciblée 19/19 verts ; build OK ; tsc clean (relancé après build pour éviter le faux négatif `.next/types`).
+- Prochaine etape : T-1133c (ajout/suppression/réordonnancement de segments) ou QA prod ciblée selon priorité.
+
 ## 2026-06-23 - Codex - T-1133a Podcast manual line edit
 - Fait : ajout de l'edition inline d'une ligne de dialogue podcast. Nouvelle route PATCH /api/podcasts/[id]/segments/[segmentId]
   avec auth/ownership, validation texte 1..600, no-op si texte inchange, reset render AVANT mutation, puis segment repasse
