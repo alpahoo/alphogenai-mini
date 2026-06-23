@@ -49,6 +49,21 @@ describe("buildPodcastDialoguePrompt", () => {
     expect(p).toContain("STYLE: balanced debate");
     expect(p).toContain("SOURCE URL: https://example.com/article");
   });
+
+  it("sets a Jogg-like podcast quality bar instead of a flat Q&A prompt", () => {
+    const p = buildPodcastDialoguePrompt({
+      topic: "How creators automate AI videos",
+      language: "en-US",
+      targetDurationSeconds: 60,
+      style: "expert",
+    });
+    expect(p).toContain("QUALITY BAR:");
+    expect(p).toContain("sharp hook or framing question");
+    expect(p).toContain("guest must have a distinct role");
+    expect(p).toContain("mini arc: hook -> tension/question -> explanation -> concrete implication -> final takeaway");
+    expect(p).toContain("Do not invent specific brands, statistics, dates, product claims, or source facts");
+    expect(p).toContain("Avoid robotic Q&A");
+  });
 });
 
 describe("parsePodcastDialogueResponse", () => {

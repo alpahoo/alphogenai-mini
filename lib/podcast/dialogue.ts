@@ -52,16 +52,26 @@ export function buildPodcastDialoguePrompt(opts: {
   const sourceUrl = (opts.sourceUrl || "").trim();
 
   const durationGuidance = targetDurationSeconds
-    ? `TARGET DURATION: about ${targetDurationSeconds} seconds. Use ${targetDurationSeconds <= 60 ? "6-8 concise" : "8-10 richer"} turns and keep the total spoken script close to that length.`
+    ? `TARGET DURATION: about ${targetDurationSeconds} seconds. Use ${targetDurationSeconds <= 60 ? "6-8 concise" : "8-10 richer"} turns. Short videos need punchy lines; longer videos need denser insight, not filler.`
     : `TARGET DURATION: short-form default. Use 6-8 concise turns.`;
 
   const styleGuidance: Record<string, string> = {
-    casual: "STYLE: casual podcast. Warm, direct, lightly conversational, no hype.",
-    news: "STYLE: news briefing. Clear context, what changed, why it matters, concise evidence.",
-    expert: "STYLE: expert analysis. Practical insight, tradeoffs, concrete examples, confident tone.",
-    debate: "STYLE: balanced debate. Let host and guest challenge each other politely before converging.",
-    documentary: "STYLE: documentary explainer. More narrative, scene-setting, and reflective transitions.",
+    casual: "STYLE: casual podcast. Warm, direct, lightly conversational, no hype; make it sound like two smart creators talking.",
+    news: "STYLE: news briefing. Clear context, what changed, why it matters, concise evidence, no sensationalism.",
+    expert: "STYLE: expert analysis. Practical insight, tradeoffs, concrete examples, confident but not salesy.",
+    debate: "STYLE: balanced debate. The guest challenges assumptions, the host pushes for clarity, then they converge on a useful takeaway.",
+    documentary: "STYLE: documentary explainer. Narrative opening, scene-setting, concrete progression, reflective ending.",
   };
+
+  const qualityGuidance = [
+    "QUALITY BAR:",
+    "- The first host line must be a sharp hook or framing question, never a generic welcome.",
+    "- The guest must have a distinct role: skeptical, practical, or explanatory; not just agreeing with the host.",
+    "- Include concrete mechanisms, examples, or tradeoffs from the topic. Avoid vague filler such as 'this is interesting' unless followed by a specific point.",
+    "- Do not invent specific brands, statistics, dates, product claims, or source facts that were not provided by the topic/source URL. If source details are unavailable, keep examples generic.",
+    "- Build a mini arc: hook -> tension/question -> explanation -> concrete implication -> final takeaway.",
+    "- The final turn must leave the viewer with a clear takeaway or next question, not a bland goodbye.",
+  ];
 
   return [
     `Write a short, natural two-person podcast dialogue about the following topic.`,
@@ -73,10 +83,13 @@ export function buildPodcastDialoguePrompt(opts: {
     durationGuidance,
     styleGuidance[style] || styleGuidance.casual,
     ``,
+    ...qualityGuidance,
+    ``,
     `Rules:`,
     `- Produce between ${MIN_SEGMENTS} and ${MAX_SEGMENTS} dialogue turns.`,
     `- Alternate between the host and the guest; both must speak multiple times.`,
     `- Each turn is one or two short spoken sentences (conversational, not an essay).`,
+    `- Avoid robotic Q&A. Let the second speaker add tension, examples, or correction.`,
     `- Keep each turn under ${SEGMENT_MAX_CHARS} characters.`,
     `- Brands, products, companies and models that are part of the topic are fine to discuss naturally.`,
     `- Do NOT name AlphoGen's internal providers or infrastructure unless the topic explicitly asks about them.`,

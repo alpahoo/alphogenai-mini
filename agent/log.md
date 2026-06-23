@@ -11,6 +11,11 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-06-23 - Codex - T-1134b Podcast Dialogue Quality Pass
+- Fait : renforcement du prompt de génération dialogue podcast pour viser le parcours Jogg-like validé : hook fort, rôle host/guest distinct, tension utile, exemples/tradeoffs concrets, arc narratif court, final takeaway, interdiction d'inventer marques/stats/faits source non fournis, anti Q&A robotique.
+- Fichiers modifiés : `lib/podcast/dialogue.ts`, `lib/podcast/__tests__/dialogue.test.ts`, `agent/tasks.md`, `agent/log.md`.
+- Tests : ciblés dialogue+script 31/31 ; suite podcast 121/121 ; build OK ; tsc clean.
+- Prochaine étape : T-1134c Voice Lab UX Upgrade ou T-1134d Render Visual Upgrade.
 ## 2026-06-23 - Codex - T-1134a Podcast Video Jogg-like quality contract
 - Fait : ajout d'une spec docs-only pour recadrer le prochain cycle Podcast autour de la vraie cible produit : un parcours Podcast Video guidé façon Jogg (workflow clair, choix visuel du format, voix testables, dialogue éditable, rendu final crédible), sans clone visuel ni faux bouton.
 - Fichiers modifiés : `docs/product/podcast-video-jogg-quality-pass-spec.md`, `agent/tasks.md`, `agent/log.md`.
