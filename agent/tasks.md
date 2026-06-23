@@ -1031,7 +1031,9 @@ Contraintes :
   section **Voices** (sélecteurs Host/Guest, label produit + tag provider discret « hybride », preview audio réel,
   garde same-voice). Loudness : **per-segment ffmpeg loudnorm** dans `render_podcast` (fix « Adam trop fort /
   Rachel trop bas ») — patch localisé, Modal redéployé. 93 tests podcast verts ; py_compile OK ; build OK ;
-  tsc clean. Google/Gemini TTS différé (catalogue prêt). QA prod e2e à suivre.
+  tsc clean. Google/Gemini TTS différé (catalogue prêt). **QA prod e2e OK** : section Voices rendue,
+  `POST /voice-preview` 200 (audio réel), `PATCH /speakers` 200 (changement host persisté), garde same-voice
+  (erreur inline, pas de persist). Loudnorm déployé (non re-rendu e2e cette session — flag ffmpeg localisé).
 - T-1132a livré (Podcast setup controls, UI + prompt contract) — `app/(workspace)/create/podcast/page.tsx`,
   `app/api/podcasts/[id]/script/route.ts`, `lib/podcast/dialogue.ts`, `lib/podcast/podcast.ts` + tests.
   Ajout d'un vrai setup avant génération : durée cible (30s/60s/2min/5min), style (casual/news/expert/debate/
