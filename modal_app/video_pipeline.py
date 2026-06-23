@@ -2188,22 +2188,38 @@ def _podcast_probe_duration(path: str) -> float:
         return 0.0
 
 
-def _podcast_avatar(name: str, color, size: int = 200):
-    """Generate a placeholder avatar (circle + initial). No external fetch (V1)."""
+def _podcast_mix(a, b, t: float):
+    return tuple(int(a[i] * (1 - t) + b[i] * t) for i in range(3))
+
+
+def _podcast_avatar(name: str, color, size: int = 220):
+    """Generate a polished placeholder presenter. No external fetch (V1)."""
     from PIL import Image, ImageDraw, ImageFont
-    img = Image.new("RGB", (size, size), (18, 22, 32))
+    img = Image.new("RGB", (size, size), (13, 17, 27))
     d = ImageDraw.Draw(img)
-    dark = tuple(int(c * 0.35) for c in color)
-    d.ellipse([8, 8, size - 8, size - 8], fill=dark, outline=color, width=6)
+
+    center = size // 2
+    for r in range(size // 2, 8, -6):
+        t = r / (size / 2)
+        fill = _podcast_mix(color, (15, 20, 32), min(0.78, t))
+        d.ellipse([center - r, center - r, center + r, center + r], fill=fill)
+    d.ellipse([8, 8, size - 8, size - 8], outline=_podcast_mix(color, (255, 255, 255), 0.18), width=5)
+    d.ellipse([18, 18, size - 18, size - 18], outline=_podcast_mix(color, (255, 255, 255), 0.04), width=2)
+
+    skin = _podcast_mix(color, (245, 247, 250), 0.58)
+    shadow = _podcast_mix(color, (8, 11, 18), 0.35)
+    d.ellipse([size * 0.34, size * 0.25, size * 0.66, size * 0.57], fill=skin, outline=shadow, width=3)
+    d.rounded_rectangle([size * 0.25, size * 0.56, size * 0.75, size * 0.88], radius=int(size * 0.16), fill=_podcast_mix(color, (20, 24, 34), 0.30))
+    d.arc([size * 0.18, size * 0.42, size * 0.82, size * 0.95], 202, 338, fill=_podcast_mix(color, (245, 247, 250), 0.30), width=6)
+
     initial = (name.strip()[:1] or "?").upper()
     try:
-        f = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(size * 0.42))
+        f = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(size * 0.24))
     except Exception:
         f = ImageFont.load_default()
     bb = d.textbbox((0, 0), initial, font=f)
-    d.text(((size - (bb[2] - bb[0])) / 2, (size - (bb[3] - bb[1])) / 2 - bb[1]), initial, font=f, fill=(240, 244, 250))
+    d.text(((size - (bb[2] - bb[0])) / 2, size * 0.56), initial, font=f, fill=(247, 250, 255))
     return img
-
 
 @app.function(image=overlay_image, secrets=[secrets], timeout=600, retries=0)
 def render_podcast(podcast_id: str) -> str:
@@ -2309,14 +2325,18 @@ def render_podcast(podcast_id: str) -> str:
             cursor = end + PODCAST_GAP_MS / 1000.0
         total = max(cursor, 1.0)
 
-        # 4) Avatars + fonts.
+        # 4) Studio-style visuals + fonts.
         host_av = _podcast_avatar(host.get("name", "Host"), _PODCAST_COLORS["host"])
         guest_av = _podcast_avatar(guest.get("name", "Guest"), _PODCAST_COLORS["guest"])
-        host_dim = Image.eval(host_av, lambda v: int(v * 0.55))
-        guest_dim = Image.eval(guest_av, lambda v: int(v * 0.55))
+        host_dim = Image.eval(host_av, lambda v: int(v * 0.54))
+        guest_dim = Image.eval(guest_av, lambda v: int(v * 0.54))
         fb = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-        f_name = ImageFont.truetype(fb, 26)
-        f_cap = ImageFont.truetype(fb, 32)
+        fr = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        f_name = ImageFont.truetype(fb, 26 if W >= 1000 else 22)
+        f_role = ImageFont.truetype(fb, 18 if W >= 1000 else 16)
+        f_title = ImageFont.truetype(fb, 24 if W >= 1000 else 20)
+        f_cap = ImageFont.truetype(fb, 30 if W >= 1000 else 26)
+        f_small = ImageFont.truetype(fr, 17 if W >= 1000 else 15)
 
         def wrap(draw, text, font, maxw, maxlines=3):
             words, lines, cur = text.split(), [], ""
@@ -2325,22 +2345,62 @@ def render_podcast(podcast_id: str) -> str:
                 if draw.textlength(t, font=font) <= maxw:
                     cur = t
                 else:
-                    lines.append(cur); cur = w_
+                    if cur:
+                        lines.append(cur)
+                    cur = w_
                     if len(lines) >= maxlines:
                         break
             if cur and len(lines) < maxlines:
                 lines.append(cur)
             return lines
 
-        panel_w, panel_h, gap_px = int(W * 0.42), int(H * 0.52), 40
+        def draw_text_box(draw, xy, text, font, fill, pad_x=14, pad_y=8, bg=(18, 22, 32), radius=14):
+            x, y = xy
+            bb = draw.textbbox((0, 0), text, font=font)
+            w_txt, h_txt = bb[2] - bb[0], bb[3] - bb[1]
+            draw.rounded_rectangle([x, y, x + w_txt + pad_x * 2, y + h_txt + pad_y * 2], radius=radius, fill=bg)
+            draw.text((x + pad_x, y + pad_y - bb[1]), text, font=font, fill=fill)
+            return x + w_txt + pad_x * 2
+
+        def draw_waveform(draw, x, y, width, color, active=True):
+            bars = 18
+            step = width / bars
+            for i in range(bars):
+                amp = (0.35 + 0.55 * abs(((i * 7) % 11) - 5) / 5) if active else 0.22
+                h_bar = int(10 + amp * 34)
+                bx = int(x + i * step)
+                draw.rounded_rectangle([bx, y - h_bar // 2, bx + 5, y + h_bar // 2], radius=3,
+                                       fill=color if active else (74, 82, 100))
+
+        def draw_background(draw):
+            top = (248, 250, 255) if W >= 1000 else (245, 248, 253)
+            bottom = (224, 231, 243)
+            for yy in range(H):
+                t_ = yy / max(1, H - 1)
+                draw.line([(0, yy), (W, yy)], fill=_podcast_mix(top, bottom, t_))
+            draw.ellipse([-W * 0.18, H * 0.08, W * 0.34, H * 0.72], fill=(226, 244, 243))
+            draw.ellipse([W * 0.66, H * 0.02, W * 1.18, H * 0.72], fill=(235, 229, 255))
+            draw.rounded_rectangle([W * 0.12, H * 0.72, W * 0.88, H * 0.90], radius=36, fill=(222, 228, 239))
+            draw.rounded_rectangle([W * 0.14, H * 0.74, W * 0.86, H * 0.88], radius=30, fill=(240, 243, 249))
+
+        landscape = W >= H
+        panel_w = int(W * (0.34 if landscape else 0.39))
+        panel_h = int(H * (0.48 if landscape else 0.36))
+        gap_px = int(W * 0.045)
         x0 = (W - (panel_w * 2 + gap_px)) // 2
-        y0 = int(H * 0.16)
+        y0 = int(H * (0.19 if landscape else 0.17))
+        avatar_size = min(host_av.width, int(panel_h * 0.48))
 
         def render_frame(t):
-            img = Image.new("RGB", (W, H), (12, 14, 20))
+            img = Image.new("RGB", (W, H), (248, 250, 255))
             d = ImageDraw.Draw(img)
+            draw_background(d)
             active = next((s for (st, en, s) in timeline if st <= t < en), timeline[-1][2])
             active_role = spk_by_id.get(active["speaker_id"], {}).get("role", "host")
+            podcast_title = (podcast.get("title") or "Podcast Video").strip()[:54]
+            title_w = d.textlength(podcast_title, font=f_title)
+            d.text(((W - title_w) / 2, int(H * 0.055)), podcast_title, font=f_title, fill=(18, 24, 34))
+
             for idx, (sp, av, av_dim, role) in enumerate([
                 (host, host_av, host_dim, "host"), (guest, guest_av, guest_dim, "guest"),
             ]):
@@ -2348,29 +2408,48 @@ def render_podcast(podcast_id: str) -> str:
                 is_active = role == active_role
                 px = x0 + idx * (panel_w + gap_px)
                 box = [px, y0, px + panel_w, y0 + panel_h]
-                if is_active:
-                    d.rounded_rectangle([box[0] - 6, box[1] - 6, box[2] + 6, box[3] + 6], radius=24, outline=col, width=6)
-                    d.rounded_rectangle(box, radius=20, fill=(26, 31, 44))
-                else:
-                    d.rounded_rectangle(box, radius=20, fill=(20, 23, 32))
-                avi = (av if is_active else av_dim)
-                img.paste(avi, (px + (panel_w - avi.width) // 2, y0 + 40))
-                nm = sp.get("name", role.title())
-                lt_w = d.textlength(nm, font=f_name) + 36
-                d.rounded_rectangle([px + 22, y0 + panel_h - 50, px + 22 + lt_w, y0 + panel_h - 12],
-                                    radius=16, fill=col if is_active else (40, 46, 60))
-                d.text((px + 40, y0 + panel_h - 46), nm, font=f_name,
-                       fill=(8, 12, 18) if is_active else (170, 178, 195))
-            acol = _PODCAST_COLORS[active_role]
-            cy = H - int(H * 0.16)
-            for ln in wrap(d, active["text"], f_cap, W - 240):
-                tw = d.textlength(ln, font=f_cap)
-                d.text(((W - tw) / 2, cy), ln, font=f_cap, fill=(238, 242, 248))
-                cy += 38
-            d.ellipse([60, H - int(H * 0.16) + 4, 84, H - int(H * 0.16) + 28], fill=acol)
-            d.rectangle([0, H - 6, int(W * min(1.0, t / total)), H], fill=acol)
-            return img
+                shadow = [box[0] + 8, box[1] + 10, box[2] + 8, box[3] + 10]
+                d.rounded_rectangle(shadow, radius=30, fill=(203, 211, 225))
+                d.rounded_rectangle(box, radius=30, fill=(255, 255, 255) if is_active else (235, 239, 247))
+                d.rounded_rectangle(box, radius=30, outline=col if is_active else (218, 224, 235), width=5 if is_active else 2)
 
+                header_y = y0 + 20
+                role_label = "HOST" if role == "host" else "GUEST"
+                draw_text_box(d, (px + 22, header_y), role_label, f_role,
+                              (8, 14, 24) if is_active else (112, 122, 138),
+                              bg=col if is_active else (224, 229, 239), radius=12)
+                nm = (sp.get("name") or role.title()).strip()[:24]
+                d.text((px + 22, header_y + 44), nm, font=f_name,
+                       fill=(18, 24, 34) if is_active else (94, 105, 123))
+
+                avi = (av if is_active else av_dim).resize((avatar_size, avatar_size))
+                img.paste(avi, (px + (panel_w - avatar_size) // 2, y0 + int(panel_h * 0.22)))
+                draw_waveform(d, px + 32, y0 + panel_h - 54, panel_w - 64, col, active=is_active)
+                if is_active:
+                    d.ellipse([px + panel_w - 48, y0 + 26, px + panel_w - 26, y0 + 48], fill=col)
+
+            acol = _PODCAST_COLORS[active_role]
+            caption_lines = wrap(d, active["text"], f_cap, W - int(W * 0.22), maxlines=3)
+            line_h = 38 if W >= 1000 else 34
+            cap_w = max([d.textlength(ln, font=f_cap) for ln in caption_lines] or [0]) + 58
+            cap_h = len(caption_lines) * line_h + 34
+            cap_x = (W - cap_w) / 2
+            cap_y = H - int(H * 0.21)
+            d.rounded_rectangle([cap_x, cap_y, cap_x + cap_w, cap_y + cap_h], radius=24, fill=(18, 24, 34))
+            d.rounded_rectangle([cap_x, cap_y, cap_x + 8, cap_y + cap_h], radius=4, fill=acol)
+            cy = cap_y + 18
+            for ln in caption_lines:
+                tw = d.textlength(ln, font=f_cap)
+                d.text(((W - tw) / 2, cy), ln, font=f_cap, fill=(247, 250, 255))
+                cy += line_h
+
+            elapsed = min(1.0, max(0.0, t / total))
+            bar_x, bar_y, bar_w = int(W * 0.16), H - 34, int(W * 0.68)
+            d.rounded_rectangle([bar_x, bar_y, bar_x + bar_w, bar_y + 8], radius=4, fill=(207, 216, 229))
+            d.rounded_rectangle([bar_x, bar_y, bar_x + int(bar_w * elapsed), bar_y + 8], radius=4, fill=acol)
+            d.ellipse([bar_x + int(bar_w * elapsed) - 7, bar_y - 4, bar_x + int(bar_w * elapsed) + 7, bar_y + 12], fill=acol)
+            d.text((bar_x, bar_y - 28), "AlphoGen Podcast", font=f_small, fill=(88, 99, 116))
+            return img
         # 5) Pipe frames → ffmpeg with the dialogue track → MP4.
         out_path = os.path.join(workdir, "output.mp4")
         proc = subprocess.Popen(

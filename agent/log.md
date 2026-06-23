@@ -11,6 +11,12 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-06-23 - Codex - T-1134d Podcast Render Visual Upgrade
+- Fait : upgrade visuel localise du render podcast Modal : scene studio claire, cartes speakers plus premium, speaker actif mieux signale, avatars placeholder plus humains, waveform, captions deterministes en cartouche lisible et progression. Pipeline audio/timings/loudnorm/R2 inchange.
+- Fichiers modifies : `modal_app/video_pipeline.py`, `agent/tasks.md`, `agent/log.md`.
+- Tests : syntaxe Python (compile sans pyc) OK ; suite podcast 121/121 ; build OK ; tsc clean (apres build, relance seul pour eviter le faux negatif `.next/types`).
+- Prochaine etape : deployer Modal puis QA e2e render sur un podcast court pour comparer le rendu final.
+
 ## 2026-06-23 - Codex - T-1134b Podcast Dialogue Quality Pass
 - Fait : renforcement du prompt de génération dialogue podcast pour viser le parcours Jogg-like validé : hook fort, rôle host/guest distinct, tension utile, exemples/tradeoffs concrets, arc narratif court, final takeaway, interdiction d'inventer marques/stats/faits source non fournis, anti Q&A robotique.
 - Fichiers modifiés : `lib/podcast/dialogue.ts`, `lib/podcast/__tests__/dialogue.test.ts`, `agent/tasks.md`, `agent/log.md`.

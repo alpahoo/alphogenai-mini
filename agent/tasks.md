@@ -1025,6 +1025,7 @@ Contraintes :
 - Priorité recommandée : **T-1134b Dialogue Quality Pass** → T-1134c Voice Lab UX Upgrade → T-1134d Render Visual Upgrade → T-1134e Upload Script/Audio → T-1134f Provider Lab.
 - Non-goals : ne pas cloner Jogg, ne pas fake upload script/audio, ne pas promettre lip-sync, ne pas utiliser Google AI Pro consumer hors API officielle, ne pas casser Story/Avatar/Product/URL/Research.
 - T-1134b livré — **Dialogue Quality Pass**. lib/podcast/dialogue.ts impose désormais une vraie barre qualité podcast : hook non générique, rôle distinct du guest, arc hook→tension→explication→implication→takeaway, interdiction d'inventer marques/stats/faits source non fournis, anti Q&A robotique. Tests de contrat ajoutés.
+- T-1134d livre - **Render Visual Upgrade V1.1**. `render_podcast` conserve le pipeline CPU/two-shot/audio existant mais remplace le rendu initial tres brut par une scene podcast plus credible : fond studio clair, cartes speakers, speaker actif, avatars placeholder plus humains, waveform, captions dans un cartouche lisible et barre de progression. Aucun changement DB/API/UI/TTS.
 ### [T-1132] Podcast UX quality — `status: in_progress` · `owner: codex`
 - T-1133c livré (claude) — **add / delete / reorder lignes de dialogue**, podcast-only, **pas de migration**.
   Routes : `POST /api/podcasts/[id]/segments` (add en fin, `order_index=max+1`, pending/no-audio, cap **max 10**),
