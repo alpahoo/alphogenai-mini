@@ -2195,7 +2195,7 @@ def _podcast_mix(a, b, t: float):
 def _podcast_avatar(name: str, color, size: int = 220):
     """Generate a polished placeholder presenter. No external fetch (V1)."""
     from PIL import Image, ImageDraw, ImageFont
-    img = Image.new("RGB", (size, size), (13, 17, 27))
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
 
     center = size // 2
@@ -2328,8 +2328,17 @@ def render_podcast(podcast_id: str) -> str:
         # 4) Studio-style visuals + fonts.
         host_av = _podcast_avatar(host.get("name", "Host"), _PODCAST_COLORS["host"])
         guest_av = _podcast_avatar(guest.get("name", "Guest"), _PODCAST_COLORS["guest"])
-        host_dim = Image.eval(host_av, lambda v: int(v * 0.54))
-        guest_dim = Image.eval(guest_av, lambda v: int(v * 0.54))
+        def dim_avatar(av):
+            r, g, b, a = av.split()
+            return Image.merge("RGBA", (
+                Image.eval(r, lambda v: int(v * 0.54)),
+                Image.eval(g, lambda v: int(v * 0.54)),
+                Image.eval(b, lambda v: int(v * 0.54)),
+                a,
+            ))
+
+        host_dim = dim_avatar(host_av)
+        guest_dim = dim_avatar(guest_av)
         fb = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
         fr = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
         f_name = ImageFont.truetype(fb, 26 if W >= 1000 else 22)
@@ -2423,7 +2432,7 @@ def render_podcast(podcast_id: str) -> str:
                        fill=(18, 24, 34) if is_active else (94, 105, 123))
 
                 avi = (av if is_active else av_dim).resize((avatar_size, avatar_size))
-                img.paste(avi, (px + (panel_w - avatar_size) // 2, y0 + int(panel_h * 0.22)))
+                img.paste(avi, (px + (panel_w - avatar_size) // 2, y0 + int(panel_h * 0.22)), avi)
                 draw_waveform(d, px + 32, y0 + panel_h - 54, panel_w - 64, col, active=is_active)
                 if is_active:
                     d.ellipse([px + panel_w - 48, y0 + 26, px + panel_w - 26, y0 + 48], fill=col)
@@ -2434,7 +2443,7 @@ def render_podcast(podcast_id: str) -> str:
             cap_w = max([d.textlength(ln, font=f_cap) for ln in caption_lines] or [0]) + 58
             cap_h = len(caption_lines) * line_h + 34
             cap_x = (W - cap_w) / 2
-            cap_y = H - int(H * 0.21)
+            cap_y = H - 76 - cap_h
             d.rounded_rectangle([cap_x, cap_y, cap_x + cap_w, cap_y + cap_h], radius=24, fill=(18, 24, 34))
             d.rounded_rectangle([cap_x, cap_y, cap_x + 8, cap_y + cap_h], radius=4, fill=acol)
             cy = cap_y + 18
