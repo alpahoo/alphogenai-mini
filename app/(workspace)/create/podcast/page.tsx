@@ -13,6 +13,7 @@ import { motion } from "framer-motion";
 import {
   AlertTriangle, ArrowLeft, CheckCircle2, Loader2, Mic, Pause, Play,
   Podcast, Sparkles, Film, FileText, Clapperboard, Clock, Globe2, Link2, Upload,
+  Pencil, Save, X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { PODCAST_VOICES, DEFAULT_HOST_VOICE, DEFAULT_GUEST_VOICE, getPodcastVoice } from "@/lib/podcast/voice-catalog";
@@ -96,6 +97,11 @@ export default function CreatePodcastPage() {
   const [previewing, setPreviewing] = useState<string | null>(null); // voice id loading/playing
   const [savingVoice, setSavingVoice] = useState(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Dialogue editing (T-1133a)
+  const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [savingSegmentId, setSavingSegmentId] = useState<string | null>(null);
 
   const hostSpeaker = useMemo(() => speakers.find((s) => s.role === "host"), [speakers]);
   const guestSpeaker = useMemo(() => speakers.find((s) => s.role === "guest"), [speakers]);
@@ -281,6 +287,50 @@ export default function CreatePodcastPage() {
     a.onended = () => setPlaying(null);
     a.onerror = () => setPlaying(null);
     a.play().catch(() => setPlaying(null));
+  }
+
+  function startEditSegment(seg: Segment) {
+    setEditingSegmentId(seg.id);
+    setEditingText(seg.text);
+    setError(null);
+  }
+
+  function cancelEditSegment() {
+    setEditingSegmentId(null);
+    setEditingText("");
+  }
+
+  async function saveSegmentEdit(seg: Segment) {
+    if (!podcast) return;
+    const text = editingText.trim().replace(/\s+/g, " ");
+    if (!text || text.length > 600) {
+      setError("Dialogue line must be 1..600 characters.");
+      return;
+    }
+    if (text === seg.text) {
+      cancelEditSegment();
+      return;
+    }
+    setSavingSegmentId(seg.id);
+    setError(null);
+    try {
+      const headers = await authHeaders();
+      if (!headers) { setError("Please sign in again."); return; }
+      const res = await fetch(`/api/podcasts/${podcast.id}/segments/${seg.id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ text }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.segment) throw new Error(json?.error || "Could not save this line.");
+      setSegments((prev) => prev.map((s) => (s.id === seg.id ? { ...s, ...json.segment } : s)));
+      setPodcast((p) => (p ? { ...p, video_url: null, render_status: "idle", render_error: null } : p));
+      cancelEditSegment();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save this line.");
+    } finally {
+      setSavingSegmentId(null);
+    }
   }
 
   // ── Step 3: render + poll ─────────────────────────────────────────────
@@ -498,7 +548,7 @@ export default function CreatePodcastPage() {
         </div>
       )}
 
-      {/* Dialogue (read-only) */}
+      {/* Dialogue */}
       {hasDialogue && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-6">
           <div className="mb-3 flex items-center justify-between">
@@ -569,14 +619,60 @@ export default function CreatePodcastPage() {
                       <span className="text-xs font-bold uppercase tracking-wide" style={{ color }}>{sp?.name ?? role}</span>
                       <SegmentBadge status={seg.status} />
                     </div>
-                    <p className="mt-0.5 text-sm leading-relaxed text-neutral-800">{seg.text}</p>
+                    {editingSegmentId === seg.id ? (
+                      <div className="mt-2">
+                        <textarea
+                          value={editingText}
+                          onChange={(e) => setEditingText(e.target.value)}
+                          rows={3}
+                          maxLength={600}
+                          className="w-full resize-none rounded-lg border border-amber-200 bg-amber-50/40 p-2.5 text-sm leading-relaxed text-neutral-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                        />
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-neutral-400">
+                            Saving this line clears its generated audio and any final video.
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={cancelEditSegment}
+                              disabled={savingSegmentId === seg.id}
+                              className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs font-semibold text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-60"
+                            >
+                              <X className="h-3.5 w-3.5" /> Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => saveSegmentEdit(seg)}
+                              disabled={savingSegmentId === seg.id}
+                              className="inline-flex items-center gap-1 rounded-lg bg-neutral-900 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-60"
+                            >
+                              {savingSegmentId === seg.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-0.5 text-sm leading-relaxed text-neutral-800">{seg.text}</p>
+                    )}
                   </div>
-                  {seg.audio_url && (
-                    <button onClick={() => togglePlay(seg)} title="Preview"
-                      className="shrink-0 rounded-full border border-neutral-200 p-2 text-neutral-600 transition hover:bg-neutral-50">
-                      {playing === seg.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                  <div className="flex shrink-0 items-center gap-1">
+                    {seg.audio_url && (
+                      <button onClick={() => togglePlay(seg)} title="Preview"
+                        className="rounded-full border border-neutral-200 p-2 text-neutral-600 transition hover:bg-neutral-50">
+                        {playing === seg.id ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => startEditSegment(seg)}
+                      title="Edit line"
+                      disabled={editingSegmentId === seg.id || savingSegmentId === seg.id}
+                      className="rounded-full border border-neutral-200 p-2 text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-50"
+                    >
+                      <Pencil className="h-4 w-4" />
                     </button>
-                  )}
+                  </div>
                 </div>
               );
             })}

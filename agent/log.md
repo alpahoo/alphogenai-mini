@@ -12,6 +12,15 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-23 - Codex - T-1133a Podcast manual line edit
+- Fait : ajout de l'edition inline d'une ligne de dialogue podcast. Nouvelle route PATCH /api/podcasts/[id]/segments/[segmentId]
+  avec auth/ownership, validation texte 1..600, no-op si texte inchange, reset render AVANT mutation, puis segment repasse
+  en pending avec audio/timings clears. UI /create/podcast : bouton Edit, textarea, Save/Cancel, message indiquant qu'il faut
+  regenerer la voix de la ligne corrigee.
+- Fichiers : `app/api/podcasts/[id]/segments/[segmentId]/route.ts`, test associe,
+  `app/(workspace)/create/podcast/page.tsx`, `agent/*`.
+- Tests : cibles podcast 25/25 verts ; build OK ; tsc clean.
+- Prochaine etape : T-1133b (regenerate one line / add-delete-reorder selon priorite produit).
 ## 2026-06-23 — Claude — T-1132b loudnorm render confirmation (QA e2e)
 - Render complet de confirmation sur podcast court `f654aa99` (host voice = nova persisté via Voice Lab,
   guest = adam par défaut → 2 voix distinctes, 2 providers). DB vérifiée : podcast_speakers.voice_id host=nova,

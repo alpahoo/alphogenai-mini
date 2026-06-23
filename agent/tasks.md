@@ -1043,6 +1043,14 @@ Contraintes :
   nouveau backend, aucune migration, podcast-only. Tests ciblés 30/30 verts ; build OK ; tsc clean.
   Prochaine étape recommandée : T-1132b Voice Lab (choix/preview de voix, normalisation volume).
 
+### [T-1133] Podcast editing — `status: in_progress` · `owner: codex`
+- T-1133a livré (manual line edit) — nouvelle route `PATCH /api/podcasts/[id]/segments/[segmentId]` +
+  UI inline dans `/create/podcast`. L'utilisateur peut corriger une ligne du dialogue sans régénérer tout le script.
+  La sauvegarde valide ownership + texte 1..600, ne fait rien si le texte est inchangé, et sinon clear le render
+  **avant** de muter le segment puis remet seulement cette ligne en `pending` (`audio_url/start_ms/end_ms=null`).
+  Ainsi un ancien MP4 ne peut pas rester associé à un dialogue corrigé ; l'utilisateur régénère ensuite les voix.
+  Tests ciblés 25/25 verts ; build OK ; tsc clean. Pas de migration, podcast-only.
+
 ### [T-1131] Podcast Video backend — `status: done` · `owner: claude`
 - T-1131f-hardening-fix3 livré (review Codex, P2 cleanup) — supprimé l'appel **dupliqué** à `invalidateRender()`
   resté après la boucle d'update en full mode (`tts/route.ts`) : une seule invalidation (avant la boucle),
