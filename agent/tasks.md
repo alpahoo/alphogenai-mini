@@ -1020,6 +1020,11 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1134] Podcast Video Jogg-like quality pass — `status: in_progress` · `owner: codex`
+- T-1134e (claude) — review render polish (commits Codex c507e89/85af728) : OK, aucun P1/P2, scope clean. Tous
+  les points visuels remplis (fond studio, cartes speakers, actif/inactif, captions hiérarchisées, branding
+  AlphoGen Podcast, avatars RGBA sans carré noir, `_podcast_avatar` swappable). py_compile/121 tests/build/tsc OK.
+  **Modal redéployé** ; QA prod re-render (1d492d13) → MP4 premium vérifié (frame 8s). Pas de personnages réels/
+  lip-sync promis. **Long-form 10 min = ticket séparé** (plus de segments, TTS async/chunked, render timeout long).
 - T-1134a livré (docs-only) — **`docs/product/podcast-video-jogg-quality-pass-spec.md`**.
   Objectif produit clarifié : le Podcast V1 prouve le backend, mais la cible reste un parcours **Podcast Video façon Jogg** : choix visuel du format, source simple, voix testables avant génération, dialogue éditable, rendu vidéo crédible.
 - Priorité recommandée : **T-1134b Dialogue Quality Pass** → T-1134c Voice Lab UX Upgrade → T-1134d Render Visual Upgrade → T-1134e Upload Script/Audio → T-1134f Provider Lab.

@@ -11,6 +11,22 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-06-23 — Claude — T-1134e Podcast render polish review + deploy + QA
+- Review des 4 commits Codex (9bcfcd0 spec Jogg ; 3a882ce prompt dialogue qualité+anti-hallucination ;
+  c507e89 + 85af728 upgrade visuels render_podcast). Verdict : OK, aucun P1/P2 ; scope respecté (podcast-only,
+  pas de migration/API/UI/TTS contract change). render_podcast remplit tous les points T-1134e : fond studio
+  clair (dégradé + blobs), cartes speakers élevées avec ombre, état actif/inactif net (bordure+chip+point
+  live+waveform vive vs grisé), caption box hiérarchisée avec accent couleur, branding « AlphoGen Podcast » +
+  progress bar, avatars RGBA (plus de carrés noirs) via `_podcast_avatar()` (swappable persona plus tard).
+- Vérifs : py_compile OK ; 121 tests podcast verts ; build OK ; tsc clean.
+- **Modal redéployé** (alphogenai-v2). QA prod : re-render du podcast 1d492d13 via `modal run` → MP4 35,63s
+  1280×720 h264+aac (bitrate 213 vs 190) ; frame 8s confirme le nouveau visuel studio premium, Host actif vs
+  Guest grisé, captions lisibles, branding présent.
+- Aucun code modifié par Claude (review + deploy + QA only).
+- NOTE long-form : passer à **10 min** nécessite un ticket séparé (plus de segments > cap 10, TTS async/chunked
+  pour éviter le timeout serverless, render Modal timeout plus long, pagination/streaming audio). À ne pas
+  bundler dans la polish visuelle.
+
 ## 2026-06-23 - Codex - T-1134d Podcast Render Visual Upgrade
 - Fait : upgrade visuel localise du render podcast Modal : scene studio claire, cartes speakers plus premium, speaker actif mieux signale, avatars placeholder plus humains, waveform, captions deterministes en cartouche lisible et progression. Pipeline audio/timings/loudnorm/R2 inchange.
 - Fichiers modifies : `modal_app/video_pipeline.py`, `agent/tasks.md`, `agent/log.md`.
