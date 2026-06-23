@@ -11,6 +11,11 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-06-23 - Codex - T-1134a Podcast Video Jogg-like quality contract
+- Fait : ajout d'une spec docs-only pour recadrer le prochain cycle Podcast autour de la vraie cible produit : un parcours Podcast Video guidé façon Jogg (workflow clair, choix visuel du format, voix testables, dialogue éditable, rendu final crédible), sans clone visuel ni faux bouton.
+- Fichiers modifiés : `docs/product/podcast-video-jogg-quality-pass-spec.md`, `agent/tasks.md`, `agent/log.md`.
+- Tests : non exécutés (docs-only, aucun runtime).
+- Prochaine étape : T-1134b Dialogue Quality Pass, puis Voice Lab UX et Render Visual Upgrade.
 ## 2026-06-23 — Claude — T-1133c QA prod ciblée (add/delete/reorder)
 - QA e2e prod (podcast 1d492d13) sur le code poussé (ea43dfd). Flux : dialogue 7 tours → voix → render (MP4) →
   Add line (Host, en bas) → Move up (ligne ajoutée) → Delete (ligne avec audio, confirm) → Regenerate pending

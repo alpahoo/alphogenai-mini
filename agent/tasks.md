@@ -1019,6 +1019,11 @@ Contraintes :
 - Reste V1+ : polish thumbnails, éventuelle édition du rôle de référence,
   e2e visuel authentifié après déploiement.
 
+### [T-1134] Podcast Video Jogg-like quality pass — `status: in_progress` · `owner: codex`
+- T-1134a livré (docs-only) — **`docs/product/podcast-video-jogg-quality-pass-spec.md`**.
+  Objectif produit clarifié : le Podcast V1 prouve le backend, mais la cible reste un parcours **Podcast Video façon Jogg** : choix visuel du format, source simple, voix testables avant génération, dialogue éditable, rendu vidéo crédible.
+- Priorité recommandée : **T-1134b Dialogue Quality Pass** → T-1134c Voice Lab UX Upgrade → T-1134d Render Visual Upgrade → T-1134e Upload Script/Audio → T-1134f Provider Lab.
+- Non-goals : ne pas cloner Jogg, ne pas fake upload script/audio, ne pas promettre lip-sync, ne pas utiliser Google AI Pro consumer hors API officielle, ne pas casser Story/Avatar/Product/URL/Research.
 ### [T-1132] Podcast UX quality — `status: in_progress` · `owner: codex`
 - T-1133c livré (claude) — **add / delete / reorder lignes de dialogue**, podcast-only, **pas de migration**.
   Routes : `POST /api/podcasts/[id]/segments` (add en fin, `order_index=max+1`, pending/no-audio, cap **max 10**),
