@@ -12,6 +12,21 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-23 — Claude — T-1133a/b review + QA prod ciblée
+- Review diff `ace4402` (edit segment) + `f41f3cb` (regenerate lines) : OK, aucun P1/P2. Route
+  `PATCH /segments/[segmentId]` correcte (clear render AVANT mutation, no-op si texte inchangé, 404 ownership,
+  audio_url/start_ms/end_ms→null + status pending). UI : bouton global `force = pendingVoiceCount===0`
+  (force seulement si tout ready → « Regenerate all », sinon « Generate N pending voices »), mic/ligne via
+  `tts {preview:segId}`, ligne éditée stoppe la lecture + masque Preview. Pas de route/migration nouvelle, podcast-only.
+- Tests : ciblés segments+tts 25/25 ; suite podcast complète 99/99 ; build OK ; tsc clean. Couverture notable :
+  « 500 sans mutation segment si reset render échoue ».
+- QA prod e2e (podcast 79d0766e) : générer dialogue 8 tours → voix → render (MP4) → **éditer la ligne 0** →
+  DB : render_status=idle, video_url=null, seg0 pending/no-audio, **seg1..7 intacts** (ready+audio) ; UI : vidéo
+  disparue, Preview de la ligne masqué, bannière « 1 line needs voice ». Bouton global = « Generate 1 pending
+  voice » (pas force). **Mic régénère uniquement la ligne 0** → 8/8 ready, seg0_text = texte édité, render
+  toujours invalidé. Render final → done + nouveau video_url. Invariant « jamais nouveau texte/audio + ancien MP4 » respecté.
+- Aucun code modifié (review+QA). T-1133a/b validés.
+
 ## 2026-06-23 - Codex - T-1133b Podcast targeted voice regeneration
 - Fait : ajout de la generation/régénération ciblée d'une ligne de dialogue dans `/create/podcast`.
   L'UI utilise la route TTS existante avec `{ preview: segment_id }` pour produire une seule voix, ajoute un bouton
