@@ -11,6 +11,18 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-06-23 — Claude — T-1133c QA prod ciblée (add/delete/reorder)
+- QA e2e prod (podcast 1d492d13) sur le code poussé (ea43dfd). Flux : dialogue 7 tours → voix → render (MP4) →
+  Add line (Host, en bas) → Move up (ligne ajoutée) → Delete (ligne avec audio, confirm) → Regenerate pending
+  voice (mic) → render final.
+- Vérifs DB à chaque étape : Add → 7→8 segments, nouvelle ligne pending/no-audio à order=max+1, 6 audios intacts,
+  render_status=idle + video_url=null. Move up → ordre permuté, 8 order_index DISTINCTS (pas de collision), 7 audios
+  conservés. Delete → 8→7, autres audios intacts, render invalidé. Regen mic → 7/7 ready, 0 pending. Render final →
+  done + video_url ; MP4 valide 35,63s 1280×720 h264+aac (reflète la structure post-édition).
+- Invariants tenus : ancien MP4 invalidé AVANT chaque mutation ; audios existants jamais purgés ; UNIQUE order_index
+  jamais violée. Aucun P1/P2. Limite V1 reorder non-atomique (Option A) documentée, non rencontrée.
+- Aucun code modifié (QA only). Note tasks/log consolidée + commit doc `62fc63a`.
+
 ## 2026-06-23 - Codex - T-1133c Add/delete/reorder accepted for V1
 - Fait : reprise du travail non pousse de Claude sur T-1133c. Decision produit appliquee : Option A V1,
   sans migration/RPC. Le reorder reste REST multi-appels et non atomique, mais collision-free, non destructif,
