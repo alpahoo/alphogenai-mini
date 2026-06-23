@@ -12,6 +12,18 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-23 — Claude — T-1132a review + T-1132b Podcast Voice Lab
+- T-1132a (Codex) reviewé : OK, pas de P1/P2. durée/style/sourceUrl bien injectés dans le prompt, scope respecté.
+- T-1132b livré : Voice Lab. `lib/podcast/voice-catalog.ts` (catalogue 10 voix + metadata produit, prêt
+  multi-provider). Routes `PATCH /api/podcasts/[id]/speakers` (host/guest voice, host≠guest, valide catalogue)
+  et `POST /api/podcasts/[id]/voice-preview` (preview audio réel, cache R2 par voix, provider caché, 503 si TTS off).
+  UI section Voices (sélecteurs + preview, affichage hybride label produit + tag provider). Loudness : loudnorm
+  per-segment dans render_podcast (Modal redéployé). Pas de migration (voice_id déjà présent). Google/Gemini différé.
+- Fichiers : `lib/podcast/voice-catalog.ts`, `app/api/podcasts/[id]/speakers/route.ts(+test)`,
+  `app/api/podcasts/[id]/voice-preview/route.ts(+test)`, `lib/podcast/__tests__/voice-catalog.test.ts`,
+  `app/(workspace)/create/podcast/page.tsx`, `modal_app/video_pipeline.py`, `agent/*`.
+- Tests : 93 tests podcast verts (+16) ; py_compile OK ; build OK ; tsc clean ; Modal déployé. QA prod e2e à suivre.
+
 ## 2026-06-22 - Codex - T-1132a Podcast setup controls
 - Fait : ajout des controles reels avant generation podcast : duree cible, style, langue, URL source optionnelle,
   et microcopy separant le moteur de script LiteLLM des voix generees ensuite. La route script valide duree/style

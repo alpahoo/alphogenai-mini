@@ -2273,7 +2273,11 @@ def render_podcast(podcast_id: str) -> str:
                 resp.raise_for_status()
                 with open(mp3, "wb") as fh:
                     fh.write(resp.content)
-                subprocess.run(["ffmpeg", "-y", "-i", mp3, "-ar", "44100", "-ac", "1", wav],
+                # Per-segment loudness normalization (EBU R128) so speakers sit at a
+                # consistent level — fixes "one voice too loud / the other too quiet".
+                subprocess.run(["ffmpeg", "-y", "-i", mp3,
+                                "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+                                "-ar", "44100", "-ac", "1", wav],
                                capture_output=True, timeout=120)
                 seg_wavs.append(wav)
                 durations.append(_podcast_probe_duration(wav))

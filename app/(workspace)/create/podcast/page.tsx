@@ -4,7 +4,8 @@
 // A simple, guided "topic -> dialogue -> voices -> render -> MP4" flow that drives
 // the existing podcast backend (no new API, no migration, no Modal change).
 // V1 scope: Generate-script only (no upload), read-only dialogue (no segment
-// edit), default host/guest voices (no picker), two_shot layout only, no lip-sync.
+// edit), two_shot layout only, no lip-sync. T-1132b adds a Voice Lab: host/guest
+// voice pickers + per-voice preview (cached) wired to PATCH /speakers + /voice-preview.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -14,8 +15,9 @@ import {
   Podcast, Sparkles, Film, FileText, Clapperboard, Clock, Globe2, Link2, Upload,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { PODCAST_VOICES, DEFAULT_HOST_VOICE, DEFAULT_GUEST_VOICE, getPodcastVoice } from "@/lib/podcast/voice-catalog";
 
-type Speaker = { id: string; role: "host" | "guest"; name: string; position: number };
+type Speaker = { id: string; role: "host" | "guest"; name: string; position: number; voice_id?: string | null };
 type Segment = {
   id: string;
   speaker_id: string;
@@ -90,6 +92,16 @@ export default function CreatePodcastPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollStartRef = useRef<number>(0);
 
+  // Voice Lab (T-1132b)
+  const [previewing, setPreviewing] = useState<string | null>(null); // voice id loading/playing
+  const [savingVoice, setSavingVoice] = useState(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const hostSpeaker = useMemo(() => speakers.find((s) => s.role === "host"), [speakers]);
+  const guestSpeaker = useMemo(() => speakers.find((s) => s.role === "guest"), [speakers]);
+  const hostVoice = hostSpeaker?.voice_id || DEFAULT_HOST_VOICE;
+  const guestVoice = guestSpeaker?.voice_id || DEFAULT_GUEST_VOICE;
+
   const speakerById = useMemo(() => Object.fromEntries(speakers.map((s) => [s.id, s])), [speakers]);
   const hasDialogue = segments.length > 0;
   const allReady = hasDialogue && segments.every((s) => s.status === "ready" && s.audio_url);
@@ -109,6 +121,7 @@ export default function CreatePodcastPage() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
       if (audioRef.current) audioRef.current.pause();
+      if (previewAudioRef.current) previewAudioRef.current.pause();
     };
   }, []);
 
@@ -166,6 +179,64 @@ export default function CreatePodcastPage() {
       setError(e instanceof Error ? e.message : "Could not write the dialogue.");
     } finally {
       setPhase("idle");
+    }
+  }
+
+  // ── Voice Lab (T-1132b): choose + preview host/guest voices ───────────
+  async function setSpeakerVoice(role: "host" | "guest", voiceId: string) {
+    if (!podcast) return;
+    // Guard same voice for both speakers (the backend rejects it too).
+    const other = role === "host" ? guestVoice : hostVoice;
+    if (voiceId === other) {
+      setError("Host and guest must use different voices.");
+      return;
+    }
+    setError(null);
+    setSavingVoice(true);
+    try {
+      const headers = await authHeaders();
+      if (!headers) { setError("Please sign in again."); return; }
+      const body = role === "host" ? { host_voice_id: voiceId } : { guest_voice_id: voiceId };
+      const res = await fetch(`/api/podcasts/${podcast.id}/speakers`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Could not save the voice.");
+      if (json.speakers) setSpeakers(json.speakers);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save the voice.");
+    } finally {
+      setSavingVoice(false);
+    }
+  }
+
+  async function previewVoice(voiceId: string) {
+    if (!podcast) return;
+    // Toggle off if the same preview is playing.
+    if (previewAudioRef.current) { previewAudioRef.current.pause(); previewAudioRef.current = null; }
+    if (previewing === voiceId) { setPreviewing(null); return; }
+    setPreviewing(voiceId);
+    setError(null);
+    try {
+      const headers = await authHeaders();
+      if (!headers) { setError("Please sign in again."); setPreviewing(null); return; }
+      const res = await fetch(`/api/podcasts/${podcast.id}/voice-preview`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ voice_id: voiceId }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.audio_url) throw new Error(json?.error || "Could not preview this voice.");
+      const a = new Audio(json.audio_url);
+      previewAudioRef.current = a;
+      a.onended = () => setPreviewing(null);
+      a.onerror = () => setPreviewing(null);
+      await a.play().catch(() => setPreviewing(null));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not preview this voice.");
+      setPreviewing(null);
     }
   }
 
@@ -447,6 +518,42 @@ export default function CreatePodcastPage() {
             )}
           </div>
 
+          {/* ── Voice Lab (T-1132b): pick + preview host/guest voices ──── */}
+          <div className="mb-5 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+            <div className="mb-1 flex items-center gap-2">
+              <Mic className="h-4 w-4 text-amber-600" />
+              <h3 className="text-base font-bold text-neutral-900">Voices</h3>
+            </div>
+            <p className="mb-4 text-xs text-neutral-500">
+              Pick a distinct voice for each speaker and preview it before generating the full audio.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <VoicePicker
+                role="host"
+                value={hostVoice}
+                otherValue={guestVoice}
+                disabled={savingVoice}
+                previewing={previewing}
+                onChange={(v) => setSpeakerVoice("host", v)}
+                onPreview={previewVoice}
+              />
+              <VoicePicker
+                role="guest"
+                value={guestVoice}
+                otherValue={hostVoice}
+                disabled={savingVoice}
+                previewing={previewing}
+                onChange={(v) => setSpeakerVoice("guest", v)}
+                onPreview={previewVoice}
+              />
+            </div>
+            {anyAudio && (
+              <p className="mt-3 text-xs text-neutral-400">
+                Changed a voice? Click “Regenerate voices” to apply it to the audio.
+              </p>
+            )}
+          </div>
+
           <div className="space-y-2.5">
             {segments.map((seg) => {
               const sp = speakerById[seg.speaker_id];
@@ -512,6 +619,58 @@ export default function CreatePodcastPage() {
           </div>
         </motion.div>
       )}
+    </div>
+  );
+}
+
+function VoicePicker({
+  role, value, otherValue, disabled, previewing, onChange, onPreview,
+}: {
+  role: "host" | "guest";
+  value: string;
+  otherValue: string;
+  disabled: boolean;
+  previewing: string | null;
+  onChange: (voiceId: string) => void;
+  onPreview: (voiceId: string) => void;
+}) {
+  const color = ROLE_COLOR[role];
+  const current = getPodcastVoice(value);
+  const isPreviewing = previewing === value;
+  return (
+    <div className="rounded-xl border border-neutral-200 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-bold uppercase tracking-wide" style={{ color }}>{role}</span>
+        {current && (
+          <span className="flex items-center gap-1.5 text-[11px] text-neutral-500">
+            <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-semibold text-neutral-700">{current.label}</span>
+            <span className="text-neutral-400">· {current.provider}</span>
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        <select
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+          className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-2.5 py-2 text-sm text-neutral-800 disabled:opacity-60"
+        >
+          {PODCAST_VOICES.map((v) => (
+            <option key={v.id} value={v.id} disabled={v.id === otherValue}>
+              {v.label} · {v.tone} ({v.gender}){v.id === otherValue ? " — in use" : ""}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => onPreview(value)}
+          title="Preview voice"
+          className="shrink-0 rounded-lg border border-neutral-200 p-2 text-neutral-600 transition hover:bg-neutral-50"
+        >
+          {isPreviewing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+        </button>
+      </div>
+      {current && <p className="mt-1.5 text-[11px] text-neutral-400">{current.useCase}</p>}
     </div>
   );
 }

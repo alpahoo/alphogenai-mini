@@ -1020,6 +1020,18 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1132] Podcast UX quality — `status: in_progress` · `owner: codex`
+- T-1132a review (claude) : OK, aucun P1/P2 — durée/style/sourceUrl réellement utilisés dans le prompt,
+  scope respecté (podcast-only, pas de migration/route, autres flows intacts). Note : durations [30,60,120,300]
+  (pas de 10min — choix conservateur cohérent avec le cap 6–10 tours).
+- T-1132b livré (claude) — **Podcast Voice Lab**. `lib/podcast/voice-catalog.ts` (10 voix curées ElevenLabs+OpenAI,
+  metadata produit id/label/provider/gender/tone/language/useCase, défauts host=rachel/guest=adam, prêt multi-provider).
+  Nouvelles routes (pas de migration, colonne voice_id existante) : `PATCH /api/podcasts/[id]/speakers`
+  (sauve host/guest voice, valide ∈ catalogue, **host≠guest**), `POST /api/podcasts/[id]/voice-preview`
+  (synth phrase type, **cache R2 par voix**, provider jamais exposé, 503 si TTS off). UI `/create/podcast` :
+  section **Voices** (sélecteurs Host/Guest, label produit + tag provider discret « hybride », preview audio réel,
+  garde same-voice). Loudness : **per-segment ffmpeg loudnorm** dans `render_podcast` (fix « Adam trop fort /
+  Rachel trop bas ») — patch localisé, Modal redéployé. 93 tests podcast verts ; py_compile OK ; build OK ;
+  tsc clean. Google/Gemini TTS différé (catalogue prêt). QA prod e2e à suivre.
 - T-1132a livré (Podcast setup controls, UI + prompt contract) — `app/(workspace)/create/podcast/page.tsx`,
   `app/api/podcasts/[id]/script/route.ts`, `lib/podcast/dialogue.ts`, `lib/podcast/podcast.ts` + tests.
   Ajout d'un vrai setup avant génération : durée cible (30s/60s/2min/5min), style (casual/news/expert/debate/
