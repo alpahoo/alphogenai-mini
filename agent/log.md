@@ -12,6 +12,17 @@ Entrée la plus récente en haut. Format :
 
 ---
 
+## 2026-06-23 — Claude — T-1132b loudnorm render confirmation (QA e2e)
+- Render complet de confirmation sur podcast court `f654aa99` (host voice = nova persisté via Voice Lab,
+  guest = adam par défaut → 2 voix distinctes, 2 providers). DB vérifiée : podcast_speakers.voice_id host=nova,
+  8/8 segments audio_url ready, render_status passé rendering→done, video_url posée ; timings réécrits par
+  ffprobe (durées réelles variables + gaps 300ms, total ~57,5s).
+- MP4 final : valide (57,88s, 1280×720, h264+aac), two-shot OK, speaker actif/captions/lower-thirds corrects
+  (frame 8s : Guest actif) — aucune régression render.
+- Loudness (volumedetect) : fenêtre host (nova) mean −18,4 dB vs guest (adam) mean −16,1 dB → ~2,3 dB d'écart
+  (sans loudnorm, ElevenLabs vs OpenAI divergent de 6–10 dB). loudnorm per-segment confirmé efficace.
+- Aucun code modifié (QA only). MP4/frames en tmp/ (gitignored).
+
 ## 2026-06-23 — Claude — T-1132a review + T-1132b Podcast Voice Lab
 - T-1132a (Codex) reviewé : OK, pas de P1/P2. durée/style/sourceUrl bien injectés dans le prompt, scope respecté.
 - T-1132b livré : Voice Lab. `lib/podcast/voice-catalog.ts` (catalogue 10 voix + metadata produit, prêt
