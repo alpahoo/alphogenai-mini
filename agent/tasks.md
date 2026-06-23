@@ -1020,6 +1020,18 @@ Contraintes :
   e2e visuel authentifié après déploiement.
 
 ### [T-1132] Podcast UX quality — `status: in_progress` · `owner: codex`
+- T-1133c livré (claude) — **add / delete / reorder lignes de dialogue**, podcast-only, **pas de migration**.
+  Routes : `POST /api/podcasts/[id]/segments` (add en fin, `order_index=max+1`, pending/no-audio, cap **max 10**),
+  `DELETE /api/podcasts/[id]/segments/[segmentId]` (garde **min 2**, n'efface pas les autres audios),
+  `PATCH /api/podcasts/[id]/segments/reorder` (`{ordered_ids}` = permutation exacte validée). Toutes : auth +
+  ownership 404 + **reset render AVANT mutation** (échec reset → 500 sans mutation). UI : ↑/↓ (disabled aux bornes),
+  Delete (disabled si 2 lignes, **confirm si audio/MP4 existe**), « + Add line » Host/Guest. add→pending+mic ;
+  delete/reorder → vidéo invalidée, audios conservés. 120 tests podcast verts ; build OK ; tsc clean.
+  **⚠️ Limite V1 acceptée (Option A) — reorder non-atomique** : reindex en 2N requêtes REST (phase 1 négatifs
+  `-(1e6+i)`, phase 2 positions finales), collision-free mais **non transactionnel**. Crash/timeout entre phases →
+  ordre transitoirement mélangé (négatifs en tête), **sans perte de donnée, sans violation unique, audios intacts,
+  render déjà invalidé** ; **auto-réparable par un nouveau reorder**. Probabilité faible (N≤10). Durcissement
+  Option B (RPC transactionnel = 1 migration fonction) **différé** — à faire seulement si problème réel observé (V1.1).
 - T-1132a review (claude) : OK, aucun P1/P2 — durée/style/sourceUrl réellement utilisés dans le prompt,
   scope respecté (podcast-only, pas de migration/route, autres flows intacts). Note : durations [30,60,120,300]
   (pas de 10min — choix conservateur cohérent avec le cap 6–10 tours).
@@ -1055,12 +1067,7 @@ Contraintes :
   après une correction, il génère seulement les lignes `pending` au lieu de forcer toutes les voix ; un bouton micro
   par ligne permet aussi de générer précisément la ligne corrigée. Pas de nouvelle route, pas de migration.
   Test TTS ciblé 19/19 vert ; build OK ; tsc clean.
-- T-1133c prêt à pousser (add/delete/reorder segments, Option A V1) — ajoute `POST /segments` (append-only),
-  `DELETE /segments/[segmentId]`, `PATCH /segments/reorder`, et l'UI `/create/podcast` (+ Add line, delete,
-  move up/down). Pas de migration : les trous `order_index` sont tolérés et les audios restent attachés au contenu.
-  Limite V1 documentée : le reorder REST est multi-appels et non atomique ; il reste collision-free, ne perd pas
-  de données, invalide le render avant mutation, et l'état partiel éventuel est auto-réparable par un nouveau reorder.
-  RPC transactionnelle différée en V1.1 seulement si besoin réel.
+  (T-1133c poussé ensuite par Codex `ea43dfd` ; entrée consolidée en tête de section avec la limite V1 reorder.)
 
 ### [T-1131] Podcast Video backend — `status: done` · `owner: claude`
 - T-1131f-hardening-fix3 livré (review Codex, P2 cleanup) — supprimé l'appel **dupliqué** à `invalidateRender()`
