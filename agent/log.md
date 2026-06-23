@@ -11,6 +11,14 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-06-23 - Codex - T-1133c Add/delete/reorder accepted for V1
+- Fait : reprise du travail non pousse de Claude sur T-1133c. Decision produit appliquee : Option A V1,
+  sans migration/RPC. Le reorder reste REST multi-appels et non atomique, mais collision-free, non destructif,
+  avec render invalide avant mutation ; un etat partiel eventuel reste auto-reparable par un nouveau reorder.
+  L'option RPC transactionnelle est differee en V1.1 si un probleme reel apparait.
+- Fichiers : `app/api/podcasts/[id]/segments/*`, `app/(workspace)/create/podcast/page.tsx`, `agent/*`.
+- Tests : routes segments/reorder 27/27 ; suite podcast 120/120 ; build OK ; tsc clean.
+- Prochaine etape : QA prod ciblee add/delete/move/render apres deploy.
 
 ## 2026-06-23 — Claude — T-1133a/b review + QA prod ciblée
 - Review diff `ace4402` (edit segment) + `f41f3cb` (regenerate lines) : OK, aucun P1/P2. Route

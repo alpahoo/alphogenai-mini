@@ -91,3 +91,65 @@ export async function PATCH(
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
+const MIN_SEGMENTS = 2;
+
+/**
+ * DELETE /api/podcasts/[id]/segments/[segmentId]
+ * Remove one dialogue line (min 2 lines kept). Invalidates the rendered MP4
+ * BEFORE deleting. Other lines keep their audio; order_index gaps are fine
+ * (everything reads ORDER BY order_index).
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; segmentId: string }> },
+) {
+  try {
+    const user = await getUserFromRequest(request);
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { id, segmentId } = await params;
+    const service = createServiceClient();
+
+    const { data: podcast } = await service.from("podcasts").select("id, user_id").eq("id", id).single();
+    if (!podcast || podcast.user_id !== user.id) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const { data: segments } = await service
+      .from("podcast_segments")
+      .select("id")
+      .eq("podcast_id", id);
+    if (!segments?.some((s) => s.id === segmentId)) {
+      return NextResponse.json({ error: "Segment not found" }, { status: 404 });
+    }
+    if (segments.length <= MIN_SEGMENTS) {
+      return NextResponse.json({ error: `A podcast must keep at least ${MIN_SEGMENTS} lines` }, { status: 400 });
+    }
+
+    // Invalidate the stale render BEFORE deleting.
+    const { error: resetErr } = await service
+      .from("podcasts")
+      .update({ video_url: null, render_status: "idle", render_error: null })
+      .eq("id", id);
+    if (resetErr) {
+      console.error(`[podcast/segments] reset render failed for ${id}:`, resetErr);
+      return NextResponse.json({ error: "Could not clear the stale video. The line was kept." }, { status: 500 });
+    }
+
+    const { error: delErr } = await service
+      .from("podcast_segments")
+      .delete()
+      .eq("id", segmentId)
+      .eq("podcast_id", id);
+    if (delErr) {
+      console.error(`[podcast/segments] delete failed for ${segmentId}:`, delErr);
+      return NextResponse.json({ error: "Could not delete the line." }, { status: 500 });
+    }
+
+    return NextResponse.json({ deleted: segmentId });
+  } catch (err) {
+    console.error("DELETE /api/podcasts/[id]/segments/[segmentId]:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}

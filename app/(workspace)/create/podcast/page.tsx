@@ -13,7 +13,7 @@ import { motion } from "framer-motion";
 import {
   AlertTriangle, ArrowLeft, CheckCircle2, Loader2, Mic, Pause, Play,
   Podcast, Sparkles, Film, FileText, Clapperboard, Clock, Globe2, Link2, Upload,
-  Pencil, Save, X,
+  Pencil, Save, X, ChevronUp, ChevronDown, Trash2, Plus,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { PODCAST_VOICES, DEFAULT_HOST_VOICE, DEFAULT_GUEST_VOICE, getPodcastVoice } from "@/lib/podcast/voice-catalog";
@@ -101,6 +101,11 @@ export default function CreatePodcastPage() {
   // Dialogue editing (T-1133a)
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
+  // T-1133c: add / delete / reorder
+  const [addRole, setAddRole] = useState<"host" | "guest">("host");
+  const [addText, setAddText] = useState("");
+  const [addingLine, setAddingLine] = useState(false);
+  const [structuring, setStructuring] = useState(false); // delete/move in progress
   const [savingSegmentId, setSavingSegmentId] = useState<string | null>(null);
   const [voicingSegmentId, setVoicingSegmentId] = useState<string | null>(null);
 
@@ -365,6 +370,87 @@ export default function CreatePodcastPage() {
       setError(e instanceof Error ? e.message : "Could not save this line.");
     } finally {
       setSavingSegmentId(null);
+    }
+  }
+
+  // ── T-1133c: add / delete / reorder lines ─────────────────────────────
+  const clearLocalVideo = () =>
+    setPodcast((p) => (p ? { ...p, video_url: null, render_status: "idle", render_error: null } : p));
+
+  async function addLine() {
+    if (!podcast || segments.length >= 10) return;
+    const text = addText.trim().replace(/\s+/g, " ");
+    if (!text) { setError("Write the new line first."); return; }
+    setAddingLine(true);
+    setError(null);
+    try {
+      const headers = await authHeaders();
+      if (!headers) { setError("Please sign in again."); return; }
+      const res = await fetch(`/api/podcasts/${podcast.id}/segments`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ speaker_role: addRole, text }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.segment) throw new Error(json?.error || "Could not add the line.");
+      setSegments((prev) => [...prev, json.segment]);
+      setAddText("");
+      clearLocalVideo();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add the line.");
+    } finally {
+      setAddingLine(false);
+    }
+  }
+
+  async function deleteLine(seg: Segment) {
+    if (!podcast || segments.length <= 2) return;
+    const needsConfirm = Boolean(seg.audio_url) || Boolean(podcast.video_url);
+    if (needsConfirm && !window.confirm("Delete this line? Its audio and the rendered video will be discarded.")) {
+      return;
+    }
+    setStructuring(true);
+    setError(null);
+    try {
+      const headers = await authHeaders();
+      if (!headers) { setError("Please sign in again."); return; }
+      const res = await fetch(`/api/podcasts/${podcast.id}/segments/${seg.id}`, { method: "DELETE", headers });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || "Could not delete the line.");
+      if (playing === seg.id && audioRef.current) { audioRef.current.pause(); setPlaying(null); }
+      setSegments((prev) => prev.filter((s) => s.id !== seg.id));
+      clearLocalVideo();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete the line.");
+    } finally {
+      setStructuring(false);
+    }
+  }
+
+  async function moveLine(index: number, dir: -1 | 1) {
+    if (!podcast) return;
+    const target = index + dir;
+    if (target < 0 || target >= segments.length) return;
+    const reordered = [...segments];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    setStructuring(true);
+    setError(null);
+    try {
+      const headers = await authHeaders();
+      if (!headers) { setError("Please sign in again."); return; }
+      const res = await fetch(`/api/podcasts/${podcast.id}/segments/reorder`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ ordered_ids: reordered.map((s) => s.id) }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.segments) throw new Error(json?.error || "Could not reorder the lines.");
+      setSegments(json.segments);
+      clearLocalVideo();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not reorder the lines.");
+    } finally {
+      setStructuring(false);
     }
   }
 
@@ -649,10 +735,11 @@ export default function CreatePodcastPage() {
           )}
 
           <div className="space-y-2.5">
-            {segments.map((seg) => {
+            {segments.map((seg, idx) => {
               const sp = speakerById[seg.speaker_id];
               const role = sp?.role ?? "host";
               const color = ROLE_COLOR[role];
+              const busyRow = structuring || phase === "voicing" || Boolean(voicingSegmentId) || editingSegmentId !== null;
               return (
                 <div key={seg.id} className="flex items-start gap-3 rounded-xl border border-neutral-200 bg-white p-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: color }}>
@@ -702,6 +789,24 @@ export default function CreatePodcastPage() {
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
+                    <div className="mr-1 flex flex-col">
+                      <button
+                        onClick={() => moveLine(idx, -1)}
+                        title="Move up"
+                        disabled={idx === 0 || busyRow}
+                        className="rounded p-0.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-30"
+                      >
+                        <ChevronUp className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => moveLine(idx, 1)}
+                        title="Move down"
+                        disabled={idx === segments.length - 1 || busyRow}
+                        className="rounded p-0.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-30"
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </button>
+                    </div>
                     <button
                       onClick={() => generateSegmentVoice(seg)}
                       title={seg.audio_url ? "Regenerate this line voice" : "Generate this line voice"}
@@ -733,10 +838,53 @@ export default function CreatePodcastPage() {
                     >
                       <Pencil className="h-4 w-4" />
                     </button>
+                    <button
+                      onClick={() => deleteLine(seg)}
+                      title={segments.length <= 2 ? "A podcast keeps at least 2 lines" : "Delete line"}
+                      disabled={segments.length <= 2 || busyRow || savingSegmentId === seg.id}
+                      className="rounded-full border border-neutral-200 p-2 text-neutral-500 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
               );
             })}
+          </div>
+
+          {/* + Add line (T-1133c) — appends a pending line at the end */}
+          <div className="mt-3 rounded-xl border border-dashed border-neutral-300 bg-neutral-50/60 p-3">
+            {segments.length >= 10 ? (
+              <p className="text-center text-xs text-neutral-400">Maximum of 10 lines reached.</p>
+            ) : (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+                <select
+                  value={addRole}
+                  onChange={(e) => setAddRole(e.target.value as "host" | "guest")}
+                  disabled={addingLine || structuring}
+                  className="rounded-lg border border-neutral-200 bg-white px-2.5 py-2 text-sm text-neutral-700"
+                >
+                  <option value="host">{hostSpeaker?.name ?? "Host"}</option>
+                  <option value="guest">{guestSpeaker?.name ?? "Guest"}</option>
+                </select>
+                <input
+                  value={addText}
+                  onChange={(e) => setAddText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !addingLine) addLine(); }}
+                  maxLength={600}
+                  placeholder="Add a new dialogue line…"
+                  className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                />
+                <button
+                  onClick={addLine}
+                  disabled={addingLine || structuring || !addText.trim()}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-neutral-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-60"
+                >
+                  {addingLine ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  Add line
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Render */}

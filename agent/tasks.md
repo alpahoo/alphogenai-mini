@@ -1055,6 +1055,12 @@ Contraintes :
   après une correction, il génère seulement les lignes `pending` au lieu de forcer toutes les voix ; un bouton micro
   par ligne permet aussi de générer précisément la ligne corrigée. Pas de nouvelle route, pas de migration.
   Test TTS ciblé 19/19 vert ; build OK ; tsc clean.
+- T-1133c prêt à pousser (add/delete/reorder segments, Option A V1) — ajoute `POST /segments` (append-only),
+  `DELETE /segments/[segmentId]`, `PATCH /segments/reorder`, et l'UI `/create/podcast` (+ Add line, delete,
+  move up/down). Pas de migration : les trous `order_index` sont tolérés et les audios restent attachés au contenu.
+  Limite V1 documentée : le reorder REST est multi-appels et non atomique ; il reste collision-free, ne perd pas
+  de données, invalide le render avant mutation, et l'état partiel éventuel est auto-réparable par un nouveau reorder.
+  RPC transactionnelle différée en V1.1 seulement si besoin réel.
 
 ### [T-1131] Podcast Video backend — `status: done` · `owner: claude`
 - T-1131f-hardening-fix3 livré (review Codex, P2 cleanup) — supprimé l'appel **dupliqué** à `invalidateRender()`
