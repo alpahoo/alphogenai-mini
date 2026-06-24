@@ -20,9 +20,13 @@ export const SEGMENT_MIN_CHARS = 1;
 export const SEGMENT_MAX_CHARS = 400; // DB cap is 600 — keep margin
 export const MAX_CONSECUTIVE_TURNS = 2; // reject host,host,host… runs
 
-// Rough spoken pace per turn (incl. the inter-segment gap). Used to scale the
-// number of dialogue turns to the user's target duration.
-const SECONDS_PER_TURN = 13;
+// Rough spoken pace per turn (incl. the inter-segment gap). Calibrated against
+// real TTS output: short turns run ~6s, so to fill long durations we (a) ask for
+// DENSER turns on long-form and (b) scale the turn count with this pace.
+const SECONDS_PER_TURN = 10;
+// At/above this target we ask for longer, denser turns (2–4 sentences) so the
+// spoken length actually reaches the requested duration.
+const LONGFORM_DENSE_SECONDS = 240;
 // Above this target we generate the dialogue in chunks (multiple LLM calls)
 // instead of one big call, to keep each response small and coherent.
 export const LONGFORM_TURN_THRESHOLD = 14;
@@ -145,7 +149,9 @@ export function buildPodcastDialoguePrompt(opts: {
     `Rules:`,
     `- Produce between ${turnBounds.min} and ${turnBounds.max} dialogue turns${cont ? " in THIS section" : ""}.`,
     `- Alternate between the host and the guest; both must speak multiple times.`,
-    `- Each turn is one or two short spoken sentences (conversational, not an essay).`,
+    (targetDurationSeconds && targetDurationSeconds >= LONGFORM_DENSE_SECONDS)
+      ? `- Each turn is two to four full spoken sentences (substantial, ~12-18 seconds of speech), still conversational.`
+      : `- Each turn is one or two short spoken sentences (conversational, not an essay).`,
     `- Avoid robotic Q&A. Let the second speaker add tension, examples, or correction.`,
     `- Keep each turn under ${SEGMENT_MAX_CHARS} characters.`,
     `- Brands, products, companies and models that are part of the topic are fine to discuss naturally.`,

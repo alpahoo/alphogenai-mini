@@ -96,6 +96,14 @@ describe("buildPodcastDialoguePrompt — long-form options", () => {
     expect(p).toContain("Produce between 8 and 12 dialogue turns");
   });
 
+  it("asks for short turns on short targets and denser turns on long-form", () => {
+    const short = buildPodcastDialoguePrompt({ topic: "x", targetDurationSeconds: 60 });
+    expect(short).toContain("one or two short spoken sentences");
+
+    const long = buildPodcastDialoguePrompt({ topic: "x", targetDurationSeconds: 600 });
+    expect(long).toContain("two to four full spoken sentences");
+  });
+
   it("renders a continuation block with the prior turns and next speaker", () => {
     const prior: DialogueSegment[] = [
       { speaker_role: "host", text: "Earlier point A." },

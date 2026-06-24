@@ -23,7 +23,15 @@ Entrée la plus récente en haut. Format :
 - Durée 600s ajoutée (podcast.ts + UI). Caps add/tts montés à 60.
 - Fichiers : `lib/podcast/{podcast,dialogue,dialogue-llm}.ts(+tests)`, `app/api/podcasts/[id]/{script,tts,segments}/route.ts(+tests)`,
   `app/(workspace)/create/podcast/page.tsx`, `modal_app/video_pipeline.py`, `agent/*`.
-- Tests : 130 podcast verts ; py_compile OK ; build OK ; tsc clean ; Modal redéployé. QA prod 10 min e2e à suivre.
+- Tests : 130 podcast verts ; py_compile OK ; build OK ; tsc clean ; Modal redéployé.
+- **QA prod e2e (réglage 10 min, podcast 349f0bbe)** : dialogue **46 tours chunké** OK ; TTS **batché 12+12+12+10**
+  → 46/46 ready 0 failed (boucle UI + progress OK) ; **render done**, MP4 4:12 1280×720, frame mid-vidéo correcte
+  (speaker actif/caption/progress/branding), **perf render OK** (~6k frames, pas de timeout). Pipeline long-form
+  fonctionnel bout-en-bout.
+- **Calibration durée** (fix appliqué) : 46 tours ne donnaient que ~4:12 car les tours réels font ~5,5s, pas les
+  13s/tour estimés. `SECONDS_PER_TURN` 13→**10** + prompt **long-form = tours denses (2-4 phrases, ~12-18s)** pour
+  les durées ≥240s → « 10 min » vise désormais ~55-60 tours denses ≈ ~9-11 min. 42 tests dialogue verts ; build OK ;
+  tsc clean. (lib-only, Vercel ; pas de changement Modal.) Re-QA durée à faire sur la prochaine génération 10 min.
 
 ## 2026-06-23 — Claude — T-1134e Podcast render polish review + deploy + QA
 - Review des 4 commits Codex (9bcfcd0 spec Jogg ; 3a882ce prompt dialogue qualité+anti-hallucination ;
