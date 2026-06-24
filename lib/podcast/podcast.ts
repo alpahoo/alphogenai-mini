@@ -8,7 +8,7 @@ export const SOURCE_MODES = ["generate", "upload"] as const;
 export const LAYOUTS = ["two_shot", "split_screen", "talk_show"] as const;
 export const ASPECT_RATIOS = ["16:9", "9:16"] as const;
 export const PODCAST_STATUSES = ["draft", "scripting", "ready", "failed"] as const;
-export const PODCAST_TARGET_DURATIONS = [30, 60, 120, 300] as const;
+export const PODCAST_TARGET_DURATIONS = [30, 60, 120, 300, 600] as const;
 export const PODCAST_STYLES = ["casual", "news", "expert", "debate", "documentary"] as const;
 
 export type SourceMode = (typeof SOURCE_MODES)[number];

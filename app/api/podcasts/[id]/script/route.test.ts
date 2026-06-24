@@ -1,12 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 import { createServiceClient } from "@/lib/supabase/service";
-import { callLLMForPodcastDialogue } from "@/lib/podcast/dialogue-llm";
+import { generatePodcastDialogue } from "@/lib/podcast/dialogue-llm";
 import { POST } from "./route";
 
 vi.mock("@/lib/podcast/auth", () => ({ getUserFromRequest: vi.fn() }));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: vi.fn() }));
-vi.mock("@/lib/podcast/dialogue-llm", () => ({ callLLMForPodcastDialogue: vi.fn() }));
+vi.mock("@/lib/podcast/dialogue-llm", () => ({ generatePodcastDialogue: vi.fn() }));
+
+const SIX_SEGMENTS = [
+  { speaker_role: "host", text: "Welcome." },
+  { speaker_role: "guest", text: "Thanks." },
+  { speaker_role: "host", text: "Question one." },
+  { speaker_role: "guest", text: "Answer one." },
+  { speaker_role: "host", text: "Question two." },
+  { speaker_role: "guest", text: "Answer two." },
+] as const;
+const okDialogue = () => ({ ok: true as const, segments: SIX_SEGMENTS.map((s) => ({ ...s })) });
 
 const USER = { id: "user-1" };
 
@@ -40,19 +50,6 @@ const SPEAKERS = [
   { id: "guest-id", name: "Guest", role: "guest" },
 ];
 
-function sixTurns(extra = "") {
-  return JSON.stringify({
-    segments: [
-      { speaker_role: "host", text: "Welcome." + extra },
-      { speaker_role: "guest", text: "Thanks." },
-      { speaker_role: "host", text: "Question one." },
-      { speaker_role: "guest", text: "Answer one." },
-      { speaker_role: "host", text: "Question two." },
-      { speaker_role: "guest", text: "Answer two." },
-    ],
-  });
-}
-
 beforeEach(() => vi.clearAllMocks());
 
 describe("POST /api/podcasts/[id]/script", () => {
@@ -63,7 +60,7 @@ describe("POST /api/podcasts/[id]/script", () => {
     );
     const res = await POST(req({ topic: "x topic" }), ctx("p1"));
     expect(res.status).toBe(404);
-    expect(callLLMForPodcastDialogue).not.toHaveBeenCalled();
+    expect(generatePodcastDialogue).not.toHaveBeenCalled();
   });
 
   it("400 when no topic is available", async () => {
@@ -88,7 +85,7 @@ describe("POST /api/podcasts/[id]/script", () => {
 
     const badStyle = await POST(req({ target_duration_seconds: 120, style: "salesy" }), ctx("p1"));
     expect(badStyle.status).toBe(400);
-    expect(callLLMForPodcastDialogue).not.toHaveBeenCalled();
+    expect(generatePodcastDialogue).not.toHaveBeenCalled();
   });
 
   it("marks the podcast failed when the LLM JSON is invalid", async () => {
@@ -101,7 +98,7 @@ describe("POST /api/podcasts/[id]/script", () => {
         "podcasts:update": (s) => { updates.push(s.payload); return { data: null, error: null }; },
       }) as never,
     );
-    vi.mocked(callLLMForPodcastDialogue).mockResolvedValue({ content: "not json", tokensUsed: null, modelUsed: "m" });
+    vi.mocked(generatePodcastDialogue).mockResolvedValue({ ok: false, error: "Could not parse the dialogue response." });
     const res = await POST(req({}), ctx("p1"));
     expect(res.status).toBe(422);
     const json = await res.json();
@@ -109,7 +106,7 @@ describe("POST /api/podcasts/[id]/script", () => {
     expect(updates).toContainEqual(expect.objectContaining({ status: "failed" }));
   });
 
-  it("502 + failed when the LLM call errors", async () => {
+  it("422 + failed when dialogue generation fails", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     vi.mocked(createServiceClient).mockReturnValue(
       makeService({
@@ -118,12 +115,12 @@ describe("POST /api/podcasts/[id]/script", () => {
         "podcasts:update": () => ({ data: null, error: null }),
       }) as never,
     );
-    vi.mocked(callLLMForPodcastDialogue).mockResolvedValue({ content: "", tokensUsed: null, modelUsed: null, error: "LLM provider error" });
+    vi.mocked(generatePodcastDialogue).mockResolvedValue({ ok: false, error: "LLM provider error" });
     const res = await POST(req({}), ctx("p1"));
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(422);
   });
 
-  it("inserts segments mapped to speaker ids, scrubs provider names, sets status ready", async () => {
+  it("inserts segments mapped to speaker ids and sets status ready", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     let inserted: Array<{ speaker_id: string; order_index: number; text: string; status: string }> = [];
     const updates: unknown[] = [];
@@ -136,8 +133,7 @@ describe("POST /api/podcasts/[id]/script", () => {
         "podcasts:update": (s) => { updates.push(s.payload); return { data: null, error: null }; },
       }) as never,
     );
-    // first host line leaks "HeyGen" — must be scrubbed before insert
-    vi.mocked(callLLMForPodcastDialogue).mockResolvedValue({ content: sixTurns(" We use HeyGen."), tokensUsed: 10, modelUsed: "m" });
+    vi.mocked(generatePodcastDialogue).mockResolvedValue(okDialogue());
 
     const res = await POST(req({}), ctx("p1"));
     expect(res.status).toBe(200);
@@ -147,8 +143,6 @@ describe("POST /api/podcasts/[id]/script", () => {
     expect(inserted).toHaveLength(6);
     expect(inserted[0]).toMatchObject({ speaker_id: "host-id", order_index: 0, status: "pending" });
     expect(inserted[1]).toMatchObject({ speaker_id: "guest-id", order_index: 1 });
-    // provider name scrubbed
-    expect(inserted.some((s) => /heygen/i.test(s.text))).toBe(false);
     // ends ready
     expect(updates).toContainEqual(expect.objectContaining({ status: "ready" }));
     // a new dialogue invalidates any previously rendered MP4
@@ -157,7 +151,7 @@ describe("POST /api/podcasts/[id]/script", () => {
     );
   });
 
-  it("passes duration and style controls to the dialogue prompt", async () => {
+  it("passes the duration and style controls to the dialogue generator", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     vi.mocked(createServiceClient).mockReturnValue(
       makeService({
@@ -168,13 +162,13 @@ describe("POST /api/podcasts/[id]/script", () => {
         "podcasts:update": () => ({ data: null, error: null }),
       }) as never,
     );
-    vi.mocked(callLLMForPodcastDialogue).mockResolvedValue({ content: sixTurns(), tokensUsed: 10, modelUsed: "m" });
+    vi.mocked(generatePodcastDialogue).mockResolvedValue(okDialogue());
 
     const res = await POST(req({ target_duration_seconds: 300, style: "documentary" }), ctx("p1"));
     expect(res.status).toBe(200);
-    const prompt = vi.mocked(callLLMForPodcastDialogue).mock.calls[0][0];
-    expect(prompt).toContain("TARGET DURATION: about 300 seconds");
-    expect(prompt).toContain("STYLE: documentary explainer");
+    expect(generatePodcastDialogue).toHaveBeenCalledWith(
+      expect.objectContaining({ topic: "AI tools", targetDurationSeconds: 300, style: "documentary" }),
+    );
   });
 
   it("500s and leaves segments UNTOUCHED when the render reset fails (reset runs first)", async () => {
@@ -191,7 +185,7 @@ describe("POST /api/podcasts/[id]/script", () => {
         },
       }, calls) as never,
     );
-    vi.mocked(callLLMForPodcastDialogue).mockResolvedValue({ content: sixTurns(), tokensUsed: 10, modelUsed: "m" });
+    vi.mocked(generatePodcastDialogue).mockResolvedValue(okDialogue());
 
     const res = await POST(req({}), ctx("p1"));
     expect(res.status).toBe(500);
@@ -227,7 +221,7 @@ describe("POST /api/podcasts/[id]/script", () => {
         "podcasts:update": (s) => { updates.push(s.payload); return { data: null, error: null }; },
       }) as never,
     );
-    vi.mocked(callLLMForPodcastDialogue).mockResolvedValue({ content: sixTurns(), tokensUsed: 10, modelUsed: "m" });
+    vi.mocked(generatePodcastDialogue).mockResolvedValue(okDialogue());
 
     const res = await POST(req({}), ctx("p1"));
     expect(res.status).toBe(500);

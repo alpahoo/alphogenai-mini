@@ -6,8 +6,9 @@ import {
   isPodcastStyle,
   isPodcastTargetDuration,
 } from "@/lib/podcast/podcast";
-import { buildPodcastDialoguePrompt, parseAndValidateDialogue } from "@/lib/podcast/dialogue";
-import { callLLMForPodcastDialogue } from "@/lib/podcast/dialogue-llm";
+import { generatePodcastDialogue } from "@/lib/podcast/dialogue-llm";
+
+export const maxDuration = 60;
 
 /**
  * POST /api/podcasts/[id]/script
@@ -58,7 +59,7 @@ export async function POST(
       !isPodcastTargetDuration(targetDurationSeconds)
     ) {
       return NextResponse.json(
-        { error: "target_duration_seconds must be 30, 60, 120 or 300" },
+        { error: "target_duration_seconds must be 30, 60, 120, 300 or 600" },
         { status: 400 },
       );
     }
@@ -88,7 +89,8 @@ export async function POST(
       return NextResponse.json({ error: message, status: "failed" }, { status: code });
     };
 
-    const prompt = buildPodcastDialoguePrompt({
+    // Single call for short targets; chunked continuation for long-form (T-1135).
+    const result = await generatePodcastDialogue({
       topic,
       language: podcast.language,
       hostName: host.name,
@@ -97,13 +99,6 @@ export async function POST(
       style,
       sourceUrl: podcast.source_asset_url,
     });
-
-    const llm = await callLLMForPodcastDialogue(prompt);
-    if (llm.error || !llm.content) {
-      return failWith(llm.error || "The dialogue generator returned nothing.", 502);
-    }
-
-    const result = parseAndValidateDialogue(llm.content, { topic });
     if (!result.ok) {
       return failWith(result.error, 422);
     }

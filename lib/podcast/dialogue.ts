@@ -14,10 +14,40 @@ export interface DialogueSegment {
 }
 
 export const MIN_SEGMENTS = 6;
-export const MAX_SEGMENTS = 10;
+export const MAX_SEGMENTS = 10; // short-form default upper bound
+export const ABSOLUTE_MAX_SEGMENTS = 60; // hard ceiling for long-form (T-1135)
 export const SEGMENT_MIN_CHARS = 1;
 export const SEGMENT_MAX_CHARS = 400; // DB cap is 600 — keep margin
 export const MAX_CONSECUTIVE_TURNS = 2; // reject host,host,host… runs
+
+// Rough spoken pace per turn (incl. the inter-segment gap). Used to scale the
+// number of dialogue turns to the user's target duration.
+const SECONDS_PER_TURN = 13;
+// Above this target we generate the dialogue in chunks (multiple LLM calls)
+// instead of one big call, to keep each response small and coherent.
+export const LONGFORM_TURN_THRESHOLD = 14;
+
+export interface TurnTarget {
+  min: number;
+  max: number;
+  target: number;
+}
+
+/**
+ * How many dialogue turns to aim for at a given target duration. Short targets
+ * keep the original 6–10 calibration; longer targets scale with the duration,
+ * clamped to ABSOLUTE_MAX_SEGMENTS.
+ */
+export function turnsForDuration(targetSeconds?: number | null): TurnTarget {
+  if (!targetSeconds || targetSeconds <= 120) {
+    return { min: MIN_SEGMENTS, max: MAX_SEGMENTS, target: 8 };
+  }
+  const raw = Math.round(targetSeconds / SECONDS_PER_TURN);
+  const target = Math.min(ABSOLUTE_MAX_SEGMENTS, Math.max(MIN_SEGMENTS, raw));
+  const min = Math.max(MIN_SEGMENTS, Math.round(target * 0.7));
+  const max = Math.min(ABSOLUTE_MAX_SEGMENTS, Math.max(target, Math.round(target * 1.2)));
+  return { min, max, target };
+}
 
 // Internal AlphoGen infrastructure / white-label vendor names that should not
 // leak into user-facing copy. This is deliberately NARROW: only the confidential
@@ -42,6 +72,10 @@ export function buildPodcastDialoguePrompt(opts: {
   targetDurationSeconds?: number | null;
   style?: string | null;
   sourceUrl?: string | null;
+  /** Explicit turn bounds (long-form). Falls back to a duration heuristic. */
+  turns?: { min: number; max: number };
+  /** Continuation mode: extend an ongoing dialogue (chunked long-form). */
+  continuation?: { priorTurns: DialogueSegment[]; isFinal: boolean; nextRole: SpeakerRole };
 }): string {
   const { topic } = opts;
   const language = opts.language || "en-US";
@@ -50,10 +84,12 @@ export function buildPodcastDialoguePrompt(opts: {
   const targetDurationSeconds = opts.targetDurationSeconds || null;
   const style = (opts.style || "casual").trim().toLowerCase();
   const sourceUrl = (opts.sourceUrl || "").trim();
+  const turnBounds = opts.turns ?? { min: MIN_SEGMENTS, max: MAX_SEGMENTS };
+  const cont = opts.continuation ?? null;
 
   const durationGuidance = targetDurationSeconds
-    ? `TARGET DURATION: about ${targetDurationSeconds} seconds. Use ${targetDurationSeconds <= 60 ? "6-8 concise" : "8-10 richer"} turns. Short videos need punchy lines; longer videos need denser insight, not filler.`
-    : `TARGET DURATION: short-form default. Use 6-8 concise turns.`;
+    ? `TARGET DURATION: about ${targetDurationSeconds} seconds total across the whole dialogue. Keep lines spoken and natural; longer videos need denser insight, not filler.`
+    : `TARGET DURATION: short-form default.`;
 
   const styleGuidance: Record<string, string> = {
     casual: "STYLE: casual podcast. Warm, direct, lightly conversational, no hype; make it sound like two smart creators talking.",
@@ -73,8 +109,28 @@ export function buildPodcastDialoguePrompt(opts: {
     "- The final turn must leave the viewer with a clear takeaway or next question, not a bland goodbye.",
   ];
 
+  // Continuation context for chunked long-form: show the recent turns so the
+  // model extends the SAME conversation instead of restarting it.
+  const priorTail = cont
+    ? cont.priorTurns.slice(-6).map((s) => `${s.speaker_role}: ${s.text}`).join("\n")
+    : "";
+  const continuationBlock = cont
+    ? [
+        `This is a CONTINUATION of an ongoing podcast on the topic above. Here are the most recent turns:`,
+        priorTail,
+        ``,
+        `Continue the SAME conversation. Start the next turn with the ${cont.nextRole}. Do NOT restart, re-introduce, or repeat earlier points; advance the discussion with new substance.`,
+        cont.isFinal
+          ? `This is the FINAL section: drive to a clear takeaway and end cleanly.`
+          : `This is a MIDDLE section: keep the momentum; do not wrap up or say goodbye yet.`,
+        ``,
+      ]
+    : [];
+
   return [
-    `Write a short, natural two-person podcast dialogue about the following topic.`,
+    cont
+      ? `Continue a natural two-person podcast dialogue about the following topic.`
+      : `Write a natural two-person podcast dialogue about the following topic.`,
     ``,
     `TOPIC: ${topic}`,
     sourceUrl ? `SOURCE URL: ${sourceUrl}` : null,
@@ -83,10 +139,11 @@ export function buildPodcastDialoguePrompt(opts: {
     durationGuidance,
     styleGuidance[style] || styleGuidance.casual,
     ``,
-    ...qualityGuidance,
-    ``,
+    ...continuationBlock,
+    ...(cont ? [] : qualityGuidance),
+    cont ? null : ``,
     `Rules:`,
-    `- Produce between ${MIN_SEGMENTS} and ${MAX_SEGMENTS} dialogue turns.`,
+    `- Produce between ${turnBounds.min} and ${turnBounds.max} dialogue turns${cont ? " in THIS section" : ""}.`,
     `- Alternate between the host and the guest; both must speak multiple times.`,
     `- Each turn is one or two short spoken sentences (conversational, not an essay).`,
     `- Avoid robotic Q&A. Let the second speaker add tension, examples, or correction.`,
@@ -201,14 +258,17 @@ export type ValidationResult =
  * Validate normalized segments: count in [6,10], both roles present and each
  * speaks at least twice (not all-one-speaker), text within caps.
  */
-export function validatePodcastSegments(segments: DialogueSegment[]): ValidationResult {
+export function validatePodcastSegments(
+  segments: DialogueSegment[],
+  bounds: { min: number; max: number } = { min: MIN_SEGMENTS, max: MAX_SEGMENTS },
+): ValidationResult {
   if (!Array.isArray(segments) || segments.length === 0) {
     return { ok: false, error: "No dialogue segments were produced." };
   }
-  if (segments.length < MIN_SEGMENTS || segments.length > MAX_SEGMENTS) {
+  if (segments.length < bounds.min || segments.length > bounds.max) {
     return {
       ok: false,
-      error: `Dialogue must have between ${MIN_SEGMENTS} and ${MAX_SEGMENTS} turns (got ${segments.length}).`,
+      error: `Dialogue must have between ${bounds.min} and ${bounds.max} turns (got ${segments.length}).`,
     };
   }
   let host = 0;
@@ -242,10 +302,10 @@ export function validatePodcastSegments(segments: DialogueSegment[]): Validation
 /** Convenience: parse → normalize → validate in one pass. */
 export function parseAndValidateDialogue(
   content: string,
-  opts: NormalizeOptions = {},
+  opts: NormalizeOptions & { bounds?: { min: number; max: number } } = {},
 ): ValidationResult {
   const raw = parsePodcastDialogueResponse(content);
   if (!raw) return { ok: false, error: "Could not parse the dialogue response." };
   const normalized = normalizePodcastSegments(raw, opts);
-  return validatePodcastSegments(normalized);
+  return validatePodcastSegments(normalized, opts.bounds);
 }

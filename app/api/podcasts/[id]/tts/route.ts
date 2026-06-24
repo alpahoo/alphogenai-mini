@@ -10,7 +10,11 @@ import { resolveSpeakerVoices, estimateSegmentTimings } from "@/lib/podcast/voic
 // path for V1 (no Modal); cap segments to keep within this budget.
 export const maxDuration = 60;
 
-const MAX_SEGMENTS = 10;
+const MAX_SEGMENTS = 60; // long-form hard cap (T-1135)
+// Bound how many segments we synthesize per request so a long podcast never
+// exceeds the serverless budget. The UI loops "generate pending voices" until
+// `remaining` hits 0.
+const MAX_SYNTH_PER_CALL = 12;
 
 interface SegmentRow {
   id: string;
@@ -165,7 +169,12 @@ export async function POST(
     }
 
     // ── Full mode: generate missing/failed (or all if force), then retime ──
+    // Bounded per call: synthesize at most MAX_SYNTH_PER_CALL segments, defer the
+    // rest so a long podcast stays within the serverless budget. The UI re-calls
+    // until `remaining` is 0.
     const results: SegmentRow[] = [];
+    let synthesized = 0;
+    let deferred = 0;
     for (const seg of segments) {
       const alreadyDone = seg.status === "ready" && !!seg.audio_url;
       if (alreadyDone && !force) {
@@ -173,6 +182,12 @@ export async function POST(
         results.push(seg);
         continue;
       }
+      if (synthesized >= MAX_SYNTH_PER_CALL) {
+        deferred++; // still needs a future call
+        results.push(seg);
+        continue;
+      }
+      synthesized++;
       results.push(await synthOne(seg));
     }
 
@@ -221,6 +236,7 @@ export async function POST(
       ready,
       failed,
       skipped,
+      remaining: deferred, // >0 → the UI should call again to voice the rest
       segments: results.map(publicSegment),
     });
   } catch (err) {

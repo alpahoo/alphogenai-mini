@@ -2221,7 +2221,7 @@ def _podcast_avatar(name: str, color, size: int = 220):
     d.text(((size - (bb[2] - bb[0])) / 2, size * 0.56), initial, font=f, fill=(247, 250, 255))
     return img
 
-@app.function(image=overlay_image, secrets=[secrets], timeout=600, retries=0)
+@app.function(image=overlay_image, secrets=[secrets], timeout=1800, retries=0)
 def render_podcast(podcast_id: str) -> str:
     """Render a two-shot voice-first podcast MP4 from ready segments.
 
@@ -2400,12 +2400,18 @@ def render_podcast(podcast_id: str) -> str:
         y0 = int(H * (0.19 if landscape else 0.17))
         avatar_size = min(host_av.width, int(panel_h * 0.48))
 
-        def render_frame(t):
+        bar_x, bar_y, bar_w = int(W * 0.16), H - 34, int(W * 0.68)
+
+        # The whole layout is constant WITHIN a segment (active speaker, caption,
+        # static waveform) — only the progress bar animates. So we render ONE base
+        # image per segment and per output frame just copy it and draw the bar.
+        # This keeps a 10-min render fast on CPU (no full redraw 24×/s).
+        def build_base(active):
             img = Image.new("RGB", (W, H), (248, 250, 255))
             d = ImageDraw.Draw(img)
             draw_background(d)
-            active = next((s for (st, en, s) in timeline if st <= t < en), timeline[-1][2])
             active_role = spk_by_id.get(active["speaker_id"], {}).get("role", "host")
+            acol = _PODCAST_COLORS[active_role]
             podcast_title = (podcast.get("title") or "Podcast Video").strip()[:54]
             title_w = d.textlength(podcast_title, font=f_title)
             d.text(((W - title_w) / 2, int(H * 0.055)), podcast_title, font=f_title, fill=(18, 24, 34))
@@ -2437,7 +2443,6 @@ def render_podcast(podcast_id: str) -> str:
                 if is_active:
                     d.ellipse([px + panel_w - 48, y0 + 26, px + panel_w - 26, y0 + 48], fill=col)
 
-            acol = _PODCAST_COLORS[active_role]
             caption_lines = wrap(d, active["text"], f_cap, W - int(W * 0.22), maxlines=3)
             line_h = 38 if W >= 1000 else 34
             cap_w = max([d.textlength(ln, font=f_cap) for ln in caption_lines] or [0]) + 58
@@ -2452,13 +2457,30 @@ def render_podcast(podcast_id: str) -> str:
                 d.text(((W - tw) / 2, cy), ln, font=f_cap, fill=(247, 250, 255))
                 cy += line_h
 
-            elapsed = min(1.0, max(0.0, t / total))
-            bar_x, bar_y, bar_w = int(W * 0.16), H - 34, int(W * 0.68)
-            d.rounded_rectangle([bar_x, bar_y, bar_x + bar_w, bar_y + 8], radius=4, fill=(207, 216, 229))
-            d.rounded_rectangle([bar_x, bar_y, bar_x + int(bar_w * elapsed), bar_y + 8], radius=4, fill=acol)
-            d.ellipse([bar_x + int(bar_w * elapsed) - 7, bar_y - 4, bar_x + int(bar_w * elapsed) + 7, bar_y + 12], fill=acol)
+            # Static branding label (the progress bar fill is drawn per output frame).
             d.text((bar_x, bar_y - 28), "AlphoGen Podcast", font=f_small, fill=(88, 99, 116))
+            d.rounded_rectangle([bar_x, bar_y, bar_x + bar_w, bar_y + 8], radius=4, fill=(207, 216, 229))
+            return img, acol
+
+        # One base per timeline entry (segment). Reused across all frames of that segment.
+        bases = [build_base(seg) for (_st, _en, seg) in timeline]
+
+        def active_index(t):
+            for i, (st, en, _s) in enumerate(timeline):
+                if st <= t < en:
+                    return i
+            return len(timeline) - 1  # gaps / tail → last segment (unchanged behaviour)
+
+        def compose_frame(idx, t):
+            base_img, acol = bases[idx]
+            img = base_img.copy()
+            d = ImageDraw.Draw(img)
+            elapsed = min(1.0, max(0.0, t / total))
+            fill_w = int(bar_w * elapsed)
+            d.rounded_rectangle([bar_x, bar_y, bar_x + fill_w, bar_y + 8], radius=4, fill=acol)
+            d.ellipse([bar_x + fill_w - 7, bar_y - 4, bar_x + fill_w + 7, bar_y + 12], fill=acol)
             return img
+
         # 5) Pipe frames → ffmpeg with the dialogue track → MP4.
         out_path = os.path.join(workdir, "output.mp4")
         proc = subprocess.Popen(
@@ -2470,7 +2492,8 @@ def render_podcast(podcast_id: str) -> str:
         )
         n_frames = int(total * PODCAST_FPS) + 1
         for fi in range(n_frames):
-            proc.stdin.write(render_frame(fi / PODCAST_FPS).tobytes())
+            t = fi / PODCAST_FPS
+            proc.stdin.write(compose_frame(active_index(t), t).tobytes())
         proc.stdin.close()
         if proc.wait() != 0:
             return fail("ffmpeg encode failed")

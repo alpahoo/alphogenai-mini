@@ -73,9 +73,9 @@ describe("POST /api/podcasts/[id]/segments", () => {
     expect((await POST(req({ speaker_role: "host", text: "   " }), ctx("p1"))).status).toBe(400);
   });
 
-  it("400 when already at 10 segments", async () => {
+  it("400 when already at the 60-segment cap", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
-    vi.mocked(createServiceClient).mockReturnValue(service(segs(10)) as never);
+    vi.mocked(createServiceClient).mockReturnValue(service(segs(60)) as never);
     expect((await POST(req({ speaker_role: "host", text: "hi" }), ctx("p1"))).status).toBe(400);
   });
 

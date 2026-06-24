@@ -1019,6 +1019,20 @@ Contraintes :
 - Reste V1+ : polish thumbnails, éventuelle édition du rôle de référence,
   e2e visuel authentifié après déploiement.
 
+### [T-1135] Podcast long-form (up to 10 min) — `status: in_progress` · `owner: claude`
+- T-1135 livré (un seul ticket, décisions validées : B1 batch+boucle UI, dialogue chunké, tours auto cap 60).
+  Podcast-only, **pas de migration**. (1) `podcast.ts` : `PODCAST_TARGET_DURATIONS` + 600. (2) `dialogue.ts` :
+  `turnsForDuration()` (≤120s→6-10 ; 300s→~23 ; 600s→~46, cap **ABSOLUTE_MAX_SEGMENTS=60**), bornes de validation
+  optionnelles, prompt avec `turns`+`continuation` (mode chunké). (3) `dialogue-llm.ts` : `generatePodcastDialogue()`
+  — court=1 appel, long=**chunks de ~12 tours** continués jusqu'au target, budget temps ~45s (stop avant kill
+  serverless), repair alternance stricte en fallback. (4) `script/route.ts` : utilise l'orchestrateur, `maxDuration=60`.
+  (5) `tts/route.ts` : **batch borné** MAX_SYNTH_PER_CALL=12, renvoie `remaining`, cap 60 ; l'UI boucle « Generate
+  pending voices » jusqu'à 0. (6) `segments/route.ts` cap 60. (7) UI : option **10 min**, boucle de voix avec progress
+  « N left… ». (8) **render Modal** : base pré-rendue **par segment** (layout statique dans un segment, seule la barre
+  de progression s'anime) → 10 min CPU sans timeout ; `timeout 600→1800`. 130 tests podcast verts ; py_compile OK ;
+  build OK ; tsc clean ; Modal redéployé (visuels identiques vérifiés sur re-render court). QA prod 10 min e2e à suivre.
+  Pas de personnages réels/lip-sync promis.
+
 ### [T-1134] Podcast Video Jogg-like quality pass — `status: in_progress` · `owner: codex`
 - T-1134e (claude) — review render polish (commits Codex c507e89/85af728) : OK, aucun P1/P2, scope clean. Tous
   les points visuels remplis (fond studio, cartes speakers, actif/inactif, captions hiérarchisées, branding

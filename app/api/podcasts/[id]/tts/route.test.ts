@@ -320,4 +320,25 @@ describe("POST /api/podcasts/[id]/tts", () => {
     expect(s0.audio_url).toMatch(/audio\/podcast\/p1\/seg-0-[0-9a-f-]{36}\.mp3$/);
     expect(s0.audio_url).not.toContain("/seg-0.mp3");
   });
+
+  it("voices a bounded batch and reports `remaining` for the rest (long-form)", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const segs = Array.from({ length: 15 }, (_, i) => seg(i)); // 15 pending
+    vi.mocked(createServiceClient).mockReturnValue(service(segs) as never);
+    const res = await POST(req({}), ctx("p1"));
+    const json = await res.json();
+    // At most MAX_SYNTH_PER_CALL (12) synthesized this call; 3 deferred.
+    expect(json.ready).toBe(12);
+    expect(json.remaining).toBe(3);
+    expect(vi.mocked(generateVoiceover)).toHaveBeenCalledTimes(12);
+  });
+
+  it("returns remaining 0 when everything fits in one call", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const segs = Array.from({ length: 6 }, (_, i) => seg(i));
+    vi.mocked(createServiceClient).mockReturnValue(service(segs) as never);
+    const json = await (await POST(req({}), ctx("p1"))).json();
+    expect(json.ready).toBe(6);
+    expect(json.remaining).toBe(0);
+  });
 });

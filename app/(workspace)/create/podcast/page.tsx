@@ -56,6 +56,7 @@ const DURATION_OPTIONS = [
   { value: 60, label: "60s" },
   { value: 120, label: "2 min" },
   { value: 300, label: "5 min" },
+  { value: 600, label: "10 min" },
 ];
 
 const STYLE_OPTIONS = [
@@ -106,6 +107,7 @@ export default function CreatePodcastPage() {
   const [addText, setAddText] = useState("");
   const [addingLine, setAddingLine] = useState(false);
   const [structuring, setStructuring] = useState(false); // delete/move in progress
+  const [voiceProgress, setVoiceProgress] = useState<string | null>(null); // "N left" while batching
   const [savingSegmentId, setSavingSegmentId] = useState<string | null>(null);
   const [voicingSegmentId, setVoicingSegmentId] = useState<string | null>(null);
 
@@ -261,25 +263,37 @@ export default function CreatePodcastPage() {
     try {
       const headers = await authHeaders();
       if (!headers) { setError("Please sign in again."); setPhase("idle"); return; }
-      const res = await fetch(`/api/podcasts/${podcast.id}/tts`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(force ? { force: true } : {}),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Could not generate the voices.");
-      // Merge returned segment statuses/urls back in.
-      const byId = Object.fromEntries((json.segments || []).map((s: Segment) => [s.id, s]));
-      setSegments((prev) => prev.map((s) => (byId[s.id] ? { ...s, ...byId[s.id] } : s)));
-      // Audio actually changed → drop the stale rendered video locally (backend reset it).
-      if (json.ready > 0) {
+      // The backend voices a bounded batch per call (long-form). Loop until
+      // `remaining` is 0 so the whole podcast gets voiced from one click.
+      let anyReady = false;
+      let lastFailed = 0;
+      for (let guard = 0; guard < 12; guard++) {
+        const res = await fetch(`/api/podcasts/${podcast.id}/tts`, {
+          method: "POST",
+          headers,
+          // force only matters on the first pass (regenerate already-ready lines).
+          body: JSON.stringify(force && guard === 0 ? { force: true } : {}),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error || "Could not generate the voices.");
+        const byId = Object.fromEntries((json.segments || []).map((s: Segment) => [s.id, s]));
+        setSegments((prev) => prev.map((s) => (byId[s.id] ? { ...s, ...byId[s.id] } : s)));
+        if (json.ready > 0) anyReady = true;
+        lastFailed = json.failed || 0;
+        const remaining = Number(json.remaining || 0);
+        setVoiceProgress(remaining > 0 ? `${remaining} line${remaining === 1 ? "" : "s"} left…` : null);
+        if (remaining <= 0) break;
+      }
+      // Audio changed → drop the stale rendered video locally (backend reset it).
+      if (anyReady) {
         setPodcast((p) => (p ? { ...p, video_url: null, render_status: "idle", render_error: null } : p));
       }
-      if (json.failed > 0) setError(`${json.failed} segment(s) couldn't be voiced — try “Regenerate voices”.`);
+      if (lastFailed > 0) setError(`${lastFailed} segment(s) couldn't be voiced — try the line mic to retry.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not generate the voices.");
     } finally {
       setPhase("idle");
+      setVoiceProgress(null);
     }
   }
 
@@ -678,15 +692,17 @@ export default function CreatePodcastPage() {
               <button onClick={() => generateVoices(pendingVoiceCount === 0)} disabled={phase === "voicing" || Boolean(voicingSegmentId)}
                 className="inline-flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-semibold text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-60">
                 {phase === "voicing" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />}
-                {pendingVoiceCount > 0
-                  ? `Generate ${pendingVoiceCount} pending voice${pendingVoiceCount === 1 ? "" : "s"}`
-                  : "Regenerate all voices"}
+                {phase === "voicing"
+                  ? voiceProgress || "Generating voices…"
+                  : pendingVoiceCount > 0
+                    ? `Generate ${pendingVoiceCount} pending voice${pendingVoiceCount === 1 ? "" : "s"}`
+                    : "Regenerate all voices"}
               </button>
             ) : (
               <button onClick={() => generateVoices(false)} disabled={phase === "voicing" || Boolean(voicingSegmentId)}
                 className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60">
                 {phase === "voicing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
-                {phase === "voicing" ? "Generating voices…" : "Generate voices"}
+                {phase === "voicing" ? (voiceProgress || "Generating voices…") : "Generate voices"}
               </button>
             )}
           </div>

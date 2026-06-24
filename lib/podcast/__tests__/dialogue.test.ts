@@ -5,6 +5,8 @@ import {
   normalizePodcastSegments,
   validatePodcastSegments,
   parseAndValidateDialogue,
+  turnsForDuration,
+  ABSOLUTE_MAX_SEGMENTS,
   type DialogueSegment,
 } from "../dialogue";
 
@@ -63,6 +65,72 @@ describe("buildPodcastDialoguePrompt", () => {
     expect(p).toContain("mini arc: hook -> tension/question -> explanation -> concrete implication -> final takeaway");
     expect(p).toContain("Do not invent specific brands, statistics, dates, product claims, or source facts");
     expect(p).toContain("Avoid robotic Q&A");
+  });
+});
+
+describe("turnsForDuration (long-form scaling)", () => {
+  it("keeps short targets at the 6–10 calibration", () => {
+    for (const s of [undefined, 30, 60, 120]) {
+      const t = turnsForDuration(s as number | undefined);
+      expect(t.min).toBe(6);
+      expect(t.max).toBe(10);
+    }
+  });
+
+  it("scales up for 5 min and 10 min, clamped to the absolute max", () => {
+    const five = turnsForDuration(300);
+    expect(five.target).toBeGreaterThan(14);
+    expect(five.min).toBeGreaterThanOrEqual(10);
+
+    const ten = turnsForDuration(600);
+    expect(ten.target).toBeGreaterThan(30);
+    expect(ten.max).toBeLessThanOrEqual(ABSOLUTE_MAX_SEGMENTS);
+    expect(ten.min).toBeLessThanOrEqual(ten.target);
+    expect(ten.target).toBeLessThanOrEqual(ten.max);
+  });
+});
+
+describe("buildPodcastDialoguePrompt — long-form options", () => {
+  it("uses explicit turn bounds when provided", () => {
+    const p = buildPodcastDialoguePrompt({ topic: "x", turns: { min: 8, max: 12 } });
+    expect(p).toContain("Produce between 8 and 12 dialogue turns");
+  });
+
+  it("renders a continuation block with the prior turns and next speaker", () => {
+    const prior: DialogueSegment[] = [
+      { speaker_role: "host", text: "Earlier point A." },
+      { speaker_role: "guest", text: "Earlier point B." },
+    ];
+    const p = buildPodcastDialoguePrompt({
+      topic: "x",
+      turns: { min: 8, max: 12 },
+      continuation: { priorTurns: prior, isFinal: false, nextRole: "host" },
+    });
+    expect(p).toContain("CONTINUATION");
+    expect(p).toContain("Earlier point B.");
+    expect(p).toContain("Start the next turn with the host");
+    expect(p).toContain("MIDDLE section");
+  });
+
+  it("marks the final section so it closes cleanly", () => {
+    const p = buildPodcastDialoguePrompt({
+      topic: "x",
+      continuation: { priorTurns: [{ speaker_role: "host", text: "a" }], isFinal: true, nextRole: "guest" },
+    });
+    expect(p).toContain("FINAL section");
+  });
+});
+
+describe("validatePodcastSegments with custom bounds", () => {
+  const longRun = (n: number): DialogueSegment[] =>
+    Array.from({ length: n }, (_, i) => ({ speaker_role: i % 2 === 0 ? "host" : "guest", text: `turn ${i}` }));
+
+  it("accepts a 20-turn dialogue within long-form bounds", () => {
+    expect(validatePodcastSegments(longRun(20), { min: 16, max: 28 }).ok).toBe(true);
+  });
+
+  it("still rejects 20 turns under the default short bounds", () => {
+    expect(validatePodcastSegments(longRun(20)).ok).toBe(false);
   });
 });
 

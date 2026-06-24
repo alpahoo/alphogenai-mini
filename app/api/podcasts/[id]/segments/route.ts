@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 
 const SEGMENT_TEXT_MAX = 600;
-const MAX_SEGMENTS = 10;
+const MAX_SEGMENTS = 60; // long-form hard cap (T-1135)
 
 /**
  * POST /api/podcasts/[id]/segments

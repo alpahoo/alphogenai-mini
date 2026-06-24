@@ -11,6 +11,20 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-06-23 — Claude — T-1135 Podcast long-form (up to 10 min)
+- Un seul ticket (décisions validées par l'utilisateur). Permet des podcasts jusqu'à 10 min sans changer Story/
+  Avatar/Research/Product, sans migration.
+- Dialogue : `turnsForDuration` scale les tours à la durée (cap 60) ; `generatePodcastDialogue` génère en chunks de
+  ~12 tours (continuation) pour le long-form, avec budget temps ~45s pour rester sous le kill serverless 60s + repair
+  alternance stricte en fallback. Court (≤120s) reste 1 appel.
+- TTS : batch borné (12/appel) + `remaining` ; l'UI boucle « Generate pending voices » jusqu'à 0 avec progress.
+- Render Modal : 1 base pré-rendue par segment (layout statique intra-segment, seule la barre de progression anime)
+  → 10 min CPU sans timeout ; timeout 600→1800. Visuels identiques (vérifié sur re-render court 1d492d13, 24s).
+- Durée 600s ajoutée (podcast.ts + UI). Caps add/tts montés à 60.
+- Fichiers : `lib/podcast/{podcast,dialogue,dialogue-llm}.ts(+tests)`, `app/api/podcasts/[id]/{script,tts,segments}/route.ts(+tests)`,
+  `app/(workspace)/create/podcast/page.tsx`, `modal_app/video_pipeline.py`, `agent/*`.
+- Tests : 130 podcast verts ; py_compile OK ; build OK ; tsc clean ; Modal redéployé. QA prod 10 min e2e à suivre.
+
 ## 2026-06-23 — Claude — T-1134e Podcast render polish review + deploy + QA
 - Review des 4 commits Codex (9bcfcd0 spec Jogg ; 3a882ce prompt dialogue qualité+anti-hallucination ;
   c507e89 + 85af728 upgrade visuels render_podcast). Verdict : OK, aucun P1/P2 ; scope respecté (podcast-only,
