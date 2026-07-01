@@ -11,6 +11,18 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-07-01 — Claude — T-1135 TTS loop hardening P2 (Codex review) — UI only
+- Suite review Codex du fix `08d9b5f` (OK, pas de P1). 2 hardenings P2 dans `create/podcast/page.tsx` :
+  (1) **200 non-JSON = batch failure retryable** : le parse est isolé ; un HTTP 200 dont le body n'est pas du
+  JSON valide ne devient plus `{}` (ce qui simulait `remaining=0` et terminait la boucle en silence) — il
+  déclenche le retry ×3 + backoff comme un vrai échec.
+  (2) **`lastRemaining` + fin non silencieuse** : si la boucle atteint `MAX_BATCHES` sans `remaining<=0`, on
+  lève une erreur claire « Voice generation didn't finish (N left). Some lines are still pending — click
+  "Generate pending voices" to resume. » au lieu de considérer le run terminé.
+- Conservé : retry ×3 + backoff, `firstPass` non consommé par les retries. Aucun backend/Modal/route touché.
+- Validation : tsc clean ; 42 tests podcast verts ; build OK.
+
+---
 ## 2026-07-01 — Claude — T-1135 Re-QA durée long-form 10 min (prod e2e) — PASS
 - Objectif : valider en conditions réelles le fix de calibration `aa0503f` (SECONDS_PER_TURN 13→10 + prompt
   « tours denses ») resté non vérifié depuis le 24/06.

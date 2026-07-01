@@ -270,10 +270,13 @@ export default function CreatePodcastPage() {
       // batch a few times with backoff before giving up.
       const MAX_BATCHES = 40; // 60 lines / 12 per call = 5 batches; headroom for retries
       const MAX_CONSECUTIVE_FAILURES = 3;
+      const RESUME_HINT = "Some lines are still pending — click “Generate pending voices” to resume.";
       let anyReady = false;
       let lastFailed = 0;
       let firstPass = true;
       let consecutiveFailures = 0;
+      let completed = false;
+      let lastRemaining = Number.NaN; // last remaining count reported by a successful batch
       for (let guard = 0; guard < MAX_BATCHES; guard++) {
         let res: Response;
         let json: { segments?: Segment[]; ready?: number; failed?: number; remaining?: number; error?: string };
@@ -284,16 +287,25 @@ export default function CreatePodcastPage() {
             // force only matters on the first pass (regenerate already-ready lines).
             body: JSON.stringify(force && firstPass ? { force: true } : {}),
           });
-          // Non-OK responses may carry a non-JSON body (e.g. an HTML/text error
-          // page) — parse defensively so a bad batch never throws out of the loop.
-          json = await res.json().catch(() => ({}));
+          // A batch can fail with a non-OK status OR return HTTP 200 with a
+          // non-JSON body (e.g. an HTML/text error page from a transient
+          // gateway/timeout). Both must be treated as a retryable batch failure —
+          // a 200 non-JSON must NOT be read as an empty {} (which would look like
+          // `remaining = 0` and end the loop silently).
+          let parsed: unknown;
+          let parseOk = true;
+          try {
+            parsed = await res.json();
+          } catch {
+            parseOk = false;
+          }
+          json = (parsed ?? {}) as typeof json;
           if (!res.ok) throw new Error(json?.error || `Voice batch failed (HTTP ${res.status}).`);
+          if (!parseOk) throw new Error("Voice batch returned an unexpected (non-JSON) response.");
         } catch {
           consecutiveFailures++;
           if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-            throw new Error(
-              "Voice generation hit repeated errors. Some lines may still be pending — click “Generate pending voices” to resume.",
-            );
+            throw new Error(`Voice generation hit repeated errors. ${RESUME_HINT}`);
           }
           setVoiceProgress(`Retrying… (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`);
           await new Promise((r) => setTimeout(r, 1500 * consecutiveFailures));
@@ -306,8 +318,15 @@ export default function CreatePodcastPage() {
         if ((json.ready ?? 0) > 0) anyReady = true;
         lastFailed = json.failed || 0;
         const remaining = Number(json.remaining || 0);
+        lastRemaining = remaining;
         setVoiceProgress(remaining > 0 ? `${remaining} line${remaining === 1 ? "" : "s"} left…` : null);
-        if (remaining <= 0) break;
+        if (remaining <= 0) { completed = true; break; }
+      }
+      // If we exhausted MAX_BATCHES without the backend reporting `remaining <= 0`,
+      // do NOT treat the run as finished — surface a clear, actionable error.
+      if (!completed) {
+        const left = Number.isNaN(lastRemaining) ? "" : ` (${lastRemaining} left)`;
+        throw new Error(`Voice generation didn't finish${left}. ${RESUME_HINT}`);
       }
       // Audio changed → drop the stale rendered video locally (backend reset it).
       if (anyReady) {
