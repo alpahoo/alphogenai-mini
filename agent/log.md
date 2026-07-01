@@ -11,6 +11,40 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-07-01 — Claude — T-1135b-lite Réduction batch TTS backend (504 serverless) — backend only
+- Suite au finding re-QA : le batch `/api/podcasts/[id]/tts` de 12 synthèses dépassait `maxDuration=60` sous
+  latence TTS haute → 504 répétés. Fix backend minimal (pas d'async Modal).
+- `MAX_SYNTH_PER_CALL` : **12 → 6** (défaut). C'est un **batch PAR APPEL**, pas un cap total : l'UI reboucle
+  jusqu'à `remaining=0`, donc un podcast plus long fait juste plus de petits appels — 10→45 min reste possible
+  (cap total = `MAX_SEGMENTS=60`, inchangé). Override env **`PODCAST_TTS_BATCH`** (clampé `[1, 60]`) pour
+  descendre à 4 sans redéploiement si besoin.
+- Conservé : provider caché (`publicSegment`), invalidation render AVANT mutation, skip ready, force 1er passage,
+  contrat de réponse `{ ready, failed, skipped, remaining, segments }` inchangé (le client en dépend).
+- Tests : test « bounded batch » adapté (15 pending → 6 ready / 9 remaining) ; **nouveau test** « splits into
+  successive bounded batches » (14 pending → 6→remaining 8→2→0, simule la boucle UI). 22 tests /tts verts ;
+  132 tests podcast+api verts ; tsc clean ; build OK.
+- Pas de migration, pas de Modal, pas d'UI. Prochaine étape : QA prod 5 min (plus de petits batches, sans 504).
+
+---
+## 2026-07-01 — Claude — T-1135 Re-QA courte (5 min) post-hardening — fix client VALIDÉ live + finding backend
+- Contexte : re-QA courte sur un podcast **5 min** pour exercer la boucle TTS batchée après déploiement du
+  hardening (`416fe9b`). Prod, compte Premium, podcast `b26720c6-22ed-4efd-9020-678a3a9142d8`.
+- Dialogue : 31 tours pour cible 300s (dans la plage `turnsForDuration(300)` ≈ 21–36). OK.
+- **Boucle TTS — hardening validé EN CONDITIONS RÉELLES** : les appels `/api/podcasts/[id]/tts` batch ont
+  renvoyé **504 (Gateway Timeout)** (body non-JSON = page d'erreur). Le client a affiché successivement
+  **« Retrying… (1/3) » → (2/3) → (3/3)** puis l'erreur claire **« Voice generation hit repeated errors. Some
+  lines are still pending — click "Generate pending voices" to resume. »**. Aucun crash JSON brut, aucun halt
+  silencieux. C'est exactement le comportement patché (fix `08d9b5f` + P2 `416fe9b`) — confirmé live.
+- **Finding backend (hors scope de ce ticket UI, à traiter séparément)** : le batch TTS de **12 segments**
+  (`MAX_SYNTH_PER_CALL=12`) **dépasse la limite serverless de 60s** quand la latence TTS est haute → 504 répétés.
+  Isolé proprement : une synthèse **ligne-par-ligne** (1 voix, bouton mic) renvoie **200**. Donc le TTS marche ;
+  seul le batch de 12 est trop gros pour `maxDuration=60`. Le run 10 min du 24/06 passait (latence plus basse) —
+  c'est intermittent. **Reco** : réduire la taille de batch backend (~6–8) OU passer le TTS en async ; garder le
+  retry client comme filet. → nouveau ticket backend `/api/podcasts/[id]/tts`.
+- Verdict : objectif de la re-QA atteint — le fix client encaisse le vrai mode d'échec (504 non-JSON) et dégrade
+  proprement. La complétion e2e du podcast est bloquée par la latence backend (hors scope). Aucun code modifié.
+
+---
 ## 2026-07-01 — Claude — T-1135 TTS loop hardening P2 (Codex review) — UI only
 - Suite review Codex du fix `08d9b5f` (OK, pas de P1). 2 hardenings P2 dans `create/podcast/page.tsx` :
   (1) **200 non-JSON = batch failure retryable** : le parse est isolé ; un HTTP 200 dont le body n'est pas du

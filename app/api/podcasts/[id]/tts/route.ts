@@ -6,15 +6,30 @@ import { generateVoiceover, isTTSAvailable } from "@/lib/tts";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { resolveSpeakerVoices, estimateSegmentTimings } from "@/lib/podcast/voices";
 
-// Sequential TTS over up to 10 segments can take ~10-30s. Stay on the serverless
-// path for V1 (no Modal); cap segments to keep within this budget.
+// Sequential TTS runs on the serverless path for V1 (no Modal); the per-call
+// batch below keeps each request well within this budget.
 export const maxDuration = 60;
 
 const MAX_SEGMENTS = 60; // long-form hard cap (T-1135)
-// Bound how many segments we synthesize per request so a long podcast never
-// exceeds the serverless budget. The UI loops "generate pending voices" until
-// `remaining` hits 0.
-const MAX_SYNTH_PER_CALL = 12;
+// How many segments we synthesize per request. This is a PER-CALL batch, NOT a
+// cap on total podcast length — the UI loops "generate pending voices" until
+// `remaining` hits 0, so a longer podcast just takes more (small) calls. Keeping
+// it low is what makes long-form scale toward 10→45 min without hitting the
+// serverless timeout.
+//
+// Default 6 (T-1135b): prod QA showed a batch of 12 could exceed the 60s limit
+// under high TTS latency → repeated 504s. Six sequential synths stay comfortably
+// under budget. Tunable via env (e.g. drop to 4) without a deploy; clamped to a
+// safe range so a bad value can't reintroduce the timeout.
+const DEFAULT_SYNTH_PER_CALL = 6;
+function resolveSynthPerCall(): number {
+  const raw = Number(process.env.PODCAST_TTS_BATCH);
+  if (Number.isFinite(raw) && raw >= 1) {
+    return Math.min(MAX_SEGMENTS, Math.floor(raw));
+  }
+  return DEFAULT_SYNTH_PER_CALL;
+}
+const MAX_SYNTH_PER_CALL = resolveSynthPerCall();
 
 interface SegmentRow {
   id: string;

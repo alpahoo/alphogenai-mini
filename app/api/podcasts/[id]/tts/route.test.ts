@@ -327,10 +327,38 @@ describe("POST /api/podcasts/[id]/tts", () => {
     vi.mocked(createServiceClient).mockReturnValue(service(segs) as never);
     const res = await POST(req({}), ctx("p1"));
     const json = await res.json();
-    // At most MAX_SYNTH_PER_CALL (12) synthesized this call; 3 deferred.
-    expect(json.ready).toBe(12);
-    expect(json.remaining).toBe(3);
-    expect(vi.mocked(generateVoiceover)).toHaveBeenCalledTimes(12);
+    // Bounded per call to the default batch (6); the rest are deferred so the UI
+    // loops. Small batches are what keep long-form under the 60s serverless limit.
+    expect(json.ready).toBe(6);
+    expect(json.remaining).toBe(9);
+    expect(vi.mocked(generateVoiceover)).toHaveBeenCalledTimes(6);
+  });
+
+  it("splits a long podcast into successive bounded batches until remaining hits 0", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    // 14 pending → first call voices 6 (8 left). Simulate the UI loop: the next
+    // call sees the first 6 as ready and voices the next 6 (2 left), and so on.
+    const segs = Array.from({ length: 14 }, (_, i) => seg(i));
+    const readyIds = new Set<string>();
+    const runOnce = async () => {
+      const view = segs.map((s) =>
+        readyIds.has(s.id) ? { ...s, status: "ready", audio_url: "https://cdn/x.mp3" } : s,
+      );
+      vi.mocked(createServiceClient).mockReturnValue(service(view) as never);
+      const json = await (await POST(req({}), ctx("p1"))).json();
+      // Mark whatever this call voiced as ready for the next iteration.
+      json.segments
+        .filter((s: { status: string }) => s.status === "ready")
+        .forEach((s: { id: string }) => readyIds.add(s.id));
+      return json;
+    };
+    const first = await runOnce();
+    expect(first.ready).toBe(6);
+    expect(first.remaining).toBe(8);
+    const second = await runOnce();
+    expect(second.remaining).toBe(2);
+    const third = await runOnce();
+    expect(third.remaining).toBe(0);
   });
 
   it("returns remaining 0 when everything fits in one call", async () => {
