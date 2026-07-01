@@ -11,6 +11,33 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-07-01 — Claude — T-1135 Re-QA durée long-form 10 min (prod e2e) — PASS
+- Objectif : valider en conditions réelles le fix de calibration `aa0503f` (SECONDS_PER_TURN 13→10 + prompt
+  « tours denses ») resté non vérifié depuis le 24/06.
+- Méthode : génération e2e prod sur www.alphogen.com (compte Premium), sujet « solo creators / durable content
+  business 2026 », durée réglée sur **10 min**, style Casual, en-US. Piloté via Chrome (Playwright/CDP).
+- Résultats mesurés :
+  - **Dialogue** : 60 tours générés (= cap `ABSOLUTE_MAX_SEGMENTS`, cible attendue pour 600s). Hook net, rôles
+    host/guest distincts, arc cohérent. Tours plutôt 1–2 phrases (pas franchement « 2–4 phrases denses »).
+  - **TTS** : batch 12/appel, boucle UI 60→48→36→24→12→0, 60/60 ready.
+  - **Render Modal** : done en ~6–7 min, pas de timeout. MP4 sur R2 public, `readyState=4`.
+  - **Durée finale MP4 = 733,6 s = 12:13** (podcast `18c1cc0d-8966-4223-96bd-99ab1aa4f074`,
+    `pub-…r2.dev/videos/18c1cc0d-…-podcast.mp4`). Player prod affiche `12:13`.
+  - **Visuel** (frame 6:06) : scène studio, Host actif (waveform vive + point live) vs Guest grisé, caption
+    lisible en cartouche, branding, pas de carré noir. Polish T-1134e confirmé.
+- Verdict : **la calibration fonctionne** — on passe de l'ancien 4:12 (target 600) à 12:13. Le long-form 10 min
+  est réel et fonctionnel bout-en-bout.
+- **Écart résiduel (non bloquant)** : léger **dépassement** (12:13 pour une cible 10:00, +22%). Le couple
+  « 60 tours + tours denses » sur-livre : pace réel ≈ 12,2 s/tour vs 10 s estimé. Piste : remonter
+  `SECONDS_PER_TURN` (~12) pour recentrer sur ~10 min, OU assumer « 10 min = 10–12 min ».
+- **Bug UX observé (à corriger)** : la boucle TTS s'est **arrêtée sur un batch** avec l'erreur cliente
+  `Unexpected token 'A', "An error o"... is not valid JSON` (réponse non-JSON = page d'erreur Vercel, probable
+  hoquet passager/timeout). Le re-clic « Generate pending voices » a repris et fini normalement. À durcir :
+  ne pas faire `res.json()` sur une réponse non-OK, retry auto du batch échoué (au lieu d'un halt silencieux).
+- Prochaine étape : (a) décider recalibrage durée vs assumer la plage ; (b) rendre la boucle TTS robuste aux
+  erreurs de batch. Aucun code modifié dans cette session (QA only).
+
+---
 ## 2026-06-23 — Claude — T-1135 Podcast long-form (up to 10 min)
 - Un seul ticket (décisions validées par l'utilisateur). Permet des podcasts jusqu'à 10 min sans changer Story/
   Avatar/Research/Product, sans migration.

@@ -265,20 +265,45 @@ export default function CreatePodcastPage() {
       if (!headers) { setError("Please sign in again."); setPhase("idle"); return; }
       // The backend voices a bounded batch per call (long-form). Loop until
       // `remaining` is 0 so the whole podcast gets voiced from one click.
+      // A single batch can transiently fail (serverless timeout / gateway error
+      // returning a non-JSON body); don't abort the whole run on it — retry the
+      // batch a few times with backoff before giving up.
+      const MAX_BATCHES = 40; // 60 lines / 12 per call = 5 batches; headroom for retries
+      const MAX_CONSECUTIVE_FAILURES = 3;
       let anyReady = false;
       let lastFailed = 0;
-      for (let guard = 0; guard < 12; guard++) {
-        const res = await fetch(`/api/podcasts/${podcast.id}/tts`, {
-          method: "POST",
-          headers,
-          // force only matters on the first pass (regenerate already-ready lines).
-          body: JSON.stringify(force && guard === 0 ? { force: true } : {}),
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json?.error || "Could not generate the voices.");
+      let firstPass = true;
+      let consecutiveFailures = 0;
+      for (let guard = 0; guard < MAX_BATCHES; guard++) {
+        let res: Response;
+        let json: { segments?: Segment[]; ready?: number; failed?: number; remaining?: number; error?: string };
+        try {
+          res = await fetch(`/api/podcasts/${podcast.id}/tts`, {
+            method: "POST",
+            headers,
+            // force only matters on the first pass (regenerate already-ready lines).
+            body: JSON.stringify(force && firstPass ? { force: true } : {}),
+          });
+          // Non-OK responses may carry a non-JSON body (e.g. an HTML/text error
+          // page) — parse defensively so a bad batch never throws out of the loop.
+          json = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(json?.error || `Voice batch failed (HTTP ${res.status}).`);
+        } catch {
+          consecutiveFailures++;
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            throw new Error(
+              "Voice generation hit repeated errors. Some lines may still be pending — click “Generate pending voices” to resume.",
+            );
+          }
+          setVoiceProgress(`Retrying… (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`);
+          await new Promise((r) => setTimeout(r, 1500 * consecutiveFailures));
+          continue; // retry the same batch without consuming firstPass
+        }
+        consecutiveFailures = 0;
+        firstPass = false;
         const byId = Object.fromEntries((json.segments || []).map((s: Segment) => [s.id, s]));
         setSegments((prev) => prev.map((s) => (byId[s.id] ? { ...s, ...byId[s.id] } : s)));
-        if (json.ready > 0) anyReady = true;
+        if ((json.ready ?? 0) > 0) anyReady = true;
         lastFailed = json.failed || 0;
         const remaining = Number(json.remaining || 0);
         setVoiceProgress(remaining > 0 ? `${remaining} line${remaining === 1 ? "" : "s"} left…` : null);
