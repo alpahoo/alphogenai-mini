@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
+import { ABSOLUTE_MAX_SEGMENTS } from "@/lib/podcast/dialogue";
 
 const SEGMENT_TEXT_MAX = 600;
-const MAX_SEGMENTS = 60; // long-form hard cap (T-1135)
+// Single source of truth (T-1135a): imported from dialogue.ts so the long-form
+// cap can be raised in one place later (e.g. toward 45 min) without drift.
+const MAX_SEGMENTS = ABSOLUTE_MAX_SEGMENTS;
 
 /**
  * POST /api/podcasts/[id]/segments

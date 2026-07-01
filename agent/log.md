@@ -11,6 +11,19 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-07-01 — Claude — T-1135a-lite Centralisation du cap segments (60) — zéro changement de comportement
+- Suite à l'audit long-form (10→45 min) : `MAX_SEGMENTS=60` était dupliqué en dur à 3 endroits
+  (`lib/podcast/dialogue.ts` sous le nom `ABSOLUTE_MAX_SEGMENTS`, `app/api/podcasts/[id]/tts/route.ts`,
+  `app/api/podcasts/[id]/segments/route.ts`) — risque de dérive si on remonte le cap un jour vers 45 min.
+- Fix : `tts/route.ts` et `segments/route.ts` importent désormais `ABSOLUTE_MAX_SEGMENTS` depuis
+  `lib/podcast/dialogue.ts` (source unique) au lieu de redéfinir `60`. **Cap inchangé (toujours 60)**, aucun
+  comportement modifié — usages (`segments.length > MAX_SEGMENTS`, `count >= MAX_SEGMENTS`) intacts.
+- Pas de migration, pas de Modal, pas de render, pas d'UI. Tests existants inchangés (132 verts, pas
+  d'adaptation nécessaire — confirme l'absence de régression comportementale). tsc clean ; build OK.
+- Prépare la montée future vers 45 min : un seul endroit à toucher (`ABSOLUTE_MAX_SEGMENTS`) plutôt que 3,
+  mais **aucun changement de cap effectué dans ce ticket**.
+
+---
 ## 2026-07-01 — Claude — T-1135b-lite Réduction batch TTS backend (504 serverless) — backend only
 - Suite au finding re-QA : le batch `/api/podcasts/[id]/tts` de 12 synthèses dépassait `maxDuration=60` sous
   latence TTS haute → 504 répétés. Fix backend minimal (pas d'async Modal).

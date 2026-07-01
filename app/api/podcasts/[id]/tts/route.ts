@@ -5,12 +5,15 @@ import { getUserFromRequest } from "@/lib/podcast/auth";
 import { generateVoiceover, isTTSAvailable } from "@/lib/tts";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { resolveSpeakerVoices, estimateSegmentTimings } from "@/lib/podcast/voices";
+import { ABSOLUTE_MAX_SEGMENTS } from "@/lib/podcast/dialogue";
 
 // Sequential TTS runs on the serverless path for V1 (no Modal); the per-call
 // batch below keeps each request well within this budget.
 export const maxDuration = 60;
 
-const MAX_SEGMENTS = 60; // long-form hard cap (T-1135)
+// Single source of truth (T-1135a): imported from dialogue.ts so the long-form
+// cap can be raised in one place later (e.g. toward 45 min) without drift.
+const MAX_SEGMENTS = ABSOLUTE_MAX_SEGMENTS;
 // How many segments we synthesize per request. This is a PER-CALL batch, NOT a
 // cap on total podcast length — the UI loops "generate pending voices" until
 // `remaining` hits 0, so a longer podcast just takes more (small) calls. Keeping
