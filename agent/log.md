@@ -24,6 +24,10 @@ Entrée la plus récente en haut. Format :
   successive bounded batches » (14 pending → 6→remaining 8→2→0, simule la boucle UI). 22 tests /tts verts ;
   132 tests podcast+api verts ; tsc clean ; build OK.
 - Pas de migration, pas de Modal, pas d'UI. Prochaine étape : QA prod 5 min (plus de petits batches, sans 504).
+- **QA prod PASS (5 min, podcast `09e4322c`)** : dialogue 34 tours → génération voix en **6 batches de 6**
+  (`6+6+6+6+6+4`) tous **HTTP 200, ZÉRO 504, zéro retry**. « All voices are ready » atteint sans intervention.
+  Render done, MP4 R2 public **4:45** (285s, cohérent cible 5 min), visuel studio OK (Host actif/Guest grisé,
+  captions, branding). Le batch de 12 (avant fix) 504-ait ×3 sur ce même flux → problème résolu.
 
 ---
 ## 2026-07-01 — Claude — T-1135 Re-QA courte (5 min) post-hardening — fix client VALIDÉ live + finding backend
