@@ -25,10 +25,13 @@ Entrée la plus récente en haut. Format :
 - Validation : **py_compile OK** ; **7 tests Python** (`tests/test_podcast_persona_avatar.py` — circle portrait
   carré/RGBA/coins transparents/non-carré, + 4 cas fallback dont erreur DB avalée) ; tsc clean ; **148 tests
   vitest** verts ; build OK.
-- **Déploiement Modal requis** (code render changé) → auto via GH Actions `deploy-modal.yml` (push main touchant
-  `modal_app/**`). QA à faire : un podcast **sans persona** doit rendre exactement comme avant (chemin fallback).
+- **Déployé** : commit `e12253c` poussé → GH Actions `deploy-modal.yml` **completed success** (pipeline Modal à jour).
+- **QA prod PASS (fallback, podcast `4d6acdab`, 30s sans persona)** : rendu **identique à avant** — Host actif
+  (carte verte, waveform vive, point live, placeholder « H »), Guest grisé (« G »), captions, branding
+  « Untitled podcast » ; player 0:31, MP4 R2. `persona_id` absent → placeholder H/G, **zéro régression**. Le
+  nouveau code persona n'impacte pas les podcasts existants.
 - Prochaine étape : mini seed catalog (2-4 portraits contrôlés) — séparé, à valider avant application — pour QA
-  du rendu persona réel.
+  du rendu persona réel (chemin non-fallback).
 
 ---
 ## 2026-07-02 — Claude — T-1136c Podcast personas API (routes CRUD) — code only, aucune migration
