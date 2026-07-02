@@ -11,6 +11,24 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-07-02 — Claude — T-1137a-fix Normalisation RMS déterministe (loudnorm abandonné)
+- **Constat QA** : le two-pass loudnorm (déployé, confirmé NON-fallback via logs Modal) **n'a pas corrigé** —
+  P90 par segment sur podcast `eeda1d80` : segments host à -28,6/-29,2 dBFS vs ~-12 ailleurs (spread ~16-18 dB).
+  Cause : `loudnorm ... linear=true` **plafonne le gain pour protéger le true-peak** → un tour doux avec un
+  transitoire isolé reste faible. loudnorm (mono OU two-pass) est donc le mauvais levier.
+- **Fix** : `_podcast_normalize_segment` passe en **normalisation RMS** : passe 1 `volumedetect` → parse
+  `_parse_volumedetect` (mean+max dBFS, pur/testable) ; gain = `-20 dBFS` − mean (clampé [-30,+40]) ; passe 2
+  `volume=<gain>dB,alimiter=level=false:limit=0.9` (limiteur de pics, auto-level désactivé pour ne pas annuler le
+  gain). **Tier 2** si le limiteur indispo : `volume` seul avec gain plafonné par le pic mesuré (sans pumping).
+  **Fallback** ultime : ancien single-pass loudnorm. Ne casse jamais le render.
+- `_parse_loudnorm_json` supprimé (plus utilisé). Cible -20 dBFS RMS (naturel pour dialogue, headroom pics).
+- Validation : py_compile OK ; **13 tests Python** (persona ownership + parser volumedetect + math gain). Aucun
+  changement TS (Modal only). Redeploy Modal requis.
+- QA après deploy : re-render court + re-mesure P90/RMS par segment → critère spread < 3-5 dB hors silences.
+- Vigilance notée : `volumedetect` mesure sur tout le fichier (silences TTS début/fin inclus) ; si biais, prévoir
+  mesure gated / trim non destructif dans un ticket suivant. Ici on corrige d'abord l'écart massif.
+
+---
 ## 2026-07-02 — Claude — T-1137a loudness two-pass + hardenings persona (render + route)
 - **T-1137a — loudness consistency** : `render_podcast` normalise chaque segment en **two-pass loudnorm**
   (`_podcast_normalize_segment`) au lieu du mono-pass. Passe 1 `loudnorm=...:print_format=json` → parse

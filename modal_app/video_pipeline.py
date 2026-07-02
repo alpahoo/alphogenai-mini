@@ -2294,79 +2294,87 @@ def _resolve_persona_avatar(sb, speaker: dict, size: int, podcast_id: str, owner
         return None
 
 
-def _parse_loudnorm_json(stderr_text: str):
-    """Extract the measured loudness params from a loudnorm pass-1 stderr blob.
+# Target speech level for per-segment RMS normalization (T-1137a-fix). Around
+# -20 dBFS RMS reads natural for dialogue and leaves headroom for peaks.
+_PODCAST_TARGET_RMS_DB = -20.0
+_PODCAST_PEAK_CEIL_DB = -1.0
 
-    Returns a dict ready for the pass-2 filter (measured_I/TP/LRA/thresh + offset),
-    or None if there's no JSON, a key is missing, or a value is non-finite
-    (loudnorm emits "-inf" for near-silent clips → not usable for linear mode).
-    Pure/testable — no ffmpeg needed.
+
+def _parse_volumedetect(stderr_text: str):
+    """Extract (mean_volume, max_volume) in dBFS from ffmpeg `volumedetect`.
+
+    Returns a (mean, max) tuple, or None if mean_volume is absent or non-finite.
+    max defaults to 0.0 when not present. Pure/testable — no ffmpeg needed.
     """
-    import json
     import math
-    start, end = stderr_text.rfind("{"), stderr_text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
+    import re
+    mm = re.search(r"mean_volume:\s*(-?\d+(?:\.\d+)?)\s*dB", stderr_text)
+    if not mm:
         return None
+    mx = re.search(r"max_volume:\s*(-?\d+(?:\.\d+)?)\s*dB", stderr_text)
     try:
-        data = json.loads(stderr_text[start:end + 1])
-        measured = {
-            "measured_I": data["input_i"],
-            "measured_TP": data["input_tp"],
-            "measured_LRA": data["input_lra"],
-            "measured_thresh": data["input_thresh"],
-            "offset": data["target_offset"],
-        }
-        for v in measured.values():
-            if not math.isfinite(float(v)):
-                return None
-        return measured
-    except (ValueError, KeyError, TypeError):
+        mean = float(mm.group(1))
+        peak = float(mx.group(1)) if mx else 0.0
+        if not (math.isfinite(mean) and math.isfinite(peak)):
+            return None
+        return (mean, peak)
+    except ValueError:
         return None
 
 
 def _podcast_normalize_segment(mp3_path: str, wav_path: str, podcast_id: str):
-    """Normalize one segment to -16 LUFS with TWO-PASS loudnorm (T-1137a).
+    """Normalize one segment to a fixed RMS target (T-1137a-fix).
 
-    Single-pass loudnorm is unreliable: it under-corrects some clips, leaving a
-    speaker's turns 15-20 dB quieter than the others. Two-pass measures the clip
-    first (print_format=json), then applies with the measured values + linear=true
-    so every segment lands precisely at the target — host and guest stay level.
+    loudnorm (single- AND two-pass) left some turns ~16 dB quieter because its
+    linear mode caps gain to protect the true-peak, so a soft turn with one stray
+    transient stays quiet. We RMS-normalize instead: measure mean_volume
+    (volumedetect), apply the gain to hit the target, and a peak limiter catches
+    stray transients — so the BODY of every turn reaches the same level regardless
+    of a single loud peak. Deterministic, no pumping.
 
-    Fallback-safe: on ANY measurement/parse/apply failure (incl. near-silent
-    clips whose measured loudness is -inf) it falls back to the original
-    single-pass filter, and never leaves the render without a wav.
+    Fallback-safe: any measurement/parse/apply failure falls back to the original
+    single-pass loudnorm and never leaves the render without a wav.
     """
     import os
     import subprocess
 
-    filt = "loudnorm=I=-16:TP=-1.5:LRA=11"
+    def _apply(af: str) -> bool:
+        p = subprocess.run(
+            ["ffmpeg", "-y", "-i", mp3_path, "-af", af, "-ar", "44100", "-ac", "1", wav_path],
+            capture_output=True, timeout=120,
+        )
+        return p.returncode == 0 and os.path.exists(wav_path) and os.path.getsize(wav_path) > 0
+
     try:
         p1 = subprocess.run(
-            ["ffmpeg", "-i", mp3_path, "-af", f"{filt}:print_format=json", "-f", "null", "-"],
+            ["ffmpeg", "-i", mp3_path, "-af", "volumedetect", "-f", "null", "-"],
             capture_output=True, timeout=120,
         )
-        stderr = p1.stderr.decode("utf-8", "ignore")
-        measured = _parse_loudnorm_json(stderr)
-        if not measured:
-            raise ValueError("no usable loudnorm measurements in pass-1 output")
-        applied = (
-            f"{filt}:measured_I={measured['measured_I']}:measured_TP={measured['measured_TP']}"
-            f":measured_LRA={measured['measured_LRA']}:measured_thresh={measured['measured_thresh']}"
-            f":offset={measured['offset']}:linear=true"
-        )
-        p2 = subprocess.run(
-            ["ffmpeg", "-y", "-i", mp3_path, "-af", applied, "-ar", "44100", "-ac", "1", wav_path],
-            capture_output=True, timeout=120,
-        )
-        if p2.returncode == 0 and os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
+        parsed = _parse_volumedetect(p1.stderr.decode("utf-8", "ignore"))
+        if not parsed:
+            raise ValueError("no mean_volume in volumedetect output")
+        mean, peak = parsed
+        # Clamp the correction: a near-silent clip (huge gain) or an already-hot
+        # clip (negative gain) shouldn't get an extreme adjustment.
+        gain = max(-30.0, min(40.0, _PODCAST_TARGET_RMS_DB - mean))
+        # Tier 1: full RMS gain + peak limiter (level auto-leveling disabled so it
+        # only limits and doesn't undo our gain; limit=0.9 ≈ -0.9 dBFS ceiling).
+        if _apply(f"volume={gain:.2f}dB,alimiter=level=false:limit=0.9"):
             return
-        raise RuntimeError(f"two-pass apply failed (rc={p2.returncode})")
+        # Tier 2 (if the limiter filter/flags are unavailable): limiter-free, with
+        # the gain capped so the measured peak can't exceed the ceiling. Fixes most
+        # of the gap without any pumping/clipping.
+        gain2 = min(gain, _PODCAST_PEAK_CEIL_DB - peak)
+        if _apply(f"volume={gain2:.2f}dB"):
+            return
+        raise RuntimeError("rms normalize passes failed")
     except Exception as e:
-        log(podcast_id, f"loudnorm two-pass fallback → single-pass: {e}")
+        log(podcast_id, f"rms normalize fallback -> single-pass loudnorm: {e}")
 
     # Fallback: original single-pass behaviour (never break the render).
     subprocess.run(
-        ["ffmpeg", "-y", "-i", mp3_path, "-af", filt, "-ar", "44100", "-ac", "1", wav_path],
+        ["ffmpeg", "-y", "-i", mp3_path, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+         "-ar", "44100", "-ac", "1", wav_path],
         capture_output=True, timeout=120,
     )
 

@@ -103,41 +103,38 @@ def test_query_error_falls_back_without_raising():
     assert vp._resolve_persona_avatar(_Boom(), {"id": "s1", "persona_id": "x"}, 220, "p1", "owner") is None
 
 
-# ── _parse_loudnorm_json (T-1137a two-pass measurement parsing) ──────────────
+# ── _parse_volumedetect (T-1137a-fix RMS measurement parsing) ────────────────
 
-_VALID_LOUDNORM = """
-[Parsed_loudnorm_0 @ 000]
-{
-    "input_i" : "-24.50",
-    "input_tp" : "-5.20",
-    "input_lra" : "7.30",
-    "input_thresh" : "-34.90",
-    "output_i" : "-16.00",
-    "target_offset" : "0.50"
-}
+_VALID_VOLDET = """
+[Parsed_volumedetect_0 @ 000] n_samples: 441000
+[Parsed_volumedetect_0 @ 000] mean_volume: -34.20 dB
+[Parsed_volumedetect_0 @ 000] max_volume: -8.10 dB
+[Parsed_volumedetect_0 @ 000] histogram_0db: 12
 """
 
 
-def test_parse_loudnorm_valid():
-    m = vp._parse_loudnorm_json(_VALID_LOUDNORM)
-    assert m is not None
-    assert m["measured_I"] == "-24.50"
-    assert m["measured_TP"] == "-5.20"
-    assert m["measured_LRA"] == "7.30"
-    assert m["measured_thresh"] == "-34.90"
-    assert m["offset"] == "0.50"
+def test_parse_volumedetect_valid():
+    got = vp._parse_volumedetect(_VALID_VOLDET)
+    assert got == (-34.2, -8.1)
 
 
-def test_parse_loudnorm_no_json_returns_none():
-    assert vp._parse_loudnorm_json("ffmpeg version ... no json here") is None
+def test_parse_volumedetect_no_mean_returns_none():
+    assert vp._parse_volumedetect("ffmpeg version ... no volume stats here") is None
 
 
-def test_parse_loudnorm_non_finite_returns_none():
-    # Near-silent clip → measured "-inf" cannot drive linear normalization.
-    blob = _VALID_LOUDNORM.replace('"input_i" : "-24.50"', '"input_i" : "-inf"')
-    assert vp._parse_loudnorm_json(blob) is None
+def test_parse_volumedetect_missing_max_defaults_to_zero():
+    blob = "[vd] mean_volume: -20.00 dB\n"
+    assert vp._parse_volumedetect(blob) == (-20.0, 0.0)
 
 
-def test_parse_loudnorm_missing_key_returns_none():
-    blob = _VALID_LOUDNORM.replace('"target_offset" : "0.50"', '"something_else" : "0.50"')
-    assert vp._parse_loudnorm_json(blob) is None
+def test_parse_volumedetect_non_finite_returns_none():
+    # Digit-based regex won't match "-inf" → treated as no reading → None.
+    blob = _VALID_VOLDET.replace("mean_volume: -34.20 dB", "mean_volume: -inf dB")
+    assert vp._parse_volumedetect(blob) is None
+
+
+def test_gain_math_lifts_quiet_clip_toward_target():
+    # A clip measured at -34 dB gets ~+14 dB to reach the -20 dB target.
+    mean, _peak = vp._parse_volumedetect(_VALID_VOLDET)
+    gain = vp._PODCAST_TARGET_RMS_DB - mean
+    assert 13.5 < gain < 14.5
