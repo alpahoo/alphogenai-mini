@@ -11,6 +11,26 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-07-02 — Claude — T-1136e Render persona resolution (fallback-safe) — Modal render change
+- `render_podcast` lit désormais `podcast_speakers.persona_id` et compose le vrai portrait à la place du
+  placeholder H/G. **Fallback-safe** : `_resolve_persona_avatar(sb, speaker, size, podcast_id)` renvoie `None`
+  (→ placeholder conservé) pour TOUT cas de miss (pas de persona_id, persona absente/`status!=active`,
+  portrait_path vide, URL non résoluble, download/décodage échoué) et **ne lève jamais**. `_podcast_circle_portrait`
+  center-crop l'image en avatar RGBA circulaire de même taille (220) que le placeholder → layout carte inchangé
+  (paste alpha + dim inactif). Portrait public (http/https) utilisé direct ; chemin storage privé signé depuis le
+  bucket `podcast-personas` (1h).
+- Points d'injection : helpers ajoutés après `_podcast_avatar` ; lignes host_av/guest_av (section 4) passent par
+  le resolver `or` placeholder. Reste inchangé : timeline, audio, base-par-segment, captions, branding (T-1134e).
+- Scope respecté : pas d'UI upload, pas de picker `/create/podcast`, pas de seed appliqué, pas de lip-sync.
+- Validation : **py_compile OK** ; **7 tests Python** (`tests/test_podcast_persona_avatar.py` — circle portrait
+  carré/RGBA/coins transparents/non-carré, + 4 cas fallback dont erreur DB avalée) ; tsc clean ; **148 tests
+  vitest** verts ; build OK.
+- **Déploiement Modal requis** (code render changé) → auto via GH Actions `deploy-modal.yml` (push main touchant
+  `modal_app/**`). QA à faire : un podcast **sans persona** doit rendre exactement comme avant (chemin fallback).
+- Prochaine étape : mini seed catalog (2-4 portraits contrôlés) — séparé, à valider avant application — pour QA
+  du rendu persona réel.
+
+---
 ## 2026-07-02 — Claude — T-1136c Podcast personas API (routes CRUD) — code only, aucune migration
 - Base : spec T-1136a + schéma T-1136b (déjà en prod). Route **`app/api/podcast-personas/route.ts`** :
   - **GET** : catalog public (user_id NULL) + personas de l'appelant, `status='active'`, filtre

@@ -2221,6 +2221,70 @@ def _podcast_avatar(name: str, color, size: int = 220):
     d.text(((size - (bb[2] - bb[0])) / 2, size * 0.56), initial, font=f, fill=(247, 250, 255))
     return img
 
+
+def _podcast_circle_portrait(img_bytes: bytes, size: int):
+    """Center-crop an arbitrary portrait into a circular RGBA avatar of `size`.
+
+    Matches the placeholder's round shape so the two-shot card layout (paste
+    with alpha mask, dimming for the inactive speaker) works unchanged whether
+    the avatar is a generated placeholder or a real persona portrait (T-1136e).
+    """
+    from io import BytesIO
+    from PIL import Image, ImageDraw
+    im = Image.open(BytesIO(img_bytes)).convert("RGBA")
+    w, h = im.size
+    side = min(w, h)
+    left, top = (w - side) // 2, (h - side) // 2
+    im = im.crop((left, top, left + side, top + side)).resize((size, size), Image.LANCZOS)
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).ellipse([0, 0, size - 1, size - 1], fill=255)
+    im.putalpha(mask)
+    return im
+
+
+def _resolve_persona_avatar(sb, speaker: dict, size: int, podcast_id: str):
+    """Return an RGBA portrait for a speaker's persona, or None to fall back.
+
+    Fallback-safe (T-1136e): returns None — so the caller keeps the placeholder
+    avatar — for ANY of: no persona_id, persona missing/removed, no portrait
+    path, unresolvable/expired URL, or a download/decode error. Never raises.
+    A public http(s) portrait_path is used directly; a private storage path is
+    signed from the `podcast-personas` bucket.
+    """
+    import httpx
+    persona_id = (speaker or {}).get("persona_id")
+    if not persona_id:
+        return None
+    try:
+        rows = (
+            sb.table("podcast_personas").select("portrait_path,status")
+            .eq("id", persona_id).eq("status", "active").limit(1).execute().data
+        ) or []
+        row = rows[0] if rows else None
+        if not row:
+            return None
+        path = (row.get("portrait_path") or "").strip()
+        if not path:
+            return None
+        if path.startswith("http://") or path.startswith("https://"):
+            url = path
+        else:
+            signed = sb.storage.from_("podcast-personas").create_signed_url(path, 3600)
+            url = None
+            if isinstance(signed, dict):
+                url = signed.get("signedURL") or signed.get("signedUrl")
+            if not url:
+                return None
+        with httpx.Client(timeout=30, follow_redirects=True) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            data = resp.content
+        return _podcast_circle_portrait(data, size)
+    except Exception as e:
+        log(podcast_id, f"persona avatar fallback (speaker {(speaker or {}).get('id')}): {e}")
+        return None
+
+
 @app.function(image=overlay_image, secrets=[secrets], timeout=1800, retries=0)
 def render_podcast(podcast_id: str) -> str:
     """Render a two-shot voice-first podcast MP4 from ready segments.
@@ -2326,8 +2390,10 @@ def render_podcast(podcast_id: str) -> str:
         total = max(cursor, 1.0)
 
         # 4) Studio-style visuals + fonts.
-        host_av = _podcast_avatar(host.get("name", "Host"), _PODCAST_COLORS["host"])
-        guest_av = _podcast_avatar(guest.get("name", "Guest"), _PODCAST_COLORS["guest"])
+        # Prefer a real persona portrait when the speaker has one (T-1136e);
+        # fall back to the generated placeholder on any miss (fallback-safe).
+        host_av = _resolve_persona_avatar(sb, host, 220, podcast_id) or _podcast_avatar(host.get("name", "Host"), _PODCAST_COLORS["host"])
+        guest_av = _resolve_persona_avatar(sb, guest, 220, podcast_id) or _podcast_avatar(guest.get("name", "Guest"), _PODCAST_COLORS["guest"])
         def dim_avatar(av):
             r, g, b, a = av.split()
             return Image.merge("RGBA", (
