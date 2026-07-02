@@ -25,9 +25,12 @@ Entrée la plus récente en haut. Format :
 - Décisions produit intégrées : V1 catalog = AlphoGen-owned/generated only (pas de célébrités/vrais visages
   reconnaissables) ; uploaded = plus tard avec attestation ; my-voice+AI-guest différé ; render V1 = portraits
   statiques (pas de lip-sync).
-- **Aucun code touché** (SQL pur) → pas de tsc/build/test requis. **Migration NON appliquée en prod** : le MCP
-  Supabase connecté ne voit que le projet Tradinglab, pas AlphoGen (`qbrpzmuedfugbhoeytdj`) ; application à faire
-  via dashboard Supabase / MCP scoppé AlphoGen après GO explicite. Pas de route, pas d'UI, pas de Modal.
+- **Aucun code touché** (SQL pur) → pas de tsc/build/test requis. Pas de route, pas d'UI, pas de Modal.
+- **APPLIQUÉE EN PROD le 2026-07-02** via le dashboard Supabase (SQL Editor, projet AlpoGenAI MINI
+  `qbrpzmuedfugbhoeytdj`, main/production) → « Success. No rows returned ». Le MCP Supabase de la session ne
+  voyait que Tradinglab (accès AlphoGen refusé), et le CLI `claude` n'est pas installé localement (donc pas de
+  MCP AlphoGen brancheable) → application manuelle par l'utilisateur. Table `podcast_personas` + colonne
+  `podcast_speakers.persona_id` désormais en prod.
 
 ---
 ## 2026-07-01 — Claude — T-1136a Podcast real duo/persona spec + mini-audit — docs-only
