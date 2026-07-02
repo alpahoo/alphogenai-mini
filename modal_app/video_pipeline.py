@@ -2242,14 +2242,19 @@ def _podcast_circle_portrait(img_bytes: bytes, size: int):
     return im
 
 
-def _resolve_persona_avatar(sb, speaker: dict, size: int, podcast_id: str):
+def _resolve_persona_avatar(sb, speaker: dict, size: int, podcast_id: str, owner_id=None):
     """Return an RGBA portrait for a speaker's persona, or None to fall back.
 
     Fallback-safe (T-1136e): returns None — so the caller keeps the placeholder
     avatar — for ANY of: no persona_id, persona missing/removed, no portrait
-    path, unresolvable/expired URL, or a download/decode error. Never raises.
-    A public http(s) portrait_path is used directly; a private storage path is
-    signed from the `podcast-personas` bucket.
+    path, not visible to the podcast owner, unresolvable/expired URL, or a
+    download/decode error. Never raises.
+
+    Visibility (hardening): only a catalog persona (user_id IS NULL) OR a persona
+    owned by the podcast owner (persona.user_id == owner_id) may be used — the
+    same rule the API's RLS/GET enforces, applied here too since render runs with
+    the service role (RLS bypassed). A public http(s) portrait_path is used
+    directly; a private storage path is signed from the `podcast-personas` bucket.
     """
     import httpx
     persona_id = (speaker or {}).get("persona_id")
@@ -2257,11 +2262,15 @@ def _resolve_persona_avatar(sb, speaker: dict, size: int, podcast_id: str):
         return None
     try:
         rows = (
-            sb.table("podcast_personas").select("portrait_path,status")
+            sb.table("podcast_personas").select("user_id,portrait_path,status")
             .eq("id", persona_id).eq("status", "active").limit(1).execute().data
         ) or []
         row = rows[0] if rows else None
         if not row:
+            return None
+        # Ownership/visibility: catalog (user_id NULL) or owned by podcast owner.
+        persona_owner = row.get("user_id")
+        if persona_owner is not None and persona_owner != owner_id:
             return None
         path = (row.get("portrait_path") or "").strip()
         if not path:
@@ -2283,6 +2292,83 @@ def _resolve_persona_avatar(sb, speaker: dict, size: int, podcast_id: str):
     except Exception as e:
         log(podcast_id, f"persona avatar fallback (speaker {(speaker or {}).get('id')}): {e}")
         return None
+
+
+def _parse_loudnorm_json(stderr_text: str):
+    """Extract the measured loudness params from a loudnorm pass-1 stderr blob.
+
+    Returns a dict ready for the pass-2 filter (measured_I/TP/LRA/thresh + offset),
+    or None if there's no JSON, a key is missing, or a value is non-finite
+    (loudnorm emits "-inf" for near-silent clips → not usable for linear mode).
+    Pure/testable — no ffmpeg needed.
+    """
+    import json
+    import math
+    start, end = stderr_text.rfind("{"), stderr_text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    try:
+        data = json.loads(stderr_text[start:end + 1])
+        measured = {
+            "measured_I": data["input_i"],
+            "measured_TP": data["input_tp"],
+            "measured_LRA": data["input_lra"],
+            "measured_thresh": data["input_thresh"],
+            "offset": data["target_offset"],
+        }
+        for v in measured.values():
+            if not math.isfinite(float(v)):
+                return None
+        return measured
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def _podcast_normalize_segment(mp3_path: str, wav_path: str, podcast_id: str):
+    """Normalize one segment to -16 LUFS with TWO-PASS loudnorm (T-1137a).
+
+    Single-pass loudnorm is unreliable: it under-corrects some clips, leaving a
+    speaker's turns 15-20 dB quieter than the others. Two-pass measures the clip
+    first (print_format=json), then applies with the measured values + linear=true
+    so every segment lands precisely at the target — host and guest stay level.
+
+    Fallback-safe: on ANY measurement/parse/apply failure (incl. near-silent
+    clips whose measured loudness is -inf) it falls back to the original
+    single-pass filter, and never leaves the render without a wav.
+    """
+    import os
+    import subprocess
+
+    filt = "loudnorm=I=-16:TP=-1.5:LRA=11"
+    try:
+        p1 = subprocess.run(
+            ["ffmpeg", "-i", mp3_path, "-af", f"{filt}:print_format=json", "-f", "null", "-"],
+            capture_output=True, timeout=120,
+        )
+        stderr = p1.stderr.decode("utf-8", "ignore")
+        measured = _parse_loudnorm_json(stderr)
+        if not measured:
+            raise ValueError("no usable loudnorm measurements in pass-1 output")
+        applied = (
+            f"{filt}:measured_I={measured['measured_I']}:measured_TP={measured['measured_TP']}"
+            f":measured_LRA={measured['measured_LRA']}:measured_thresh={measured['measured_thresh']}"
+            f":offset={measured['offset']}:linear=true"
+        )
+        p2 = subprocess.run(
+            ["ffmpeg", "-y", "-i", mp3_path, "-af", applied, "-ar", "44100", "-ac", "1", wav_path],
+            capture_output=True, timeout=120,
+        )
+        if p2.returncode == 0 and os.path.exists(wav_path) and os.path.getsize(wav_path) > 0:
+            return
+        raise RuntimeError(f"two-pass apply failed (rc={p2.returncode})")
+    except Exception as e:
+        log(podcast_id, f"loudnorm two-pass fallback → single-pass: {e}")
+
+    # Fallback: original single-pass behaviour (never break the render).
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", mp3_path, "-af", filt, "-ar", "44100", "-ac", "1", wav_path],
+        capture_output=True, timeout=120,
+    )
 
 
 @app.function(image=overlay_image, secrets=[secrets], timeout=1800, retries=0)
@@ -2354,11 +2440,9 @@ def render_podcast(podcast_id: str) -> str:
                 with open(mp3, "wb") as fh:
                     fh.write(resp.content)
                 # Per-segment loudness normalization (EBU R128) so speakers sit at a
-                # consistent level — fixes "one voice too loud / the other too quiet".
-                subprocess.run(["ffmpeg", "-y", "-i", mp3,
-                                "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
-                                "-ar", "44100", "-ac", "1", wav],
-                               capture_output=True, timeout=120)
+                # consistent level. Two-pass (T-1137a) — single-pass left some
+                # turns 15-20 dB quieter; two-pass hits the target precisely.
+                _podcast_normalize_segment(mp3, wav, podcast_id)
                 seg_wavs.append(wav)
                 durations.append(_podcast_probe_duration(wav))
 
@@ -2392,8 +2476,9 @@ def render_podcast(podcast_id: str) -> str:
         # 4) Studio-style visuals + fonts.
         # Prefer a real persona portrait when the speaker has one (T-1136e);
         # fall back to the generated placeholder on any miss (fallback-safe).
-        host_av = _resolve_persona_avatar(sb, host, 220, podcast_id) or _podcast_avatar(host.get("name", "Host"), _PODCAST_COLORS["host"])
-        guest_av = _resolve_persona_avatar(sb, guest, 220, podcast_id) or _podcast_avatar(guest.get("name", "Guest"), _PODCAST_COLORS["guest"])
+        owner_id = podcast.get("user_id")
+        host_av = _resolve_persona_avatar(sb, host, 220, podcast_id, owner_id) or _podcast_avatar(host.get("name", "Host"), _PODCAST_COLORS["host"])
+        guest_av = _resolve_persona_avatar(sb, guest, 220, podcast_id, owner_id) or _podcast_avatar(guest.get("name", "Guest"), _PODCAST_COLORS["guest"])
         def dim_avatar(av):
             r, g, b, a = av.split()
             return Image.merge("RGBA", (

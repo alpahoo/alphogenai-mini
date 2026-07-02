@@ -11,6 +11,26 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-07-02 — Claude — T-1137a loudness two-pass + hardenings persona (render + route)
+- **T-1137a — loudness consistency** : `render_podcast` normalise chaque segment en **two-pass loudnorm**
+  (`_podcast_normalize_segment`) au lieu du mono-pass. Passe 1 `loudnorm=...:print_format=json` → parse
+  `_parse_loudnorm_json` (fonction pure : extrait measured_I/TP/LRA/thresh + offset ; renvoie None si pas de JSON,
+  clé manquante, ou valeur non-finie type "-inf"). Passe 2 avec ces valeurs + `linear=true` → chaque segment à
+  -16 LUFS précis. **Fallback-safe** : toute erreur mesure/parse/apply → retombe sur le mono-pass d'origine, ne
+  laisse jamais le render sans wav. Cause corrigée : mono-pass laissait certains tours 15-20 dB plus faibles
+  (mesuré au RMS sur le podcast QA `4d6acdab` : tours à ~16,5s et ~25s à -30/-44 dBFS vs ~-15 ailleurs).
+- **Hardening 1 (render, Codex)** : `_resolve_persona_avatar` sélectionne aussi `user_id`, reçoit `owner_id`
+  (=`podcast.user_id`) et n'autorise qu'une persona **catalog (user_id NULL) OU possédée par l'owner du podcast** ;
+  sinon fallback placeholder, sans throw. (Le render tourne en service role = RLS bypassée, d'où le check explicite.)
+- **Hardening 2 (route, Codex)** : `POST /api/podcast-personas` **refuse les `portrait_path`/`thumb_path` en
+  http(s)** pour les personas user (`uploaded`/`generated`) → chemins storage privés uniquement. Les URLs publiques
+  restent réservées au seed catalog service-role. (T-1136d imposera plus tard le préfixe bucket/user.)
+- Validation : py_compile OK ; **12 tests Python** (persona ownership + 4 cas parser loudnorm) ; **18 tests route
+  personas** (dont rejets http portrait/thumb) ; tsc clean ; build OK. Pas de migration, pas de seed, pas d'UI.
+- **Redeploy Modal requis** (`modal_app/video_pipeline.py` changé). QA après deploy : re-render court + re-mesure
+  RMS (tous les tours dans ~3-5 dB hors silences) — critère d'acceptation T-1137a.
+
+---
 ## 2026-07-02 — Claude — T-1136e Render persona resolution (fallback-safe) — Modal render change
 - `render_podcast` lit désormais `podcast_speakers.persona_id` et compose le vrai portrait à la place du
   placeholder H/G. **Fallback-safe** : `_resolve_persona_avatar(sb, speaker, size, podcast_id)` renvoie `None`

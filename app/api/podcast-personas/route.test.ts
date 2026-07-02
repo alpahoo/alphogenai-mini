@@ -163,12 +163,26 @@ describe("POST /api/podcast-personas", () => {
         calls,
       ) as never,
     );
-    const res = await POST(req({ body: { name: "AI Guest", source_kind: "generated", portrait_path: "https://cdn.example.com/g.png" } }));
+    const res = await POST(req({ body: { name: "AI Guest", source_kind: "generated", portrait_path: "podcast-personas/user-1/g.png" } }));
     expect(res.status).toBe(200);
     const insert = calls.find((c) => c.op === "insert")!.payload as Record<string, unknown>;
     expect(insert.consent_confirmed_at).toBeUndefined();
     expect(insert.consent_statement_version).toBeUndefined();
     expect(insert.user_id).toBe("user-1");
+  });
+
+  it("400 rejects a public http(s) portrait_path (private storage paths only)", async () => {
+    vi.mocked(createServiceClient).mockReturnValue(makeService({}) as never);
+    const res = await POST(req({ body: { name: "X", source_kind: "generated", portrait_path: "https://cdn.example.com/g.png" } }));
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json()).toLowerCase()).toContain("portrait_path");
+  });
+
+  it("400 rejects a public http(s) thumb_path", async () => {
+    vi.mocked(createServiceClient).mockReturnValue(makeService({}) as never);
+    const res = await POST(req({ body: { name: "X", source_kind: "generated", portrait_path: "podcast-personas/user-1/g.png", thumb_path: "http://cdn.example.com/t.png" } }));
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json()).toLowerCase()).toContain("thumb_path");
   });
 });
 

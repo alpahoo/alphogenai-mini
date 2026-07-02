@@ -141,8 +141,24 @@ export async function POST(request: NextRequest) {
     if (!portraitPath || portraitPath.length > PATH_MAX) {
       return NextResponse.json({ error: "A valid portrait_path is required." }, { status: 400 });
     }
+    // Hardening: user-created personas must reference PRIVATE storage paths, never
+    // a public http(s) URL. Public catalog URLs are reserved for service-role
+    // seeds (not this route). (T-1136d will further pin the path to the user's
+    // own bucket prefix once the upload flow exists.)
+    if (isHttpUrl(portraitPath)) {
+      return NextResponse.json(
+        { error: "portrait_path must be a private storage path, not a public URL." },
+        { status: 400 },
+      );
+    }
     if (thumbPath && thumbPath.length > PATH_MAX) {
       return NextResponse.json({ error: "thumb_path is too long." }, { status: 400 });
+    }
+    if (thumbPath && isHttpUrl(thumbPath)) {
+      return NextResponse.json(
+        { error: "thumb_path must be a private storage path, not a public URL." },
+        { status: 400 },
+      );
     }
 
     // Consent guard (mirrors the DB CHECK): an uploaded real likeness cannot be
