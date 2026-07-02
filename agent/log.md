@@ -11,6 +11,28 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-07-02 — Claude — T-1136c Podcast personas API (routes CRUD) — code only, aucune migration
+- Base : spec T-1136a + schéma T-1136b (déjà en prod). Route **`app/api/podcast-personas/route.ts`** :
+  - **GET** : catalog public (user_id NULL) + personas de l'appelant, `status='active'`, filtre
+    `.or(user_id.eq.<uid>,user_id.is.null)` (service client + scope explicite, pattern podcast). URLs résolues :
+    URL http(s) (catalog) passée telle quelle ; chemin storage privé signé 24h depuis le bucket `podcast-personas`.
+    Tri catalog d'abord (picker-friendly).
+  - **POST** : crée une persona **de l'appelant**. `source_kind` limité à `uploaded`/`generated` (**`catalog`
+    refusé** — seed service-role only). **Consent guard** : `uploaded` sans `consent:true` → 400 ; avec consent →
+    `consent_confirmed_at` + `consent_statement_version` (v1-2026-07) posés (miroir du CHECK DB).
+  - **PATCH** : rename own (scopé `user_id`), 404 si pas à l'appelant.
+  - **DELETE** : soft-remove (`status='removed'`, scopé `user_id`) — les podcasts qui référencent la persona
+    continuent de résoudre au render ; disparaît juste des résultats picker.
+- Auth bearer (`getUserFromRequest`) — user id TOUJOURS du token, jamais du body. Provider jamais exposé.
+- **Aucune migration** : la route tourne contre le schéma existant ; elle prend un `portrait_path` déjà résolu.
+  L'upload d'image (bytes → bucket privé `podcast-personas`) + l'UI picker sont **différés (T-1136d)**. Le catalog
+  (URLs publiques seedées server-side) marche end-to-end dès maintenant → débloque T-1136e.
+- Tests : `route.test.ts` 16 cas (auth, catalog+own+tri+signing, consent guard, source_kind, rename/soft-delete
+  scopés). tsc clean ; lint clean ; build OK (route `/api/podcast-personas` enregistrée). Pas de Modal, pas de UI.
+- **Seed catalog** : nécessaire pour QA e2e de T-1136e (au moins 1 persona) — à proposer séparément AVANT
+  application (dépend du sourcing des images portraits, cf spec §5 Q1). Non fait dans ce ticket.
+
+---
 ## 2026-07-02 — Claude — T-1136b Podcast personas schema — migration additive (NON appliquée)
 - Base : spec T-1136a. Migration **`supabase/migrations/20260702_create_podcast_personas.sql`** (additive only).
 - Table `podcast_personas` : `user_id` NULL = catalog public (service-role only), `source_kind`
