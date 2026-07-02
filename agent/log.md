@@ -11,6 +11,20 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-07-02 — Claude — T-1136f Content-policy sur le nom de persona — TS only (non poussé)
+- Travail offline (MCP `supabase-alphogen` non authentifié dans la session → seed impossible ; on avance sur du
+  code pur en attendant l'autorisation OAuth + les URLs portraits pour le seed).
+- `lib/content-policy.ts` : ajout `PUBLIC_FIGURE_NAMES` (liste curée non-exhaustive de vraies personnalités) +
+  `screenPersonaName(name)` → bloque si le nom matche une figure publique (marqueurs génériques OU noms) ou l'
+  `IP_BLOCKLIST` (marques/persos protégés). Réutilise `findMatches` (word-boundary, pas de faux positif substring).
+- `app/api/podcast-personas/route.ts` (POST) : après validation du nom, `screenPersonaName` → 400 si bloqué
+  (ex. « Elon Musk », « Mickey Mouse »). Avant le reste de la validation.
+- Tests : `lib/__tests__/content-policy.test.ts` (+5 cas screenPersonaName : figure, IP, casse/inclus, nom
+  original OK, pas de faux positif « Skye »/« ye ») + route (+1 cas : nom figure → 400). 30 tests verts (content
+  + route) ; tsc clean ; build OK. Pas de Modal, pas de migration, pas d'UI.
+- NON poussé (attend GO). Déploiement = Vercel au push (pas de redeploy Modal).
+
+---
 ## 2026-07-02 — Claude — T-1137a-fix Normalisation RMS déterministe (loudnorm abandonné)
 - **Constat QA** : le two-pass loudnorm (déployé, confirmé NON-fallback via logs Modal) **n'a pas corrigé** —
   P90 par segment sur podcast `eeda1d80` : segments host à -28,6/-29,2 dBFS vs ~-12 ailleurs (spread ~16-18 dB).

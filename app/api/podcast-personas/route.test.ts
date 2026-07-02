@@ -120,6 +120,13 @@ describe("POST /api/podcast-personas", () => {
     expect((await POST(req({ body: { source_kind: "generated", portrait_path: "x" } }))).status).toBe(400);
   });
 
+  it("400 rejects a persona name that references a public figure (T-1136f)", async () => {
+    vi.mocked(createServiceClient).mockReturnValue(makeService({}) as never);
+    const res = await POST(req({ body: { name: "Elon Musk", source_kind: "generated", portrait_path: "podcast-personas/user-1/g.png" } }));
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json()).toLowerCase()).toContain("public figure");
+  });
+
   it("400 rejects user-created 'catalog' source_kind", async () => {
     vi.mocked(createServiceClient).mockReturnValue(makeService({}) as never);
     const res = await POST(req({ body: { name: "X", source_kind: "catalog", portrait_path: "x" } }));

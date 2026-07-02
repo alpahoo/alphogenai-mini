@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
+import { screenPersonaName } from "@/lib/content-policy";
 
 /**
  * Podcast personas API (T-1136c).
@@ -130,6 +131,15 @@ export async function POST(request: NextRequest) {
     const consent = body.consent === true;
 
     if (!name) return NextResponse.json({ error: "A persona name is required." }, { status: 400 });
+    // Content policy (T-1136f): a persona name can't reference a real public
+    // figure or a copyrighted/branded character.
+    const nameScreen = screenPersonaName(name);
+    if (nameScreen.blocked) {
+      return NextResponse.json(
+        { error: nameScreen.findings.find((f) => f.level === "block")?.message || "This persona name isn't allowed." },
+        { status: 400 },
+      );
+    }
     if (!USER_SOURCE_KINDS.includes(sourceKind as UserSourceKind)) {
       // 'catalog' is intentionally excluded — catalog personas are seeded by the
       // service role only, never created by a user.

@@ -50,6 +50,23 @@ const PUBLIC_FIGURE_MARKERS: string[] = [
   "real politician", "pop star named", "the singer named",
 ];
 
+// Curated (non-exhaustive) list of well-known real public figures. Used to
+// screen short, name-like fields (e.g. a podcast persona name) where the generic
+// markers above wouldn't catch a bare name. Heuristic first line — the user
+// remains responsible for their inputs (T-1136f).
+const PUBLIC_FIGURE_NAMES: string[] = [
+  "elon musk", "donald trump", "joe biden", "barack obama", "kamala harris",
+  "vladimir putin", "emmanuel macron", "xi jinping", "narendra modi",
+  "taylor swift", "beyonce", "beyoncé", "kanye west", "ye", "drake", "rihanna",
+  "justin bieber", "billie eilish", "ariana grande", "lady gaga",
+  "cristiano ronaldo", "lionel messi", "lebron james", "serena williams",
+  "tom cruise", "brad pitt", "angelina jolie", "leonardo dicaprio",
+  "dwayne johnson", "the rock", "scarlett johansson", "keanu reeves",
+  "oprah", "oprah winfrey", "kim kardashian", "kylie jenner", "mrbeast",
+  "mr beast", "bill gates", "jeff bezos", "mark zuckerberg", "steve jobs",
+  "warren buffett", "greta thunberg", "pope francis",
+];
+
 // ── Age words → heightened provider scrutiny (warn, suggest roles) ─────────
 const AGE_WORDS: string[] = [
   "child", "children", "kid", "kids", "toddler", "baby", "babies", "infant",
@@ -128,6 +145,46 @@ export function screenPrompt(prompt: string): PolicyResult {
         `Narrative/backstory phrasing raises flag risk. Describe only what the ` +
         `camera sees (setting, action, shot type, lighting), not motivations or history.`,
       matches: narrative,
+    });
+  }
+
+  return { blocked: findings.some((f) => f.level === "block"), findings };
+}
+
+/**
+ * Screen a short, name-like field (e.g. a podcast persona name) for real public
+ * figures and copyrighted/branded characters (T-1136f). Stricter than
+ * `screenPrompt` for names: a bare "Elon Musk" or "Mickey Mouse" is blocked.
+ * Heuristic + non-exhaustive — AlphoGen's first line, not a substitute for
+ * downstream review. Pure/testable.
+ */
+export function screenPersonaName(name: string): PolicyResult {
+  const findings: PolicyFinding[] = [];
+  const text = name || "";
+
+  const figures = findMatches(text, PUBLIC_FIGURE_NAMES);
+  const markers = findMatches(text, PUBLIC_FIGURE_MARKERS);
+  const named = [...figures, ...markers];
+  if (named.length > 0) {
+    findings.push({
+      level: "block",
+      code: "PUBLIC_FIGURE",
+      message:
+        `Persona names can't reference real public figures (${named.join(", ")}). ` +
+        `Use an original, fictional presenter name.`,
+      matches: named,
+    });
+  }
+
+  const ip = findMatches(text, IP_BLOCKLIST);
+  if (ip.length > 0) {
+    findings.push({
+      level: "block",
+      code: "COPYRIGHTED_IP",
+      message:
+        `Persona names can't reference protected brands/characters (${ip.join(", ")}). ` +
+        `Use an original name instead.`,
+      matches: ip,
     });
   }
 
