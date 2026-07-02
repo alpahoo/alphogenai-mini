@@ -11,6 +11,25 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-07-02 — Claude — T-1136b Podcast personas schema — migration additive (NON appliquée)
+- Base : spec T-1136a. Migration **`supabase/migrations/20260702_create_podcast_personas.sql`** (additive only).
+- Table `podcast_personas` : `user_id` NULL = catalog public (service-role only), `source_kind`
+  (catalog/uploaded/generated), `name`, `portrait_path`, `thumb_path`, `consent_confirmed_at`,
+  `consent_statement_version`, `status` (active/removed), `created_at`. RLS : SELECT = own OR catalog actif ;
+  INSERT/UPDATE/DELETE = owner only (catalog géré par service role). Index own + index partiel catalog.
+- **Garde d'intégrité** : `CHECK (source_kind <> 'uploaded' OR consent_confirmed_at IS NOT NULL)` — une persona
+  uploadée ne peut exister sans consentement horodaté (renforce le §4 de la spec au niveau DB).
+- `podcast_speakers` : ajout colonne nullable **`persona_id`** (`REFERENCES podcast_personas ON DELETE SET NULL`).
+  **`avatar_id` laissé intact** (fallback legacy) — l'audit confirme qu'il n'est pas lu par le render, donc pas
+  de risque à le garder ; le render (T-1136e) préférera `persona_id`.
+- Décisions produit intégrées : V1 catalog = AlphoGen-owned/generated only (pas de célébrités/vrais visages
+  reconnaissables) ; uploaded = plus tard avec attestation ; my-voice+AI-guest différé ; render V1 = portraits
+  statiques (pas de lip-sync).
+- **Aucun code touché** (SQL pur) → pas de tsc/build/test requis. **Migration NON appliquée en prod** : le MCP
+  Supabase connecté ne voit que le projet Tradinglab, pas AlphoGen (`qbrpzmuedfugbhoeytdj`) ; application à faire
+  via dashboard Supabase / MCP scoppé AlphoGen après GO explicite. Pas de route, pas d'UI, pas de Modal.
+
+---
 ## 2026-07-01 — Claude — T-1136a Podcast real duo/persona spec + mini-audit — docs-only
 - Audit read-only (schéma podcast, storage/buckets, routes looks/upload/byteplus-assets, points d'injection
   `render_podcast`, contraintes consentement existantes) puis spec — **`docs/product/podcast-real-duo-persona-spec.md`**.
