@@ -24,9 +24,11 @@ Entrée la plus récente en haut. Format :
 - `_parse_loudnorm_json` supprimé (plus utilisé). Cible -20 dBFS RMS (naturel pour dialogue, headroom pics).
 - Validation : py_compile OK ; **13 tests Python** (persona ownership + parser volumedetect + math gain). Aucun
   changement TS (Modal only). Redeploy Modal requis.
-- QA après deploy : re-render court + re-mesure P90/RMS par segment → critère spread < 3-5 dB hors silences.
+- **Déployé** (`a18f58a` → GH Actions completed success) + **QA PASS** (podcast `bbab3d2b`, 10 segments,
+  re-mesure Web Audio P90/RMS) : **spread P90 = 3,1 dB**, **spread RMS moyen = 4,0 dB** (vs ~16-18 dB avant).
+  Critère T-1137a atteint (< 3-5 dB). Plus aucune chute brutale host/guest ; moyennes ~-20 à -24 dBFS (cible -20).
 - Vigilance notée : `volumedetect` mesure sur tout le fichier (silences TTS début/fin inclus) ; si biais, prévoir
-  mesure gated / trim non destructif dans un ticket suivant. Ici on corrige d'abord l'écart massif.
+  mesure gated / trim non destructif dans un ticket suivant. Écart massif corrigé, résultat homogène confirmé.
 
 ---
 ## 2026-07-02 — Claude — T-1137a loudness two-pass + hardenings persona (render + route)
