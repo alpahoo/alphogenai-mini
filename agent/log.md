@@ -23,7 +23,14 @@ Entrée la plus récente en haut. Format :
   `source_kind='catalog'`. + bloc optionnel commenté pour assigner 2 personas aux speakers d'un podcast test.
 - **Ordre obligatoire** : (1) PUSH (Vercel héberge les PNG) AVANT (2) apply du seed via dashboard, sinon le render
   httpx.get 404 → fallback. Puis (3) assigner persona_id à un podcast test, (4) render, (5) QA visuelle non-fallback.
-- Rien appliqué. py_compile générateur OK. Non poussé (attend GO).
+- py_compile générateur OK.
+- **DÉPLOYÉ + SEED APPLIQUÉ + QA PASS (2026-07-02)** : commits `c6b6119` (T-1136f) + `57cea64` (portraits+seed)
+  poussés → Vercel ; 4 PNG servis HTTP 200 (`alphogen.com/podcast-personas/*.png`). Seed appliqué via dashboard
+  → 4 personas catalog (Maya `fa54f41b`, Leo `c93178eb`, Aria `d20c650e`, Sam `e0ac444c`). Podcast test
+  `e3691b4f-e84c-4bbc-b521-1abf8afe08ef` (30s) : dialogue+voix générés, host→Maya / guest→Leo assignés via SQL,
+  render. **QA visuelle : avatars VIOLET (host) / AMBRE (guest) au lieu du placeholder vert/bleu → chemin
+  non-fallback persona confirmé end-to-end.** La chaîne T-1136 (spec→schema→API→render→seed) est complète et
+  prouvée en prod avec de vrais portraits.
 
 ---
 ## 2026-07-02 — Claude — T-1136f Content-policy sur le nom de persona — TS only (non poussé)
