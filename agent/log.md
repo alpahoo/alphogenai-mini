@@ -11,6 +11,21 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-07-02 — Claude — T-1136-seed Mini seed catalog personas (assets + SQL, non appliqué)
+- Le seed était bloqué sur l'absence de portraits AlphoGen-owned. Résolu **sans dépendance externe** : 4 portraits
+  **stylisés générés** (illustrations flat, PAS de personnes réelles → conformes non-goal) via
+  `scripts/gen_podcast_catalog_portraits.py`, écrits dans `public/podcast-personas/*.png` → servis par Vercel à
+  `https://www.alphogen.com/podcast-personas/<slug>.png` (AlphoGen-owned, publics, non signés).
+- Palettes **distinctes du placeholder** (violet/ambre/teal/rose vs host-vert/guest-bleu) → au render, un avatar
+  dans ces tons **prouve** visuellement le chemin non-fallback.
+- Seed SQL idempotent : `supabase/seeds/podcast_personas_catalog_seed.sql` — 4 personas catalog (Maya Rivers,
+  Leo Bennett, Aria Chen, Sam Delgado — noms fictifs, passent screenPersonaName), `user_id NULL`,
+  `source_kind='catalog'`. + bloc optionnel commenté pour assigner 2 personas aux speakers d'un podcast test.
+- **Ordre obligatoire** : (1) PUSH (Vercel héberge les PNG) AVANT (2) apply du seed via dashboard, sinon le render
+  httpx.get 404 → fallback. Puis (3) assigner persona_id à un podcast test, (4) render, (5) QA visuelle non-fallback.
+- Rien appliqué. py_compile générateur OK. Non poussé (attend GO).
+
+---
 ## 2026-07-02 — Claude — T-1136f Content-policy sur le nom de persona — TS only (non poussé)
 - Travail offline (MCP `supabase-alphogen` non authentifié dans la session → seed impossible ; on avance sur du
   code pur en attendant l'autorisation OAuth + les URLs portraits pour le seed).
