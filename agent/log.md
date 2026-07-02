@@ -11,6 +11,25 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-07-01 — Claude — T-1136a Podcast real duo/persona spec + mini-audit — docs-only
+- Audit read-only (schéma podcast, storage/buckets, routes looks/upload/byteplus-assets, points d'injection
+  `render_podcast`, contraintes consentement existantes) puis spec — **`docs/product/podcast-real-duo-persona-spec.md`**.
+- Findings clés : `podcast_speakers.avatar_id` existe déjà mais n'est **jamais lu** par le render (placeholder
+  `_podcast_avatar()` systématique) — c'est le point d'injection naturel. `render_podcast` construit **une base
+  statique par segment** (perf, pas par frame) : un portrait statique s'y glisse sans changement d'archi ; un
+  avatar parlant/lip-sync (V1.1) casserait ce modèle et doit être un ticket séparé avec sa propre validation perf.
+  **Aucun pattern de consentement in-app n'existe** pour un vrai visage (la "vérification" BytePlus est un
+  garde-fou anti-abus côté provider, pas un consentement produit) — c'est le plus gros gap policy à combler,
+  traité en détail dans la spec (§4, attestation horodatée + versionnée, pas juste un booléen).
+- Spec : 4 types de duo (catalog / uploaded / generated / my-voice+AI-guest), data model additif
+  (`podcast_personas` nouvelle table découplée de `byteplus_assets` + colonne `persona_id` nullable sur
+  `podcast_speakers`), asset policy (bucket privé façon `references`), V1 render (portrait statique, zéro
+  régression), V1.1 (lip-sync, ticket séparé), UI cible (Duo picker avant dialogue + voice mapping indépendant),
+  non-goals (pas de vrai visage sans consentement, pas de lip-sync immédiat), découpage T-1136b..f + ordre
+  suggéré (b→c→e→f→d, la compositing Modal avant le polish UI), 3 questions ouvertes pour review produit.
+- Docs-only : aucun runtime, aucune migration, aucun Modal touché. **Stop pour review produit** avant T-1136b.
+
+---
 ## 2026-07-01 — Claude — T-1135a-lite Centralisation du cap segments (60) — zéro changement de comportement
 - Suite à l'audit long-form (10→45 min) : `MAX_SEGMENTS=60` était dupliqué en dur à 3 endroits
   (`lib/podcast/dialogue.ts` sous le nom `ABSOLUTE_MAX_SEGMENTS`, `app/api/podcasts/[id]/tts/route.ts`,
