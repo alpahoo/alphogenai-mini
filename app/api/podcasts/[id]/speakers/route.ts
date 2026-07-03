@@ -5,10 +5,17 @@ import { isPodcastVoice } from "@/lib/podcast/voice-catalog";
 
 /**
  * PATCH /api/podcasts/[id]/speakers
- * Set the host and/or guest voice_id from the podcast voice catalog. No migration
- * (podcast_speakers.voice_id already exists). Host and guest must end up distinct.
+ * Set the host and/or guest voice_id (voice catalog) and/or persona_id
+ * (podcast_personas — T-1136d Duo picker). No migration (both columns exist).
  *
- * Body: { host_voice_id?: string, guest_voice_id?: string }
+ * Body: {
+ *   host_voice_id?: string, guest_voice_id?: string,
+ *   host_persona_id?: string | null, guest_persona_id?: string | null,
+ * }
+ * - voice: host/guest must end up distinct.
+ * - persona: must be visible to the owner (catalog user_id IS NULL, or owned by
+ *   the caller) and active; host/guest must end up distinct; null clears it;
+ *   undefined leaves it unchanged.
  */
 export async function PATCH(
   request: NextRequest,
@@ -29,10 +36,20 @@ export async function PATCH(
     const body = await request.json().catch(() => ({}));
     const hostVoice = body.host_voice_id;
     const guestVoice = body.guest_voice_id;
+    const hostPersona = body.host_persona_id; // string = set, null = clear, undefined = unchanged
+    const guestPersona = body.guest_persona_id;
 
-    if (hostVoice === undefined && guestVoice === undefined) {
-      return NextResponse.json({ error: "Provide host_voice_id and/or guest_voice_id" }, { status: 400 });
+    const nothingProvided =
+      hostVoice === undefined && guestVoice === undefined &&
+      hostPersona === undefined && guestPersona === undefined;
+    if (nothingProvided) {
+      return NextResponse.json(
+        { error: "Provide host/guest voice_id and/or persona_id" },
+        { status: 400 },
+      );
     }
+
+    // ── Voice validation ──────────────────────────────────────────────────
     if (hostVoice !== undefined && !isPodcastVoice(hostVoice)) {
       return NextResponse.json({ error: "host_voice_id is not a known voice" }, { status: 400 });
     }
@@ -40,9 +57,34 @@ export async function PATCH(
       return NextResponse.json({ error: "guest_voice_id is not a known voice" }, { status: 400 });
     }
 
+    // ── Persona validation (visibility + shape) ───────────────────────────
+    const wantsPersona = (v: unknown): v is string => typeof v === "string" && v.length > 0;
+    const requestedPersonaIds = [hostPersona, guestPersona].filter(wantsPersona);
+    if (requestedPersonaIds.length > 0) {
+      const { data: personas } = await service
+        .from("podcast_personas")
+        .select("id, user_id, status")
+        .in("id", requestedPersonaIds);
+      const byId = new Map((personas || []).map((p) => [p.id, p]));
+      for (const pid of requestedPersonaIds) {
+        const p = byId.get(pid);
+        // Catalog (user_id NULL) or owned by the caller; must be active.
+        const visible = p && p.status === "active" && (p.user_id === null || p.user_id === user.id);
+        if (!visible) {
+          return NextResponse.json({ error: "persona not found or not allowed" }, { status: 400 });
+        }
+      }
+    }
+    // Reject malformed persona values (not string, not null).
+    for (const v of [hostPersona, guestPersona]) {
+      if (v !== undefined && v !== null && typeof v !== "string") {
+        return NextResponse.json({ error: "persona_id must be a string or null" }, { status: 400 });
+      }
+    }
+
     const { data: speakers } = await service
       .from("podcast_speakers")
-      .select("id, role, voice_id")
+      .select("id, role, voice_id, persona_id")
       .eq("podcast_id", id);
     const host = speakers?.find((s) => s.role === "host");
     const guest = speakers?.find((s) => s.role === "guest");
@@ -51,30 +93,45 @@ export async function PATCH(
     }
 
     // Final voices after applying the requested changes must be distinct.
-    const finalHost = hostVoice !== undefined ? hostVoice : host.voice_id;
-    const finalGuest = guestVoice !== undefined ? guestVoice : guest.voice_id;
-    if (finalHost && finalGuest && finalHost === finalGuest) {
+    const finalHostVoice = hostVoice !== undefined ? hostVoice : host.voice_id;
+    const finalGuestVoice = guestVoice !== undefined ? guestVoice : guest.voice_id;
+    if (finalHostVoice && finalGuestVoice && finalHostVoice === finalGuestVoice) {
       return NextResponse.json({ error: "Host and guest must use different voices" }, { status: 400 });
     }
 
-    if (hostVoice !== undefined) {
-      const { error } = await service.from("podcast_speakers").update({ voice_id: hostVoice }).eq("id", host.id);
+    // Final personas must be distinct (V1: no shared persona for both speakers).
+    const finalHostPersona = hostPersona !== undefined ? hostPersona : host.persona_id;
+    const finalGuestPersona = guestPersona !== undefined ? guestPersona : guest.persona_id;
+    if (finalHostPersona && finalGuestPersona && finalHostPersona === finalGuestPersona) {
+      return NextResponse.json({ error: "Host and guest must use different personas" }, { status: 400 });
+    }
+
+    // ── Apply ─────────────────────────────────────────────────────────────
+    const hostPatch: Record<string, unknown> = {};
+    const guestPatch: Record<string, unknown> = {};
+    if (hostVoice !== undefined) hostPatch.voice_id = hostVoice;
+    if (guestVoice !== undefined) guestPatch.voice_id = guestVoice;
+    if (hostPersona !== undefined) hostPatch.persona_id = hostPersona;
+    if (guestPersona !== undefined) guestPatch.persona_id = guestPersona;
+
+    if (Object.keys(hostPatch).length > 0) {
+      const { error } = await service.from("podcast_speakers").update(hostPatch).eq("id", host.id);
       if (error) {
         console.error("[podcast/speakers] host update failed:", error);
-        return NextResponse.json({ error: "Could not save the host voice" }, { status: 500 });
+        return NextResponse.json({ error: "Could not save the host speaker" }, { status: 500 });
       }
     }
-    if (guestVoice !== undefined) {
-      const { error } = await service.from("podcast_speakers").update({ voice_id: guestVoice }).eq("id", guest.id);
+    if (Object.keys(guestPatch).length > 0) {
+      const { error } = await service.from("podcast_speakers").update(guestPatch).eq("id", guest.id);
       if (error) {
         console.error("[podcast/speakers] guest update failed:", error);
-        return NextResponse.json({ error: "Could not save the guest voice" }, { status: 500 });
+        return NextResponse.json({ error: "Could not save the guest speaker" }, { status: 500 });
       }
     }
 
     const { data: updated } = await service
       .from("podcast_speakers")
-      .select("id, role, name, position, voice_id")
+      .select("id, role, name, position, voice_id, persona_id")
       .eq("podcast_id", id)
       .order("position", { ascending: true });
 

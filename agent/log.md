@@ -11,6 +11,23 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-07-03 — Claude — T-1136d Duo picker UI V1 (catalog-only)
+- **Route** : extension **sûre** de `PATCH /api/podcasts/[id]/speakers` (déjà utilisée pour les voix) → accepte
+  aussi `host_persona_id`/`guest_persona_id` (string=set, null=clear, undefined=inchangé). Validation :
+  ownership/visibilité (persona catalog `user_id NULL` OU possédée par l'owner, `status='active'`), host≠guest
+  (personas distincts), formes rejetées → 400. Retourne les speakers avec `persona_id`.
+- **UI `/create/podcast`** : nouvelle carte **« Presenters »** avant le Voice Lab, affichée si des personas catalog
+  existent. Charge `GET /api/podcast-personas` (filtre `is_catalog`), colonnes Host/Guest avec tuiles portrait +
+  « None », sélection surlignée (couleur rôle), tuile désactivée si déjà prise par l'autre rôle. `setSpeakerPersona`
+  → PATCH speakers, guard client host≠guest. Fallback inchangé (None = placeholder).
+- Scope respecté : catalog-only, pas d'upload user, pas de generated/uploaded UI, pas de lip-sync, pas de
+  migration. Type `Speaker` + `Persona` ajoutés, composant `DuoColumn`.
+- Validation : tsc clean ; **12 tests route speakers** (dont persona : assign, ownership 400, distinct 400, clear
+  null, host+guest) ; 115 tests podcast/api verts ; lint (1 warning `<img>` cohérent avec le repo) ; build OK.
+- QA prod à faire après deploy : ouvrir un podcast, choisir Maya (host) + Leo (guest) via le picker, render,
+  vérifier portraits non-fallback (violet/ambre). Non poussé (attend GO).
+
+---
 ## 2026-07-02 — Claude — T-1136-seed Mini seed catalog personas (assets + SQL, non appliqué)
 - Le seed était bloqué sur l'absence de portraits AlphoGen-owned. Résolu **sans dépendance externe** : 4 portraits
   **stylisés générés** (illustrations flat, PAS de personnes réelles → conformes non-goal) via

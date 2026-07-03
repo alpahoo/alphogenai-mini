@@ -23,6 +23,7 @@ function makeService(routes: Record<string, (s: State) => Result>, updates: Stat
       select: () => b,
       update: (obj: unknown) => { st.op = "update"; st.payload = obj; return b; },
       eq: (k: string, v: unknown) => { st.filters[k] = v; return b; },
+      in: (k: string, v: unknown) => { st.filters[`in:${k}`] = v; return b; },
       order: () => b,
       single: () => run(),
       then: (resolve: (r: Result) => unknown, reject?: (e: unknown) => unknown) => run().then(resolve, reject),
@@ -36,8 +37,16 @@ const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 const req = (body?: unknown) => ({ url: "http://localhost", json: async () => body ?? {} } as never);
 
 const SPEAKERS = [
-  { id: "host-id", role: "host", voice_id: DEFAULT_HOST_VOICE },
-  { id: "guest-id", role: "guest", voice_id: DEFAULT_GUEST_VOICE },
+  { id: "host-id", role: "host", voice_id: DEFAULT_HOST_VOICE, persona_id: null },
+  { id: "guest-id", role: "guest", voice_id: DEFAULT_GUEST_VOICE, persona_id: "persona-guest" },
+];
+
+// Personas the route may look up. Catalog rows (user_id null) + one owned by
+// another user (not visible) to exercise the ownership guard.
+const PERSONAS = [
+  { id: "p-cat-1", user_id: null, status: "active" },
+  { id: "persona-guest", user_id: null, status: "active" },
+  { id: "p-other", user_id: "someone-else", status: "active" },
 ];
 
 function service(updates: State[] = []) {
@@ -45,6 +54,10 @@ function service(updates: State[] = []) {
     "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id }, error: null }),
     "podcast_speakers:select": () => ({ data: SPEAKERS, error: null }),
     "podcast_speakers:update": () => ({ data: null, error: null }),
+    "podcast_personas:select": (s) => {
+      const ids = (s.filters["in:id"] as string[]) || [];
+      return { data: PERSONAS.filter((p) => ids.includes(p.id)), error: null };
+    },
   }, updates) as never;
 }
 
@@ -76,10 +89,9 @@ describe("PATCH /api/podcasts/[id]/speakers", () => {
     expect((await PATCH(req({ host_voice_id: "not-a-voice" }), ctx("p1"))).status).toBe(400);
   });
 
-  it("400 when host would equal guest", async () => {
+  it("400 when host would equal guest (voice)", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     vi.mocked(createServiceClient).mockReturnValue(service());
-    // guest is DEFAULT_GUEST_VOICE; trying to set host to the same → conflict
     const res = await PATCH(req({ host_voice_id: DEFAULT_GUEST_VOICE }), ctx("p1"));
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/different voices/i);
@@ -92,5 +104,59 @@ describe("PATCH /api/podcasts/[id]/speakers", () => {
     const res = await PATCH(req({ host_voice_id: "nova" }), ctx("p1"));
     expect(res.status).toBe(200);
     expect(updates.some((u) => (u.payload as { voice_id?: string }).voice_id === "nova")).toBe(true);
+  });
+
+  // ── Persona assignment (T-1136d) ──────────────────────────────────────────
+
+  it("assigns a catalog persona to the host", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(service(updates));
+    const res = await PATCH(req({ host_persona_id: "p-cat-1" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect(updates.some((u) => (u.payload as { persona_id?: string }).persona_id === "p-cat-1")).toBe(true);
+  });
+
+  it("400 for a persona owned by another user", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(service());
+    const res = await PATCH(req({ host_persona_id: "p-other" }), ctx("p1"));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/not found or not allowed/i);
+  });
+
+  it("400 for an unknown persona id", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(service());
+    expect((await PATCH(req({ host_persona_id: "does-not-exist" }), ctx("p1"))).status).toBe(400);
+  });
+
+  it("400 when host and guest would share a persona", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(service());
+    // guest already has persona-guest; assigning it to host too must conflict.
+    const res = await PATCH(req({ host_persona_id: "persona-guest" }), ctx("p1"));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/different personas/i);
+  });
+
+  it("clears the guest persona with null", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(service(updates));
+    const res = await PATCH(req({ guest_persona_id: null }), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect(updates.some((u) => "persona_id" in (u.payload as object) && (u.payload as { persona_id: unknown }).persona_id === null)).toBe(true);
+  });
+
+  it("assigns host + guest personas together", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(service(updates));
+    const res = await PATCH(req({ host_persona_id: "p-cat-1", guest_persona_id: "persona-guest" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    const personaVals = updates.map((u) => (u.payload as { persona_id?: string }).persona_id).filter(Boolean);
+    expect(personaVals).toContain("p-cat-1");
+    expect(personaVals).toContain("persona-guest");
   });
 });

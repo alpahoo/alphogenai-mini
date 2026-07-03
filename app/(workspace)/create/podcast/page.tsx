@@ -18,7 +18,8 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { PODCAST_VOICES, DEFAULT_HOST_VOICE, DEFAULT_GUEST_VOICE, getPodcastVoice } from "@/lib/podcast/voice-catalog";
 
-type Speaker = { id: string; role: "host" | "guest"; name: string; position: number; voice_id?: string | null };
+type Speaker = { id: string; role: "host" | "guest"; name: string; position: number; voice_id?: string | null; persona_id?: string | null };
+type Persona = { id: string; name: string; portrait_url: string | null; thumb_url: string | null; is_catalog: boolean };
 type Segment = {
   id: string;
   speaker_id: string;
@@ -99,6 +100,10 @@ export default function CreatePodcastPage() {
   const [savingVoice, setSavingVoice] = useState(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Duo picker (T-1136d) — catalog personas for host/guest
+  const [personas, setPersonas] = useState<Persona[]>([]);
+  const [savingPersona, setSavingPersona] = useState(false);
+
   // Dialogue editing (T-1133a)
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
@@ -115,6 +120,8 @@ export default function CreatePodcastPage() {
   const guestSpeaker = useMemo(() => speakers.find((s) => s.role === "guest"), [speakers]);
   const hostVoice = hostSpeaker?.voice_id || DEFAULT_HOST_VOICE;
   const guestVoice = guestSpeaker?.voice_id || DEFAULT_GUEST_VOICE;
+  const hostPersonaId = hostSpeaker?.persona_id ?? null;
+  const guestPersonaId = guestSpeaker?.persona_id ?? null;
 
   const speakerById = useMemo(() => Object.fromEntries(speakers.map((s) => [s.id, s])), [speakers]);
   const hasDialogue = segments.length > 0;
@@ -224,6 +231,55 @@ export default function CreatePodcastPage() {
       setError(e instanceof Error ? e.message : "Could not save the voice.");
     } finally {
       setSavingVoice(false);
+    }
+  }
+
+  // ── Duo picker (T-1136d): load catalog personas + assign per speaker ───
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const headers = await authHeaders();
+        if (!headers) return;
+        const res = await fetch("/api/podcast-personas", { headers });
+        const json = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok && Array.isArray(json.personas)) {
+          // V1: catalog personas only.
+          setPersonas(json.personas.filter((p: Persona) => p.is_catalog));
+        }
+      } catch {
+        /* non-blocking: the picker just stays empty */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authHeaders]);
+
+  async function setSpeakerPersona(role: "host" | "guest", personaId: string | null) {
+    if (!podcast) return;
+    // Guard: host and guest can't share the same persona (backend rejects too).
+    const other = role === "host" ? guestPersonaId : hostPersonaId;
+    if (personaId && personaId === other) {
+      setError("Host and guest must use different personas.");
+      return;
+    }
+    setError(null);
+    setSavingPersona(true);
+    try {
+      const headers = await authHeaders();
+      if (!headers) { setError("Please sign in again."); return; }
+      const body = role === "host" ? { host_persona_id: personaId } : { guest_persona_id: personaId };
+      const res = await fetch(`/api/podcasts/${podcast.id}/speakers`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Could not save the persona.");
+      if (json.speakers) setSpeakers(json.speakers);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save the persona.");
+    } finally {
+      setSavingPersona(false);
     }
   }
 
@@ -751,6 +807,42 @@ export default function CreatePodcastPage() {
             )}
           </div>
 
+          {/* ── Duo picker (T-1136d): pick a catalog persona per speaker ── */}
+          {personas.length > 0 && (
+            <div className="mb-5 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+              <div className="mb-1 flex items-center gap-2">
+                <Podcast className="h-4 w-4 text-indigo-600" />
+                <h3 className="text-base font-bold text-neutral-900">Presenters</h3>
+              </div>
+              <p className="mb-4 text-xs text-neutral-500">
+                Choose a face for each speaker. Leave as “None” to keep the default placeholder.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <DuoColumn
+                  role="host"
+                  personas={personas}
+                  value={hostPersonaId}
+                  otherValue={guestPersonaId}
+                  disabled={savingPersona}
+                  onChange={(pid) => setSpeakerPersona("host", pid)}
+                />
+                <DuoColumn
+                  role="guest"
+                  personas={personas}
+                  value={guestPersonaId}
+                  otherValue={hostPersonaId}
+                  disabled={savingPersona}
+                  onChange={(pid) => setSpeakerPersona("guest", pid)}
+                />
+              </div>
+              {anyAudio && (
+                <p className="mt-3 text-xs text-neutral-400">
+                  Changed a presenter? Click “Regenerate” isn’t needed — just re-render the video.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* ── Voice Lab (T-1132b): pick + preview host/guest voices ──── */}
           <div className="mb-5 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
             <div className="mb-1 flex items-center gap-2">
@@ -1036,6 +1128,62 @@ function VoicePicker({
         </button>
       </div>
       {current && <p className="mt-1.5 text-[11px] text-neutral-400">{current.useCase}</p>}
+    </div>
+  );
+}
+
+function DuoColumn({
+  role, personas, value, otherValue, disabled, onChange,
+}: {
+  role: "host" | "guest";
+  personas: Persona[];
+  value: string | null;
+  otherValue: string | null;
+  disabled: boolean;
+  onChange: (personaId: string | null) => void;
+}) {
+  const color = ROLE_COLOR[role];
+  const Tile = ({
+    id, name, img, selected, unavailable,
+  }: { id: string | null; name: string; img: string | null; selected: boolean; unavailable: boolean }) => (
+    <button
+      type="button"
+      disabled={disabled || unavailable}
+      onClick={() => onChange(id)}
+      title={unavailable ? "In use by the other speaker" : name}
+      className={`flex w-20 shrink-0 flex-col items-center gap-1 rounded-lg border p-2 transition ${
+        selected ? "border-2" : "border-neutral-200 hover:bg-neutral-50"
+      } ${disabled || unavailable ? "opacity-40" : ""}`}
+      style={selected ? { borderColor: color } : undefined}
+    >
+      <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-neutral-100">
+        {img ? (
+          <img src={img} alt={name} className="h-full w-full object-cover" />
+        ) : (
+          <X className="h-4 w-4 text-neutral-400" />
+        )}
+      </span>
+      <span className="w-full truncate text-center text-[10px] font-medium text-neutral-600">{name}</span>
+    </button>
+  );
+  return (
+    <div className="rounded-xl border border-neutral-200 p-3">
+      <div className="mb-2">
+        <span className="text-xs font-bold uppercase tracking-wide" style={{ color }}>{role}</span>
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        <Tile id={null} name="None" img={null} selected={value === null} unavailable={false} />
+        {personas.map((p) => (
+          <Tile
+            key={p.id}
+            id={p.id}
+            name={p.name}
+            img={p.thumb_url || p.portrait_url}
+            selected={value === p.id}
+            unavailable={p.id === otherValue}
+          />
+        ))}
+      </div>
     </div>
   );
 }
