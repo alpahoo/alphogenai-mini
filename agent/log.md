@@ -3,6 +3,18 @@
 Entrée la plus récente en haut. Format :
 
 ```
+## 2026-07-03 — Claude — T-1138 QA prod PASS (upload persona → render non-fallback)
+- Podcast test `f2734d11` : persona **uploadée** « Alex QA Uploaded » assignée au GUEST → render → avatar guest
+  **violet (persona, URL signée bucket privé)** ≠ placeholder bleu, host resté placeholder vert. Chemin
+  non-fallback signé validé.
+- Endpoint upload validé e2e (fetch page, vraie session cookie ssr) : `upload 200` → `storage_path={user_id}/{uuid}.png`
+  (ownership) ; `create 200` persona `uploaded` consent enforced, `is_catalog:false`, `has_url:true` (signature OK).
+- UI : picker affiche own personas séparées (divider + badge « YOU ») + section « YOUR PRESENTERS » (chip + delete)
+  + form upload (nom + consentement obligatoire + garde-fou « No public figures/IP »).
+- Note QA : `file_upload` du navigateur refuse les fichiers hors dossiers partagés (même après `request_directory`) →
+  upload piloté via fetch page (token lu depuis cookie `sb-<ref>-auth-token`). Endpoint identique, validation réelle.
+- T-1138 déployé (commit `52141ce`, Vercel) + bucket appliqué prod. Tout vert.
+
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
 - Fichiers modifiés :
