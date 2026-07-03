@@ -103,6 +103,11 @@ export default function CreatePodcastPage() {
   // Duo picker (T-1136d) — catalog personas for host/guest
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [savingPersona, setSavingPersona] = useState(false);
+  // My Personas upload (T-1138)
+  const [uploadName, setUploadName] = useState("");
+  const [uploadConsent, setUploadConsent] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const personaFileRef = useRef<HTMLInputElement | null>(null);
 
   // Dialogue editing (T-1133a)
   const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
@@ -244,8 +249,8 @@ export default function CreatePodcastPage() {
         const res = await fetch("/api/podcast-personas", { headers });
         const json = await res.json().catch(() => ({}));
         if (!cancelled && res.ok && Array.isArray(json.personas)) {
-          // V1: catalog personas only.
-          setPersonas(json.personas.filter((p: Persona) => p.is_catalog));
+          // Catalog + the user's own personas (T-1138).
+          setPersonas(json.personas as Persona[]);
         }
       } catch {
         /* non-blocking: the picker just stays empty */
@@ -282,6 +287,74 @@ export default function CreatePodcastPage() {
       setError(e instanceof Error ? e.message : "Could not save the persona.");
     } finally {
       setSavingPersona(false);
+    }
+  }
+
+  // ── My Personas (T-1138): upload a portrait + create an owned persona ──
+  async function uploadPersona(file: File) {
+    const name = uploadName.trim();
+    if (name.length < 2) { setError("Give your presenter a name first."); return; }
+    if (!uploadConsent) { setError("Please confirm you have the rights/consent for this image."); return; }
+    setError(null);
+    setUploadBusy(true);
+    try {
+      const headers = await authHeaders();
+      if (!headers) { setError("Please sign in again."); return; }
+      const auth = (headers as Record<string, string>).Authorization;
+      // 1) Upload the portrait bytes to the private bucket.
+      const fd = new FormData();
+      fd.append("file", file);
+      const upRes = await fetch("/api/podcast-personas/upload", {
+        method: "POST",
+        headers: { Authorization: auth },
+        body: fd,
+      });
+      const upJson = await upRes.json().catch(() => ({}));
+      if (!upRes.ok) throw new Error(upJson?.error || "Could not upload the image.");
+      // 2) Create the persona (source_kind=uploaded, consent required, screened).
+      const res = await fetch("/api/podcast-personas", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          name,
+          source_kind: "uploaded",
+          portrait_path: upJson.storage_path,
+          consent: true,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || "Could not create the persona.");
+      if (json.persona) setPersonas((prev) => [...prev, json.persona as Persona]);
+      setUploadName("");
+      setUploadConsent(false);
+      if (personaFileRef.current) personaFileRef.current.value = "";
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add the persona.");
+    } finally {
+      setUploadBusy(false);
+    }
+  }
+
+  async function deletePersona(id: string) {
+    setError(null);
+    try {
+      const headers = await authHeaders();
+      if (!headers) { setError("Please sign in again."); return; }
+      const res = await fetch(`/api/podcast-personas?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json?.error || "Could not remove the persona.");
+      }
+      setPersonas((prev) => prev.filter((p) => p.id !== id));
+      // If a speaker was using it, clear the selection (backend soft-deletes it;
+      // render would fall back anyway).
+      if (hostPersonaId === id) await setSpeakerPersona("host", null);
+      if (guestPersonaId === id) await setSpeakerPersona("guest", null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not remove the persona.");
     }
   }
 
@@ -837,6 +910,60 @@ export default function CreatePodcastPage() {
                   onChange={(pid) => setSpeakerPersona("guest", pid)}
                 />
               </div>
+
+              {/* ── My Personas (T-1138): upload your own presenter ──────── */}
+              <div className="mt-4 border-t border-neutral-100 pt-4">
+                <span className="text-[11px] font-bold uppercase tracking-wide text-neutral-500">Your presenters</span>
+                <div className="mt-2 mb-3 flex flex-wrap gap-2">
+                  {personas.filter((p) => !p.is_catalog).map((p) => (
+                    <span key={p.id} className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50/60 py-1 pl-1 pr-2 text-xs">
+                      <span className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-neutral-100">
+                        {p.thumb_url && <img src={p.thumb_url} alt={p.name} className="h-full w-full object-cover" />}
+                      </span>
+                      <span className="max-w-[110px] truncate text-neutral-700">{p.name}</span>
+                      <button type="button" onClick={() => deletePersona(p.id)} title="Remove" className="text-neutral-400 transition hover:text-red-500">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  ))}
+                  {personas.filter((p) => !p.is_catalog).length === 0 && (
+                    <span className="text-xs text-neutral-400">No personal presenters yet.</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    value={uploadName}
+                    onChange={(e) => setUploadName(e.target.value)}
+                    maxLength={120}
+                    placeholder="Presenter name"
+                    className="w-44 rounded-lg border border-neutral-200 bg-white px-2.5 py-2 text-sm text-neutral-800 outline-none focus:border-indigo-300"
+                  />
+                  <label className="flex items-center gap-1.5 text-[11px] text-neutral-600">
+                    <input type="checkbox" checked={uploadConsent} onChange={(e) => setUploadConsent(e.target.checked)} />
+                    I have the rights/consent to use this face
+                  </label>
+                  <input
+                    ref={personaFileRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPersona(f); }}
+                  />
+                  <button
+                    type="button"
+                    disabled={uploadBusy}
+                    onClick={() => personaFileRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 disabled:opacity-60"
+                  >
+                    {uploadBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    Upload portrait
+                  </button>
+                </div>
+                <p className="mt-1.5 text-[11px] text-neutral-400">
+                  JPG/PNG/WEBP, up to 10 MB. No public figures or copyrighted characters.
+                </p>
+              </div>
+
               {anyAudio && (
                 <p className="mt-3 text-xs text-neutral-400">
                   Changed a presenter? Click “Regenerate” isn’t needed — just re-render the video.
@@ -1145,19 +1272,24 @@ function DuoColumn({
   onChange: (personaId: string | null) => void;
 }) {
   const color = ROLE_COLOR[role];
+  const catalog = personas.filter((p) => p.is_catalog);
+  const own = personas.filter((p) => !p.is_catalog);
   const Tile = ({
-    id, name, img, selected, unavailable,
-  }: { id: string | null; name: string; img: string | null; selected: boolean; unavailable: boolean }) => (
+    id, name, img, selected, unavailable, own: isOwn,
+  }: { id: string | null; name: string; img: string | null; selected: boolean; unavailable: boolean; own?: boolean }) => (
     <button
       type="button"
       disabled={disabled || unavailable}
       onClick={() => onChange(id)}
       title={unavailable ? "In use by the other speaker" : name}
-      className={`flex w-20 shrink-0 flex-col items-center gap-1 rounded-lg border p-2 transition ${
+      className={`relative flex w-20 shrink-0 flex-col items-center gap-1 rounded-lg border p-2 transition ${
         selected ? "border-2" : "border-neutral-200 hover:bg-neutral-50"
       } ${disabled || unavailable ? "opacity-40" : ""}`}
       style={selected ? { borderColor: color } : undefined}
     >
+      {isOwn && (
+        <span className="absolute right-1 top-1 rounded-full bg-indigo-100 px-1 text-[8px] font-bold uppercase text-indigo-600">you</span>
+      )}
       <span className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-neutral-100">
         {img ? (
           <img src={img} alt={name} className="h-full w-full object-cover" />
@@ -1173,17 +1305,14 @@ function DuoColumn({
       <div className="mb-2">
         <span className="text-xs font-bold uppercase tracking-wide" style={{ color }}>{role}</span>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="flex items-stretch gap-2 overflow-x-auto pb-1">
         <Tile id={null} name="None" img={null} selected={value === null} unavailable={false} />
-        {personas.map((p) => (
-          <Tile
-            key={p.id}
-            id={p.id}
-            name={p.name}
-            img={p.thumb_url || p.portrait_url}
-            selected={value === p.id}
-            unavailable={p.id === otherValue}
-          />
+        {catalog.map((p) => (
+          <Tile key={p.id} id={p.id} name={p.name} img={p.thumb_url || p.portrait_url} selected={value === p.id} unavailable={p.id === otherValue} />
+        ))}
+        {own.length > 0 && <span className="my-1 w-px shrink-0 bg-neutral-200" aria-hidden />}
+        {own.map((p) => (
+          <Tile key={p.id} id={p.id} name={p.name} img={p.thumb_url || p.portrait_url} selected={value === p.id} unavailable={p.id === otherValue} own />
         ))}
       </div>
     </div>

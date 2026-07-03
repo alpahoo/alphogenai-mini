@@ -11,6 +11,23 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-07-03 — Claude — T-1138 My Personas upload V1 (personas utilisateur)
+- **Bucket** : `podcast-personas` créé (privé, 10 MB, image jpeg/png/webp, RLS par dossier `{user_id}/` —
+  insert/select/delete own). Migration `20260703_create_podcast_personas_bucket.sql`, **appliquée en prod** via MCP
+  Supabase AlphoGen (`qbrpzmuedfugbhoeytdj`). Advisors sécurité post-DDL : rien de nouveau lié (warnings restants
+  préexistants/hors scope).
+- **Route upload** : `POST /api/podcast-personas/upload` (bearer, multipart) → valide taille ≤10 MB + MIME +
+  **magic-bytes** (file-type), upload vers `podcast-personas/{user_id}/{uuid}.ext` (service client, ownership
+  strict par le chemin), renvoie `{ storage_path }`. Aucune URL publique, bytes only. La persona est ensuite créée
+  via `POST /api/podcast-personas` existant (source_kind='uploaded', consent obligatoire, screening nom).
+- **UI `/create/podcast`** : le Duo picker charge désormais catalog **+** own personas (fin du filtre is_catalog),
+  séparés visuellement (divider + badge « you » sur les own). Nouveau sous-bloc « Your presenters » : liste own
+  (chips + delete soft via DELETE existant) + form upload (nom + **checkbox consentement obligatoire** + fichier).
+  Garde-fous UI : nom ≥2, consentement requis avant upload, message « No public figures / IP ».
+- Scope respecté : pas de lip-sync, pas de generated-texte, pas de changement render. Tests : **7 route upload** +
+  43 (personas+speakers) ; tsc clean ; build OK. QA prod à faire après deploy (Vercel only).
+
+---
 ## 2026-07-03 — Claude — T-1136d-fix Invalidation render au changement de persona (P1 Codex)
 - Bug P1 : `PATCH /speakers` ne vidait pas le MP4 rendu quand `persona_id` changeait → l'ancienne vidéo
   (placeholder ou autre persona) restait servie.
