@@ -159,4 +159,72 @@ describe("PATCH /api/podcasts/[id]/speakers", () => {
     expect(personaVals).toContain("p-cat-1");
     expect(personaVals).toContain("persona-guest");
   });
+
+  // ── Render invalidation on persona change (P1 fix) ─────────────────────────
+
+  it("clears the stale render BEFORE mutating speakers when a persona changes", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(service(updates));
+    const res = await PATCH(req({ host_persona_id: "p-cat-1" }), ctx("p1")); // host was null → change
+    expect(res.status).toBe(200);
+    const podcastReset = updates.findIndex(
+      (u) => u.table === "podcasts" && (u.payload as { video_url?: unknown }).video_url === null,
+    );
+    const speakerUpdate = updates.findIndex((u) => u.table === "podcast_speakers");
+    expect(podcastReset).toBeGreaterThanOrEqual(0);
+    expect(speakerUpdate).toBeGreaterThanOrEqual(0);
+    expect(podcastReset).toBeLessThan(speakerUpdate); // reset happens first
+    const reset = updates[podcastReset].payload as Record<string, unknown>;
+    expect(reset.render_status).toBe("idle");
+    expect(reset.render_error).toBe(null);
+  });
+
+  it("500s and does NOT mutate speakers when the stale-render reset fails", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id }, error: null }),
+        "podcast_speakers:select": () => ({ data: SPEAKERS, error: null }),
+        "podcast_personas:select": (s) => {
+          const ids = (s.filters["in:id"] as string[]) || [];
+          return { data: PERSONAS.filter((p) => ids.includes(p.id)), error: null };
+        },
+        "podcasts:update": () => ({ data: null, error: { message: "db boom" } }),
+      }, updates) as never,
+    );
+    const res = await PATCH(req({ host_persona_id: "p-cat-1" }), ctx("p1"));
+    expect(res.status).toBe(500);
+    expect(JSON.stringify(await res.json())).toMatch(/stale rendered video/i);
+    expect(updates.some((u) => u.table === "podcast_speakers")).toBe(false);
+  });
+
+  it("does NOT reset the render for a no-op persona (same value)", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(service(updates));
+    // guest already has persona-guest; re-sending it is a no-op → no reset.
+    const res = await PATCH(req({ guest_persona_id: "persona-guest" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect(updates.some((u) => u.table === "podcasts")).toBe(false);
+  });
+
+  it("resets the render when clearing a previously-set persona (null)", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(service(updates));
+    const res = await PATCH(req({ guest_persona_id: null }), ctx("p1")); // guest was persona-guest → change
+    expect(res.status).toBe(200);
+    expect(updates.some((u) => u.table === "podcasts" && (u.payload as { video_url?: unknown }).video_url === null)).toBe(true);
+  });
+
+  it("does NOT reset the render for a voice-only change", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(service(updates));
+    const res = await PATCH(req({ host_voice_id: "nova" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect(updates.some((u) => u.table === "podcasts")).toBe(false);
+  });
 });

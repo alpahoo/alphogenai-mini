@@ -11,6 +11,19 @@ Entrée la plus récente en haut. Format :
 ```
 
 ---
+## 2026-07-03 — Claude — T-1136d-fix Invalidation render au changement de persona (P1 Codex)
+- Bug P1 : `PATCH /speakers` ne vidait pas le MP4 rendu quand `persona_id` changeait → l'ancienne vidéo
+  (placeholder ou autre persona) restait servie.
+- Fix route : si `host_persona_id`/`guest_persona_id` **change réellement** l'état final (comparaison vs
+  `persona_id` courant, no-op ignoré), reset `podcasts.video_url=null, render_status='idle', render_error=null`
+  **AVANT** de muter `podcast_speakers` (ordre transactionnel comme tts/segments). Reset échoue → 500, aucun
+  speaker modifié. Changement voix-only ne reset PAS (comportement inchangé).
+- Fix UI : après succès du PATCH persona, vide localement `podcast.video_url/render_status/render_error`.
+- Tests : +6 cas (reset avant update + ordre, reset-fail→500 sans mutation, no-op même persona→pas de reset,
+  clear null→reset, voice-only→pas de reset). 17 tests speakers verts ; tsc clean ; build OK.
+- Pas de migration, pas de Modal, pas d'upload, pas de lip-sync.
+
+---
 ## 2026-07-03 — Claude — T-1136d Duo picker UI V1 (catalog-only)
 - **Route** : extension **sûre** de `PATCH /api/podcasts/[id]/speakers` (déjà utilisée pour les voix) → accepte
   aussi `host_persona_id`/`guest_persona_id` (string=set, null=clear, undefined=inchangé). Validation :

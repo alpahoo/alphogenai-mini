@@ -106,6 +106,23 @@ export async function PATCH(
       return NextResponse.json({ error: "Host and guest must use different personas" }, { status: 400 });
     }
 
+    // A persona change alters the rendered visuals → clear the stale MP4 BEFORE
+    // mutating speakers (same transactional order as tts/segments). Only when a
+    // persona value actually changes; a no-op (same value) skips the reset.
+    const personaChanged =
+      (hostPersona !== undefined && hostPersona !== (host.persona_id ?? null)) ||
+      (guestPersona !== undefined && guestPersona !== (guest.persona_id ?? null));
+    if (personaChanged) {
+      const { error: resetErr } = await service
+        .from("podcasts")
+        .update({ video_url: null, render_status: "idle", render_error: null })
+        .eq("id", id);
+      if (resetErr) {
+        console.error("[podcast/speakers] stale-render reset failed:", resetErr);
+        return NextResponse.json({ error: "Could not clear the stale rendered video" }, { status: 500 });
+      }
+    }
+
     // ── Apply ─────────────────────────────────────────────────────────────
     const hostPatch: Record<string, unknown> = {};
     const guestPatch: Record<string, unknown> = {};

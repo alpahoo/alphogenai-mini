@@ -276,6 +276,8 @@ export default function CreatePodcastPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Could not save the persona.");
       if (json.speakers) setSpeakers(json.speakers);
+      // A persona change invalidates the rendered MP4 (backend cleared it too).
+      setPodcast((p) => (p ? { ...p, video_url: null, render_status: "idle", render_error: null } : p));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save the persona.");
     } finally {
