@@ -116,7 +116,8 @@ describe("POST /api/jobs/[id]/voiceover", () => {
       success: false,
       fallback: true,
       video_url: "https://cdn.example.com/raw.mp4",
-      error: "Voice-over mux failed; original video kept",
+      error: "Voice-over mux failed: modal down",
+      raw_error: "modal down",
     });
     expect(service.jobsUpdate).not.toHaveBeenCalled();
   });
