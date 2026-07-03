@@ -22,6 +22,10 @@ Entrée la plus récente en haut. Format :
 - Tests : +6 cas (reset avant update + ordre, reset-fail→500 sans mutation, no-op même persona→pas de reset,
   clear null→reset, voice-only→pas de reset). 17 tests speakers verts ; tsc clean ; build OK.
 - Pas de migration, pas de Modal, pas d'upload, pas de lip-sync.
+- **Déployé (`173221e`) + QA prod PASS** : podcast `307e628c` rendu (Maya/Leo, done+video) → changement host
+  Maya→Aria via le picker → **MCP** : `video_url NULL`, `render_status='idle'`, `render_error NULL`, host
+  persona=Aria Chen (guest=Leo inchangé). **UI** : player disparu + bouton « Render podcast » revenu. Re-render →
+  avatar host **teal (Aria)** au lieu de violet (Maya) = nouvelle persona propagée. Les 5 points de QA validés.
 
 ---
 ## 2026-07-03 — Claude — T-1136d Duo picker UI V1 (catalog-only)
