@@ -24,8 +24,12 @@ Entrée la plus récente en haut. Format :
   migration. Type `Speaker` + `Persona` ajoutés, composant `DuoColumn`.
 - Validation : tsc clean ; **12 tests route speakers** (dont persona : assign, ownership 400, distinct 400, clear
   null, host+guest) ; 115 tests podcast/api verts ; lint (1 warning `<img>` cohérent avec le repo) ; build OK.
-- QA prod à faire après deploy : ouvrir un podcast, choisir Maya (host) + Leo (guest) via le picker, render,
-  vérifier portraits non-fallback (violet/ambre). Non poussé (attend GO).
+- **Déployé (`a91c625`) + QA prod PASS (2026-07-03)** : podcast `e531f932` créé via l'UI, carte « Presenters »
+  affichée, Maya (host) + Leo (guest) choisis **dans le picker** → 2× PATCH /speakers 200. Vérif MCP
+  `supabase` (AlphoGen) : `podcast_speakers` host→Maya Rivers, guest→Leo Bennett. Voix générées, render →
+  **avatars violet (host) / ambre (guest)** = portraits persona, pas le placeholder. Chaîne complète picker UI →
+  PATCH → DB → render non-fallback validée en prod. (Note : le connecteur MCP `supabase` AlphoGen fonctionne
+  enfin dans la session, outils `mcp__supabase__*`.)
 
 ---
 ## 2026-07-02 — Claude — T-1136-seed Mini seed catalog personas (assets + SQL, non appliqué)
