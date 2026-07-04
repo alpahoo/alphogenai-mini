@@ -154,6 +154,30 @@ Entrée la plus récente en haut. Format :
   **Décisions demandées** : approuver A+D, le plan, opt-in/plan-gated/cost-disclosed, et un **spike 1-clip
   coût/qualité** contre le plan HeyGen live avant T-1144.
 
+## 2026-07-05 — Claude — T-1143a migration appliquée prod + T-1143b QA base clip cache
+- **T-1143a migration APPLIQUÉE prod** (AlphoGen `qbrpzmuedfugbhoeytdj`, via MCP) :
+  `public.podcast_persona_base_clips` créée. Vérifié : table ✔, **4 policies RLS** ✔, index unique
+  `podcast_persona_base_clips_unique_ready_key` ✔, trigger `..._updated_at` ✔, RLS enabled ✔. (Codex ne pouvait
+  pas l'appliquer — son MCP pointe Tradinglab.)
+- **T-1143b déploiement** : `aba7c82` déployé ; `POST /api/admin/podcast-base-clips` répond 400 en session admin
+  (requireAdmin OK, non-404) ✔.
+- **QA base clip cache = PASS** (persona QA temporaire pointant un JPEG R2, voix clonée `6d38a70e…`) :
+  clip `3c43e111` → poll → **status=ready**, provider_avatar_id + provider_video_id non-null,
+  **video_url = R2 permanent** (`pub-…r2.dev/podcast/base-clips/…mp4`, PAS heygen), storage_key présent,
+  duration=3.11s. HEAD (curl) : **HTTP 200 video/mp4 628 KB**. Re-`ensure` sans force → **reused=true**, même
+  provider_video_id (aucun nouvel appel HeyGen). Rehost R2 + cache validés.
+- **FINDING P2 (route T-1143b)** : `handleEnsure` appelle `createAvatarVideo` **immédiatement après**
+  `createPhotoAvatar` dans la même requête → au **1ᵉʳ appel pour une nouvelle persona**, l'avatar HeyGen n'est pas
+  encore « processed » → 400 `invalid_parameter: Talking photo … has missing image dimensions`. Un **2ᵉ ensure**
+  passe (avatar prêt entre-temps). Confirmé sur Maya (catalog PNG) ET sur le JPEG → **c'est un problème de
+  timing/readiness, pas de format**. Les tests unitaires (HeyGen mocké) ne le voient pas. Correction minimale
+  proposée (à valider) : dans `app/api/admin/podcast-base-clips/route.ts` handleEnsure, après `createPhotoAvatar`,
+  **ne pas enchaîner `createAvatarVideo`** dans la même requête — stocker `provider_avatar_id`, renvoyer `pending`,
+  et laisser un `ensure` suivant (ou un poll de readiness avatar) déclencher la vidéo une fois l'avatar prêt.
+- Cleanup : persona QA temp supprimée (cascade clips), row base clip Maya bloquée → `status='removed'`. État propre.
+- Note asset (rappelé par le spike report) : les portraits catalog PNG flat donnent un rendu stylisé ; le
+  photoréalisme « niveau Jogg » exige de vrais portraits photo — hors scope T-1143b.
+
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
 - Fichiers modifiés :
