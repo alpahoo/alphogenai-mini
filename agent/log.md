@@ -2686,3 +2686,25 @@ findings level block/warn + message), `byteplus-cost.ts`
   que le vrai pipeline (T-1144b) n'existe pas. Modal inchangé (fallback conservé).
 - Tests : invalidation on-change, no-op unchanged, missing==talking_visual,
   rejet lipsync_premium (POST+PATCH). tsc + build + vitest OK (28 podcast routes).
+
+
+## Mini-gate lip-sync 1 segment (2026-07-05, Claude)
+- Objectif : gate qualité/coût/temps/fit avant T-1143/T-1144b. Précision, 1 clip.
+- Exécution : route admin `podcast-lipsync-spike` (clé HeyGen server-side).
+  Base clip Maya 1:1/720p ready (4.28 s, réutilisé, 0 cr) + notre TTS
+  (e531f932 order_index 0, 4.49 s). Seul appel payant = 1 createLipsync.
+- Résultats :
+  * Q1 qualité (notre TTS) : ✅ convaincant, photoréaliste, bouche synchro
+    variable (ouverte t≈2.0s, fermée t≈3.6s), pas d'artefact bouche visible 720p.
+  * Q2 coût : payload HeyGen n'expose pas les crédits/tâche → à relever au
+    dashboard. Heuristique precision ~16–23 cr. 1ʳᵉ tentative échouée =
+    validation duration mismatch >15% → 0 crédit.
+  * Q3 temps : ~90–100 s wall-clock pour 1 clip 4.5 s precision (async).
+  * Q4 fit : ✅ sortie 720×720 (1:1) = format des cartes T-1144a, drop-in.
+  * Appris : audio doit être à ±15% de la durée du base clip ; `end_time` seul
+    ne trim pas quand enable_dynamic_duration=true.
+- Ajout diagnostic : step `raw_lipsync` (GET, no spend) dans la spike route
+  (commit 2fce0c2) pour lire le failure_message brut HeyGen.
+- Verdict : GO T-1143/T-1144b, conditionné à la confirmation du coût réel
+  (dashboard) + estimateur de coût/opt-in (T-1145) d'abord. Comparer speed vs
+  precision seulement si precision trop cher.

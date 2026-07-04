@@ -194,3 +194,31 @@ local shell. It needs a tiny **admin-gated** internal route that calls
 credit cost read from the HeyGen dashboard. Base clip: a HeyGen stock avatar clip or
 one `createAvatarVideo` output; our TTS audio: an existing R2 segment URL. Scope,
 inputs and expected credit spend to be confirmed before running.
+
+### Spike RESULT (2026-07-05, mini-gate — 1 clip, precision)
+Ran via the admin route (`podcast-lipsync-spike`). Inputs: Maya's ready 1:1/720p
+base clip (4.28 s) + our real TTS segment audio (podcast e531f932, order_index 0,
+4.49 s). Base clip reused → the only paid call was **one** `createLipsync`.
+- **Q1 Quality (our TTS): ✅ convincing.** Photoreal, stable identity, mouth
+  articulates and clearly varies frame-to-frame in sync with our TTS (open at
+  t≈2.0 s, closed/rounded at t≈3.6 s). No obvious mouth artifacts at 720p.
+- **Q2 Credit cost: heuristic only, dashboard read pending.** HeyGen's lipsync
+  task payload does NOT expose per-task credits — must be read from the HeyGen
+  billing dashboard. Heuristic (precision ~5 cr/s × ~4.5 s) ≈ **~16–23 cr** for
+  this clip. **First attempt failed on a validation error (audio/video duration
+  mismatch >15%) → 0 credits** (no processing). ACTION: confirm exact credits on
+  the dashboard before enabling.
+- **Q3 Generation time: ~90–100 s wall-clock** for one 4.5 s precision clip
+  (async: processing at 28 s & 64 s, completed by ~100 s). Implies a full podcast
+  (8–12 active-speaker clips) is minutes even with parallel polling → needs the
+  guided-loading progress UX + per-segment cache.
+- **Q4 Visual fit: ✅ by construction.** Output is **720×720 (1:1)** — exactly the
+  square format the T-1144a base-clip pipeline already composites into the speaker
+  cards. Drop-in for the same frame path (no letterboxing).
+- **Key learning:** `createLipsync` must receive audio within **±15%** of the base
+  clip duration (or a correct trim). `end_time` alone did NOT trim when
+  `enable_dynamic_duration:true` — pick/trim audio to match the base clip length.
+→ **Verdict: GO for T-1143/T-1144b** (base-clip + per-segment lip-sync pipeline),
+  gated on confirming real credit cost from the dashboard and building the cost
+  estimator + opt-in (T-1145) first. Compare speed-vs-precision only if precision
+  cost proves too high.
