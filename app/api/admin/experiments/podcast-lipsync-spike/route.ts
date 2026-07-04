@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { isAdminEmail } from "@/lib/flags";
+import { uploadBufferToR2 } from "@/lib/r2";
 import {
   listAvatars,
   listOwnedAvatars,
@@ -12,6 +13,7 @@ import {
   createLipsync,
   getLipsyncTask,
 } from "@/lib/heygen-client";
+import { randomUUID } from "crypto";
 
 /**
  * EXPERIMENTAL — T-1142 podcast lip-sync spike. NOT a product feature.
@@ -120,6 +122,22 @@ export async function POST(request: NextRequest) {
         if (!body.imageUrl) return NextResponse.json({ error: "imageUrl required" }, { status: 400 });
         const pa = await createPhotoAvatar({ imageUrl: body.imageUrl, name: body.name || "spike" });
         return NextResponse.json({ elapsedMs: Date.now() - t0, avatarId: pa.avatarId, status: pa.status });
+      }
+      case "upload_image": {
+        // Spike-only helper: upload a normalized portrait (usually JPEG) to R2
+        // so HeyGen gets a stable public URL with readable dimensions.
+        const dataUrl = typeof body.dataUrl === "string" ? body.dataUrl : "";
+        if (!dataUrl) return NextResponse.json({ error: "dataUrl required" }, { status: 400 });
+        const comma = dataUrl.indexOf(",");
+        const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+        const buffer = Buffer.from(base64, "base64");
+        if (buffer.length < 1000) return NextResponse.json({ error: "image too small" }, { status: 400 });
+        if (buffer.length > 8_000_000) return NextResponse.json({ error: "image too large" }, { status: 400 });
+        const contentType = body.contentType === "image/png" ? "image/png" : "image/jpeg";
+        const ext = contentType === "image/png" ? "png" : "jpg";
+        const key = `experiments/podcast-lipsync-spike/${randomUUID()}.${ext}`;
+        const url = await uploadBufferToR2(buffer, key, contentType);
+        return NextResponse.json({ elapsedMs: Date.now() - t0, url, key, bytes: buffer.length });
       }
       case "base": {
         const { avatarId, voiceId, scriptText } = body;
