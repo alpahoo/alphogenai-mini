@@ -13,7 +13,7 @@ import { motion } from "framer-motion";
 import {
   AlertTriangle, ArrowLeft, CheckCircle2, Loader2, Mic, Pause, Play,
   Podcast, Sparkles, Film, FileText, Clapperboard, Clock, Globe2, Link2, Upload,
-  Pencil, Save, X, ChevronUp, ChevronDown, Trash2, Plus,
+  Pencil, Save, X, ChevronUp, ChevronDown, Trash2, Plus, Copy, Archive,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { PODCAST_VOICES, DEFAULT_HOST_VOICE, DEFAULT_GUEST_VOICE, getPodcastVoice } from "@/lib/podcast/voice-catalog";
@@ -42,6 +42,7 @@ type PodcastRow = {
   created_at?: string | null;
   source_topic?: string | null;
   source_asset_url?: string | null;
+  metadata?: { podcast_style?: string; target_duration_seconds?: number } | null;
 };
 
 const LANGUAGES = [
@@ -193,6 +194,8 @@ export default function CreatePodcastPage() {
             source_asset_url: cleanUrl || undefined,
             language,
             layout: "two_shot",
+            podcast_style: podcastStyle,
+            target_duration_seconds: targetDuration,
           }),
         });
         const json = await res.json();
@@ -200,6 +203,14 @@ export default function CreatePodcastPage() {
         setPodcast(json.podcast);
         setSpeakers(json.speakers || []);
         pid = json.podcast.id;
+      } else {
+        // Rewrite: persist the latest studio settings (style/duration) so a reopen
+        // restores them. Metadata-only — does NOT invalidate the render (T-1141).
+        await fetch(`/api/podcasts/${pid}`, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ podcast_style: podcastStyle, target_duration_seconds: targetDuration }),
+        }).catch(() => {});
       }
 
       const res = await fetch(`/api/podcasts/${pid}/script`, {
@@ -287,7 +298,10 @@ export default function CreatePodcastPage() {
         setTopic(p.source_topic || "");
         setSourceUrl(p.source_asset_url || "");
         if (p.language) setLanguage(p.language);
-        if (p.target_duration_seconds) setTargetDuration(p.target_duration_seconds);
+        // Studio settings restored from metadata (T-1141).
+        const meta = p.metadata || {};
+        if (meta.podcast_style) setPodcastStyle(meta.podcast_style);
+        if (meta.target_duration_seconds) setTargetDuration(meta.target_duration_seconds);
       } catch {
         if (!cancelled) setError("Could not open that podcast.");
       }
@@ -333,6 +347,58 @@ export default function CreatePodcastPage() {
     })();
     return () => { cancelled = true; };
   }, [authHeaders]);
+
+  // ── Library actions (T-1141): rename / archive / duplicate ─────────────
+  async function renamePodcast(p: PodcastRow) {
+    const next = window.prompt("Rename podcast", p.title || "Untitled podcast");
+    if (next === null) return;
+    const title = next.trim();
+    if (!title) { setError("Title can't be empty."); return; }
+    setError(null);
+    try {
+      const headers = await authHeaders();
+      if (!headers) { setError("Please sign in again."); return; }
+      const res = await fetch(`/api/podcasts/${p.id}`, { method: "PATCH", headers, body: JSON.stringify({ title }) });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j?.error || "Rename failed."); }
+      setRecentPodcasts((prev) => prev.map((x) => (x.id === p.id ? { ...x, title } : x)));
+      setPodcast((cur) => (cur && cur.id === p.id ? { ...cur, title } : cur));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Rename failed.");
+    }
+  }
+
+  async function archivePodcast(p: PodcastRow) {
+    if (!window.confirm(`Archive "${p.title || "Untitled podcast"}"? It will be removed from your library.`)) return;
+    setError(null);
+    try {
+      const headers = await authHeaders();
+      if (!headers) { setError("Please sign in again."); return; }
+      const res = await fetch(`/api/podcasts/${p.id}`, { method: "DELETE", headers });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j?.error || "Archive failed."); }
+      setRecentPodcasts((prev) => prev.filter((x) => x.id !== p.id));
+      // If the archived podcast is the one open in the editor, reset to the entry.
+      if (podcast?.id === p.id) {
+        setPodcast(null); setSpeakers([]); setSegments([]);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Archive failed.");
+    }
+  }
+
+  async function duplicatePodcast(p: PodcastRow) {
+    setError(null);
+    try {
+      const headers = await authHeaders();
+      if (!headers) { setError("Please sign in again."); return; }
+      const res = await fetch(`/api/podcasts/${p.id}/duplicate`, { method: "POST", headers });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.podcast) throw new Error(json?.error || "Duplicate failed.");
+      // Open the fresh copy in the editor.
+      window.location.href = `/create/podcast?podcast_id=${json.podcast.id}`;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Duplicate failed.");
+    }
+  }
 
   async function setSpeakerPersona(role: "host" | "guest", personaId: string | null) {
     if (!podcast) return;
@@ -996,6 +1062,18 @@ export default function CreatePodcastPage() {
                         <Play className="h-3.5 w-3.5" /> View video
                       </a>
                     )}
+                    <button type="button" onClick={() => renamePodcast(p)} title="Rename"
+                      className="ml-auto rounded-lg border border-neutral-200 p-1.5 text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-800">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" onClick={() => duplicatePodcast(p)} title="Duplicate"
+                      className="rounded-lg border border-neutral-200 p-1.5 text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-800">
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" onClick={() => archivePodcast(p)} title="Archive"
+                      className="rounded-lg border border-neutral-200 p-1.5 text-neutral-500 transition hover:bg-neutral-50 hover:text-red-500">
+                      <Archive className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
               );

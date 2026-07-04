@@ -9,6 +9,8 @@ import {
   isHttpUrl,
   isLanguage,
   isLayout,
+  isPodcastStyle,
+  isPodcastTargetDuration,
   isSourceMode,
 } from "@/lib/podcast/podcast";
 
@@ -28,6 +30,7 @@ export async function GET(request: NextRequest) {
       .from("podcasts")
       .select("*", { count: "exact" })
       .eq("user_id", user.id)
+      .neq("status", "archived") // hide archived podcasts from the library (T-1141)
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -51,7 +54,8 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await request.json().catch(() => ({}));
-    const { source_mode, source_topic, source_asset_url, title, layout, aspect_ratio, language } = body;
+    const { source_mode, source_topic, source_asset_url, title, layout, aspect_ratio, language,
+      podcast_style, target_duration_seconds } = body;
 
     if (!isSourceMode(source_mode)) {
       return NextResponse.json({ error: "source_mode must be 'generate' or 'upload'" }, { status: 400 });
@@ -78,6 +82,20 @@ export async function POST(request: NextRequest) {
     if (language !== undefined && !isLanguage(language)) {
       return NextResponse.json({ error: "language must match [a-z]{2}(-[A-Z]{2})?" }, { status: 400 });
     }
+    // Studio settings persisted in metadata (T-1141) so a reopened draft restores them.
+    const metadata: Record<string, unknown> = {};
+    if (podcast_style !== undefined) {
+      if (!isPodcastStyle(podcast_style)) {
+        return NextResponse.json({ error: "podcast_style must be casual | news | expert | debate | documentary" }, { status: 400 });
+      }
+      metadata.podcast_style = podcast_style;
+    }
+    if (target_duration_seconds !== undefined) {
+      if (!isPodcastTargetDuration(target_duration_seconds)) {
+        return NextResponse.json({ error: "target_duration_seconds must be 30, 60, 120, 300 or 600" }, { status: 400 });
+      }
+      metadata.target_duration_seconds = target_duration_seconds;
+    }
 
     const service = createServiceClient();
     const { data: podcast, error: insertErr } = await service
@@ -92,6 +110,7 @@ export async function POST(request: NextRequest) {
         aspect_ratio: isAspectRatio(aspect_ratio) ? aspect_ratio : "16:9",
         language: isLanguage(language) ? language : "en-US",
         status: "draft",
+        metadata,
       })
       .select()
       .single();

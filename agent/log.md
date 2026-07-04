@@ -57,6 +57,29 @@ Entrée la plus récente en haut. Format :
   « 1 line need voice generation » + render réinitialisé (pas d'ancien MP4 avec nouveau contenu). Continue/Edit =
   vrais liens `?podcast_id=`. Aucune fausse action restante.
 
+## 2026-07-04 — Claude — T-1141 Podcast library actions + style persistence
+- **Migration** (appliquée prod via MCP AlphoGen + versionnée `20260704_podcast_metadata_and_archive.sql`) :
+  `podcasts.metadata jsonb DEFAULT '{}'` + `status` CHECK élargi à `archived`. Additive.
+- **A — Style/duration persistence** : POST `/api/podcasts` accepte `podcast_style` + `target_duration_seconds`
+  → stockés dans `metadata` (validés enum/durée, 400 sinon). PATCH `/[id]` accepte aussi ces champs (mergés dans
+  metadata, **n'invalide PAS le render** — paramètre du prochain Rewrite). Page : envoie style+duration à la
+  création + PATCH avant chaque Rewrite ; **restaure** style+duration depuis `metadata` au reopen.
+- **B1 — Rename** : via PATCH `/[id]` (titre existant). Ne clear pas video_url. UI = prompt sur carte Recent.
+- **B2 — Archive** : nouveau `DELETE /api/podcasts/[id]` → `status='archived'` (row + R2 conservés). GET list
+  filtre `neq status archived`. Ownership strict (404). Si podcast ouvert archivé → retour entrée vide.
+- **B3 — Duplicate** : nouvelle route `POST /api/podcasts/[id]/duplicate` — best-effort + **rollback manuel**
+  (échec après insert podcast → delete du copy, cascade nettoie). Copie titre+« (Copy) », topic/lang/layout/AR/
+  metadata + speakers (voice_id/persona_id) + segments (text/order, speaker_id **remappé par rôle**), segments en
+  **pending, audio_url null**, **sans** video_url/render_status. Ouvre `?podcast_id=<newId>`.
+- UI Recent cards : actions réelles Continue/Edit · View video · **Rename · Duplicate · Archive** (icônes). Pas de
+  faux bouton.
+- Invariants préservés : title/style ne clear pas le render ; archive retire de la liste ; duplicate = draft neuf
+  sans MP4 ni audio.
+- Tests : +10 (POST style/400, GET filtre archived, PATCH style mergé/400 + rename no-clear-video, DELETE archive
+  owned/404, duplicate mapping/pending/no-video/404/rollback). **npm test 843/843** ; tsc clean ; build OK.
+- Migration : **OUI** (metadata + archived). Routes : POST/PATCH `/api/podcasts` étendues, `DELETE /[id]` +
+  `POST /[id]/duplicate` ajoutées. QA prod à faire après deploy.
+
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
 - Fichiers modifiés :

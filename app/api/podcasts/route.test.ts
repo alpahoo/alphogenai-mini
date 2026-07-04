@@ -25,6 +25,7 @@ function makeService(routes: Record<string, (s: State) => Result>, calls: State[
       update: (obj: unknown) => { st.op = "update"; st.payload = obj; return b; },
       delete: () => { st.op = "delete"; return b; },
       eq: (k: string, v: unknown) => { st.filters[k] = v; return b; },
+      neq: (k: string, v: unknown) => { st.filters[`neq:${k}`] = v; return b; },
       order: () => b,
       range: () => b,
       single: () => run(),
@@ -61,6 +62,8 @@ describe("GET /api/podcasts", () => {
     const json = await res.json();
     expect(json.podcasts).toHaveLength(1);
     expect(calls[0].filters.user_id).toBe(USER.id);
+    // archived podcasts are filtered out of the library (T-1141)
+    expect(calls[0].filters["neq:status"]).toBe("archived");
   });
 });
 
@@ -99,5 +102,26 @@ describe("POST /api/podcasts", () => {
     expect(speakerPayload.every((s) => s.podcast_id === "p1")).toBe(true);
     // user_id always from auth
     expect((json.podcast.user_id)).toBe(USER.id);
+  });
+
+  it("persists podcast_style + duration into metadata (T-1141)", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    let podcastPayload: Record<string, unknown> = {};
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:insert": (s) => { podcastPayload = s.payload as Record<string, unknown>; return { data: { id: "p1", user_id: USER.id, ...(s.payload as object) }, error: null }; },
+        "podcast_speakers:insert": (s) => ({ data: (s.payload as unknown[]).map((sp, i) => ({ id: `sp-${i}`, ...(sp as object) })), error: null }),
+      }) as never,
+    );
+    const res = await POST(req({ source_mode: "generate", source_topic: "AI", podcast_style: "expert", target_duration_seconds: 60 }));
+    expect(res.status).toBe(201);
+    expect(podcastPayload.metadata).toEqual({ podcast_style: "expert", target_duration_seconds: 60 });
+  });
+
+  it("400 on invalid podcast_style", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(makeService({}) as never);
+    const res = await POST(req({ source_mode: "generate", source_topic: "AI", podcast_style: "opera" }));
+    expect(res.status).toBe(400);
   });
 });

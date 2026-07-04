@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
-import { TITLE_MAX, isAspectRatio, isLanguage, isLayout } from "@/lib/podcast/podcast";
+import { TITLE_MAX, isAspectRatio, isLanguage, isLayout, isPodcastStyle, isPodcastTargetDuration } from "@/lib/podcast/podcast";
 
 /**
  * GET /api/podcasts/[id] — full podcast (with speakers + segments). 404 if not owned.
@@ -63,7 +63,7 @@ export async function PATCH(
 
     const { data: podcast } = await service
       .from("podcasts")
-      .select("id, user_id")
+      .select("id, user_id, metadata")
       .eq("id", id)
       .single();
     if (!podcast || podcast.user_id !== user.id) {
@@ -72,6 +72,26 @@ export async function PATCH(
 
     const body = await request.json().catch(() => ({}));
     const update: Record<string, unknown> = {};
+
+    // Studio settings (style/duration) live in metadata and DON'T invalidate the
+    // render — they only drive the next Rewrite script (T-1141).
+    const nextMeta: Record<string, unknown> = { ...(podcast.metadata as Record<string, unknown> | null || {}) };
+    let metaChanged = false;
+    if (body.podcast_style !== undefined) {
+      if (!isPodcastStyle(body.podcast_style)) {
+        return NextResponse.json({ error: "podcast_style must be casual | news | expert | debate | documentary" }, { status: 400 });
+      }
+      nextMeta.podcast_style = body.podcast_style;
+      metaChanged = true;
+    }
+    if (body.target_duration_seconds !== undefined) {
+      if (!isPodcastTargetDuration(body.target_duration_seconds)) {
+        return NextResponse.json({ error: "target_duration_seconds must be 30, 60, 120, 300 or 600" }, { status: 400 });
+      }
+      nextMeta.target_duration_seconds = body.target_duration_seconds;
+      metaChanged = true;
+    }
+    if (metaChanged) update.metadata = nextMeta;
 
     if (body.title !== undefined) {
       if (typeof body.title !== "string" || body.title.length < 1 || body.title.length > TITLE_MAX) {
@@ -116,6 +136,45 @@ export async function PATCH(
     return NextResponse.json(updated);
   } catch (err) {
     console.error("PATCH /api/podcasts/[id]:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/podcasts/[id] — soft-delete (archive). Keeps the row + R2 assets;
+ * GET /api/podcasts filters archived out. 404 if not owned (T-1141).
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const user = await getUserFromRequest(request);
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { id } = await params;
+    const service = createServiceClient();
+
+    const { data: podcast } = await service
+      .from("podcasts")
+      .select("id, user_id")
+      .eq("id", id)
+      .single();
+    if (!podcast || podcast.user_id !== user.id) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const { error } = await service
+      .from("podcasts")
+      .update({ status: "archived" })
+      .eq("id", id);
+    if (error) {
+      console.error("DELETE /api/podcasts/[id] archive error:", error);
+      return NextResponse.json({ error: "Failed to archive podcast" }, { status: 500 });
+    }
+    return NextResponse.json({ success: true, archived: true });
+  } catch (err) {
+    console.error("DELETE /api/podcasts/[id]:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
