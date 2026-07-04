@@ -191,6 +191,10 @@ Entrée la plus récente en haut. Format :
   - Jamais d'URL HeyGen persistée en `video_url` (inchangé) ; `poll` inchangé (completed → download → R2 → ready).
 - Tests : +4 (stage1 avatar-only, stage2 video start, avatar-not-ready→pending, force→staged) → **8/8** sur le
   fichier route. Suite complète **852/852** ; tsc clean ; build OK.
+- **QA prod PASS (deploy 9780a07)** : persona temp JPEG → 1ᵉʳ `ensure` = **200 `stage:avatar_processing`** (avatar
+  créé, PAS de 500) ; 2ᵉ `ensure` = `stage:video_processing` (video task créée) ; `poll` → **ready**, `video_url`
+  R2 permanent, duration 4.26s ; re-`ensure` → **`reused=true` stage:ready**. Le 1ᵉʳ appel n'échoue plus. Persona
+  temp + clip nettoyés.
 
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
