@@ -17,6 +17,12 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { PODCAST_VOICES, DEFAULT_HOST_VOICE, DEFAULT_GUEST_VOICE, getPodcastVoice } from "@/lib/podcast/voice-catalog";
+import {
+  estimatePodcastLipsync,
+  secondsFromText,
+  formatUsd,
+  formatEstimatedTime,
+} from "@/lib/podcast/lipsync-estimate";
 
 type Speaker = { id: string; role: "host" | "guest"; name: string; position: number; voice_id?: string | null; persona_id?: string | null };
 type Persona = { id: string; name: string; portrait_url: string | null; thumb_url: string | null; is_catalog: boolean };
@@ -76,10 +82,10 @@ const STYLE_OPTIONS = [
 // Render mode (T-1144b-lite). Copy is deliberately explicit: "Talking visual"
 // animates real people but is NOT exact lip-sync. "Lip-sync premium" is not
 // active yet (soon) — shown disabled so the option is visible but not selectable.
-const RENDER_MODE_OPTIONS: { value: string; label: string; desc: string; disabled?: boolean }[] = [
-  { value: "static", label: "Static", desc: "Fixed portrait cards. Fastest." },
-  { value: "talking_visual", label: "Talking visual", desc: "Real people, animated — not exact lip-sync." },
-  { value: "lipsync_premium", label: "Lip-sync premium — soon", desc: "Exact per-speaker lip-sync. Coming soon.", disabled: true },
+const RENDER_MODE_OPTIONS: { value: string; label: string; desc: string }[] = [
+  { value: "static", label: "Static", desc: "Fixed portrait cards. Fastest. Free." },
+  { value: "talking_visual", label: "Talking visual", desc: "Real people, animated — not exact lip-sync. Free." },
+  { value: "lipsync_premium", label: "Lip-sync premium", desc: "Exact per-speaker lip-sync. Paid — cost shown before render." },
 ];
 
 const STEPS = [
@@ -106,6 +112,11 @@ export default function CreatePodcastPage() {
   const [targetDuration, setTargetDuration] = useState(120);
   const [podcastStyle, setPodcastStyle] = useState("casual");
   const [renderMode, setRenderMode] = useState("talking_visual");
+  // Lip-sync premium opt-in gate (T-1145). Confirmation is required (with a cost
+  // estimate) before the premium mode can be selected. No credits are spent here;
+  // the real lip-sync render ships in T-1144b.
+  const [lipsyncConfirmOpen, setLipsyncConfirmOpen] = useState(false);
+  const [lipsyncConfirmed, setLipsyncConfirmed] = useState(false);
 
   const [podcast, setPodcast] = useState<PodcastRow | null>(null);
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
@@ -158,6 +169,12 @@ export default function CreatePodcastPage() {
   const allReady = hasDialogue && segments.every((s) => s.status === "ready" && s.audio_url);
   const anyAudio = segments.some((s) => s.audio_url);
   const pendingVoiceCount = segments.filter((s) => s.status !== "ready" || !s.audio_url).length;
+  // Live lip-sync estimate (T-1145): active-speaker lip-sync = one clip per segment.
+  // Durations are proxied from text length pre-render. No HeyGen call, no spend.
+  const lipsyncEstimate = useMemo(
+    () => estimatePodcastLipsync(segments.map((s) => secondsFromText(s.text))),
+    [segments],
+  );
   const rendering = podcast?.render_status === "rendering" || phase === "rendering";
   const currentStep = !hasDialogue ? 1 : !anyAudio ? 2 : podcast?.video_url ? 4 : 3;
 
@@ -188,6 +205,10 @@ export default function CreatePodcastPage() {
     }
     setError(null);
     setPhase("scripting");
+    // Premium isn't a live render mode yet (T-1144b) and the API rejects it —
+    // persist the free equivalent so drafting never 400s. The UI keeps the premium
+    // selection for cost disclosure; the render itself is separately gated.
+    const persistRenderMode = renderMode === "lipsync_premium" ? "talking_visual" : renderMode;
     try {
       const headers = await authHeaders();
       if (!headers) { setError("Please sign in again."); setPhase("idle"); return; }
@@ -206,7 +227,7 @@ export default function CreatePodcastPage() {
             layout: "two_shot",
             podcast_style: podcastStyle,
             target_duration_seconds: targetDuration,
-            render_mode: renderMode,
+            render_mode: persistRenderMode,
           }),
         });
         const json = await res.json();
@@ -221,7 +242,7 @@ export default function CreatePodcastPage() {
         const metaRes = await fetch(`/api/podcasts/${pid}`, {
           method: "PATCH",
           headers,
-          body: JSON.stringify({ podcast_style: podcastStyle, target_duration_seconds: targetDuration, render_mode: renderMode }),
+          body: JSON.stringify({ podcast_style: podcastStyle, target_duration_seconds: targetDuration, render_mode: persistRenderMode }),
         }).catch(() => null);
         if (!metaRes || !metaRes.ok) {
           const j = metaRes ? await metaRes.json().catch(() => ({})) : {};
@@ -829,6 +850,12 @@ export default function CreatePodcastPage() {
 
   async function renderPodcast() {
     if (!podcast || !allReady) return;
+    // Lip-sync premium isn't renderable yet (real pipeline lands in T-1144b). Block
+    // it here so a confirmed selection can't start a paid/failed render — no spend.
+    if (renderMode === "lipsync_premium") {
+      setError("Lip-sync premium arrive bientôt (T-1144b). Choisis Static ou Talking visual pour lancer un rendu maintenant.");
+      return;
+    }
     setError(null);
     setPhase("rendering");
     try {
@@ -1007,31 +1034,90 @@ export default function CreatePodcastPage() {
           <div className="grid gap-2 sm:grid-cols-3">
             {RENDER_MODE_OPTIONS.map((m) => {
               const active = renderMode === m.value;
+              const isPremium = m.value === "lipsync_premium";
               return (
                 <button
                   key={m.value}
                   type="button"
-                  disabled={m.disabled}
-                  onClick={() => !m.disabled && setRenderMode(m.value)}
+                  onClick={() => {
+                    if (isPremium) {
+                      // Opt-in gate: require an explicit cost confirmation once.
+                      if (lipsyncConfirmed) setRenderMode(m.value);
+                      else setLipsyncConfirmOpen(true);
+                    } else {
+                      setRenderMode(m.value);
+                    }
+                  }}
                   className={`rounded-xl border px-3 py-2.5 text-left transition ${
-                    m.disabled
-                      ? "cursor-not-allowed border-neutral-200 bg-neutral-50 opacity-60"
-                      : active
-                        ? "border-neutral-900 bg-neutral-900/[0.03] ring-1 ring-neutral-900"
-                        : "border-neutral-200 bg-white hover:bg-neutral-50"
+                    active
+                      ? "border-neutral-900 bg-neutral-900/[0.03] ring-1 ring-neutral-900"
+                      : "border-neutral-200 bg-white hover:bg-neutral-50"
                   }`}
                 >
-                  <span className="block text-sm font-semibold text-neutral-800">{m.label}</span>
+                  <span className="flex items-center gap-1.5 text-sm font-semibold text-neutral-800">
+                    {m.label}
+                    {isPremium && (
+                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-700">Paid</span>
+                    )}
+                  </span>
                   <span className="mt-0.5 block text-[11px] leading-snug text-neutral-500">{m.desc}</span>
+                  {isPremium && lipsyncEstimate.clips > 0 && (
+                    <span className="mt-1 block text-[11px] font-semibold text-amber-700">
+                      Est. {formatUsd(lipsyncEstimate.estimatedUsdWithMargin)} · {formatEstimatedTime(lipsyncEstimate.estimatedTimeSeconds)}
+                    </span>
+                  )}
                 </button>
               );
             })}
           </div>
           <p className="mt-1.5 text-[11px] text-neutral-400">
-            “Talking visual” animates real people from a base clip. It is not exact
-            lip-sync — the mouth does not match each word. Lip-sync premium is coming soon.
+            “Talking visual” animates real people from a base clip and is <strong>free</strong> —
+            it is not exact lip-sync (the mouth doesn’t match each word). “Lip-sync premium”
+            is exact per-speaker lip-sync and is <strong>paid</strong>; the estimated cost is
+            shown and confirmed before anything is generated.
           </p>
         </div>
+
+        {/* Lip-sync premium opt-in gate (T-1145) — cost disclosure + explicit
+            confirmation before the paid mode can be selected. No spend here. */}
+        {lipsyncConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setLipsyncConfirmOpen(false)}>
+            <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-base font-bold text-neutral-900">Lip-sync premium — cost estimate</h3>
+              <p className="mt-1 text-sm text-neutral-600">
+                Exact per-speaker lip-sync generates one paid HeyGen clip per dialogue line.
+                Here’s the estimate for this podcast:
+              </p>
+              {lipsyncEstimate.clips > 0 ? (
+                <div className="mt-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-sm">
+                  <div className="flex justify-between py-0.5"><span className="text-neutral-500">Clips (one per line)</span><span className="font-semibold text-neutral-800">{lipsyncEstimate.clips}</span></div>
+                  <div className="flex justify-between py-0.5"><span className="text-neutral-500">Lip-sync seconds</span><span className="font-semibold text-neutral-800">~{Math.round(lipsyncEstimate.totalSeconds)} s</span></div>
+                  <div className="flex justify-between py-0.5"><span className="text-neutral-500">Estimated time</span><span className="font-semibold text-neutral-800">{formatEstimatedTime(lipsyncEstimate.estimatedTimeSeconds)}</span></div>
+                  <div className="mt-1 flex justify-between border-t border-neutral-200 pt-1.5"><span className="font-semibold text-neutral-700">Estimated cost (incl. +15% margin)</span><span className="font-bold text-amber-700">{formatUsd(lipsyncEstimate.estimatedUsdWithMargin)}</span></div>
+                </div>
+              ) : (
+                <p className="mt-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-500">
+                  Generate the dialogue first to see a real estimate.
+                </p>
+              )}
+              <p className="mt-3 text-[11px] leading-snug text-neutral-400">
+                Estimate only — actual HeyGen credits vary. The real lip-sync render ships in a
+                later update (T-1144b); confirming here selects the premium mode and its cost
+                disclosure. <strong>No credits are spent now.</strong>
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button type="button" onClick={() => setLipsyncConfirmOpen(false)} className="rounded-lg border border-neutral-200 px-3 py-2 text-sm font-semibold text-neutral-600 hover:bg-neutral-50">Cancel</button>
+                <button
+                  type="button"
+                  onClick={() => { setLipsyncConfirmed(true); setRenderMode("lipsync_premium"); setLipsyncConfirmOpen(false); }}
+                  className="rounded-lg bg-neutral-900 px-3 py-2 text-sm font-semibold text-white hover:bg-neutral-800"
+                >
+                  I understand the cost — select premium
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button

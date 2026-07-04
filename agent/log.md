@@ -2708,3 +2708,22 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Verdict : GO T-1143/T-1144b, conditionné à la confirmation du coût réel
   (dashboard) + estimateur de coût/opt-in (T-1145) d'abord. Comparer speed vs
   precision seulement si precision trop cher.
+
+
+## T-1145 — Lip-sync premium cost estimator + opt-in gate (2026-07-05, Claude)
+- FAIT (aucun crédit dépensé, pas de batch, pas d'appel HeyGen) :
+  - `lib/podcast/lipsync-estimate.ts` (pur) : taux réel observé
+    `LIPSYNC_USD_PER_SECOND=0.04` (dashboard : ~$0.20/5s), marge +15%,
+    proxy durée depuis le texte (`secondsFromText`, ~14 char/s), temps estimé
+    via concurrence (100 s/clip, 4 en //). Constante `HEYGEN_DURATION_TOLERANCE`
+    (±15%) exportée pour T-1144b. 10 tests.
+  - UI /create/podcast : la carte "Lip-sync premium" n'est plus flat-disabled ;
+    badge Paid + estimation live "Est. $X · ~Y min". Sa sélection passe par une
+    modale de confirmation (clips, secondes, temps, coût +15%) exigeant un
+    "I understand the cost". talking_visual reste le défaut gratuit.
+  - Garde-fous : le rendu premium est bloqué côté UI (message "arrive avec
+    T-1144b") — aucun spend/échec. Persistance create/rewrite coerce premium →
+    talking_visual pour ne pas heurter le 400 API (premium non live).
+- Validé : tsc OK, `npm run build` OK, vitest 172/172 (podcast + routes).
+- NON fait : rendu lip-sync réel (T-1144b), cache par segment, activation du
+  spend premium. Coût réel HeyGen confirmé : $0.04/s (Video Translation).
