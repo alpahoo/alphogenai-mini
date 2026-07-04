@@ -3,6 +3,20 @@
 Entrée la plus récente en haut. Format :
 
 ```
+## 2026-07-04 ? Codex ? T-1142 spike PASS (realistic talking portrait)
+- Experimental admin-gated route used for the HeyGen podcast talking-duo spike. Added a spike-only `upload_image`
+  helper to rehost normalized JPEG portraits on R2.
+- Attempt 1 with existing `Alex QA Uploaded` persona proved the chain but remained an icon-style result; the first
+  PNG also triggered HeyGen `missing image dimensions`, fixed by JPEG rehost. Product lesson: source portrait quality
+  is decisive.
+- Attempt 2 used a synthetic photorealistic podcast-host portrait (no real identity) -> JPEG 1024x1024 -> R2 ->
+  `createPhotoAvatar` -> `createAvatarVideo` -> `createLipsync(..., precision)` with real AlphoGen podcast TTS.
+- Result: final MP4 `C:\tmp\heygen-realistic-person-lipsync.mp4`, 4.68s, 1280x720, H.264/AAC. Frame
+  `C:\tmp\heygen-realistic-person-lipsync-frame.png` shows a realistic talking presenter, not an icon.
+- Verdict: PASS for the technical direction. Next production work should start with base clip caching + opt-in
+  `talking_highlights` render mode, plus a photorealistic persona catalog and explicit cost/consent gates.
+- Detailed report: `docs/product/podcast-real-video-duo-spike-report.md`.
+
 ## 2026-07-03 — Claude — T-1138 QA prod PASS (upload persona → render non-fallback)
 - Podcast test `f2734d11` : persona **uploadée** « Alex QA Uploaded » assignée au GUEST → render → avatar guest
   **violet (persona, URL signée bucket privé)** ≠ placeholder bleu, host resté placeholder vert. Chemin
