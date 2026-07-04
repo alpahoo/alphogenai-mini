@@ -3,6 +3,18 @@
 Entrée la plus récente en haut. Format :
 
 ```
+## 2026-07-04 — Codex — T-1143b admin base clip cache route
+- Added admin-gated `POST /api/admin/podcast-base-clips` with two explicit actions:
+  `ensure` creates/reuses a HeyGen base clip cache row for a persona, and `poll` copies a completed HeyGen
+  base clip to permanent R2 storage before marking it ready.
+- The route is multi-step to avoid serverless timeouts and is intentionally admin-only because it can spend HeyGen
+  credits. `ensure` requires an explicit HeyGen `voice_id`; no hidden default spend is baked into code.
+- Cache invariant enforced in code: never persist expiring HeyGen URLs as `video_url`; completed clips are downloaded
+  and re-uploaded under `podcast/base-clips/{persona_id}/{clip_id}-{uuid}.mp4`.
+- Validation: targeted route tests (5/5), `npm run build` OK (route registered), `npx tsc --noEmit` clean after build.
+- Note: production migration for `podcast_persona_base_clips` still needs to be applied on the AlphoGen Supabase project;
+  this Codex session only has the Tradinglab Supabase MCP, so it was not applied here.
+
 ## 2026-07-04 — Codex — T-1143a base clip cache contract
 - Added additive migration `supabase/migrations/20260704_create_podcast_persona_base_clips.sql`
   for reusable podcast persona base clips. The table stores cache rows per persona/provider/aspect/resolution/kind
