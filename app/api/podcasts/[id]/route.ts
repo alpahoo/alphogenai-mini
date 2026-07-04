@@ -23,8 +23,10 @@ export async function GET(
       .eq("id", id)
       .single();
 
-    // Same 404 for "missing" and "not yours" — never leak existence.
-    if (!podcast || podcast.user_id !== user.id) {
+    // Same 404 for "missing", "not yours", and "archived" — archive is a user
+    // delete, so an archived podcast is not reopenable (T-1141 review). Never
+    // leak existence.
+    if (!podcast || podcast.user_id !== user.id || podcast.status === "archived") {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 

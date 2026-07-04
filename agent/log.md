@@ -88,6 +88,16 @@ Entrée la plus récente en haut. Format :
 - Note : Rename/Archive UI utilisent `window.prompt/confirm` (dialogues natifs) → validés via fetch (endpoints
   identiques) ; Duplicate UI = clic direct (pas de dialogue).
 
+## 2026-07-04 — Claude — T-1141 review fixes (Codex, 3 corrections)
+- **P2** — page `/create/podcast` : le PATCH metadata (style/durée) avant un Rewrite ne swallow plus l'erreur
+  (`catch(()=>{})`). Vérifie `res.ok` ; si la sauvegarde échoue → throw + message clair, **le POST /script n'est PAS
+  lancé** tant que metadata n'est pas persistée.
+- **P2/P3** — `GET /api/podcasts/[id]` renvoie **404 si `status='archived'`** (décision : Archive = suppression
+  utilisateur → non rouvrable par URL). Même 404 que missing/not-owned (pas de leak). Test ajouté.
+- **P3** — cartes Recent lisent la durée depuis `metadata.target_duration_seconds` (fallback legacy
+  `p.target_duration_seconds`).
+- Validation : tsc clean ; **npm test 844/844** (+1 archived) ; build OK.
+
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
 - Fichiers modifiés :

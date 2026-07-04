@@ -204,13 +204,18 @@ export default function CreatePodcastPage() {
         setSpeakers(json.speakers || []);
         pid = json.podcast.id;
       } else {
-        // Rewrite: persist the latest studio settings (style/duration) so a reopen
-        // restores them. Metadata-only — does NOT invalidate the render (T-1141).
-        await fetch(`/api/podcasts/${pid}`, {
+        // Rewrite: persist the latest studio settings (style/duration) BEFORE the
+        // script call so a reopen restores them. Metadata-only — no render
+        // invalidation. If it fails, stop here (don't rewrite with unsaved settings).
+        const metaRes = await fetch(`/api/podcasts/${pid}`, {
           method: "PATCH",
           headers,
           body: JSON.stringify({ podcast_style: podcastStyle, target_duration_seconds: targetDuration }),
-        }).catch(() => {});
+        }).catch(() => null);
+        if (!metaRes || !metaRes.ok) {
+          const j = metaRes ? await metaRes.json().catch(() => ({})) : {};
+          throw new Error(j?.error || "Could not save the style/duration. Try again.");
+        }
       }
 
       const res = await fetch(`/api/podcasts/${pid}/script`, {
@@ -1032,8 +1037,10 @@ export default function CreatePodcastPage() {
                 : rs === "rendering" ? { t: "Rendering", c: "bg-amber-100 text-amber-700" }
                 : rs === "failed" ? { t: "Failed", c: "bg-red-100 text-red-700" }
                 : { t: "Draft", c: "bg-neutral-100 text-neutral-500" };
-              const dur = p.target_duration_seconds
-                ? (p.target_duration_seconds >= 60 ? `${Math.round(p.target_duration_seconds / 60)} min` : `${p.target_duration_seconds}s`)
+              // Duration now lives in metadata (T-1141); fall back to the legacy top-level field.
+              const durSec = p.metadata?.target_duration_seconds ?? p.target_duration_seconds;
+              const dur = durSec
+                ? (durSec >= 60 ? `${Math.round(durSec / 60)} min` : `${durSec}s`)
                 : null;
               return (
                 <div key={p.id} className="flex flex-col rounded-xl border border-neutral-200 bg-white p-3 shadow-sm">

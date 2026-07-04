@@ -61,6 +61,14 @@ describe("GET /api/podcasts/[id]", () => {
     expect(res.status).toBe(404);
   });
 
+  it("404 when the podcast is archived (T-1141 review)", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({ "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id, status: "archived" }, error: null }) }) as never,
+    );
+    expect((await GET(req(), ctx("p1"))).status).toBe(404);
+  });
+
   it("returns podcast + speakers + segments when owned", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     vi.mocked(createServiceClient).mockReturnValue(
