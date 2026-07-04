@@ -143,11 +143,12 @@ describe("PATCH /api/podcasts/[id]", () => {
     expect((await PATCH(req({ podcast_style: "opera" }), ctx("p1"))).status).toBe(400);
   });
 
-  it("persists render_mode into metadata (merged) — T-1144b-lite", async () => {
+  it("persists render_mode + invalidates stale render when it changes — T-1144b-lite", async () => {
     let payload: Record<string, unknown> | undefined;
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     vi.mocked(createServiceClient).mockReturnValue(
       makeService({
+        // no prior render_mode == talking_visual default → switching to static is a change.
         "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id, metadata: { keep: 1 } }, error: null }),
         "podcasts:update": (s) => { payload = s.payload as Record<string, unknown>; return { data: { id: "p1" }, error: null }; },
       }) as never,
@@ -155,6 +156,39 @@ describe("PATCH /api/podcasts/[id]", () => {
     const res = await PATCH(req({ render_mode: "static" }), ctx("p1"));
     expect(res.status).toBe(200);
     expect(payload?.metadata).toEqual({ keep: 1, render_mode: "static" });
+    expect(payload?.video_url).toBeNull();
+    expect(payload?.render_status).toBe("idle");
+    expect(payload?.render_error).toBeNull();
+  });
+
+  it("does NOT invalidate the render when render_mode is unchanged — T-1144b-lite", async () => {
+    let payload: Record<string, unknown> | undefined;
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id, metadata: { render_mode: "static" } }, error: null }),
+        "podcasts:update": (s) => { payload = s.payload as Record<string, unknown>; return { data: { id: "p1" }, error: null }; },
+      }) as never,
+    );
+    const res = await PATCH(req({ render_mode: "static" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect(payload?.metadata).toEqual({ render_mode: "static" });
+    expect("video_url" in (payload || {})).toBe(false);
+    expect("render_status" in (payload || {})).toBe(false);
+  });
+
+  it("treats missing render_mode as talking_visual (no-op when set to talking_visual) — T-1144b-lite", async () => {
+    let payload: Record<string, unknown> | undefined;
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id, metadata: {} }, error: null }),
+        "podcasts:update": (s) => { payload = s.payload as Record<string, unknown>; return { data: { id: "p1" }, error: null }; },
+      }) as never,
+    );
+    const res = await PATCH(req({ render_mode: "talking_visual" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect("video_url" in (payload || {})).toBe(false);
   });
 
   it("rejects an invalid render_mode", async () => {
@@ -163,6 +197,14 @@ describe("PATCH /api/podcasts/[id]", () => {
       makeService({ "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id, metadata: {} }, error: null }) }) as never,
     );
     expect((await PATCH(req({ render_mode: "hologram" }), ctx("p1"))).status).toBe(400);
+  });
+
+  it("rejects lipsync_premium until the real pipeline exists — T-1144b-lite", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({ "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id, metadata: {} }, error: null }) }) as never,
+    );
+    expect((await PATCH(req({ render_mode: "lipsync_premium" }), ctx("p1"))).status).toBe(400);
   });
 
   it("rename does not clear the rendered video", async () => {

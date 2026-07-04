@@ -145,4 +145,11 @@ describe("POST /api/podcasts", () => {
     const res = await POST(req({ source_mode: "generate", source_topic: "AI", render_mode: "hologram" }));
     expect(res.status).toBe(400);
   });
+
+  it("400 on lipsync_premium until real pipeline exists (T-1144b-lite)", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(makeService({}) as never);
+    const res = await POST(req({ source_mode: "generate", source_topic: "AI", render_mode: "lipsync_premium" }));
+    expect(res.status).toBe(400);
+  });
 });

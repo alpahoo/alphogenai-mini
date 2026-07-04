@@ -2674,3 +2674,15 @@ findings level block/warn + message), `byteplus-cost.ts`
   Les deux renders terminent en `done`. Podcast restauré en talking_visual.
 - NON fait : lip-sync réel par segment (T-1144b), mini-gate coût/qualité
   lip-sync 1 segment, activation réelle de `lipsync_premium`.
+
+
+## T-1144b-lite hardening (2026-07-05, Claude)
+- P2 : PATCH /api/podcasts/[id] invalide le render obsolète quand render_mode
+  change réellement (video_url=null, render_status='idle', render_error=null) ;
+  no-op si inchangé (null == talking_visual par défaut, pas de reset).
+- P2 : renderPodcast (UI) stoppe avec une erreur claire si le PATCH render_mode
+  échoue — le render ne part plus avec des metadata périmées.
+- P3 : POST + PATCH rejettent `lipsync_premium` (400 "not available yet") tant
+  que le vrai pipeline (T-1144b) n'existe pas. Modal inchangé (fallback conservé).
+- Tests : invalidation on-change, no-op unchanged, missing==talking_visual,
+  rejet lipsync_premium (POST+PATCH). tsc + build + vitest OK (28 podcast routes).

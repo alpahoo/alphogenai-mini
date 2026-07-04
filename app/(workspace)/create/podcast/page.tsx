@@ -835,12 +835,17 @@ export default function CreatePodcastPage() {
       const headers = await authHeaders();
       if (!headers) { setError("Please sign in again."); setPhase("idle"); return; }
       // Persist the chosen render mode (metadata-only) so the Modal renderer reads
-      // the latest value even if it changed after the script was generated.
-      await fetch(`/api/podcasts/${podcast.id}`, {
+      // the latest value even if it changed after the script was generated. If this
+      // save fails we must NOT render — otherwise the render runs with stale metadata.
+      const modeRes = await fetch(`/api/podcasts/${podcast.id}`, {
         method: "PATCH",
         headers,
         body: JSON.stringify({ render_mode: renderMode }),
       }).catch(() => null);
+      if (!modeRes || !modeRes.ok) {
+        const j = modeRes ? await modeRes.json().catch(() => ({})) : {};
+        throw new Error(j?.error || "Could not save the render mode. Try again.");
+      }
       const res = await fetch(`/api/podcasts/${podcast.id}/render`, { method: "POST", headers });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || "Could not start the render.");
