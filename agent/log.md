@@ -78,7 +78,15 @@ Entrée la plus récente en haut. Format :
 - Tests : +10 (POST style/400, GET filtre archived, PATCH style mergé/400 + rename no-clear-video, DELETE archive
   owned/404, duplicate mapping/pending/no-video/404/rollback). **npm test 843/843** ; tsc clean ; build OK.
 - Migration : **OUI** (metadata + archived). Routes : POST/PATCH `/api/podcasts` étendues, `DELETE /[id]` +
-  `POST /[id]/duplicate` ajoutées. QA prod à faire après deploy.
+  `POST /[id]/duplicate` ajoutées.
+- **QA prod PASS (2026-07-04)** : (routes via fetch session + vérif MCP AlphoGen)
+  · **Duplicate** `e531f932` → copie `78c8f74f` : 201, has_video=false, render_status=idle, 8 segments
+  **pending+audio null**, 2 speakers **persona copiée**, titre « … (Copy) ». Original non modifié.
+  · **Rename** copie → 200, titre « QA Renamed Copy ». · **Archive** copie → 200, `status='archived'` (MCP),
+  **absente de la liste**. · **Style** : PATCH `metadata{podcast_style:expert,target_duration_seconds:300}` →
+  reopen UI : sélecteurs restaurés **5 min + Expert** (n'a pas invalidé le render).
+- Note : Rename/Archive UI utilisent `window.prompt/confirm` (dialogues natifs) → validés via fetch (endpoints
+  identiques) ; Duplicate UI = clic direct (pas de dialogue).
 
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
