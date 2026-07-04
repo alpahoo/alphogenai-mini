@@ -3,6 +3,15 @@
 Entrée la plus récente en haut. Format :
 
 ```
+## 2026-07-04 — Codex — T-1143a base clip cache contract
+- Added additive migration `supabase/migrations/20260704_create_podcast_persona_base_clips.sql`
+  for reusable podcast persona base clips. The table stores cache rows per persona/provider/aspect/resolution/kind
+  with permanent AlphoGen-controlled `video_url`/`storage_key`, provider ids, status, metadata, RLS, and a unique
+  active cache key. Migration is versioned only; not applied to production in this slice.
+- Added `docs/product/podcast-base-clip-cache-contract.md`, documenting why expiring HeyGen URLs cannot be used
+  directly, the R2 permanent-copy invariant, future create/reuse flow, non-goals, and next tickets T-1143b/T-1144.
+- Scope: schema + docs only. No runtime route, Modal change, UI, provider call, or credit spend.
+
 ## 2026-07-04 ? Codex ? T-1142 spike PASS (realistic talking portrait)
 - Experimental admin-gated route used for the HeyGen podcast talking-duo spike. Added a spike-only `upload_image`
   helper to rehost normalized JPEG portraits on R2.
