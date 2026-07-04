@@ -97,6 +97,8 @@ Entrée la plus récente en haut. Format :
 - **P3** — cartes Recent lisent la durée depuis `metadata.target_duration_seconds` (fallback legacy
   `p.target_duration_seconds`).
 - Validation : tsc clean ; **npm test 844/844** (+1 archived) ; build OK.
+- **QA prod PASS** : GET `[id]` sur podcast archivé `78c8f74f` → **404** ; sur actif `e531f932` → **200**
+  (réouverture des actifs intacte). Commit `0094e8c`.
 
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
