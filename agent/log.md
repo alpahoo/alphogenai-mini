@@ -15,6 +15,21 @@ Entrée la plus récente en haut. Format :
   upload piloté via fetch page (token lu depuis cookie `sb-<ref>-auth-token`). Endpoint identique, validation réelle.
 - T-1138 déployé (commit `52141ce`, Vercel) + bucket appliqué prod. Tout vert.
 
+## 2026-07-04 — Claude — T-1139 Podcast entry polish / guided flow (UI-only)
+- `/create/podcast` uniquement. Aucun backend touché (routes/TTS/Modal inchangés). Flow préservé :
+  script → voices → presenters → render.
+- Entrée : headline raccourci (« Create a podcast video »), sous-titre condensé, CTA « Generate script »
+  (au lieu de « Generate dialogue » ; « Rewrite script » / « Writing script… »). Idée/lien/durée/style/langue
+  inchangés (déjà présents). Upload script/audio reste « Soon » disabled.
+- Loading guidé façon Jogg : `SCRIPT_LOADING_STEPS` (Parsing topic → Structuring → Drafting → Almost ready) +
+  state `scriptStep` avancé par interval pendant `phase==='scripting'` ; bloc à coches/spinner sous le CTA.
+- Recent podcasts : nouvelle section (entrée seulement, `!podcast`) branchée sur `GET /api/podcasts?limit=6`
+  (existant) — miniatures (video preview / icône), titre, badge statut (Ready/Rendering/Failed/Draft), durée.
+  Actions **honnêtes** : « View video » (ouvre `video_url`) si rendu ; sinon « Continue (soon) » disabled (pas de
+  fausse action — le ré-open d'un brouillon dans l'éditeur n'existe pas encore).
+- Type `PodcastRow` étendu (champs optionnels `target_duration_seconds`, `created_at`).
+- Validation : tsc clean ; **suite complète 833/833** ; build OK. QA prod à faire après deploy (Vercel only).
+
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
 - Fichiers modifiés :
