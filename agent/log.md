@@ -28,7 +28,12 @@ Entrée la plus récente en haut. Format :
   Actions **honnêtes** : « View video » (ouvre `video_url`) si rendu ; sinon « Continue (soon) » disabled (pas de
   fausse action — le ré-open d'un brouillon dans l'éditeur n'existe pas encore).
 - Type `PodcastRow` étendu (champs optionnels `target_duration_seconds`, `created_at`).
-- Validation : tsc clean ; **suite complète 833/833** ; build OK. QA prod à faire après deploy (Vercel only).
+- Validation : tsc clean ; **suite complète 833/833** ; build OK.
+- **QA prod PASS (2026-07-04)** : `/create/podcast` — headline « Create a podcast video » + CTA « Generate script »
+  OK ; loading guidé affiché (coches vertes Parsing/Structuring/Drafting + spinner « Almost ready ») ; section
+  Recent podcasts rendue (6 cartes, vraies miniatures vidéo, badges READY/DRAFT, « View video » / « Continue
+  (soon) » désactivé) ; flow préservé — après « Generate script » : Dialogue + carte Presenters (Duo picker) +
+  Generate voices présents. Render inchangé (backend non touché, validé aux tickets T-1136/1137).
 
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
