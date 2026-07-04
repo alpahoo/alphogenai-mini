@@ -140,6 +140,7 @@ export async function POST(request: NextRequest) {
           n: 1,
         };
         if (typeof body.negative_prompt === "string") payload.negative_prompt = body.negative_prompt;
+        if (body.watermark === false) payload.watermark = false;
         const gen = await fetch(`${arkBase}/api/v3/images/generations`, {
           method: "POST",
           headers: { Authorization: `Bearer ${arkKey}`, "Content-Type": "application/json" },
