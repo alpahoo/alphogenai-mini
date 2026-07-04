@@ -5,6 +5,7 @@ import {
   listAvatars,
   listOwnedAvatars,
   listVoices,
+  createPhotoAvatar,
   createAvatarVideo,
   getHeyGenTask,
   createLipsync,
@@ -67,6 +68,13 @@ export async function POST(request: NextRequest) {
       case "voices": {
         const voices = await listVoices();
         return NextResponse.json({ elapsedMs: Date.now() - t0, voices: voices.slice(0, 10) });
+      }
+      case "photo_avatar": {
+        // Turn a persona portrait into a photo avatar (the real T-1143 chain),
+        // avoiding the slow avatar listing.
+        if (!body.imageUrl) return NextResponse.json({ error: "imageUrl required" }, { status: 400 });
+        const pa = await createPhotoAvatar({ imageUrl: body.imageUrl, name: body.name || "spike" });
+        return NextResponse.json({ elapsedMs: Date.now() - t0, avatarId: pa.avatarId, status: pa.status });
       }
       case "base": {
         const { avatarId, voiceId, scriptText } = body;
