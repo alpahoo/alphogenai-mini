@@ -196,6 +196,16 @@ Entrée la plus récente en haut. Format :
   R2 permanent, duration 4.26s ; re-`ensure` → **`reused=true` stage:ready**. Le 1ᵉʳ appel n'échoue plus. Persona
   temp + clip nettoyés.
 
+## 2026-07-05 — Claude — T-1143d comparaison Seedream 4.0 vs 4.5 vs Dola-5.0-lite
+- Model ids exacts (fournis via console) : 4.0 `seedream-4-0-250828`, **4.5 `seedream-4-5-251128`**,
+  **Dola-5.0-lite `seedream-5-0-260128`**. 4.5/5.0 exigent `size:"2K"|"1K"` (pas `1024x1024`) ; 4.0 accepte 1024².
+- Mêmes 4 personnages (maya/leo/aria/nova) générés sur les 3 modèles, `watermark:false` → tous sans watermark,
+  photoréalistes, aptes HeyGen. Contact sheet comparative : `tmp/photoreal-personas/_compare_models.jpg`.
+- Observations : **4.5** = le plus net/détaillé (reco qualité) ; 4.0 très proche, éclairage plus doux ;
+  **5.0-lite** excellent mais **biais traits est-asiatiques** pour les 4 (à prompter explicitement si casting varié).
+  Même tarif ~0,035 $/img, quotas gratuits. Recommandation modèle : **4.5** (ou 4.0), 5.0-lite si look voulu.
+- STOP maintenu : aucun seed, aucun base clip. Attente choix user (modèle + portraits).
+
 ## 2026-07-05 — Claude — T-1143d Photoreal persona catalog (Seedream test) — STOP pour review
 - Test BytePlus ModelArk Seedream T2I via step admin expérimental `gen_portrait`
   (`app/api/admin/experiments/podcast-lipsync-spike/route.ts`, `/api/v3/images/generations`, `BYTEPLUS_ARK_API_KEY`).
