@@ -2647,3 +2647,30 @@ findings level block/warn + message), `byteplus-cost.ts`
   - filtre + badge `Favorites` dans Projects.
 - Tests : `lib/__tests__/job-favorite.test.ts` couvre les cas app_state true/false,
   préservation d'état et valeurs invalides.
+
+
+## T-1144b-lite — Podcast render mode UI + disclosure (2026-07-05, Claude)
+- FAIT : mode de rendu explicite via `podcasts.metadata.render_mode`
+  (`static` | `talking_visual` | `lipsync_premium`). Aucune migration.
+  - Backend : `isPodcastRenderMode` (lib/podcast/podcast.ts) ; POST + PATCH
+    `/api/podcasts` valident et persistent render_mode dans metadata.
+  - Modal `render_podcast` : lit `metadata.render_mode`. `static` → bypass des
+    base clips (portraits statiques) ; `talking_visual` (défaut) = comportement
+    T-1144a ; `lipsync_premium` non actif (traité comme talking_visual pour
+    l'instant). Inconnu/absent → talking_visual. Fallback statique inchangé.
+  - UI /create/podcast : sélecteur 3 cartes + disclosure explicite
+    ("Talking visual = vraies personnes animées, PAS de lip-sync exact").
+    "Lip-sync premium — soon" affiché **disabled**. render_mode persisté à la
+    création, au rewrite (PATCH) et juste avant le render ; restauré à la
+    réouverture (premium jamais re-sélectionné).
+- Validé : py_compile OK, tsc OK, vitest 66/66 (nouveaux tests POST+PATCH
+  render_mode valide/invalide), `npm run build` OK.
+- Deploy : commit 768fedc poussé → GH Actions deploy-modal.yml **success**.
+- QA prod (podcast e531f932, Maya host + Leo guest, base clips 1:1 ready) :
+  renders déclenchés directement sur la fonction Modal déployée. Logs live
+  confirment les DEUX branches :
+    * `render_mode=static → static portraits (base clips bypassed)`
+    * `render_mode=talking_visual → talking-duo base clips host=yes guest=yes`
+  Les deux renders terminent en `done`. Podcast restauré en talking_visual.
+- NON fait : lip-sync réel par segment (T-1144b), mini-gate coût/qualité
+  lip-sync 1 segment, activation réelle de `lipsync_premium`.

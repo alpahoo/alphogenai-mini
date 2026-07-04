@@ -1399,3 +1399,13 @@ Contraintes :
 ## T-1144a — Podcast talking-duo base clip render (2026-07-05, Claude)
 - FAIT : render_podcast branche les base clips 1:1 ready (frames animées bouclees dans les speaker cards), fallback statique, sans HeyGen/credit/migration/UI. py_compile+tsc+test 852+build OK. Push -> auto-deploy Modal. QA prod ensuite.
 - NON fait : lip-sync par segment, cout HeyGen au render, render_mode UI.
+
+
+## T-1144b-lite — Render mode UI + disclosure (2026-07-05, Claude) — FAIT
+- metadata.render_mode (static/talking_visual/lipsync_premium), défaut talking_visual.
+  static bypass base clips dans render_podcast ; lipsync_premium visible mais disabled.
+  Copy UI explicite (talking visual ≠ lip-sync exact). Aucun crédit/appel provider/migration.
+  Validé tsc+vitest+build+deploy Modal ; QA prod e531f932 : logs confirment static bypass
+  vs talking_visual base clips host=yes guest=yes. Commit 768fedc.
+- Suite recommandée : mini-gate lip-sync 1 segment (qualité/délai/coût réel) → T-1144b
+  complet (lip-sync par segment actif, cache, fallback T-1144a, activation lipsync_premium).
