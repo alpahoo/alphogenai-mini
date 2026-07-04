@@ -123,6 +123,55 @@ export async function POST(request: NextRequest) {
         const pa = await createPhotoAvatar({ imageUrl: body.imageUrl, name: body.name || "spike" });
         return NextResponse.json({ elapsedMs: Date.now() - t0, avatarId: pa.avatarId, status: pa.status });
       }
+      case "gen_portrait": {
+        // T-1143d: probe BytePlus ModelArk Seedream T2I → rehost to R2 staging.
+        // model + prompt from body so we can discover the callable model id
+        // without redeploying (failed model ids error out, no charge).
+        const model = typeof body.model === "string" ? body.model : "";
+        const prompt = typeof body.prompt === "string" ? body.prompt : "";
+        if (!model || !prompt) return NextResponse.json({ error: "model + prompt required" }, { status: 400 });
+        const arkBase = process.env.BYTEPLUS_BASE_URL || "https://ark.ap-southeast.bytepluses.com";
+        const arkKey = process.env.BYTEPLUS_ARK_API_KEY || "";
+        const payload: Record<string, unknown> = {
+          model,
+          prompt,
+          size: typeof body.size === "string" ? body.size : "1024x1024",
+          response_format: "url",
+          n: 1,
+        };
+        if (typeof body.negative_prompt === "string") payload.negative_prompt = body.negative_prompt;
+        const gen = await fetch(`${arkBase}/api/v3/images/generations`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${arkKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(50_000),
+        });
+        const genJson = await gen.json().catch(() => ({}));
+        if (!gen.ok) {
+          return NextResponse.json({ elapsedMs: Date.now() - t0, ark_status: gen.status, ark_error: genJson }, { status: 200 });
+        }
+        const first = Array.isArray(genJson.data) ? genJson.data[0] : undefined;
+        const srcUrl = first?.url as string | undefined;
+        const b64 = first?.b64_json as string | undefined;
+        let buffer: Buffer | null = null;
+        let srcInfo = "";
+        if (srcUrl) {
+          const dl = await fetch(srcUrl, { signal: AbortSignal.timeout(30_000) });
+          if (!dl.ok) return NextResponse.json({ error: `download failed ${dl.status}`, srcUrl }, { status: 200 });
+          buffer = Buffer.from(await dl.arrayBuffer());
+          srcInfo = srcUrl.slice(0, 80);
+        } else if (b64) {
+          buffer = Buffer.from(b64, "base64");
+          srcInfo = "b64";
+        }
+        if (!buffer || buffer.length < 1000) {
+          return NextResponse.json({ error: "no image in response", raw: genJson }, { status: 200 });
+        }
+        const label = typeof body.label === "string" ? body.label.replace(/[^a-z0-9-]/gi, "_").slice(0, 40) : "portrait";
+        const key = `experiments/photoreal-personas/${label}-${randomUUID()}.png`;
+        const url = await uploadBufferToR2(buffer, key, "image/png");
+        return NextResponse.json({ elapsedMs: Date.now() - t0, ark_status: gen.status, src: srcInfo, r2_url: url, bytes: buffer.length, usage: genJson.usage });
+      }
       case "upload_image": {
         // Spike-only helper: upload a normalized portrait (usually JPEG) to R2
         // so HeyGen gets a stable public URL with readable dimensions.
