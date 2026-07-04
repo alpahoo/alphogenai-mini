@@ -9,6 +9,7 @@ import {
   isHttpUrl,
   isLanguage,
   isLayout,
+  isPodcastRenderMode,
   isPodcastStyle,
   isPodcastTargetDuration,
   isSourceMode,
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => ({}));
     const { source_mode, source_topic, source_asset_url, title, layout, aspect_ratio, language,
-      podcast_style, target_duration_seconds } = body;
+      podcast_style, target_duration_seconds, render_mode } = body;
 
     if (!isSourceMode(source_mode)) {
       return NextResponse.json({ error: "source_mode must be 'generate' or 'upload'" }, { status: 400 });
@@ -95,6 +96,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "target_duration_seconds must be 30, 60, 120, 300 or 600" }, { status: 400 });
       }
       metadata.target_duration_seconds = target_duration_seconds;
+    }
+    if (render_mode !== undefined) {
+      if (!isPodcastRenderMode(render_mode)) {
+        return NextResponse.json({ error: "render_mode must be static | talking_visual | lipsync_premium" }, { status: 400 });
+      }
+      metadata.render_mode = render_mode;
     }
 
     const service = createServiceClient();

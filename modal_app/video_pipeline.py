@@ -2650,12 +2650,24 @@ def render_podcast(podcast_id: str) -> str:
         # base clip cached on R2, animate its looping frames in the card instead of
         # the static portrait. This is a "talking base clip visual", NOT segment
         # lip-sync. Fallback-safe: any miss keeps the static avatar. No HeyGen call.
-        _host_clip = _resolve_base_clip_url(sb, host, podcast_id, owner_id)
-        _guest_clip = _resolve_base_clip_url(sb, guest, podcast_id, owner_id)
-        host_frames = _extract_base_clip_frames(_host_clip, workdir, "host", avatar_size, podcast_id) if _host_clip else None
-        guest_frames = _extract_base_clip_frames(_guest_clip, workdir, "guest", avatar_size, podcast_id) if _guest_clip else None
-        if host_frames or guest_frames:
-            log(podcast_id, f"talking-duo base clips → host={'yes' if host_frames else 'no'} guest={'yes' if guest_frames else 'no'}")
+        # Render mode (T-1144b-lite): "static" bypasses base clips entirely (static
+        # portraits only); "talking_visual" (default) keeps the T-1144a looping-clip
+        # visual; "lipsync_premium" is reserved for T-1144b and behaves as
+        # talking_visual for now (not yet active). Unknown/missing → talking_visual.
+        _meta = podcast.get("metadata") or {}
+        render_mode = _meta.get("render_mode") if isinstance(_meta, dict) else None
+        if render_mode not in ("static", "talking_visual", "lipsync_premium"):
+            render_mode = "talking_visual"
+        if render_mode == "static":
+            host_frames = None
+            guest_frames = None
+            log(podcast_id, "render_mode=static → static portraits (base clips bypassed)")
+        else:
+            _host_clip = _resolve_base_clip_url(sb, host, podcast_id, owner_id)
+            _guest_clip = _resolve_base_clip_url(sb, guest, podcast_id, owner_id)
+            host_frames = _extract_base_clip_frames(_host_clip, workdir, "host", avatar_size, podcast_id) if _host_clip else None
+            guest_frames = _extract_base_clip_frames(_guest_clip, workdir, "guest", avatar_size, podcast_id) if _guest_clip else None
+            log(podcast_id, f"render_mode={render_mode} → talking-duo base clips host={'yes' if host_frames else 'no'} guest={'yes' if guest_frames else 'no'}")
 
         bar_x, bar_y, bar_w = int(W * 0.16), H - 34, int(W * 0.68)
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
-import { TITLE_MAX, isAspectRatio, isLanguage, isLayout, isPodcastStyle, isPodcastTargetDuration } from "@/lib/podcast/podcast";
+import { TITLE_MAX, isAspectRatio, isLanguage, isLayout, isPodcastRenderMode, isPodcastStyle, isPodcastTargetDuration } from "@/lib/podcast/podcast";
 
 /**
  * GET /api/podcasts/[id] — full podcast (with speakers + segments). 404 if not owned.
@@ -91,6 +91,13 @@ export async function PATCH(
         return NextResponse.json({ error: "target_duration_seconds must be 30, 60, 120, 300 or 600" }, { status: 400 });
       }
       nextMeta.target_duration_seconds = body.target_duration_seconds;
+      metaChanged = true;
+    }
+    if (body.render_mode !== undefined) {
+      if (!isPodcastRenderMode(body.render_mode)) {
+        return NextResponse.json({ error: "render_mode must be static | talking_visual | lipsync_premium" }, { status: 400 });
+      }
+      nextMeta.render_mode = body.render_mode;
       metaChanged = true;
     }
     if (metaChanged) update.metadata = nextMeta;

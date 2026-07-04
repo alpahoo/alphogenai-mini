@@ -143,6 +143,28 @@ describe("PATCH /api/podcasts/[id]", () => {
     expect((await PATCH(req({ podcast_style: "opera" }), ctx("p1"))).status).toBe(400);
   });
 
+  it("persists render_mode into metadata (merged) — T-1144b-lite", async () => {
+    let payload: Record<string, unknown> | undefined;
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id, metadata: { keep: 1 } }, error: null }),
+        "podcasts:update": (s) => { payload = s.payload as Record<string, unknown>; return { data: { id: "p1" }, error: null }; },
+      }) as never,
+    );
+    const res = await PATCH(req({ render_mode: "static" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect(payload?.metadata).toEqual({ keep: 1, render_mode: "static" });
+  });
+
+  it("rejects an invalid render_mode", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({ "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id, metadata: {} }, error: null }) }) as never,
+    );
+    expect((await PATCH(req({ render_mode: "hologram" }), ctx("p1"))).status).toBe(400);
+  });
+
   it("rename does not clear the rendered video", async () => {
     let payload: Record<string, unknown> | undefined;
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);

@@ -10,6 +10,9 @@ export const ASPECT_RATIOS = ["16:9", "9:16"] as const;
 export const PODCAST_STATUSES = ["draft", "scripting", "ready", "failed"] as const;
 export const PODCAST_TARGET_DURATIONS = [30, 60, 120, 300, 600] as const;
 export const PODCAST_STYLES = ["casual", "news", "expert", "debate", "documentary"] as const;
+// Render modes (T-1144b-lite). talking_visual = looping base-clip visual (NOT exact
+// lip-sync); lipsync_premium reserved for T-1144b (not active yet).
+export const PODCAST_RENDER_MODES = ["static", "talking_visual", "lipsync_premium"] as const;
 
 export type SourceMode = (typeof SOURCE_MODES)[number];
 export type Layout = (typeof LAYOUTS)[number];
@@ -17,6 +20,7 @@ export type AspectRatio = (typeof ASPECT_RATIOS)[number];
 export type PodcastStatus = (typeof PODCAST_STATUSES)[number];
 export type PodcastTargetDuration = (typeof PODCAST_TARGET_DURATIONS)[number];
 export type PodcastStyle = (typeof PODCAST_STYLES)[number];
+export type PodcastRenderMode = (typeof PODCAST_RENDER_MODES)[number];
 
 export const TITLE_MAX = 200;
 export const TOPIC_MAX = 2000;
@@ -31,6 +35,8 @@ export const isPodcastTargetDuration = (v: unknown): v is PodcastTargetDuration 
   typeof v === "number" && (PODCAST_TARGET_DURATIONS as readonly number[]).includes(v);
 export const isPodcastStyle = (v: unknown): v is PodcastStyle =>
   typeof v === "string" && (PODCAST_STYLES as readonly string[]).includes(v);
+export const isPodcastRenderMode = (v: unknown): v is PodcastRenderMode =>
+  typeof v === "string" && (PODCAST_RENDER_MODES as readonly string[]).includes(v);
 
 export const isLanguage = (v: unknown): v is string =>
   typeof v === "string" && /^[a-z]{2}(-[A-Z]{2})?$/.test(v);

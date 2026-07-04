@@ -42,7 +42,7 @@ type PodcastRow = {
   created_at?: string | null;
   source_topic?: string | null;
   source_asset_url?: string | null;
-  metadata?: { podcast_style?: string; target_duration_seconds?: number } | null;
+  metadata?: { podcast_style?: string; target_duration_seconds?: number; render_mode?: string } | null;
 };
 
 const LANGUAGES = [
@@ -73,6 +73,15 @@ const STYLE_OPTIONS = [
   { value: "documentary", label: "Documentary", desc: "Narrative explainer" },
 ];
 
+// Render mode (T-1144b-lite). Copy is deliberately explicit: "Talking visual"
+// animates real people but is NOT exact lip-sync. "Lip-sync premium" is not
+// active yet (soon) — shown disabled so the option is visible but not selectable.
+const RENDER_MODE_OPTIONS: { value: string; label: string; desc: string; disabled?: boolean }[] = [
+  { value: "static", label: "Static", desc: "Fixed portrait cards. Fastest." },
+  { value: "talking_visual", label: "Talking visual", desc: "Real people, animated — not exact lip-sync." },
+  { value: "lipsync_premium", label: "Lip-sync premium — soon", desc: "Exact per-speaker lip-sync. Coming soon.", disabled: true },
+];
+
 const STEPS = [
   { n: 1, label: "Write dialogue", Icon: FileText },
   { n: 2, label: "Generate voices", Icon: Mic },
@@ -96,6 +105,7 @@ export default function CreatePodcastPage() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [targetDuration, setTargetDuration] = useState(120);
   const [podcastStyle, setPodcastStyle] = useState("casual");
+  const [renderMode, setRenderMode] = useState("talking_visual");
 
   const [podcast, setPodcast] = useState<PodcastRow | null>(null);
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
@@ -196,6 +206,7 @@ export default function CreatePodcastPage() {
             layout: "two_shot",
             podcast_style: podcastStyle,
             target_duration_seconds: targetDuration,
+            render_mode: renderMode,
           }),
         });
         const json = await res.json();
@@ -210,7 +221,7 @@ export default function CreatePodcastPage() {
         const metaRes = await fetch(`/api/podcasts/${pid}`, {
           method: "PATCH",
           headers,
-          body: JSON.stringify({ podcast_style: podcastStyle, target_duration_seconds: targetDuration }),
+          body: JSON.stringify({ podcast_style: podcastStyle, target_duration_seconds: targetDuration, render_mode: renderMode }),
         }).catch(() => null);
         if (!metaRes || !metaRes.ok) {
           const j = metaRes ? await metaRes.json().catch(() => ({})) : {};
@@ -307,6 +318,8 @@ export default function CreatePodcastPage() {
         const meta = p.metadata || {};
         if (meta.podcast_style) setPodcastStyle(meta.podcast_style);
         if (meta.target_duration_seconds) setTargetDuration(meta.target_duration_seconds);
+        // Only restore a real render mode; premium is not selectable yet.
+        if (meta.render_mode === "static" || meta.render_mode === "talking_visual") setRenderMode(meta.render_mode);
       } catch {
         if (!cancelled) setError("Could not open that podcast.");
       }
@@ -821,6 +834,13 @@ export default function CreatePodcastPage() {
     try {
       const headers = await authHeaders();
       if (!headers) { setError("Please sign in again."); setPhase("idle"); return; }
+      // Persist the chosen render mode (metadata-only) so the Modal renderer reads
+      // the latest value even if it changed after the script was generated.
+      await fetch(`/api/podcasts/${podcast.id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ render_mode: renderMode }),
+      }).catch(() => null);
       const res = await fetch(`/api/podcasts/${podcast.id}/render`, { method: "POST", headers });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || "Could not start the render.");
@@ -971,6 +991,41 @@ export default function CreatePodcastPage() {
               {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
             </select>
           </label>
+        </div>
+
+        {/* Render mode (T-1144b-lite) — explicit disclosure so users know the
+            current visual is not exact lip-sync. */}
+        <div className="mt-4">
+          <span className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-neutral-500">
+            <Clapperboard className="h-3.5 w-3.5" /> Render mode
+          </span>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {RENDER_MODE_OPTIONS.map((m) => {
+              const active = renderMode === m.value;
+              return (
+                <button
+                  key={m.value}
+                  type="button"
+                  disabled={m.disabled}
+                  onClick={() => !m.disabled && setRenderMode(m.value)}
+                  className={`rounded-xl border px-3 py-2.5 text-left transition ${
+                    m.disabled
+                      ? "cursor-not-allowed border-neutral-200 bg-neutral-50 opacity-60"
+                      : active
+                        ? "border-neutral-900 bg-neutral-900/[0.03] ring-1 ring-neutral-900"
+                        : "border-neutral-200 bg-white hover:bg-neutral-50"
+                  }`}
+                >
+                  <span className="block text-sm font-semibold text-neutral-800">{m.label}</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-neutral-500">{m.desc}</span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[11px] text-neutral-400">
+            “Talking visual” animates real people from a base clip. It is not exact
+            lip-sync — the mouth does not match each word. Lip-sync premium is coming soon.
+          </p>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">

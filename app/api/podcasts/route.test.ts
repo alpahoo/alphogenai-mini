@@ -124,4 +124,25 @@ describe("POST /api/podcasts", () => {
     const res = await POST(req({ source_mode: "generate", source_topic: "AI", podcast_style: "opera" }));
     expect(res.status).toBe(400);
   });
+
+  it("persists render_mode into metadata (T-1144b-lite)", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    let podcastPayload: Record<string, unknown> = {};
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:insert": (s) => { podcastPayload = s.payload as Record<string, unknown>; return { data: { id: "p1", user_id: USER.id, ...(s.payload as object) }, error: null }; },
+        "podcast_speakers:insert": (s) => ({ data: (s.payload as unknown[]).map((sp, i) => ({ id: `sp-${i}`, ...(sp as object) })), error: null }),
+      }) as never,
+    );
+    const res = await POST(req({ source_mode: "generate", source_topic: "AI", render_mode: "static" }));
+    expect(res.status).toBe(201);
+    expect((podcastPayload.metadata as Record<string, unknown>).render_mode).toBe("static");
+  });
+
+  it("400 on invalid render_mode", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    vi.mocked(createServiceClient).mockReturnValue(makeService({}) as never);
+    const res = await POST(req({ source_mode: "generate", source_topic: "AI", render_mode: "hologram" }));
+    expect(res.status).toBe(400);
+  });
 });
