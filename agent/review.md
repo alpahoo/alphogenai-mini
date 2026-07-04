@@ -10,6 +10,20 @@ Format :
 
 ## Risques & dette
 
+### [R-030] Route voiceover exposait l'erreur interne au client — `severity: low` · `status: resolved`
+- Contexte (2026-07-04, Claude) : le fallback mux de `app/api/jobs/[id]/voiceover/route.ts` renvoyait
+  `error: "Voice-over mux failed: <errMsg brut>"` + un champ `raw_error` (erreur interne exposée au client).
+  Introduit le 2026-06-14 par `ffb0082 debug(T-1113): return exact Modal error message` — étape de diagnostic
+  volontaire, **nettoyage post-debug oublié** ~3 semaines. Le test `voiceover/route.test.ts` était rouge depuis
+  (assertion attendait l'ancien message propre). Détecté quand un 2ᵉ agent (Cline/deepseek) a lancé la suite
+  complète ; confirmé comme régression réelle via `git blame` (l'agent l'avait balayé en « sans rapport »).
+- Risque / impact : info-disclosure mineure (chaînes d'erreur internes / noms d'infra vers le client). Pas de
+  bug d'exécution — le fallback vidéo fonctionne.
+- Décision : **assaini** — message client générique `"Voice-over mux failed; original video kept"`, erreur brute
+  gardée uniquement dans `console.error` serveur (déjà présent), champ `raw_error` supprimé. Test réaligné.
+- Leçon process : ne pas conformer un test à un comportement de debug pour « verdir » ; lancer `npm test`
+  **complet** en fin de ticket (pas seulement les tests ciblés) pour attraper les rouges dormants.
+
 ### [R-020] Table publique `gallery_items` (T-1002) — appliquée prod — `severity: low` · `status: resolved`
 - Contexte (2026-06-09, Claude) : nouvelle table `public.gallery_items` pour la galerie
   curated (spec gallery-curation-redesign). Appliquée prod via MCP `apply_migration`

@@ -142,13 +142,14 @@ export async function POST(
       });
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
+      // Log the raw failure server-side; return a generic message to the client
+      // (don't leak internal error strings). Leftover from T-1113 debug — T-1138 cleanup.
       console.error("[jobs/voiceover] mux failed; keeping original video:", errorMsg);
       return NextResponse.json({
         success: false,
         fallback: true,
         video_url: rawVideoUrl,
-        error: `Voice-over mux failed: ${errorMsg}`,
-        raw_error: errorMsg,
+        error: "Voice-over mux failed; original video kept",
       });
     }
   } catch (error) {
