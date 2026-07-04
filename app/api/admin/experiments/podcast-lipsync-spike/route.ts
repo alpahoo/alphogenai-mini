@@ -233,6 +233,18 @@ export async function POST(request: NextRequest) {
         const r = await getLipsyncTask(body.lipsyncId);
         return NextResponse.json({ elapsedMs: Date.now() - t0, ...r });
       }
+      case "raw_lipsync": {
+        // Diagnostic-only (no spend): return HeyGen's raw lipsync task JSON so we
+        // can read the real failure reason (our client normalizes it away).
+        if (!body.lipsyncId) return NextResponse.json({ error: "lipsyncId required" }, { status: 400 });
+        const res = await fetch(`https://api.heygen.com/v3/lipsyncs/${body.lipsyncId}`, {
+          headers: { "X-Api-Key": process.env.HEYGEN_API_KEY || "", Accept: "application/json" },
+          cache: "no-store",
+          signal: AbortSignal.timeout(15_000),
+        });
+        const data = await res.json().catch(() => ({}));
+        return NextResponse.json({ elapsedMs: Date.now() - t0, http: res.status, raw: data });
+      }
       default:
         return NextResponse.json({ error: "unknown step" }, { status: 400 });
     }
