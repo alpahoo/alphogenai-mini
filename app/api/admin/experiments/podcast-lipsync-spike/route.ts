@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { isAdminEmail } from "@/lib/flags";
 import {
   listAvatars,
@@ -68,6 +69,50 @@ export async function POST(request: NextRequest) {
       case "voices": {
         const voices = await listVoices();
         return NextResponse.json({ elapsedMs: Date.now() - t0, voices: voices.slice(0, 10) });
+      }
+      case "latest_audio": {
+        // Admin-only spike helper: reuse a real podcast TTS clip without
+        // exposing client tokens or generating new voice audio.
+        const service = createServiceClient();
+        const { data, error } = await service
+          .from("podcast_segments")
+          .select("id,podcast_id,speaker_role,text,audio_url,start_ms,end_ms,order_index,status")
+          .eq("status", "ready")
+          .not("audio_url", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(8);
+        if (error) throw new Error(`latest_audio failed: ${error.message}`);
+        return NextResponse.json({ elapsedMs: Date.now() - t0, segments: data ?? [] });
+      }
+      case "personas": {
+        // Admin-only spike helper: list active personas and sign private
+        // storage paths so HeyGen can fetch a portrait for this experiment.
+        const service = createServiceClient();
+        const { data, error } = await service
+          .from("podcast_personas")
+          .select("id,name,source_kind,portrait_path,thumb_path,status,user_id")
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+          .limit(20);
+        if (error) throw new Error(`personas failed: ${error.message}`);
+        const personas = [];
+        for (const row of data ?? []) {
+          const path = String(row.portrait_path ?? "");
+          let imageUrl = path;
+          if (path && !/^https?:\/\//i.test(path)) {
+            const signed = await service.storage.from("podcast-personas").createSignedUrl(path, 60 * 60);
+            imageUrl = signed.data?.signedUrl ?? "";
+          }
+          personas.push({
+            id: row.id,
+            name: row.name,
+            source_kind: row.source_kind,
+            catalog: row.user_id == null,
+            imageUrl,
+            thumb_path: row.thumb_path,
+          });
+        }
+        return NextResponse.json({ elapsedMs: Date.now() - t0, personas });
       }
       case "photo_avatar": {
         // Turn a persona portrait into a photo avatar (the real T-1143 chain),
