@@ -100,6 +100,25 @@ Entrée la plus récente en haut. Format :
 - **QA prod PASS** : GET `[id]` sur podcast archivé `78c8f74f` → **404** ; sur actif `e531f932` → **200**
   (réouverture des actifs intacte). Commit `0094e8c`.
 
+## 2026-07-04 — Claude — T-1142 Real video duo / talking avatars — SPEC + mini-audit (docs-only)
+- Livrable : `docs/product/podcast-real-video-duo-spec.md`. **Aucun code prod** (spec/audit).
+- Audit : podcast render actuel = two-shot statique (portrait + waveform, pas de lip-sync) sur Modal ; HeyGen déjà
+  en stack (`lib/heygen-client.ts`) avec `createAvatarVideo` (texte→avatar parlant, engine avatar_iv),
+  `createLipsync(video,audio)`, `createPhotoAvatar`, voice clone, polling — déjà utilisé par le pipeline vidéo
+  général (/create/avatar, jobs). `podcast_speakers.avatar_id` existe (legacy libre). Coûts heuristiques
+  `lib/lipsync-cost.ts`.
+- Reco : **approche A+D** = lip-sync par segment du **locuteur actif uniquement** via `createLipsync`, en gardant
+  notre TTS (voix + RMS), Modal compose la mise en page finale ; **fallback-safe** (échec → tuile portrait
+  statique). Rejeté : B (texte→avatar HeyGen) car abandonne notre TTS/voix.
+- Point central : bascule Modal-compositing ↔ clips HeyGen ; talking = **mode opt-in, plan-gated, coût annoncé**
+  (risque #1 = coût, ~250 cr/podcast estimé, à confirmer sur le plan live).
+- Consentement : animer un visage réel (persona uploaded) exige un consentement **likeness/animation** renforcé ;
+  pas de figures publiques (screenPersonaName). Migration future (base_clip/heygen_avatar_id + render_mode) — PAS
+  dans ce ticket.
+- Plan proposé : T-1143 base-clip pipeline · T-1144 talking render mode · T-1145 cost UI/guardrails · T-1146 QA.
+  **Décisions demandées** : approuver A+D, le plan, opt-in/plan-gated/cost-disclosed, et un **spike 1-clip
+  coût/qualité** contre le plan HeyGen live avant T-1144.
+
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
 - Fichiers modifiés :
