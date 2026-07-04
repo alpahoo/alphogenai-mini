@@ -46,6 +46,24 @@ export async function POST(request: NextRequest) {
         const avatars = await listAvatars();
         return NextResponse.json({ elapsedMs: Date.now() - t0, avatars: avatars.slice(0, 10) });
       }
+      case "raw_avatars": {
+        // Direct fetch with a generous timeout — the client's 15s abort is too
+        // short for HeyGen's avatar list. Spike-only.
+        const res = await fetch("https://api.heygen.com/v2/avatars", {
+          headers: { "X-Api-Key": process.env.HEYGEN_API_KEY || "", Accept: "application/json" },
+          cache: "no-store",
+          signal: AbortSignal.timeout(45_000),
+        });
+        const data = await res.json().catch(() => ({}));
+        const root = data.data ?? data;
+        const avatars = (root.avatars ?? []).slice(0, 8).map((a: Record<string, unknown>) => ({
+          avatar_id: a.avatar_id ?? a.id, name: a.avatar_name ?? a.name,
+        }));
+        const talking = (root.talking_photos ?? []).slice(0, 5).map((a: Record<string, unknown>) => ({
+          talking_photo_id: a.talking_photo_id ?? a.id, name: a.talking_photo_name ?? a.name,
+        }));
+        return NextResponse.json({ elapsedMs: Date.now() - t0, http: res.status, avatars, talking });
+      }
       case "voices": {
         const voices = await listVoices();
         return NextResponse.json({ elapsedMs: Date.now() - t0, voices: voices.slice(0, 10) });
