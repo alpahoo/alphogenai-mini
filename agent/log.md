@@ -35,6 +35,22 @@ Entrée la plus récente en haut. Format :
   (soon) » désactivé) ; flow préservé — après « Generate script » : Dialogue + carte Presenters (Duo picker) +
   Generate voices présents. Render inchangé (backend non touché, validé aux tickets T-1136/1137).
 
+## 2026-07-04 — Claude — T-1140 Reopen / Continue podcast draft (client-only)
+- **Audit d'abord** : `GET /api/podcasts/[id]` renvoie déjà `{ podcast(*), speakers(*), segments(*) }` — formes
+  identiques à l'état de la page (segments text/audio_url/status/order_index, speakers voice_id/persona_id,
+  podcast source_topic/language/target_duration_seconds/render_status/video_url). **Aucune route/migration/DB
+  nécessaire** — 100% client.
+- Réouverture via **query param** `/create/podcast?podcast_id=…` (partageable, robuste au refresh). Effet mount
+  (lit `window.location.search`, pas `useSearchParams` → pas de Suspense/build issue) : fetch detail + repeuple
+  `podcast/speakers/segments/topic/sourceUrl/language/targetDuration`. L'éditeur existant s'affiche (sections
+  gated par hasDialogue/anyAudio/podcast) au lieu de l'entrée vide. Erreur douce si 404/échec.
+- Recent podcasts : `Continue (soon)` remplacé par vrai lien **Continue** (`?podcast_id=`) ; carte rendue affiche
+  **Edit** + **View video**. Plus aucune fausse action.
+- Invariants préservés (aucun code touché) : édition ligne/persona/audio → invalidation render (setPodcast clear
+  video), Voice Lab, Duo picker, TTS batch, render intacts. Pas de « nouveau contenu + ancien MP4 ».
+- Type `PodcastRow` : + `source_topic`, `source_asset_url` optionnels.
+- Validation : tsc clean ; **suite complète 833/833** ; build OK. QA prod après deploy (Vercel only).
+
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
 - Fichiers modifiés :

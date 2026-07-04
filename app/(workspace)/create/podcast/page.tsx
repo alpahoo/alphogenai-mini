@@ -40,6 +40,8 @@ type PodcastRow = {
   render_error: string | null;
   target_duration_seconds?: number | null;
   created_at?: string | null;
+  source_topic?: string | null;
+  source_asset_url?: string | null;
 };
 
 const LANGUAGES = [
@@ -260,6 +262,38 @@ export default function CreatePodcastPage() {
     }, 1400);
     return () => clearInterval(id);
   }, [phase]);
+
+  // ── Reopen a draft/recent podcast via ?podcast_id= (T-1140) ────────────
+  // Client-only: GET /api/podcasts/[id] already returns podcast+speakers+segments
+  // in the exact shapes this page uses — just repopulate state, no new route.
+  useEffect(() => {
+    const pid = new URLSearchParams(window.location.search).get("podcast_id");
+    if (!pid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const headers = await authHeaders();
+        if (!headers) return;
+        const res = await fetch(`/api/podcasts/${pid}`, { headers });
+        const json = await res.json().catch(() => ({}));
+        if (cancelled || !res.ok || !json.podcast) {
+          if (!cancelled && !res.ok) setError("Could not open that podcast.");
+          return;
+        }
+        const p = json.podcast as PodcastRow;
+        setPodcast(p);
+        setSpeakers(json.speakers || []);
+        setSegments(json.segments || []);
+        setTopic(p.source_topic || "");
+        setSourceUrl(p.source_asset_url || "");
+        if (p.language) setLanguage(p.language);
+        if (p.target_duration_seconds) setTargetDuration(p.target_duration_seconds);
+      } catch {
+        if (!cancelled) setError("Could not open that podcast.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authHeaders]);
 
   // ── Recent podcasts (T-1139): read-only list for quick access ──────────
   useEffect(() => {
@@ -951,17 +985,16 @@ export default function CreatePodcastPage() {
                   <div className="mt-1 flex items-center gap-2 text-[11px] text-neutral-400">
                     {dur && <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {dur}</span>}
                   </div>
-                  <div className="mt-2.5">
-                    {p.video_url ? (
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <a href={`/create/podcast?podcast_id=${p.id}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition hover:bg-neutral-50">
+                      <Pencil className="h-3.5 w-3.5" /> {p.video_url ? "Edit" : "Continue"}
+                    </a>
+                    {p.video_url && (
                       <a href={p.video_url} target="_blank" rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition hover:bg-neutral-50">
                         <Play className="h-3.5 w-3.5" /> View video
                       </a>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-semibold text-neutral-300"
-                        title="Re-opening a draft in the editor is coming soon.">
-                        Continue (soon)
-                      </span>
                     )}
                   </div>
                 </div>
