@@ -2294,6 +2294,91 @@ def _resolve_persona_avatar(sb, speaker: dict, size: int, podcast_id: str, owner
         return None
 
 
+def _resolve_base_clip_url(sb, speaker: dict, podcast_id: str, owner_id=None):
+    """Return a ready 1:1 talking-head base clip R2 URL for a speaker's persona,
+    or None (→ keep the static portrait). T-1144a. Never raises.
+
+    Visibility mirrors _resolve_persona_avatar (service role bypasses RLS): only a
+    catalog persona (user_id NULL) or one owned by the podcast owner is used.
+    Reads the cached clip only — NO HeyGen call, no credit spend.
+    """
+    persona_id = (speaker or {}).get("persona_id")
+    if not persona_id:
+        return None
+    try:
+        prows = (
+            sb.table("podcast_personas").select("user_id,status")
+            .eq("id", persona_id).eq("status", "active").limit(1).execute().data
+        ) or []
+        if not prows:
+            return None
+        p_owner = prows[0].get("user_id")
+        if p_owner is not None and p_owner != owner_id:
+            return None
+        rows = (
+            sb.table("podcast_persona_base_clips").select("video_url,status,created_at")
+            .eq("persona_id", persona_id).eq("provider", "heygen")
+            .eq("aspect_ratio", "1:1").eq("resolution", "720p")
+            .eq("clip_kind", "talking_head").eq("prompt_version", "base-v1")
+            .eq("status", "ready").order("created_at", desc=True).limit(1)
+            .execute().data
+        ) or []
+        url = (rows[0].get("video_url") or "").strip() if rows else ""
+        return url or None
+    except Exception as e:
+        log(podcast_id, f"base clip resolve fallback (speaker {(speaker or {}).get('id')}): {e}")
+        return None
+
+
+def _extract_base_clip_frames(video_url: str, workdir: str, label: str, size: int, podcast_id: str):
+    """Download a base clip (R2) and pre-extract looping RGBA frames sized to the
+    speaker-card avatar (rounded square). Returns {"fps", "bright", "dim"} or None
+    on ANY failure (→ static portrait fallback). T-1144a.
+
+    NOT segment lip-sync — a looping "talking base clip visual". Uses ffmpeg + PIL
+    only (already in the render image); no cv2/new deps, no HeyGen. 1:1 source →
+    no letterboxing.
+    """
+    import glob
+    import httpx
+    EXTRACT_FPS = 10
+    try:
+        clip_path = os.path.join(workdir, f"baseclip_{label}.mp4")
+        with httpx.Client(timeout=60, follow_redirects=True) as client:
+            resp = client.get(video_url)
+            resp.raise_for_status()
+            with open(clip_path, "wb") as fh:
+                fh.write(resp.content)
+        frames_dir = os.path.join(workdir, f"baseclip_{label}_frames")
+        os.makedirs(frames_dir, exist_ok=True)
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", clip_path, "-vf", f"fps={EXTRACT_FPS}",
+             os.path.join(frames_dir, "%04d.png")],
+            capture_output=True, timeout=120,
+        )
+        files = sorted(glob.glob(os.path.join(frames_dir, "*.png")))
+        if not files:
+            return None
+        mask = Image.new("L", (size, size), 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, size - 1, size - 1], radius=int(size * 0.14), fill=255)
+        bright, dim = [], []
+        for fp in files:
+            rgba = Image.open(fp).convert("RGB").resize((size, size)).convert("RGBA")
+            rgba.putalpha(mask)
+            bright.append(rgba)
+            r_, g_, b_, a_ = rgba.split()
+            dim.append(Image.merge("RGBA", (
+                Image.eval(r_, lambda v: int(v * 0.54)),
+                Image.eval(g_, lambda v: int(v * 0.54)),
+                Image.eval(b_, lambda v: int(v * 0.54)),
+                a_,
+            )))
+        return {"fps": EXTRACT_FPS, "bright": bright, "dim": dim}
+    except Exception as e:
+        log(podcast_id, f"base clip frames fallback ({label}): {e}")
+        return None
+
+
 # Target speech level for per-segment RMS normalization (T-1137a-fix). Around
 # -20 dBFS RMS reads natural for dialogue and leaves headroom for peaks.
 _PODCAST_TARGET_RMS_DB = -20.0
@@ -2559,6 +2644,17 @@ def render_podcast(podcast_id: str) -> str:
         y0 = int(H * (0.19 if landscape else 0.17))
         avatar_size = min(host_av.width, int(panel_h * 0.48))
 
+        # Talking-duo base clips (T-1144a): if a speaker persona has a ready 1:1
+        # base clip cached on R2, animate its looping frames in the card instead of
+        # the static portrait. This is a "talking base clip visual", NOT segment
+        # lip-sync. Fallback-safe: any miss keeps the static avatar. No HeyGen call.
+        _host_clip = _resolve_base_clip_url(sb, host, podcast_id, owner_id)
+        _guest_clip = _resolve_base_clip_url(sb, guest, podcast_id, owner_id)
+        host_frames = _extract_base_clip_frames(_host_clip, workdir, "host", avatar_size, podcast_id) if _host_clip else None
+        guest_frames = _extract_base_clip_frames(_guest_clip, workdir, "guest", avatar_size, podcast_id) if _guest_clip else None
+        if host_frames or guest_frames:
+            log(podcast_id, f"talking-duo base clips → host={'yes' if host_frames else 'no'} guest={'yes' if guest_frames else 'no'}")
+
         bar_x, bar_y, bar_w = int(W * 0.16), H - 34, int(W * 0.68)
 
         # The whole layout is constant WITHIN a segment (active speaker, caption,
@@ -2596,8 +2692,17 @@ def render_podcast(podcast_id: str) -> str:
                 d.text((px + 22, header_y + 44), nm, font=f_name,
                        fill=(18, 24, 34) if is_active else (94, 105, 123))
 
-                avi = (av if is_active else av_dim).resize((avatar_size, avatar_size))
-                img.paste(avi, (px + (panel_w - avatar_size) // 2, y0 + int(panel_h * 0.22)), avi)
+                ax = px + (panel_w - avatar_size) // 2
+                ay = y0 + int(panel_h * 0.22)
+                _frames = host_frames if role == "host" else guest_frames
+                if _frames:
+                    # Baseline still from the talking base clip (animated per output
+                    # frame in compose_frame) — a real person, not the round icon.
+                    fr0 = (_frames["bright"] if is_active else _frames["dim"])[0]
+                    img.paste(fr0, (ax, ay), fr0)
+                else:
+                    avi = (av if is_active else av_dim).resize((avatar_size, avatar_size))
+                    img.paste(avi, (ax, ay), avi)
                 draw_waveform(d, px + 32, y0 + panel_h - 54, panel_w - 64, col, active=is_active)
                 if is_active:
                     d.ellipse([px + panel_w - 48, y0 + 26, px + panel_w - 26, y0 + 48], fill=col)
@@ -2633,6 +2738,20 @@ def render_podcast(podcast_id: str) -> str:
         def compose_frame(idx, t):
             base_img, acol = bases[idx]
             img = base_img.copy()
+            # Animate the talking base-clip frames over the card avatar region
+            # (T-1144a): loop the pre-extracted frames; active speaker bright,
+            # listener dimmed. No-op when a speaker has no base clip (static).
+            if host_frames or guest_frames:
+                active_seg = timeline[idx][2]
+                active_role = spk_by_id.get(active_seg["speaker_id"], {}).get("role", "host")
+                ay = y0 + int(panel_h * 0.22)
+                for _i, (_role, _fr) in enumerate([("host", host_frames), ("guest", guest_frames)]):
+                    if not _fr:
+                        continue
+                    _lst = _fr["bright"] if _role == active_role else _fr["dim"]
+                    _cur = _lst[int(t * _fr["fps"]) % len(_lst)]
+                    _px = x0 + _i * (panel_w + gap_px)
+                    img.paste(_cur, (_px + (panel_w - avatar_size) // 2, ay), _cur)
             d = ImageDraw.Draw(img)
             elapsed = min(1.0, max(0.0, t / total))
             fill_w = int(bar_w * elapsed)

@@ -1395,3 +1395,7 @@ Contraintes :
   T-1120d (suite : preview iframe + Studio layout — UI-first, pas de back) →
   T-1120f Visual QA desktop/mobile.
 
+
+## T-1144a — Podcast talking-duo base clip render (2026-07-05, Claude)
+- FAIT : render_podcast branche les base clips 1:1 ready (frames animées bouclees dans les speaker cards), fallback statique, sans HeyGen/credit/migration/UI. py_compile+tsc+test 852+build OK. Push -> auto-deploy Modal. QA prod ensuite.
+- NON fait : lip-sync par segment, cout HeyGen au render, render_mode UI.

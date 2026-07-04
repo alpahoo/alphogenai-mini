@@ -224,6 +224,25 @@ Entrée la plus récente en haut. Format :
   (garder 2-4). Recos perso : maya-a, leo-a, aria-b, nova-a. Images watermarkées locales supprimées ; staging R2
   laissé (à nettoyer après sélection).
 
+## 2026-07-05 — Claude — T-1144a Podcast talking-duo base clip render
+- `render_podcast` (`modal_app/video_pipeline.py`) branche les base clips **1:1 ready** dans les speaker cards :
+  vraie personne animée au lieu du rond portrait. **Pas de lip-sync segment, pas d'appel HeyGen, pas de crédit.**
+- 2 helpers ajoutés : `_resolve_base_clip_url(sb, speaker, podcast_id, owner_id)` (query
+  `podcast_persona_base_clips` : persona_id + provider heygen + aspect_ratio 1:1 + resolution 720p + clip_kind
+  talking_head + prompt_version base-v1 + status ready, plus récent ; visibilité persona catalog/owner comme
+  `_resolve_persona_avatar`) ; `_extract_base_clip_frames(url, workdir, label, size, podcast_id)` (download httpx →
+  ffmpeg `fps=10` → PNG → PIL frames RGBA carrées masque arrondi + variantes bright/dim). **ffmpeg + PIL + httpx
+  déjà présents — aucun cv2/numpy/nouveau dep**, aucun import top-level (évite le scramble).
+- Wiring : résolution/extraction après `avatar_size` ; `build_base` pose frame[0] (still) si dispo sinon avatar
+  statique ; `compose_frame` **boucle les frames** (`int(t*fps)%n`) sur la carte, active=bright / listener=dim.
+  Clips 1:1 → carré → **pas de bandes blanches**, coins arrondis. Captions/waveform/lower-thirds/progress/RMS
+  inchangés. **Fallback-safe** : tout échec (résolve/download/ffmpeg/decode) → avatar statique, ne fail jamais.
+- Validation : `py_compile` OK ; tsc clean ; `npm test` 852/852 ; build OK. Push → auto-deploy Modal (GH Actions
+  `deploy-modal.yml`, modal_app/**). QA prod à faire après deploy.
+- **NON fait (hors T-1144a)** : pas de lip-sync par segment (les lèvres ne suivent pas le TTS — c'est un visuel
+  bouclé) ; pas de coût/appel HeyGen au render ; pas de `render_mode` ni UI (toujours "talking si base clip
+  dispo, sinon statique") ; pas de migration.
+
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
 - Fichiers modifiés :
