@@ -173,6 +173,22 @@ export async function POST(request: NextRequest) {
         const url = await uploadBufferToR2(buffer, key, "image/png");
         return NextResponse.json({ elapsedMs: Date.now() - t0, ark_status: gen.status, src: srcInfo, r2_url: url, bytes: buffer.length, usage: genJson.usage });
       }
+      case "normalize_jpeg": {
+        // T-1143d: fetch a staging portrait (PNG), re-encode to a stable 1024 JPEG
+        // (HeyGen photo-avatar needs JPEG with readable dimensions), upload to a
+        // PERMANENT catalog path on R2. Returns the permanent URL.
+        const src = typeof body.sourceUrl === "string" ? body.sourceUrl : "";
+        const slug = typeof body.slug === "string" ? body.slug.replace(/[^a-z0-9-]/gi, "-").slice(0, 60) : "";
+        if (!src || !slug) return NextResponse.json({ error: "sourceUrl + slug required" }, { status: 400 });
+        const dl = await fetch(src, { signal: AbortSignal.timeout(30_000) });
+        if (!dl.ok) return NextResponse.json({ error: `download failed ${dl.status}` }, { status: 200 });
+        const inBuf = Buffer.from(await dl.arrayBuffer());
+        const sharp = (await import("sharp")).default;
+        const jpeg = await sharp(inBuf).resize(1024, 1024, { fit: "cover" }).jpeg({ quality: 90 }).toBuffer();
+        const key = `podcast/personas-catalog/${slug}.jpg`;
+        const url = await uploadBufferToR2(jpeg, key, "image/jpeg");
+        return NextResponse.json({ elapsedMs: Date.now() - t0, r2_url: url, key, bytes: jpeg.length });
+      }
       case "upload_image": {
         // Spike-only helper: upload a normalized portrait (usually JPEG) to R2
         // so HeyGen gets a stable public URL with readable dimensions.
