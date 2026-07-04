@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
         const service = createServiceClient();
         const { data, error } = await service
           .from("podcast_segments")
-          .select("id,podcast_id,speaker_role,text,audio_url,start_ms,end_ms,order_index,status")
+          .select("id,podcast_id,speaker_id,text,audio_url,start_ms,end_ms,order_index,status")
           .eq("status", "ready")
           .not("audio_url", "is", null)
           .order("created_at", { ascending: false })
