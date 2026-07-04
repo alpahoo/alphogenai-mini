@@ -237,8 +237,12 @@ Entrée la plus récente en haut. Format :
   statique ; `compose_frame` **boucle les frames** (`int(t*fps)%n`) sur la carte, active=bright / listener=dim.
   Clips 1:1 → carré → **pas de bandes blanches**, coins arrondis. Captions/waveform/lower-thirds/progress/RMS
   inchangés. **Fallback-safe** : tout échec (résolve/download/ffmpeg/decode) → avatar statique, ne fail jamais.
-- Validation : `py_compile` OK ; tsc clean ; `npm test` 852/852 ; build OK. Push → auto-deploy Modal (GH Actions
-  `deploy-modal.yml`, modal_app/**). QA prod à faire après deploy.
+- Validation : `py_compile` OK ; tsc clean ; `npm test` 852/852 ; build OK. Push (`a7c1f6d`) → **auto-deploy Modal
+  GH Actions completed success**.
+- **QA prod PASS** : podcast `e531f932` (host Maya / guest Leo, 8 voix ready via /tts) rendu → cards montrent les
+  **vrais visages photoréalistes** (Maya active bordure verte + Leo dimmé), **plus les icônes rondes**, **pas de
+  bandes blanches** (1:1), captions/waveform/branding/progress intacts, distinction active/inactive OK. video_url
+  R2 done. Nuance polish : le visuel occupe la zone avatar (pas encore tout le fond de carte) — amélioration future.
 - **NON fait (hors T-1144a)** : pas de lip-sync par segment (les lèvres ne suivent pas le TTS — c'est un visuel
   bouclé) ; pas de coût/appel HeyGen au render ; pas de `render_mode` ni UI (toujours "talking si base clip
   dispo, sinon statique") ; pas de migration.
