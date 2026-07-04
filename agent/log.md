@@ -196,6 +196,24 @@ Entrée la plus récente en haut. Format :
   R2 permanent, duration 4.26s ; re-`ensure` → **`reused=true` stage:ready**. Le 1ᵉʳ appel n'échoue plus. Persona
   temp + clip nettoyés.
 
+## 2026-07-05 — Claude — T-1143d Photoreal persona catalog (Seedream test) — STOP pour review
+- Test BytePlus ModelArk Seedream T2I via step admin expérimental `gen_portrait`
+  (`app/api/admin/experiments/podcast-lipsync-spike/route.ts`, `/api/v3/images/generations`, `BYTEPLUS_ARK_API_KEY`).
+- **Model id callable** : `seedream-4-0-250828` (200). `seedream-4-5`/autres = `InvalidEndpointOrModel.NotFound`.
+  Seedream 4.5 non trouvé via API → **4.0 utilisé**.
+- **Watermark** : Seedream stampe « AI generated » (bas-droite) par défaut → bloquant pour un catalog. Fix trouvé :
+  param **`watermark:false`** (ajouté au step) → watermark supprimé, vérifié visuellement. ✅
+- **Généré** 8 portraits propres (watermark:false) : maya-a/b, leo-a/b, aria-a/b, nova-a/b (1024×1024 PNG, ~0.4 MB),
+  head-and-shoulders, studio podcast, non réels/non célébrités. Contact sheet : `tmp/photoreal-personas/_contact_sheet_clean.jpg`.
+  URLs R2 staging : `pub-…r2.dev/experiments/photoreal-personas/wm0-<label>-<uuid>.png`.
+- **Qualité = PASS** : vrai rendu photo (pas illustration/pictogramme), naturel, apte HeyGen photo-avatar.
+  **Recommandation : Seedream 4.0 OK** (avec `watermark:false`) — pas besoin de fallback OpenAI.
+- **Coût/quota** : ~18 images générées sur Seedream 4.0 (probes + watermarkées jetées + set propre) ; ~0,03 $/img,
+  **dans le quota gratuit** (200 free pour 4.0). Échecs de model id = non facturés.
+- **STOP conforme au ticket** : PAS de seed `podcast_personas`, PAS de base clips HeyGen. Attente sélection user
+  (garder 2-4). Recos perso : maya-a, leo-a, aria-b, nova-a. Images watermarkées locales supprimées ; staging R2
+  laissé (à nettoyer après sélection).
+
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
 - Fichiers modifiés :
