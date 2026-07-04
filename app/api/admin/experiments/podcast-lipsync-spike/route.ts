@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdminEmail } from "@/lib/flags";
 import {
   listAvatars,
+  listOwnedAvatars,
   listVoices,
   createAvatarVideo,
   getHeyGenTask,
@@ -36,6 +37,12 @@ export async function POST(request: NextRequest) {
   try {
     switch (step) {
       case "avatars": {
+        // Owned avatars only — listAvatars() pulls the whole public library and
+        // times out. We'd animate our own looks anyway.
+        const avatars = await listOwnedAvatars();
+        return NextResponse.json({ elapsedMs: Date.now() - t0, avatars: avatars.slice(0, 10) });
+      }
+      case "avatars_all": {
         const avatars = await listAvatars();
         return NextResponse.json({ elapsedMs: Date.now() - t0, avatars: avatars.slice(0, 10) });
       }
