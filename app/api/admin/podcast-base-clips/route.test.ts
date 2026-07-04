@@ -136,21 +136,17 @@ describe("POST /api/admin/podcast-base-clips", () => {
     expect(createAvatarVideo).not.toHaveBeenCalled();
   });
 
-  it("creates a pending base clip from a private persona portrait", async () => {
+  // T-1143b P2 fix — staged ensure (avatar THEN video, separate calls).
+
+  it("stage 1: new persona creates the photo avatar but NOT the video", async () => {
     const calls: State[] = [];
     let clip = { ...readyClip, id: "clip-new", provider_avatar_id: null, provider_video_id: null, video_url: null, status: "pending" };
     vi.mocked(createServiceClient).mockReturnValue(
       makeService({
         "podcast_personas:select": () => ({ data: persona, error: null }),
         "podcast_persona_base_clips:select": () => ({ data: null, error: null }),
-        "podcast_persona_base_clips:insert": (s) => {
-          clip = { ...clip, ...(s.payload as object) };
-          return { data: clip, error: null };
-        },
-        "podcast_persona_base_clips:update": (s) => {
-          clip = { ...clip, ...(s.payload as object) };
-          return { data: clip, error: null };
-        },
+        "podcast_persona_base_clips:insert": (s) => { clip = { ...clip, ...(s.payload as object) }; return { data: clip, error: null }; },
+        "podcast_persona_base_clips:update": (s) => { clip = { ...clip, ...(s.payload as object) }; return { data: clip, error: null }; },
       }, calls) as never,
     );
 
@@ -158,15 +154,74 @@ describe("POST /api/admin/podcast-base-clips", () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.status).toBe("pending");
-    expect(json.clip.provider_video_id).toBe("video-new");
-    expect(createPhotoAvatar).toHaveBeenCalledWith({
-      imageUrl: "https://signed.example.com/maya.jpg",
-      name: "Maya Rivers podcast base",
-    });
+    expect(json.stage).toBe("avatar_processing");
+    expect(createPhotoAvatar).toHaveBeenCalledWith({ imageUrl: "https://signed.example.com/maya.jpg", name: "Maya Rivers podcast base" });
+    expect(createAvatarVideo).not.toHaveBeenCalled();
+    expect(json.clip.provider_avatar_id).toBe("avatar-new");
+    expect(json.clip.provider_video_id).toBeNull();
+  });
+
+  it("stage 2: second ensure (avatar present, no video) starts the video", async () => {
+    const clip = { ...readyClip, id: "clip-2", provider_avatar_id: "avatar-new", provider_video_id: null, video_url: null, status: "pending" };
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcast_personas:select": () => ({ data: persona, error: null }),
+        "podcast_persona_base_clips:select": () => ({ data: clip, error: null }),
+        "podcast_persona_base_clips:update": (s) => ({ data: { ...clip, ...(s.payload as object) }, error: null }),
+      }) as never,
+    );
+
+    const res = await POST(req({ action: "ensure", persona_id: "persona-1", voice_id: "voice-1" }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.status).toBe("pending");
+    expect(json.stage).toBe("video_processing");
+    expect(createPhotoAvatar).not.toHaveBeenCalled();
     expect(createAvatarVideo).toHaveBeenCalledWith(
       expect.objectContaining({ avatarId: "avatar-new", voiceId: "voice-1", aspectRatio: "16:9", resolution: "720p" }),
     );
-    expect(calls.some((c) => c.op === "insert")).toBe(true);
+    expect(json.clip.provider_video_id).toBe("video-new");
+  });
+
+  it("stage 2: avatar-not-ready error keeps the row pending (not failed)", async () => {
+    const clip = { ...readyClip, id: "clip-3", provider_avatar_id: "avatar-new", provider_video_id: null, video_url: null, status: "pending" };
+    let updatePayload: Record<string, unknown> = {};
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcast_personas:select": () => ({ data: persona, error: null }),
+        "podcast_persona_base_clips:select": () => ({ data: clip, error: null }),
+        "podcast_persona_base_clips:update": (s) => { updatePayload = s.payload as Record<string, unknown>; return { data: { ...clip, ...updatePayload }, error: null }; },
+      }) as never,
+    );
+    vi.mocked(createAvatarVideo).mockRejectedValueOnce(
+      new Error('HeyGen createAvatarVideo failed (400): {"error":{"message":"Talking photo x has missing image dimensions. Please re-upload the photo."}}'),
+    );
+
+    const res = await POST(req({ action: "ensure", persona_id: "persona-1", voice_id: "voice-1" }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.status).toBe("pending");
+    expect(json.stage).toBe("avatar_processing");
+    expect(updatePayload.status).toBe("pending"); // never marked failed
+    expect(createPhotoAvatar).not.toHaveBeenCalled();
+  });
+
+  it("force restarts a staged cycle (fresh avatar, no video in same call)", async () => {
+    let clip = { ...readyClip };
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcast_personas:select": () => ({ data: persona, error: null }),
+        "podcast_persona_base_clips:select": () => ({ data: clip, error: null }),
+        "podcast_persona_base_clips:update": (s) => { clip = { ...clip, ...(s.payload as object) }; return { data: clip, error: null }; },
+      }) as never,
+    );
+
+    const res = await POST(req({ action: "ensure", persona_id: "persona-1", voice_id: "voice-1", force: true }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.stage).toBe("avatar_processing");
+    expect(createPhotoAvatar).toHaveBeenCalledTimes(1);
+    expect(createAvatarVideo).not.toHaveBeenCalled();
   });
 
   it("polls an in-progress provider task without uploading", async () => {

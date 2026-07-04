@@ -163,6 +163,20 @@ async function updateClip(
   return data as BaseClipRow;
 }
 
+// HeyGen sometimes 400s createAvatarVideo right after createPhotoAvatar because
+// the photo avatar isn't processed yet ("missing image dimensions"). That's a
+// transient not-ready state, not a real failure — we keep the row pending and
+// let a later ensure retry (T-1143b P2 fix).
+function isAvatarNotReady(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    msg.includes("missing image dimensions") ||
+    msg.includes("re-upload the photo") ||
+    msg.includes("avatar not ready") ||
+    msg.includes("still processing")
+  );
+}
+
 async function handleEnsure(service: ServiceClient, body: Record<string, unknown>) {
   const personaId = typeof body.persona_id === "string" ? body.persona_id : "";
   if (!personaId) return jsonError("persona_id is required", 400);
@@ -183,17 +197,21 @@ async function handleEnsure(service: ServiceClient, body: Record<string, unknown
   if (!persona) return jsonError("Persona not found", 404);
 
   let clip = await findClip(service, personaId, aspectRatio, resolution, promptVersion);
+
+  // ── Cache hits ─────────────────────────────────────────────────────────
   if (clip?.status === "ready" && clip.video_url && !force) {
-    return NextResponse.json({ clip: publicClip(clip, true), status: "ready", reused: true });
+    return NextResponse.json({ clip: publicClip(clip, true), status: "ready", stage: "ready", reused: true });
   }
   if (clip?.status === "pending" && clip.provider_video_id && !force) {
-    return NextResponse.json({ clip: publicClip(clip, true), status: "pending", reused: true });
+    // Video already queued — poll() drives it to ready from here.
+    return NextResponse.json({ clip: publicClip(clip, true), status: "pending", stage: "video_processing", reused: true });
   }
 
+  // ── Create or reset the row to a fresh pending cycle ───────────────────
   if (!clip) {
     clip = await insertClip(service, personaId, aspectRatio, resolution, promptVersion);
   } else if (force || clip.status === "failed" || clip.status === "ready") {
-    clip = await updateClip(service, clip.id, {
+    const patch: Record<string, unknown> = {
       status: "pending",
       error_message: null,
       provider_video_id: null,
@@ -201,19 +219,21 @@ async function handleEnsure(service: ServiceClient, body: Record<string, unknown
       storage_key: null,
       duration_seconds: null,
       metadata: { ...(clip.metadata ?? {}), restarted_at: new Date().toISOString(), force },
-    });
+    };
+    // force restarts the whole staged cycle, including a fresh photo avatar.
+    if (force) patch.provider_avatar_id = null;
+    clip = await updateClip(service, clip.id, patch);
   }
 
-  let providerAvatarId = clip.provider_avatar_id;
-  if (!providerAvatarId || force) {
+  // ── STAGE 1 — no avatar yet: create the photo avatar and STOP. ─────────
+  // Do NOT call createAvatarVideo in the same request; the avatar needs time
+  // to process. The caller re-invokes ensure to move to stage 2.
+  if (!clip.provider_avatar_id) {
     const imageUrl = await resolvePortraitUrl(service, persona.portrait_path);
-    const photo = await createPhotoAvatar({
-      imageUrl,
-      name: `${persona.name} podcast base`,
-    });
-    providerAvatarId = photo.avatarId;
+    const photo = await createPhotoAvatar({ imageUrl, name: `${persona.name} podcast base` });
     clip = await updateClip(service, clip.id, {
-      provider_avatar_id: providerAvatarId,
+      provider_avatar_id: photo.avatarId,
+      status: "pending",
       error_message: null,
       metadata: {
         ...(clip.metadata ?? {}),
@@ -221,29 +241,47 @@ async function handleEnsure(service: ServiceClient, body: Record<string, unknown
         photo_avatar_created_at: new Date().toISOString(),
       },
     });
+    return NextResponse.json({ clip: publicClip(clip), status: "pending", stage: "avatar_processing", reused: false });
   }
 
-  const task = await createAvatarVideo({
-    avatarId: providerAvatarId,
-    voiceId,
-    scriptText,
-    aspectRatio,
-    resolution,
-  });
+  // ── STAGE 2 — avatar exists, no video: try to start the base video. ────
+  if (!clip.provider_video_id) {
+    try {
+      const task = await createAvatarVideo({
+        avatarId: clip.provider_avatar_id,
+        voiceId,
+        scriptText,
+        aspectRatio,
+        resolution,
+      });
+      clip = await updateClip(service, clip.id, {
+        provider_video_id: task.taskId,
+        status: "pending",
+        error_message: null,
+        metadata: {
+          ...(clip.metadata ?? {}),
+          base_video_status: task.status,
+          base_video_started_at: new Date().toISOString(),
+          script_words: scriptText.split(/\s+/).filter(Boolean).length,
+        },
+      });
+      return NextResponse.json({ clip: publicClip(clip), status: "pending", stage: "video_processing", reused: false });
+    } catch (err) {
+      if (isAvatarNotReady(err)) {
+        // Avatar still processing — stay pending (not failed), retry on next ensure.
+        clip = await updateClip(service, clip.id, {
+          status: "pending",
+          error_message: null,
+          metadata: { ...(clip.metadata ?? {}), avatar_not_ready_at: new Date().toISOString() },
+        });
+        return NextResponse.json({ clip: publicClip(clip), status: "pending", stage: "avatar_processing", reused: false });
+      }
+      throw err;
+    }
+  }
 
-  clip = await updateClip(service, clip.id, {
-    provider_video_id: task.taskId,
-    status: "pending",
-    error_message: null,
-    metadata: {
-      ...(clip.metadata ?? {}),
-      base_video_status: task.status,
-      base_video_started_at: new Date().toISOString(),
-      script_words: scriptText.split(/\s+/).filter(Boolean).length,
-    },
-  });
-
-  return NextResponse.json({ clip: publicClip(clip), status: "pending", reused: false });
+  // ── STAGE 3 — video already queued: hand off to poll. ──────────────────
+  return NextResponse.json({ clip: publicClip(clip), status: "pending", stage: "video_processing", reused: false });
 }
 
 async function handlePoll(service: ServiceClient, body: Record<string, unknown>) {

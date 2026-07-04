@@ -178,6 +178,20 @@ Entrée la plus récente en haut. Format :
 - Note asset (rappelé par le spike report) : les portraits catalog PNG flat donnent un rendu stylisé ; le
   photoréalisme « niveau Jogg » exige de vrais portraits photo — hors scope T-1143b.
 
+## 2026-07-05 — Claude — T-1143b P2 fix : ensure staged (avatar → video)
+- `handleEnsure` (`app/api/admin/podcast-base-clips/route.ts`) rendu **multi-step**, ne casse plus au 1ᵉʳ appel :
+  - ready + !force → reused (stage `ready`). pending + provider_video_id + !force → reused (stage `video_processing`).
+  - Sinon insert/reset pending. **STAGE 1** (pas d'avatar) : `createPhotoAvatar` → save `provider_avatar_id` → STOP,
+    renvoie `pending` `stage:"avatar_processing"` (PAS de `createAvatarVideo`). **STAGE 2** (avatar, pas de video) :
+    `createAvatarVideo` ; succès → `provider_video_id` + `stage:"video_processing"` ; erreur « missing image
+    dimensions / re-upload / not ready » (helper `isAvatarNotReady`) → **reste pending, PAS failed**,
+    `stage:"avatar_processing"`. **STAGE 3** (video déjà lancée) → laisse `poll`.
+  - `force` repart en cycle staged complet (clear `provider_avatar_id` + video/url/key/duration) — pas de
+    photo→video enchaîné.
+  - Jamais d'URL HeyGen persistée en `video_url` (inchangé) ; `poll` inchangé (completed → download → R2 → ready).
+- Tests : +4 (stage1 avatar-only, stage2 video start, avatar-not-ready→pending, force→staged) → **8/8** sur le
+  fichier route. Suite complète **852/852** ; tsc clean ; build OK.
+
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
 - Fichiers modifiés :
