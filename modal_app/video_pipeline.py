@@ -2340,7 +2340,9 @@ def _extract_base_clip_frames(video_url: str, workdir: str, label: str, size: in
     no letterboxing.
     """
     import glob
+    import subprocess
     import httpx
+    from PIL import Image, ImageDraw
     EXTRACT_FPS = 10
     try:
         clip_path = os.path.join(workdir, f"baseclip_{label}.mp4")

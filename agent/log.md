@@ -247,6 +247,14 @@ Entrée la plus récente en haut. Format :
   bouclé) ; pas de coût/appel HeyGen au render ; pas de `render_mode` ni UI (toujours "talking si base clip
   dispo, sinon statique") ; pas de migration.
 
+## 2026-07-05 — Claude — T-1144a cleanup (review Codex)
+- Supprimé les restes de patch non suivis : `modal_app/_helpers.py`, `modal_app/_patch_t1144a.py`,
+  `modal_app/helpers_block.txt`. Ajouté `.clinerules` + `modal_app/_*.py` + `helpers_block.txt` à `.gitignore`
+  (config Cline locale ignorée, pas supprimée). Working tree propre.
+- Durcissement `_extract_base_clip_frames` : imports explicites dans le helper (`subprocess`,
+  `from PIL import Image, ImageDraw`) au lieu de dépendre des imports de `render_podcast`. Comportement inchangé.
+- py_compile OK. Modal-only (redeploy déclenché au push, no-op fonctionnel).
+
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
 - Fichiers modifiés :

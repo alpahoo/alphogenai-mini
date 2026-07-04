@@ -58,3 +58,8 @@ revlon_*.csv
 
 # POC / local render artifacts (T-1131-poc) — keep MP4s & intermediates local
 tmp/
+
+# Local tool configs / scratch (not part of the app)
+.clinerules
+modal_app/_*.py
+modal_app/helpers_block.txt
