@@ -49,7 +49,13 @@ Entrée la plus récente en haut. Format :
 - Invariants préservés (aucun code touché) : édition ligne/persona/audio → invalidation render (setPodcast clear
   video), Voice Lab, Duo picker, TTS batch, render intacts. Pas de « nouveau contenu + ancien MP4 ».
 - Type `PodcastRow` : + `source_topic`, `source_asset_url` optionnels.
-- Validation : tsc clean ; **suite complète 833/833** ; build OK. QA prod après deploy (Vercel only).
+- Validation : tsc clean ; **suite complète 833/833** ; build OK.
+- **QA prod PASS (2026-07-04)** : `/create/podcast?podcast_id=e531f932…` (rendu, Maya/Leo) →
+  état **entièrement restauré** : topic (« One trick… »), 8 segments avec texte **+ statut Ready**, speakers,
+  presenters sélectionnés (HOST=Maya vert / GUEST=Leo bleu), section « YOUR PRESENTERS » (own personas), stepper
+  tout vert (vidéo existante). **Invalidation préservée** : édition d'une ligne → badge **Pending** + bannière
+  « 1 line need voice generation » + render réinitialisé (pas d'ancien MP4 avec nouveau contenu). Continue/Edit =
+  vrais liens `?podcast_id=`. Aucune fausse action restante.
 
 ## YYYY-MM-DD HH:MM — Agent — Titre
 - Fait :
