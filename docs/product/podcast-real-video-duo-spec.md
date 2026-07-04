@@ -83,14 +83,39 @@ any failed avatar clip → static portrait tile (never break the render).
 
 ---
 
+## 2b. Product strategy — render_mode tiers (user decision, 2026-07-04)
+"Jogg-level" ≠ animated portraits. Real duos come from **people in a setting** (mic,
+posture, framing) → needs real **base clips** per persona, not just portraits.
+Static-portrait lip-sync is the tech foundation, not the end product. Cost/time
+explode on long formats (10–45 min), so talking is offered in **tiers**, not all-or-nothing:
+
+- **`static`** — current mode. Fast, cheap, reliable. Default, and the always-available
+  fallback. Works for any length.
+- **`talking_highlights`** — animate only intro / transitions / key moments; the rest
+  stays static. Best cost/impact compromise, viable for long podcasts.
+- **`talking_active_speaker`** — approach A+D: lip-sync the active speaker each segment.
+  Good for short/medium formats.
+- **`full_talking_duo`** — premium, both speakers animated. Opt-in, cost-disclosed,
+  likely gated to short formats and/or paid plans.
+
+Rules baked in from day one:
+- **Cost estimator before render**: show "Estimated: X credits / ~Y min" per mode
+  before the user commits.
+- **Per-segment cache**: key = (persona + text + audio hash). Same inputs → reuse the
+  clip, never re-bill on re-render.
+- **Real base clips per persona** (not portraits): a person in a setting (mic, framing).
+  This is what makes it look Jogg-level; portrait lip-sync is only the MVP rung.
+- **Long formats**: do NOT target full lip-sync first — aim "long podcast + smart
+  animated clips" (`talking_highlights`) rather than 45 min of full lip-sync.
+
 ## 3. Data model (future — needs a migration, NOT in this ticket)
 Reuse `metadata jsonb` where possible; add explicit columns only if needed.
 - `podcast_personas`: add `base_clip_path` (a short idle/talking base video for the
   face) and/or `heygen_avatar_id` (for photo-avatar reuse). Likely `metadata jsonb`
   on personas, OR dedicated columns.
 - `podcast_speakers.avatar_id` already exists → can hold the resolved avatar/look id.
-- A per-podcast toggle `metadata.render_mode = 'static' | 'talking'` (default static;
-  talking is opt-in — cost).
+- A per-podcast `metadata.render_mode` ∈ `static | talking_highlights |
+  talking_active_speaker | full_talking_duo` (default `static`; anything else opt-in).
 - Persist generated talking-clip URLs per segment for reuse (avoid re-billing on
   re-render when text/audio unchanged) — e.g. `podcast_segments.metadata.talking_clip_url`.
 
@@ -144,10 +169,28 @@ Reuse `metadata jsonb` where possible; add explicit columns only if needed.
 - Not replacing the static mode — talking is an **added opt-in mode**.
 - No real-time/streaming avatars; no multi-party (>2) duo.
 
-## 10. Decision requested
-1. Approve **approach A+D** (per-segment lip-sync, active speaker, our TTS, fallback
-   static) as the target?
-2. Approve the phased plan (T-1143→T-1146) starting with the base-clip pipeline?
-3. Confirm talking mode is **opt-in + plan-gated + cost-disclosed** from day one?
-4. Before T-1144, run a **1-clip cost/quality spike** against the live HeyGen plan
-   (real credit cost + lip-sync quality on our TTS) — recommended gate.
+## 10. Decisions (2026-07-04)
+- ✅ **A+D validated as the technical direction** (per-segment lip-sync, active
+  speaker, keep our TTS, fallback static) — but wrapped in the **tiered strategy**
+  (§2b): static / talking_highlights / talking_active_speaker / full_talking_duo.
+- ✅ Talking is **opt-in, cost-disclosed** (estimator before render), **cached**
+  per segment; long formats favor `talking_highlights`, not full lip-sync.
+- ✅ **GO for a 1-clip spike BEFORE any heavy code** (gate for T-1143+).
+- 🎯 Jogg-level requires **real base clips** (person in a setting), not portrait
+  animation — the MVP rung is portrait lip-sync, the product bar is base clips.
+
+### Spike — must answer 4 questions (gate)
+1. **Lip-sync quality** with **our TTS** audio (not HeyGen voice).
+2. **Real HeyGen credit cost** per clip (verify `lipsync-cost.ts` heuristics).
+3. **Real generation time** (async job latency).
+4. **Visual fit** inside our Modal two-shot layout.
+→ If convincing: start **T-1143** (base-clip pipeline). If not: adjust before
+burning time/credits.
+
+### Spike execution note
+HeyGen API key is **server-side only** (Vercel env) — a spike cannot run from a
+local shell. It needs a tiny **admin-gated** internal route that calls
+`createLipsync(baseClipUrl, ourTtsAudioUrl)` + polls, returning result URL + timing;
+credit cost read from the HeyGen dashboard. Base clip: a HeyGen stock avatar clip or
+one `createAvatarVideo` output; our TTS audio: an existing R2 segment URL. Scope,
+inputs and expected credit spend to be confirmed before running.
