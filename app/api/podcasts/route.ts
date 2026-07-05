@@ -101,11 +101,8 @@ export async function POST(request: NextRequest) {
       if (!isPodcastRenderMode(render_mode)) {
         return NextResponse.json({ error: "render_mode must be static | talking_visual | lipsync_premium" }, { status: 400 });
       }
-      // lipsync_premium is UI-disabled ("Soon") with no real pipeline yet — reject
-      // it until T-1144b ships so a direct API call can't persist an unsupported state.
-      if (render_mode === "lipsync_premium") {
-        return NextResponse.json({ error: "render_mode 'lipsync_premium' is not available yet" }, { status: 400 });
-      }
+      // lipsync_premium is live as of T-1144b Phase 1 (capped, cached, fallback-safe).
+      // Actual spend is gated by POST /api/podcasts/[id]/lipsync, not here.
       metadata.render_mode = render_mode;
     }
 

@@ -205,10 +205,9 @@ export default function CreatePodcastPage() {
     }
     setError(null);
     setPhase("scripting");
-    // Premium isn't a live render mode yet (T-1144b) and the API rejects it —
-    // persist the free equivalent so drafting never 400s. The UI keeps the premium
-    // selection for cost disclosure; the render itself is separately gated.
-    const persistRenderMode = renderMode === "lipsync_premium" ? "talking_visual" : renderMode;
+    // render_mode is persisted as metadata. The actual premium spend is still
+    // gated later by POST /api/podcasts/[id]/lipsync, never by draft/rewrite.
+    const persistRenderMode = renderMode;
     try {
       const headers = await authHeaders();
       if (!headers) { setError("Please sign in again."); setPhase("idle"); return; }
@@ -850,12 +849,6 @@ export default function CreatePodcastPage() {
 
   async function renderPodcast() {
     if (!podcast || !allReady) return;
-    // Lip-sync premium isn't renderable yet (real pipeline lands in T-1144b). Block
-    // it here so a confirmed selection can't start a paid/failed render — no spend.
-    if (renderMode === "lipsync_premium") {
-      setError("Lip-sync premium arrive bientôt (T-1144b). Choisis Static ou Talking visual pour lancer un rendu maintenant.");
-      return;
-    }
     setError(null);
     setPhase("rendering");
     try {
@@ -873,6 +866,35 @@ export default function CreatePodcastPage() {
         const j = modeRes ? await modeRes.json().catch(() => ({})) : {};
         throw new Error(j?.error || "Could not save the render mode. Try again.");
       }
+      if (renderMode === "lipsync_premium") {
+        setVoiceProgress("Preparing premium lip-sync clips...");
+        const start = await fetch(`/api/podcasts/${podcast.id}/lipsync`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ action: "start" }),
+        });
+        const startJson = await start.json().catch(() => ({}));
+        if (!start.ok) throw new Error(startJson?.error || "Could not start premium lip-sync.");
+
+        let processing = Number(startJson?.started || 0);
+        let lastStatus = startJson;
+        for (let i = 0; i < 60 && processing > 0; i++) {
+          setVoiceProgress(`Generating premium lip-sync clips… ${processing} left`);
+          await new Promise((resolve) => setTimeout(resolve, 3500));
+          const poll = await fetch(`/api/podcasts/${podcast.id}/lipsync`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ action: "poll" }),
+          });
+          lastStatus = await poll.json().catch(() => ({}));
+          if (!poll.ok) throw new Error(lastStatus?.error || "Could not poll premium lip-sync.");
+          processing = Number(lastStatus?.processing || 0);
+        }
+        setVoiceProgress(null);
+        if (processing > 0) {
+          throw new Error("Premium lip-sync is still processing. Try rendering again in a moment.");
+        }
+      }
       const res = await fetch(`/api/podcasts/${podcast.id}/render`, { method: "POST", headers });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || "Could not start the render.");
@@ -881,6 +903,7 @@ export default function CreatePodcastPage() {
       pollStartRef.current = Date.now();
       pollRef.current = setInterval(pollPodcast, 3500);
     } catch (e) {
+      setVoiceProgress(null);
       setError(e instanceof Error ? e.message : "Could not start the render.");
       setPhase("idle");
     }

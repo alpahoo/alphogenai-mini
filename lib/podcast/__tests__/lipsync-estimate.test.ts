@@ -4,6 +4,8 @@ import {
   secondsFromText,
   formatUsd,
   formatEstimatedTime,
+  lipsyncCacheKey,
+  planLipsyncTrim,
   LIPSYNC_USD_PER_SECOND,
   LIPSYNC_COST_SAFETY_MARGIN,
 } from "../lipsync-estimate";
@@ -61,6 +63,36 @@ describe("estimatePodcastLipsync", () => {
     // ~2 min podcast, ~120 spoken seconds → clearly several dollars
     const e = estimatePodcastLipsync(Array(24).fill(5));
     expect(e.estimatedUsdWithMargin).toBeGreaterThan(4);
+  });
+});
+
+describe("lipsyncCacheKey", () => {
+  it("is stable for the same inputs", () => {
+    const a = lipsyncCacheKey({ audioUrl: "https://r2/x.mp3", baseClipId: "b1", mode: "precision" });
+    const b = lipsyncCacheKey({ audioUrl: "https://r2/x.mp3", baseClipId: "b1", mode: "precision" });
+    expect(a).toBe(b);
+  });
+  it("changes when audio, base clip, or mode changes", () => {
+    const base = lipsyncCacheKey({ audioUrl: "https://r2/x.mp3", baseClipId: "b1", mode: "precision" });
+    expect(lipsyncCacheKey({ audioUrl: "https://r2/y.mp3", baseClipId: "b1", mode: "precision" })).not.toBe(base);
+    expect(lipsyncCacheKey({ audioUrl: "https://r2/x.mp3", baseClipId: "b2", mode: "precision" })).not.toBe(base);
+    expect(lipsyncCacheKey({ audioUrl: "https://r2/x.mp3", baseClipId: "b1", mode: "speed" })).not.toBe(base);
+  });
+});
+
+describe("planLipsyncTrim", () => {
+  it("trims the video down to the audio when audio is shorter", () => {
+    expect(planLipsyncTrim(3.0, 4.28)).toEqual({ ok: true, endTimeSeconds: 3.0 });
+  });
+  it("allows a small overshoot within ±15% without trimming", () => {
+    expect(planLipsyncTrim(4.49, 4.28)).toEqual({ ok: true }); // the mini-gate case
+  });
+  it("rejects audio too long for the base clip", () => {
+    expect(planLipsyncTrim(6.0, 4.28).ok).toBe(false);
+  });
+  it("rejects invalid durations", () => {
+    expect(planLipsyncTrim(0, 4.28).ok).toBe(false);
+    expect(planLipsyncTrim(3, 0).ok).toBe(false);
   });
 });
 

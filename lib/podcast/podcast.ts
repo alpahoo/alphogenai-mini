@@ -10,8 +10,8 @@ export const ASPECT_RATIOS = ["16:9", "9:16"] as const;
 export const PODCAST_STATUSES = ["draft", "scripting", "ready", "failed"] as const;
 export const PODCAST_TARGET_DURATIONS = [30, 60, 120, 300, 600] as const;
 export const PODCAST_STYLES = ["casual", "news", "expert", "debate", "documentary"] as const;
-// Render modes (T-1144b-lite). talking_visual = looping base-clip visual (NOT exact
-// lip-sync); lipsync_premium reserved for T-1144b (not active yet).
+// Render modes. talking_visual = looping base-clip visual (NOT exact lip-sync);
+// lipsync_premium = capped, cached per-segment lip-sync with fallback.
 export const PODCAST_RENDER_MODES = ["static", "talking_visual", "lipsync_premium"] as const;
 
 export type SourceMode = (typeof SOURCE_MODES)[number];

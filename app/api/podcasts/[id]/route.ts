@@ -97,12 +97,9 @@ export async function PATCH(
       if (!isPodcastRenderMode(body.render_mode)) {
         return NextResponse.json({ error: "render_mode must be static | talking_visual | lipsync_premium" }, { status: 400 });
       }
-      // lipsync_premium is UI-disabled ("Soon") and has no real pipeline yet —
-      // reject it so a direct API call can't persist a state the product can't
-      // honor. Remove this guard when T-1144b (real lip-sync) ships.
-      if (body.render_mode === "lipsync_premium") {
-        return NextResponse.json({ error: "render_mode 'lipsync_premium' is not available yet" }, { status: 400 });
-      }
+      // lipsync_premium is live as of T-1144b Phase 1, but the real spend is
+      // still gated by POST /api/podcasts/[id]/lipsync. Changing the mode only
+      // invalidates stale renders; it never calls HeyGen here.
       // render_mode changes the final MP4. If it actually changes, invalidate the
       // stale render so the old video isn't shown as if still valid (mirrors the
       // persona/script/audio invalidation). null render_mode == talking_visual default.

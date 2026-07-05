@@ -1,7 +1,7 @@
-"""
-AlphoGenAI Mini — Modal Video Pipeline (v3 — simplified)
+﻿"""
+AlphoGenAI Mini â€” Modal Video Pipeline (v3 â€” simplified)
 
-Single-clip pipeline: prompt → SDXL-Turbo (T2I) → Wan I2V (1 clip, 5s) → R2
+Single-clip pipeline: prompt â†’ SDXL-Turbo (T2I) â†’ Wan I2V (1 clip, 5s) â†’ R2
 
 Models pre-downloaded to Modal volume via setup_models.py.
 No external API calls during inference.
@@ -47,9 +47,9 @@ webhook_image = (
     .pip_install("fastapi", "pydantic", "supabase", "httpx", "boto3", "sentry-sdk", "cryptography")
 )
 
-# LTX-2.3 — SDK officiel Lightricks (ltx-core + ltx-pipelines), checkpoint FP8.
-# Deps validées dans modal_app/ltx_video.py (app de test isolée). Image dédiée
-# à cette seule fonction : torch 2.7 n'impacte pas base_image (Wan reste 2.5.1).
+# LTX-2.3 â€” SDK officiel Lightricks (ltx-core + ltx-pipelines), checkpoint FP8.
+# Deps validÃ©es dans modal_app/ltx_video.py (app de test isolÃ©e). Image dÃ©diÃ©e
+# Ã  cette seule fonction : torch 2.7 n'impacte pas base_image (Wan reste 2.5.1).
 ltx23_image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("git", "ffmpeg", "libsndfile1")
@@ -82,7 +82,7 @@ overlay_image = (
     .pip_install("pillow", "httpx", "boto3", "supabase", "sentry-sdk", "cryptography")
 )
 
-# Explainer renderer (code-based slides + Kokoro voice) — CPU only, no GPU.
+# Explainer renderer (code-based slides + Kokoro voice) â€” CPU only, no GPU.
 # Mirrors infra/explainer-renderer/Dockerfile: Node 22 (HyperFrames) + chromium
 # + ffmpeg + python/kokoro-onnx + the model baked in. Renderer scripts (build.js,
 # tts_kokoro.py) are mounted from infra/explainer-renderer/.
@@ -116,17 +116,17 @@ explainer_image = (
 # ---------------------------------------------------------------------------
 secrets = modal.Secret.from_name("alphogenai-secrets-corrected-v2")
 models_volume = modal.Volume.from_name("alphogenai-models", create_if_missing=True)
-# Volume partagé avec l'app de test ltx_video.py — contient déjà le checkpoint FP8
-# + Gemma (téléchargés et validés). Monté à /cache pour generate_clip_ltx23.
+# Volume partagÃ© avec l'app de test ltx_video.py â€” contient dÃ©jÃ  le checkpoint FP8
+# + Gemma (tÃ©lÃ©chargÃ©s et validÃ©s). MontÃ© Ã  /cache pour generate_clip_ltx23.
 hf_volume = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
 
 GPU = "A100-80GB"
 
 SDXL_TURBO_PATH = "/models/sdxl-turbo"
 WAN_PATH        = "/models/wan2.2-i2v-a14b"
-ENABLE_SVI_LORA = False  # disabled — stabilise pipeline first
+ENABLE_SVI_LORA = False  # disabled â€” stabilise pipeline first
 SVI_LORA_PATH   = "/models/svi-lora/SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors"
-# LTX-2.3 FP8 (SDK officiel) — exige H100 (FP8 e4m3 scaled_mm = Hopper/Ada only).
+# LTX-2.3 FP8 (SDK officiel) â€” exige H100 (FP8 e4m3 scaled_mm = Hopper/Ada only).
 LTX23_FP8       = "/cache/ltx23-base/ltx-2.3-22b-distilled-fp8.safetensors"
 LTX23_GEMMA     = "/cache/ltx23-distilled"
 
@@ -135,13 +135,13 @@ LTX23_GEMMA     = "/cache/ltx23-distilled"
 # ---------------------------------------------------------------------------
 NUM_FRAMES      = 81    # ~5s at 16 fps
 FPS             = 16
-NUM_STEPS       = 20    # balanced quality/speed (was 25 — too slow on cold starts)
+NUM_STEPS       = 20    # balanced quality/speed (was 25 â€” too slow on cold starts)
 GUIDANCE_SCALE  = 3.5
 IMG_HEIGHT      = 720
-IMG_WIDTH       = 1280  # 720p (was 832×480)
+IMG_WIDTH       = 1280  # 720p (was 832Ã—480)
 
 # ---------------------------------------------------------------------------
-# MVP scene limits (server-side hard cap — mirrors lib/storyboard.ts)
+# MVP scene limits (server-side hard cap â€” mirrors lib/storyboard.ts)
 # ---------------------------------------------------------------------------
 MAX_SCENES = {"free": 1, "pro": 3, "premium": 10}
 ABSOLUTE_MAX_SCENES = 10  # never exceed, regardless of plan
@@ -185,13 +185,13 @@ def update_job(job_id: str, **fields):
     try:
         sb = get_supabase_client()
         sb.table("jobs").update(fields).eq("id", job_id).execute()
-        log(job_id, f"update_job → {fields}")
+        log(job_id, f"update_job â†’ {fields}")
     except Exception as e:
         log(job_id, f"update_job FAILED: {e}")
 
 
 def frames_to_mp4(frames, output_path: str, fps: int = FPS):
-    """Convert numpy frames [0,1] float32 → H.264 MP4 via ffmpeg."""
+    """Convert numpy frames [0,1] float32 â†’ H.264 MP4 via ffmpeg."""
     import numpy as np
     import subprocess
     import tempfile
@@ -273,13 +273,13 @@ def update_scene(job_id: str, scene_index: int, **fields):
     try:
         sb = get_supabase_client()
         sb.table("job_scenes").update(fields).eq("job_id", job_id).eq("scene_index", scene_index).execute()
-        log(job_id, f"update_scene[{scene_index}] → {fields}")
+        log(job_id, f"update_scene[{scene_index}] â†’ {fields}")
     except Exception as e:
         log(job_id, f"update_scene[{scene_index}] FAILED: {e}")
 
 
 # ===========================================================================
-# GPU function — single clip generation
+# GPU function â€” single clip generation
 # ===========================================================================
 
 @app.function(
@@ -293,9 +293,9 @@ def update_scene(job_id: str, scene_index: int, **fields):
 def generate_clip(prompt: str, job_id: str, image_url: Optional[str] = None) -> bytes:
     """
     Single-clip pipeline:
-      1. User image OR SDXL-Turbo → 1 image
-      2. Wan2.2-I2V-A14B → 81 frames (~5s)
-      3. ffmpeg → MP4 bytes
+      1. User image OR SDXL-Turbo â†’ 1 image
+      2. Wan2.2-I2V-A14B â†’ 81 frames (~5s)
+      3. ffmpeg â†’ MP4 bytes
 
     If image_url is provided, skips T2I and downloads the user's image.
     """
@@ -409,7 +409,7 @@ def generate_clip(prompt: str, job_id: str, image_url: Optional[str] = None) -> 
 
 
 # ===========================================================================
-# Multi-scene generation (no GPU — just coordinates scene-by-scene)
+# Multi-scene generation (no GPU â€” just coordinates scene-by-scene)
 # ===========================================================================
 
 def _safe_overlay_text(value, max_len: int = 220) -> str:
@@ -650,8 +650,8 @@ def apply_overlays_to_video(video_url: str, job_id: str, overlay_plan: dict) -> 
 @app.function(
     image=base_image,
     secrets=[secrets],
-    # Timeout rationale: each scene ≈ 12 min (cold start + gen).
-    # 10 scenes × 12 min = 120 min.  Set to 150 min (9000s) for safety margin.
+    # Timeout rationale: each scene â‰ˆ 12 min (cold start + gen).
+    # 10 scenes Ã— 12 min = 120 min.  Set to 150 min (9000s) for safety margin.
     timeout=9000,
     retries=0,
 )
@@ -682,7 +682,7 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferre
 
     total = len(scenes)
 
-    # Server-side hard cap — never trust storyboard length from DB blindly
+    # Server-side hard cap â€” never trust storyboard length from DB blindly
     if total > ABSOLUTE_MAX_SCENES:
         log(job_id, f"scene count {total} exceeds cap {ABSOLUTE_MAX_SCENES}, truncating")
         scenes = scenes[:ABSOLUTE_MAX_SCENES]
@@ -690,7 +690,7 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferre
 
     log(job_id, f"generate_multi_scene START: {total} scene(s)")
     clip_urls: list = []
-    # Track if ANY scene used fallback — if so, job-level engine_used = "wan_i2v"
+    # Track if ANY scene used fallback â€” if so, job-level engine_used = "wan_i2v"
     any_fallback = False
 
     for scene in scenes:
@@ -721,21 +721,21 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferre
                 supabase_client=ms_sb,
             )
             if actual_engine != engine_key:
-                log(job_id, f"scene [{idx+1}/{total}] fallback: {engine_key} → {actual_engine}")
+                log(job_id, f"scene [{idx+1}/{total}] fallback: {engine_key} â†’ {actual_engine}")
                 any_fallback = True
 
             suffix = f"_scene_{idx:02d}"
             clip_url = upload_to_r2(video_bytes, job_id, suffix=suffix)
             elapsed = time.monotonic() - t0
 
-            log(job_id, f"scene [{idx+1}/{total}] DONE in {elapsed:.0f}s | {len(video_bytes)/1e6:.1f} MB → {clip_url}")
+            log(job_id, f"scene [{idx+1}/{total}] DONE in {elapsed:.0f}s | {len(video_bytes)/1e6:.1f} MB â†’ {clip_url}")
             update_scene(job_id, idx, status="done", clip_url=clip_url)
             clip_urls.append(clip_url)
 
         except Exception as e:
             elapsed = time.monotonic() - t0
             error_msg = normalize_error(e)[:500]
-            log(job_id, f"scene [{idx+1}/{total}] FAILED after {elapsed:.0f}s — {error_msg}")
+            log(job_id, f"scene [{idx+1}/{total}] FAILED after {elapsed:.0f}s â€” {error_msg}")
             update_scene(job_id, idx, status="failed", error_message=error_msg)
             # Mark remaining scenes as skipped
             for remaining_scene in scenes[idx + 1:]:
@@ -888,7 +888,7 @@ def extract_last_frame(job_id: str, scene_index: int, video_url: str) -> str:
 
     public_url = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")
     frame_url = f"{public_url}/{key}"
-    log(job_id, f"extract_last_frame → {frame_url}")
+    log(job_id, f"extract_last_frame â†’ {frame_url}")
 
     # Persist so the Next.js poller can fire the next EvoLink scene with it
     update_scene(job_id, scene_index, last_frame_url=frame_url)
@@ -977,7 +977,7 @@ def concat_and_finalize(job_id: str) -> str:
     single MP4, optionally generate background music with MusicGen, upload
     to R2, and mark the job as done.
 
-    Reads clip_urls directly from Supabase job_scenes — no client payload
+    Reads clip_urls directly from Supabase job_scenes â€” no client payload
     trusted.  If only one scene is done we short-circuit (but still add
     music if requested).
     """
@@ -1028,7 +1028,7 @@ def concat_and_finalize(job_id: str) -> str:
             except Exception as e:
                 log(job_id, f"watermark skipped: {e}")
 
-        # ── Background music generation ──────────────────────────────────
+        # â”€â”€ Background music generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         music_url = None
         if audio_mode != "none" and _is_musicgen_enabled():
             try:
@@ -1037,7 +1037,7 @@ def concat_and_finalize(job_id: str) -> str:
                 # Probe video duration
                 video_duration = _probe_video_duration(final_bytes)
                 duration_int = max(2, int(video_duration))
-                log(job_id, f"video duration: {video_duration:.1f}s → generating {duration_int}s music")
+                log(job_id, f"video duration: {video_duration:.1f}s â†’ generating {duration_int}s music")
 
                 # Build music prompt
                 music_prompt = _derive_music_prompt(job_prompt, audio_prompt, audio_mode)
@@ -1049,7 +1049,7 @@ def concat_and_finalize(job_id: str) -> str:
 
                 # Upload music to R2
                 music_url = upload_to_r2(music_bytes, job_id, suffix="_music", content_type="audio/mpeg", extension="mp3")
-                log(job_id, f"music uploaded → {music_url}")
+                log(job_id, f"music uploaded â†’ {music_url}")
 
                 # Update audio_url on job
                 from datetime import datetime, timezone
@@ -1065,14 +1065,14 @@ def concat_and_finalize(job_id: str) -> str:
 
             except Exception as e:
                 log(job_id, f"music generation skipped (non-blocking): {e}")
-                # Continue without music — video is still valid
+                # Continue without music â€” video is still valid
         else:
             log(job_id, f"music skipped: audio_mode={audio_mode}, musicgen_enabled={_is_musicgen_enabled()}")
 
-        # ── Upload final video ───────────────────────────────────────────
+        # â”€â”€ Upload final video â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         update_job(job_id, current_stage="uploading")
         final_url = upload_to_r2(final_bytes, job_id, suffix="_final")
-        log(job_id, f"concat_and_finalize uploaded → {final_url}")
+        log(job_id, f"concat_and_finalize uploaded â†’ {final_url}")
 
         update_job(
             job_id,
@@ -1099,7 +1099,7 @@ def apply_voiceover_to_job(job_id: str) -> str:
 
     Reads jobs.video_url + jobs.avatar_final.audio_url server-side, replaces the
     clip's native audio with the voice track, uploads, and marks the job done.
-    The voice URL is never trusted from the client — it is read from the DB.
+    The voice URL is never trusted from the client â€” it is read from the DB.
     """
     import traceback
     import httpx
@@ -1130,7 +1130,7 @@ def apply_voiceover_to_job(job_id: str) -> str:
         muxed = mux_audio.remote(video_bytes, audio_bytes, music_volume=1.0)
 
         final_url = upload_to_r2(muxed, job_id, suffix="_voiceover")
-        log(job_id, f"apply_voiceover uploaded → {final_url}")
+        log(job_id, f"apply_voiceover uploaded â†’ {final_url}")
 
         update_job(
             job_id,
@@ -1169,7 +1169,7 @@ def apply_voiceover_to_job(job_id: str) -> str:
 def apply_research_voiceover_to_video(job_id: str) -> str:
     """Mux a Research Story's TTS voice-over into its final video (T-1113).
 
-    Reads jobs.video_url (raw base) + jobs.voiceover_url server-side — neither is
+    Reads jobs.video_url (raw base) + jobs.voiceover_url server-side â€” neither is
     trusted from the client. Ducks the clip's native audio and mixes the voice on
     top, uploads a `_voiced` copy, and RETURNS the URL. The SaaS route writes it
     to jobs.output_url_final while keeping video_url raw, so a failure here never
@@ -1239,7 +1239,7 @@ def apply_research_voiceover_to_video(job_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Audio generation (AudioLDM2 on A10G — for Wan only, Seedance has native audio)
+# Audio generation (AudioLDM2 on A10G â€” for Wan only, Seedance has native audio)
 # ---------------------------------------------------------------------------
 audio_image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -1302,18 +1302,18 @@ def generate_audio(prompt: str, duration_seconds: int = 5) -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# Music generation (ACE-Step 1.5 on A10G — background music for videos)
+# Music generation (ACE-Step 1.5 on A10G â€” background music for videos)
 # ---------------------------------------------------------------------------
 acestep_image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("git", "ffmpeg", "build-essential")
     .run_commands(
         "git clone --branch v0.1.6 --depth 1 https://github.com/ace-step/ACE-Step-1.5.git /opt/ace-step",
-        # ACE-Step pins torch/torchaudio 2.10.0+cu128 — install from PyTorch index
+        # ACE-Step pins torch/torchaudio 2.10.0+cu128 â€” install from PyTorch index
         "pip install torch==2.10.0+cu128 torchaudio==2.10.0+cu128 --index-url https://download.pytorch.org/whl/cu128",
         # nano-vllm is bundled in third_parts/
         "pip install /opt/ace-step/acestep/third_parts/nano-vllm",
-        # Install ACE-Step — use PyTorch index for any remaining +cu128 deps
+        # Install ACE-Step â€” use PyTorch index for any remaining +cu128 deps
         "pip install /opt/ace-step --extra-index-url https://download.pytorch.org/whl/cu128",
     )
 )
@@ -1333,7 +1333,7 @@ def generate_music(prompt: str, duration_seconds: int = 30) -> bytes:
     """Generate background music using ACE-Step 1.5 (2B Turbo). Returns MP3 bytes.
 
     Uses tag-style captions for genre/mood/instrumentation control.
-    Generates full tracks up to 600s in a single pass — no stitching needed.
+    Generates full tracks up to 600s in a single pass â€” no stitching needed.
     Output: 48kHz MP3 at 192kbps.
     """
     import subprocess
@@ -1343,7 +1343,7 @@ def generate_music(prompt: str, duration_seconds: int = 30) -> bytes:
     duration = max(10, min(600, duration_seconds))  # ACE-Step: 10-600s
     print(f"[ace-step] generating {duration}s music for: {prompt[:80]}")
 
-    # Initialize DiT handler (2B Turbo — 8 inference steps, fast)
+    # Initialize DiT handler (2B Turbo â€” 8 inference steps, fast)
     from acestep.handler import AceStepHandler
     dit_handler = AceStepHandler()
     init_status, enable_generate = dit_handler.initialize_service(
@@ -1353,7 +1353,7 @@ def generate_music(prompt: str, duration_seconds: int = 30) -> bytes:
     )
     print(f"[ace-step] DiT initialized: {init_status}")
 
-    # Initialize LM handler (1.7B — good quality, fits comfortably on A10G)
+    # Initialize LM handler (1.7B â€” good quality, fits comfortably on A10G)
     from acestep.llm_inference import LLMHandler
     llm_handler = LLMHandler()
     lm_status, lm_success = llm_handler.initialize(
@@ -1428,7 +1428,7 @@ def mux_audio(video_bytes: bytes, audio_bytes: bytes, music_volume: float = 1.0)
     Args:
         video_bytes: Raw MP4 video bytes.
         audio_bytes: Raw MP3/WAV audio bytes.
-        music_volume: Volume level for the audio track (0.0–1.0).
+        music_volume: Volume level for the audio track (0.0â€“1.0).
                       1.0 = full volume, 0.3 = background music level.
     """
     import subprocess
@@ -1479,7 +1479,7 @@ def mux_audio(video_bytes: bytes, audio_bytes: bytes, music_volume: float = 1.0)
             raise RuntimeError(f"ffmpeg mux failed: {result.stderr[-300:]}")
 
         muxed = output_path.read_bytes()
-        print(f"[mux_audio] {len(video_bytes)/1e6:.1f}MB video + {len(audio_bytes)/1e3:.0f}KB audio (vol={music_volume}) → {len(muxed)/1e6:.1f}MB")
+        print(f"[mux_audio] {len(video_bytes)/1e6:.1f}MB video + {len(audio_bytes)/1e3:.0f}KB audio (vol={music_volume}) â†’ {len(muxed)/1e6:.1f}MB")
         return muxed
 
 
@@ -1518,7 +1518,7 @@ def export_social_formats(video_url: str, job_id: str) -> dict:
 
         results = {}
 
-        # 9:16 TikTok (vertical) — crop center horizontally, pad if needed
+        # 9:16 TikTok (vertical) â€” crop center horizontally, pad if needed
         tiktok_path = Path(tmpdir) / "tiktok.mp4"
         target_w_9_16 = int(h * 9 / 16)  # width based on original height
         if target_w_9_16 > w:
@@ -1536,9 +1536,9 @@ def export_social_formats(video_url: str, job_id: str) -> dict:
         )
         tiktok_url = upload_to_r2(tiktok_path.read_bytes(), job_id, suffix="_tiktok")
         results["tiktok"] = tiktok_url
-        print(f"[social] tiktok: {tiktok_path.stat().st_size / 1e6:.1f} MB → {tiktok_url}")
+        print(f"[social] tiktok: {tiktok_path.stat().st_size / 1e6:.1f} MB â†’ {tiktok_url}")
 
-        # 1:1 Instagram (square) — crop to square from center
+        # 1:1 Instagram (square) â€” crop to square from center
         insta_path = Path(tmpdir) / "insta.mp4"
         side = min(w, h)
         vf_insta = f"crop={side}:{side}:(iw-{side})/2:(ih-{side})/2"
@@ -1550,15 +1550,15 @@ def export_social_formats(video_url: str, job_id: str) -> dict:
         )
         insta_url = upload_to_r2(insta_path.read_bytes(), job_id, suffix="_insta")
         results["instagram"] = insta_url
-        print(f"[social] instagram: {insta_path.stat().st_size / 1e6:.1f} MB → {insta_url}")
+        print(f"[social] instagram: {insta_path.stat().st_size / 1e6:.1f} MB â†’ {insta_url}")
 
-        # 16:9 YouTube — original is already 16:9 (or close), just copy
+        # 16:9 YouTube â€” original is already 16:9 (or close), just copy
         results["youtube"] = video_url
-        print(f"[social] youtube: using original → {video_url}")
+        print(f"[social] youtube: using original â†’ {video_url}")
 
         # Update job
         update_job(job_id, social_exports=results)
-        print(f"[social] job={job_id} DONE — 3 formats exported")
+        print(f"[social] job={job_id} DONE â€” 3 formats exported")
 
     return results
 
@@ -1627,7 +1627,7 @@ def generate_thumbnail(video_url: str, job_id: str, title: str = "") -> str:
             thumb_bytes, job_id,
             suffix="_thumb", content_type="image/jpeg", extension="jpg",
         )
-        print(f"[thumbnail] uploaded → {thumb_url}")
+        print(f"[thumbnail] uploaded â†’ {thumb_url}")
         return thumb_url
 
 
@@ -1672,17 +1672,17 @@ def add_watermark(video_bytes: bytes) -> bytes:
             return video_bytes
 
         watermarked = output_path.read_bytes()
-        print(f"[watermark] applied → {len(watermarked)/1e6:.1f}MB")
+        print(f"[watermark] applied â†’ {len(watermarked)/1e6:.1f}MB")
         return watermarked
 
 
 # ===========================================================================
-# Experimental T2I/T2V candidates (model lab Step 1) — NOT wired into
+# Experimental T2I/T2V candidates (model lab Step 1) â€” NOT wired into
 # generate_clip() or generate_video_complete(). Reachable only via
 # `modal run modal_app/video_pipeline.py::test_<name>`.
 # ===========================================================================
 
-# NVIDIA NIM FLUX endpoints — verify current names at build.nvidia.com
+# NVIDIA NIM FLUX endpoints â€” verify current names at build.nvidia.com
 _NIM_FLUX_MODELS = [
     "black-forest-labs/flux.1-dev",      # best quality
     "black-forest-labs/flux.1-schnell",  # fast, Apache 2.0
@@ -1692,10 +1692,10 @@ _NIM_FLUX_MODELS = [
 
 @app.function(image=base_image, secrets=[secrets, modal.Secret.from_name("Nvidia")], timeout=180, retries=0)
 def generate_image_flux_nim(prompt: str) -> bytes:
-    """Generate an image via NVIDIA NIM: tries flux.1-dev → schnell → flux.2-klein.
+    """Generate an image via NVIDIA NIM: tries flux.1-dev â†’ schnell â†’ flux.2-klein.
 
     All 3 are ACTIVE on the existing NVIDIA NGC account. Returns PNG bytes.
-    No GPU needed — NIM is a hosted REST API.
+    No GPU needed â€” NIM is a hosted REST API.
     """
     import base64
     import httpx
@@ -1740,7 +1740,7 @@ def generate_image_flux_nim(prompt: str) -> bytes:
 
 @app.function(
     image=ltx23_image,
-    gpu="H100",  # FP8 e4m3 scaled_mm exige Hopper/Ada — A100 ne supporte pas FP8
+    gpu="H100",  # FP8 e4m3 scaled_mm exige Hopper/Ada â€” A100 ne supporte pas FP8
     timeout=1800,
     retries=0,
     volumes={"/cache": hf_volume},
@@ -1752,11 +1752,11 @@ def generate_clip_ltx23(
     duration_seconds: float = 5.0,
     seed: int = 42,
 ) -> bytes:
-    """Génère un clip LTX-2.3 (SDK officiel Lightricks, checkpoint FP8), MP4 bytes.
+    """GÃ©nÃ¨re un clip LTX-2.3 (SDK officiel Lightricks, checkpoint FP8), MP4 bytes.
 
-    Mode auto : image_url fourni → I2V (image animée) ; sinon → T2V direct.
-    Audio natif embarqué dans le MP4 (pas d'AudioLDM2 séparé).
-    Config validée : TI2VidOneStagePipeline + FP8 scaled_mm + offload NONE +
+    Mode auto : image_url fourni â†’ I2V (image animÃ©e) ; sinon â†’ T2V direct.
+    Audio natif embarquÃ© dans le MP4 (pas d'AudioLDM2 sÃ©parÃ©).
+    Config validÃ©e : TI2VidOneStagePipeline + FP8 scaled_mm + offload NONE +
     inference_mode (cf. modal_app/ltx_video.py). Scale-to-zero (plain @app.function).
     """
     import time
@@ -1796,12 +1796,12 @@ def generate_clip_ltx23(
         offload_mode=OffloadMode.NONE,
     )
 
-    # Params prod validés
+    # Params prod validÃ©s
     width, height, frame_rate, steps = 768, 512, 25.0, 8
     num_frames = max(9, int(round(duration_seconds * frame_rate)))
     negative_prompt = "worst quality, inconsistent motion, blurry, jittery, distorted, static"
 
-    # stg_scale=0 : désactive Skip-Transformer-Guidance (économie VRAM)
+    # stg_scale=0 : dÃ©sactive Skip-Transformer-Guidance (Ã©conomie VRAM)
     video_params = MultiModalGuiderParams(
         cfg_scale=3.0, stg_scale=0.0, rescale_scale=0.7, modality_scale=3.0, stg_blocks=[],
     )
@@ -1819,7 +1819,7 @@ def generate_clip_ltx23(
 
         out_path = f"{tmpdir}/output.mp4"
         t0 = time.time()
-        # inference_mode englobe encode_video : décodage VAE paresseux (sinon
+        # inference_mode englobe encode_video : dÃ©codage VAE paresseux (sinon
         # RuntimeError: Inference tensors do not track version counter).
         with torch.inference_mode():
             video, audio = pipeline(
@@ -1838,12 +1838,12 @@ def generate_clip_ltx23(
             encode_video(video, fps=frame_rate, audio=audio, output_path=out_path, video_chunks_number=1)
         video_bytes = Path(out_path).read_bytes()
 
-    print(f"[ltx23] {mode} terminé en {time.time()-t0:.1f}s — {len(video_bytes)//1024} KB")
+    print(f"[ltx23] {mode} terminÃ© en {time.time()-t0:.1f}s â€” {len(video_bytes)//1024} KB")
     return video_bytes
 
 
 # ===========================================================================
-# Explainer (code-based slides + Kokoro voice) — CPU only, ~cents/video
+# Explainer (code-based slides + Kokoro voice) â€” CPU only, ~cents/video
 # ===========================================================================
 @app.function(image=explainer_image, secrets=[secrets], timeout=1200, retries=0)
 def render_explainer(job_id: str, storyboard: dict, brand: Optional[dict] = None,
@@ -1898,7 +1898,7 @@ def render_explainer(job_id: str, storyboard: dict, brand: Optional[dict] = None
         url = upload_to_r2(video_bytes, job_id, suffix="_explainer")
         update_job(job_id, status="done", current_stage="completed",
                    video_url=url, output_url_final=url)
-        log(job_id, f"[explainer] DONE → {url} ({len(video_bytes)//1024} KB)")
+        log(job_id, f"[explainer] DONE â†’ {url} ({len(video_bytes)//1024} KB)")
         return url
     except Exception as e:
         import traceback
@@ -1910,7 +1910,7 @@ def render_explainer(job_id: str, storyboard: dict, brand: Optional[dict] = None
 
 
 # ===========================================================================
-# Orchestrator (no GPU — just coordinates)
+# Orchestrator (no GPU â€” just coordinates)
 # ===========================================================================
 
 @app.function(
@@ -1940,7 +1940,7 @@ def generate_video_complete(
         f"{f' | preferred={preferred_engine}' if preferred_engine else ''}")
 
     try:
-        # Fetch job to read storyboard — scene_count is ALWAYS derived
+        # Fetch job to read storyboard â€” scene_count is ALWAYS derived
         # server-side from DB, never from client webhook payload.
         sb = get_supabase_client()
         job_row = sb.table("jobs").select("storyboard, target_duration_seconds, plan").eq("id", job_id).single().execute()
@@ -1954,11 +1954,11 @@ def generate_video_complete(
             storyboard = storyboard[:plan_cap]
 
         # ------------------------------------------------------------------
-        # Route: single-scene → original pipeline (unchanged)
+        # Route: single-scene â†’ original pipeline (unchanged)
         # ------------------------------------------------------------------
         if len(storyboard) <= 1:
             log(job_id, "single-scene path (v3 compat)")
-            # status already "in_progress" from webhook — only update stage
+            # status already "in_progress" from webhook â€” only update stage
             update_job(job_id, status="in_progress", current_stage="generating_scene_1")
 
             from modal_app.engines import select_engine, generate_with_fallback
@@ -1971,11 +1971,11 @@ def generate_video_complete(
             log(job_id, f"engine selected: {engine_key}"
                 f"{' (with references)' if references else ''}")
 
-            # Cost tracking (before generation — recorded even on failure)
+            # Cost tracking (before generation â€” recorded even on failure)
             try:
                 from modal_app.utils.costs import estimate_cost
                 estimated_cost = round(estimate_cost(engine_key, clip_dur, supabase_client_for_engines), 4)
-                log(job_id, f"cost estimated: {engine_key} → ${estimated_cost:.4f}")
+                log(job_id, f"cost estimated: {engine_key} â†’ ${estimated_cost:.4f}")
                 update_job(job_id, engine_used=engine_key, estimated_cost_usd=estimated_cost)
             except Exception as e:
                 log(job_id, f"cost tracking skipped: {e}")
@@ -1986,7 +1986,7 @@ def generate_video_complete(
                 references=references,
             )
             if actual_engine != engine_key:
-                log(job_id, f"fallback triggered: {engine_key} → {actual_engine}")
+                log(job_id, f"fallback triggered: {engine_key} â†’ {actual_engine}")
                 update_job(job_id, engine_used=actual_engine)
                 try:
                     from modal_app.utils.costs import estimate_cost
@@ -2007,7 +2007,7 @@ def generate_video_complete(
 
             update_job(job_id, current_stage="uploading")
             video_url = upload_to_r2(video_bytes, job_id)
-            log(job_id, f"uploaded → {video_url}")
+            log(job_id, f"uploaded â†’ {video_url}")
 
             # Also mark the single scene as done (if it exists)
             if storyboard:
@@ -2025,16 +2025,16 @@ def generate_video_complete(
                         audio_bytes, job_id,
                         suffix="_audio", content_type="audio/mpeg", extension="mp3",
                     )
-                    log(job_id, f"audio uploaded → {audio_url}")
+                    log(job_id, f"audio uploaded â†’ {audio_url}")
 
                     update_job(job_id, current_stage="muxing_audio")
                     muxed_bytes = mux_audio.remote(video_bytes, audio_bytes)
                     final_url = upload_to_r2(muxed_bytes, job_id, suffix="_final")
-                    log(job_id, f"muxed video+audio → {final_url}")
+                    log(job_id, f"muxed video+audio â†’ {final_url}")
                     update_job(job_id, audio_url=audio_url)
                 except Exception as e:
                     log(job_id, f"audio generation skipped (non-blocking): {e}")
-                    # Video is already uploaded — proceed without audio
+                    # Video is already uploaded â€” proceed without audio
 
             update_job(
                 job_id,
@@ -2047,16 +2047,16 @@ def generate_video_complete(
             return {"success": True, "video_url": final_url}
 
         # ------------------------------------------------------------------
-        # Route: multi-scene → generate each scene, then assemble
+        # Route: multi-scene â†’ generate each scene, then assemble
         # ------------------------------------------------------------------
         log(job_id, f"multi-scene path: {len(storyboard)} scenes")
-        # status already "in_progress" from webhook — only update stage
+        # status already "in_progress" from webhook â€” only update stage
         update_job(job_id, status="in_progress", current_stage="generating_scene_1")
 
         # Total duration needed for cost recalculation on fallback
         total_dur = sum(int(s.get("duration_sec", 5)) for s in storyboard)
 
-        # Cost tracking (before generation — recorded even on failure)
+        # Cost tracking (before generation â€” recorded even on failure)
         try:
             from modal_app.engines import select_engine as _sel
             from modal_app.utils.costs import estimate_cost
@@ -2066,7 +2066,7 @@ def generate_video_complete(
                 preferred=preferred_engine, supabase_client=orchestrator_sb,
             )
             estimated_cost = round(estimate_cost(ms_engine_key, total_dur, orchestrator_sb), 4)
-            log(job_id, f"cost estimated: {ms_engine_key} × {len(storyboard)} scenes → ${estimated_cost:.4f}")
+            log(job_id, f"cost estimated: {ms_engine_key} Ã— {len(storyboard)} scenes â†’ ${estimated_cost:.4f}")
             update_job(job_id, engine_used=ms_engine_key, estimated_cost_usd=estimated_cost)
         except Exception as e:
             log(job_id, f"cost tracking skipped: {e}")
@@ -2077,10 +2077,10 @@ def generate_video_complete(
         ms_any_fallback = ms_result["any_fallback"]
 
         # Multi-scene engine_used rule:
-        # If ANY scene used fallback → job-level engine_used = "wan_i2v"
+        # If ANY scene used fallback â†’ job-level engine_used = "wan_i2v"
         # This ensures the cost displayed reflects the actual engine used.
         if ms_any_fallback:
-            log(job_id, "multi-scene fallback detected → engine_used = wan_i2v")
+            log(job_id, "multi-scene fallback detected â†’ engine_used = wan_i2v")
             try:
                 from modal_app.utils.costs import estimate_cost
                 fallback_cost = round(estimate_cost("wan_i2v", total_dur, get_supabase_client()), 4)
@@ -2103,7 +2103,7 @@ def generate_video_complete(
         # Step 3: upload final assembled video
         update_job(job_id, current_stage="uploading")
         video_url = upload_to_r2(final_bytes, job_id, suffix="_final")
-        log(job_id, f"final uploaded → {video_url}")
+        log(job_id, f"final uploaded â†’ {video_url}")
 
         # Step 4: Audio for Wan multi-scene (Seedance has audio embedded)
         final_url = video_url
@@ -2118,12 +2118,12 @@ def generate_video_complete(
                     audio_bytes, job_id,
                     suffix="_audio", content_type="audio/mpeg", extension="mp3",
                 )
-                log(job_id, f"audio uploaded → {audio_url}")
+                log(job_id, f"audio uploaded â†’ {audio_url}")
 
                 update_job(job_id, current_stage="muxing_audio")
                 muxed_bytes = mux_audio.remote(final_bytes, audio_bytes)
                 final_url = upload_to_r2(muxed_bytes, job_id, suffix="_with_audio")
-                log(job_id, f"muxed video+audio → {final_url}")
+                log(job_id, f"muxed video+audio â†’ {final_url}")
                 update_job(job_id, audio_url=audio_url)
             except Exception as e:
                 log(job_id, f"audio generation skipped (non-blocking): {e}")
@@ -2166,7 +2166,7 @@ def _report_sentry(exc: Exception, **context) -> None:
 
 
 # ===========================================================================
-# Podcast render (T-1131e) — two-shot voice-first compositing, CPU only.
+# Podcast render (T-1131e) â€” two-shot voice-first compositing, CPU only.
 # ===========================================================================
 
 PODCAST_GAP_MS = 300
@@ -2245,13 +2245,13 @@ def _podcast_circle_portrait(img_bytes: bytes, size: int):
 def _resolve_persona_avatar(sb, speaker: dict, size: int, podcast_id: str, owner_id=None):
     """Return an RGBA portrait for a speaker's persona, or None to fall back.
 
-    Fallback-safe (T-1136e): returns None — so the caller keeps the placeholder
-    avatar — for ANY of: no persona_id, persona missing/removed, no portrait
+    Fallback-safe (T-1136e): returns None â€” so the caller keeps the placeholder
+    avatar â€” for ANY of: no persona_id, persona missing/removed, no portrait
     path, not visible to the podcast owner, unresolvable/expired URL, or a
     download/decode error. Never raises.
 
     Visibility (hardening): only a catalog persona (user_id IS NULL) OR a persona
-    owned by the podcast owner (persona.user_id == owner_id) may be used — the
+    owned by the podcast owner (persona.user_id == owner_id) may be used â€” the
     same rule the API's RLS/GET enforces, applied here too since render runs with
     the service role (RLS bypassed). A public http(s) portrait_path is used
     directly; a private storage path is signed from the `podcast-personas` bucket.
@@ -2296,11 +2296,11 @@ def _resolve_persona_avatar(sb, speaker: dict, size: int, podcast_id: str, owner
 
 def _resolve_base_clip_url(sb, speaker: dict, podcast_id: str, owner_id=None):
     """Return a ready 1:1 talking-head base clip R2 URL for a speaker's persona,
-    or None (→ keep the static portrait). T-1144a. Never raises.
+    or None (â†’ keep the static portrait). T-1144a. Never raises.
 
     Visibility mirrors _resolve_persona_avatar (service role bypasses RLS): only a
     catalog persona (user_id NULL) or one owned by the podcast owner is used.
-    Reads the cached clip only — NO HeyGen call, no credit spend.
+    Reads the cached clip only â€” NO HeyGen call, no credit spend.
     """
     persona_id = (speaker or {}).get("persona_id")
     if not persona_id:
@@ -2330,13 +2330,37 @@ def _resolve_base_clip_url(sb, speaker: dict, podcast_id: str, owner_id=None):
         return None
 
 
+def _resolve_segment_lipsync_clips(sb, podcast_id: str):
+    """Return {segment_id: r2_video_url} for READY per-segment lip-sync clips
+    (T-1144b). Next orchestrates HeyGen + caches into podcast_segment_lipsync_clips;
+    Modal only READS ready rows here â€” NO HeyGen call, no credit spend. Never raises.
+    Any missing/failed segment simply falls back to the talking_visual visual.
+    """
+    out = {}
+    try:
+        rows = (
+            sb.table("podcast_segment_lipsync_clips")
+            .select("segment_id,video_url,status")
+            .eq("podcast_id", podcast_id).eq("status", "ready")
+            .execute().data
+        ) or []
+        for r in rows:
+            sid = r.get("segment_id")
+            url = (r.get("video_url") or "").strip()
+            if sid and url:
+                out[sid] = url
+    except Exception as e:
+        log(podcast_id, f"lipsync clips resolve fallback: {e}")
+    return out
+
+
 def _extract_base_clip_frames(video_url: str, workdir: str, label: str, size: int, podcast_id: str):
     """Download a base clip (R2) and pre-extract looping RGBA frames sized to the
     speaker-card avatar (rounded square). Returns {"fps", "bright", "dim"} or None
-    on ANY failure (→ static portrait fallback). T-1144a.
+    on ANY failure (â†’ static portrait fallback). T-1144a.
 
-    NOT segment lip-sync — a looping "talking base clip visual". Uses ffmpeg + PIL
-    only (already in the render image); no cv2/new deps, no HeyGen. 1:1 source →
+    NOT segment lip-sync â€” a looping "talking base clip visual". Uses ffmpeg + PIL
+    only (already in the render image); no cv2/new deps, no HeyGen. 1:1 source â†’
     no letterboxing.
     """
     import glob
@@ -2391,7 +2415,7 @@ def _parse_volumedetect(stderr_text: str):
     """Extract (mean_volume, max_volume) in dBFS from ffmpeg `volumedetect`.
 
     Returns a (mean, max) tuple, or None if mean_volume is absent or non-finite.
-    max defaults to 0.0 when not present. Pure/testable — no ffmpeg needed.
+    max defaults to 0.0 when not present. Pure/testable â€” no ffmpeg needed.
     """
     import math
     import re
@@ -2416,7 +2440,7 @@ def _podcast_normalize_segment(mp3_path: str, wav_path: str, podcast_id: str):
     linear mode caps gain to protect the true-peak, so a soft turn with one stray
     transient stays quiet. We RMS-normalize instead: measure mean_volume
     (volumedetect), apply the gain to hit the target, and a peak limiter catches
-    stray transients — so the BODY of every turn reaches the same level regardless
+    stray transients â€” so the BODY of every turn reaches the same level regardless
     of a single loud peak. Deterministic, no pumping.
 
     Fallback-safe: any measurement/parse/apply failure falls back to the original
@@ -2445,7 +2469,7 @@ def _podcast_normalize_segment(mp3_path: str, wav_path: str, podcast_id: str):
         # clip (negative gain) shouldn't get an extreme adjustment.
         gain = max(-30.0, min(40.0, _PODCAST_TARGET_RMS_DB - mean))
         # Tier 1: full RMS gain + peak limiter (level auto-leveling disabled so it
-        # only limits and doesn't undo our gain; limit=0.9 ≈ -0.9 dBFS ceiling).
+        # only limits and doesn't undo our gain; limit=0.9 â‰ˆ -0.9 dBFS ceiling).
         if _apply(f"volume={gain:.2f}dB,alimiter=level=false:limit=0.9"):
             return
         # Tier 2 (if the limiter filter/flags are unavailable): limiter-free, with
@@ -2524,7 +2548,7 @@ def render_podcast(podcast_id: str) -> str:
 
         workdir = tempfile.mkdtemp(prefix="podcast-")
         # 1) Download + transcode each segment to a uniform wav, probe real duration.
-        # Use httpx (not urllib) — R2's edge rejects the default urllib UA (403).
+        # Use httpx (not urllib) â€” R2's edge rejects the default urllib UA (403).
         seg_wavs, durations = [], []
         with httpx.Client(timeout=120, follow_redirects=True) as client:
             for i, seg in enumerate(segments):
@@ -2535,7 +2559,7 @@ def render_podcast(podcast_id: str) -> str:
                 with open(mp3, "wb") as fh:
                     fh.write(resp.content)
                 # Per-segment loudness normalization (EBU R128) so speakers sit at a
-                # consistent level. Two-pass (T-1137a) — single-pass left some
+                # consistent level. Two-pass (T-1137a) â€” single-pass left some
                 # turns 15-20 dB quieter; two-pass hits the target precisely.
                 _podcast_normalize_segment(mp3, wav, podcast_id)
                 seg_wavs.append(wav)
@@ -2650,31 +2674,45 @@ def render_podcast(podcast_id: str) -> str:
         # base clip cached on R2, animate its looping frames in the card instead of
         # the static portrait. This is a "talking base clip visual", NOT segment
         # lip-sync. Fallback-safe: any miss keeps the static avatar. No HeyGen call.
-        # Render mode (T-1144b-lite): "static" bypasses base clips entirely (static
-        # portraits only); "talking_visual" (default) keeps the T-1144a looping-clip
-        # visual; "lipsync_premium" is reserved for T-1144b and behaves as
-        # talking_visual for now (not yet active). Unknown/missing → talking_visual.
+        # Render mode: "static" bypasses base clips entirely (static
+        # portraits only); "talking_visual" (default) keeps the looping-clip
+        # visual; "lipsync_premium" plays cached segment clips when present and
+        # falls back to talking_visual for missing/failed segments.
         _meta = podcast.get("metadata") or {}
         render_mode = _meta.get("render_mode") if isinstance(_meta, dict) else None
         if render_mode not in ("static", "talking_visual", "lipsync_premium"):
             render_mode = "talking_visual"
+        # Per-segment lip-sync frames (T-1144b premium): {segment_id: frames dict}.
+        # Populated only for lipsync_premium; empty otherwise â†’ talking_visual path.
+        seg_lipsync_frames = {}
         if render_mode == "static":
             host_frames = None
             guest_frames = None
-            log(podcast_id, "render_mode=static → static portraits (base clips bypassed)")
+            log(podcast_id, "render_mode=static â†’ static portraits (base clips bypassed)")
         else:
             _host_clip = _resolve_base_clip_url(sb, host, podcast_id, owner_id)
             _guest_clip = _resolve_base_clip_url(sb, guest, podcast_id, owner_id)
             host_frames = _extract_base_clip_frames(_host_clip, workdir, "host", avatar_size, podcast_id) if _host_clip else None
             guest_frames = _extract_base_clip_frames(_guest_clip, workdir, "guest", avatar_size, podcast_id) if _guest_clip else None
-            log(podcast_id, f"render_mode={render_mode} → talking-duo base clips host={'yes' if host_frames else 'no'} guest={'yes' if guest_frames else 'no'}")
+            log(podcast_id, f"render_mode={render_mode} â†’ talking-duo base clips host={'yes' if host_frames else 'no'} guest={'yes' if guest_frames else 'no'}")
+            if render_mode == "lipsync_premium":
+                # Read the cached per-segment lip-sync clips (Next already generated
+                # them). Extract each into frames; the active speaker plays its clip
+                # in sync during its segment. Missing/failed segments fall back to the
+                # talking_visual base-clip loop above. NO HeyGen call here.
+                _ls = _resolve_segment_lipsync_clips(sb, podcast_id)
+                for _seg_id, _url in _ls.items():
+                    _f = _extract_base_clip_frames(_url, workdir, f"ls_{str(_seg_id)[:8]}", avatar_size, podcast_id)
+                    if _f:
+                        seg_lipsync_frames[_seg_id] = _f
+                log(podcast_id, f"lipsync_premium â†’ {len(seg_lipsync_frames)}/{len(_ls)} segment clips ready (rest fallback to talking_visual)")
 
         bar_x, bar_y, bar_w = int(W * 0.16), H - 34, int(W * 0.68)
 
         # The whole layout is constant WITHIN a segment (active speaker, caption,
-        # static waveform) — only the progress bar animates. So we render ONE base
+        # static waveform) â€” only the progress bar animates. So we render ONE base
         # image per segment and per output frame just copy it and draw the bar.
-        # This keeps a 10-min render fast on CPU (no full redraw 24×/s).
+        # This keeps a 10-min render fast on CPU (no full redraw 24Ã—/s).
         def build_base(active):
             img = Image.new("RGB", (W, H), (248, 250, 255))
             d = ImageDraw.Draw(img)
@@ -2711,7 +2749,7 @@ def render_podcast(podcast_id: str) -> str:
                 _frames = host_frames if role == "host" else guest_frames
                 if _frames:
                     # Baseline still from the talking base clip (animated per output
-                    # frame in compose_frame) — a real person, not the round icon.
+                    # frame in compose_frame) â€” a real person, not the round icon.
                     fr0 = (_frames["bright"] if is_active else _frames["dim"])[0]
                     img.paste(fr0, (ax, ay), fr0)
                 else:
@@ -2747,7 +2785,7 @@ def render_podcast(podcast_id: str) -> str:
             for i, (st, en, _s) in enumerate(timeline):
                 if st <= t < en:
                     return i
-            return len(timeline) - 1  # gaps / tail → last segment (unchanged behaviour)
+            return len(timeline) - 1  # gaps / tail â†’ last segment (unchanged behaviour)
 
         def compose_frame(idx, t):
             base_img, acol = bases[idx]
@@ -2755,17 +2793,25 @@ def render_podcast(podcast_id: str) -> str:
             # Animate the talking base-clip frames over the card avatar region
             # (T-1144a): loop the pre-extracted frames; active speaker bright,
             # listener dimmed. No-op when a speaker has no base clip (static).
-            if host_frames or guest_frames:
+            if host_frames or guest_frames or seg_lipsync_frames:
                 active_seg = timeline[idx][2]
                 active_role = spk_by_id.get(active_seg["speaker_id"], {}).get("role", "host")
+                seg_start = timeline[idx][0]
+                # Premium: the active speaker's segment lip-sync clip, played in sync
+                # with its audio (local time within the segment, clamped â€” no loop).
+                _ls = seg_lipsync_frames.get(active_seg.get("id")) if seg_lipsync_frames else None
                 ay = y0 + int(panel_h * 0.22)
                 for _i, (_role, _fr) in enumerate([("host", host_frames), ("guest", guest_frames)]):
-                    if not _fr:
-                        continue
-                    _lst = _fr["bright"] if _role == active_role else _fr["dim"]
-                    _cur = _lst[int(t * _fr["fps"]) % len(_lst)]
                     _px = x0 + _i * (panel_w + gap_px)
-                    img.paste(_cur, (_px + (panel_w - avatar_size) // 2, ay), _cur)
+                    if _role == active_role and _ls:
+                        _lst = _ls["bright"]
+                        _j = int(max(0.0, t - seg_start) * _ls["fps"])
+                        _cur = _lst[min(_j, len(_lst) - 1)]
+                        img.paste(_cur, (_px + (panel_w - avatar_size) // 2, ay), _cur)
+                    elif _fr:
+                        _lst = _fr["bright"] if _role == active_role else _fr["dim"]
+                        _cur = _lst[int(t * _fr["fps"]) % len(_lst)]
+                        img.paste(_cur, (_px + (panel_w - avatar_size) // 2, ay), _cur)
             d = ImageDraw.Draw(img)
             elapsed = min(1.0, max(0.0, t / total))
             fill_w = int(bar_w * elapsed)
@@ -2773,7 +2819,7 @@ def render_podcast(podcast_id: str) -> str:
             d.ellipse([bar_x + fill_w - 7, bar_y - 4, bar_x + fill_w + 7, bar_y + 12], fill=acol)
             return img
 
-        # 5) Pipe frames → ffmpeg with the dialogue track → MP4.
+        # 5) Pipe frames â†’ ffmpeg with the dialogue track â†’ MP4.
         out_path = os.path.join(workdir, "output.mp4")
         proc = subprocess.Popen(
             ["ffmpeg", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}",
@@ -2797,7 +2843,7 @@ def render_podcast(podcast_id: str) -> str:
         sb.table("podcasts").update({
             "video_url": video_url, "render_status": "done", "render_error": None,
         }).eq("id", podcast_id).execute()
-        log(podcast_id, f"render_podcast done → {video_url} ({total:.1f}s)")
+        log(podcast_id, f"render_podcast done â†’ {video_url} ({total:.1f}s)")
         return video_url
     except Exception as e:
         return fail(normalize_error(e))
@@ -2883,7 +2929,7 @@ def webhook():
         """Trigger ffmpeg last-frame extraction for a scene (multi-scene chaining).
 
         Spawns extract_last_frame on Modal (base_image, has ffmpeg). Returns
-        immediately with 202-style success — the Next.js poller picks up the
+        immediately with 202-style success â€” the Next.js poller picks up the
         new last_frame_url on the next GET.
         """
         expected = os.environ.get("MODAL_WEBHOOK_SECRET")
@@ -3147,7 +3193,7 @@ def test_flux_nim(prompt: str = "A futuristic city skyline at sunset, cinematic 
     out_path = "output_flux_nim_test.png"
     with open(out_path, "wb") as f:
         f.write(image_bytes)
-    print(f"Saved {len(image_bytes)/1024:.1f} KB → {out_path}")
+    print(f"Saved {len(image_bytes)/1024:.1f} KB â†’ {out_path}")
 
 
 @app.local_entrypoint()
@@ -3155,7 +3201,7 @@ def test_ltx23(
     prompt: str = "A futuristic city skyline at sunset, cinematic lighting",
     image_url: str = "",
 ):
-    """Test l'intégration generate_clip_ltx23 (FP8/SDK) — T2V par défaut.
+    """Test l'intÃ©gration generate_clip_ltx23 (FP8/SDK) â€” T2V par dÃ©faut.
     Passer --image-url <url> pour tester le mode I2V.
     Usage: modal run modal_app/video_pipeline.py::test_ltx23
     """
@@ -3167,4 +3213,4 @@ def test_ltx23(
     out_path = f"output_ltx23_integration_{mode.lower()}.mp4"
     with open(out_path, "wb") as f:
         f.write(video_bytes)
-    print(f"Saved {len(video_bytes)/1e6:.1f} MB → {out_path}")
+    print(f"Saved {len(video_bytes)/1e6:.1f} MB â†’ {out_path}")

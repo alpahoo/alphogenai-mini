@@ -26,6 +26,49 @@ export const LIPSYNC_SECONDS_PER_CLIP = 100;
 export const LIPSYNC_CLIP_CONCURRENCY = 4;
 /** HeyGen audio/video duration must match within this ratio (±15%). */
 export const HEYGEN_DURATION_TOLERANCE = 0.15;
+/** Hard cap on real spend per premium render (USD). Phase 1 guard rail (T-1144b). */
+export const LIPSYNC_MAX_USD_PER_RENDER = 1.5;
+/** Cache key version — bump to invalidate all cached lip-sync clips. */
+export const LIPSYNC_CACHE_VERSION = "ls-v1";
+
+/**
+ * Deterministic cache key for a per-segment lip-sync clip. Captures the inputs
+ * that change the output: the TTS audio (its R2 URL changes when re-synthesized),
+ * the base clip, and the mode. Pure + dependency-free (works client & server).
+ */
+export function lipsyncCacheKey(input: {
+  audioUrl: string;
+  baseClipId?: string | null;
+  mode?: string;
+}): string {
+  const raw = `${LIPSYNC_CACHE_VERSION}|${input.mode || "precision"}|${input.baseClipId || ""}|${input.audioUrl}`;
+  // djb2 — short, stable, no crypto dependency.
+  let h = 5381;
+  for (let i = 0; i < raw.length; i++) h = ((h << 5) + h + raw.charCodeAt(i)) | 0;
+  return `${LIPSYNC_CACHE_VERSION}_${(h >>> 0).toString(36)}`;
+}
+
+/**
+ * Decide how to feed a segment's audio (duration D) to HeyGen against a base clip
+ * of duration B, honoring the ±15% rule (learned in the mini-gate):
+ *  - D <= B         → trim the video to D (equal lengths, safest).
+ *  - D <= B*(1+tol) → no trim; dynamic_duration absorbs the small diff.
+ *  - else           → skip (audio too long for this base clip → fallback).
+ * Returns { ok, endTimeSeconds } where endTimeSeconds is undefined when no trim.
+ */
+export function planLipsyncTrim(
+  audioSeconds: number,
+  baseClipSeconds: number,
+): { ok: boolean; endTimeSeconds?: number } {
+  if (!(audioSeconds > 0) || !(baseClipSeconds > 0)) return { ok: false };
+  if (audioSeconds <= baseClipSeconds) {
+    return { ok: true, endTimeSeconds: Math.round(audioSeconds * 100) / 100 };
+  }
+  if (audioSeconds <= baseClipSeconds * (1 + HEYGEN_DURATION_TOLERANCE)) {
+    return { ok: true };
+  }
+  return { ok: false };
+}
 
 export interface PodcastLipsyncEstimate {
   /** Number of lip-sync clips (one per active-speaker segment). */

@@ -199,12 +199,20 @@ describe("PATCH /api/podcasts/[id]", () => {
     expect((await PATCH(req({ render_mode: "hologram" }), ctx("p1"))).status).toBe(400);
   });
 
-  it("rejects lipsync_premium until the real pipeline exists — T-1144b-lite", async () => {
+  it("accepts lipsync_premium and invalidates stale render — T-1144b Phase 1", async () => {
+    let payload: Record<string, unknown> | undefined;
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     vi.mocked(createServiceClient).mockReturnValue(
-      makeService({ "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id, metadata: {} }, error: null }) }) as never,
+      makeService({
+        "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id, metadata: { render_mode: "talking_visual" } }, error: null }),
+        "podcasts:update": (s) => { payload = s.payload as Record<string, unknown>; return { data: { id: "p1" }, error: null }; },
+      }) as never,
     );
-    expect((await PATCH(req({ render_mode: "lipsync_premium" }), ctx("p1"))).status).toBe(400);
+    expect((await PATCH(req({ render_mode: "lipsync_premium" }), ctx("p1"))).status).toBe(200);
+    expect(payload?.metadata).toEqual({ render_mode: "lipsync_premium" });
+    expect(payload?.video_url).toBeNull();
+    expect(payload?.render_status).toBe("idle");
+    expect(payload?.render_error).toBeNull();
   });
 
   it("rename does not clear the rendered video", async () => {

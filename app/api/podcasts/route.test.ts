@@ -146,10 +146,17 @@ describe("POST /api/podcasts", () => {
     expect(res.status).toBe(400);
   });
 
-  it("400 on lipsync_premium until real pipeline exists (T-1144b-lite)", async () => {
+  it("accepts lipsync_premium now that the capped pipeline exists (T-1144b Phase 1)", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
-    vi.mocked(createServiceClient).mockReturnValue(makeService({}) as never);
+    let podcastPayload: Record<string, unknown> = {};
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:insert": (s) => { podcastPayload = s.payload as Record<string, unknown>; return { data: { id: "p1", user_id: USER.id, ...(s.payload as object) }, error: null }; },
+        "podcast_speakers:insert": (s) => ({ data: (s.payload as unknown[]).map((sp, i) => ({ id: `sp-${i}`, ...(sp as object) })), error: null }),
+      }) as never,
+    );
     const res = await POST(req({ source_mode: "generate", source_topic: "AI", render_mode: "lipsync_premium" }));
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(201);
+    expect((podcastPayload.metadata as Record<string, unknown>).render_mode).toBe("lipsync_premium");
   });
 });
