@@ -2808,6 +2808,9 @@ def render_podcast(podcast_id: str) -> str:
                         _j = int(max(0.0, t - seg_start) * _ls["fps"])
                         _cur = _lst[min(_j, len(_lst) - 1)]
                         img.paste(_cur, (_px + (panel_w - avatar_size) // 2, ay), _cur)
+                    elif render_mode == "lipsync_premium" and _role != active_role:
+                        _cur = host_dim if _role == "host" else guest_dim
+                        img.paste(_cur, (_px + (panel_w - avatar_size) // 2, ay), _cur)
                     elif _fr:
                         _lst = _fr["bright"] if _role == active_role else _fr["dim"]
                         _cur = _lst[int(t * _fr["fps"]) % len(_lst)]

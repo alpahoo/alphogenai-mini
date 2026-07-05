@@ -261,7 +261,13 @@ Entrée la plus récente en haut. Format :
 - Tests : (npm test / tsc / build) → résultat
 - Prochaine étape :
 ```
-## 2026-07-05 � Codex � T-1144b Phase 1 hardening: no double-spend on processing lip-sync rows
+## 2026-07-05 - Codex - T-1144b-fix active-speaker lip-sync
+- Fixed premium lip-sync pipeline after QA found both speakers kept moving their mouths throughout the video.
+- `POST /api/podcasts/[id]/lipsync` now physically pre-trims the base clip with packaged `ffmpeg-static` before calling HeyGen; the API `end_time` hint alone was not enough to satisfy HeyGen's +/-15% duration rule.
+- `render_podcast` premium compositing now keeps the inactive speaker as a dim static persona while only the active speaker plays the cached segment lip-sync clip; missing/failed active clips still fall back to `talking_visual`.
+- Validation: `npx tsc --noEmit`, `python -m py_compile modal_app/video_pipeline.py`, targeted lip-sync test, full `npm test` (880/880), and `npm run build` OK.
+
+## 2026-07-05 � Codex � T-1144b Phase 1 hardening: no double-spend on processing lip-sync rows
 - Hardened `POST /api/podcasts/[id]/lipsync` so an existing `processing` cache row with a saved HeyGen `provider_task_id` is reused instead of calling HeyGen again. Re-clicking premium render while clips are already processing now costs $0 extra.
 - UI polling now waits on `started + processing`, so already-running jobs continue to be polled after a retry/re-click.
 - Added a route test proving an existing processing row does not call `createLipsync` and performs no DB writes.

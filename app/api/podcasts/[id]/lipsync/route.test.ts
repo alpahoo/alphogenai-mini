@@ -60,7 +60,7 @@ const baseRoutes = (overrides: Record<string, (s: State) => Result> = {}) => ({
   }),
   "podcast_personas:select": () => ({ data: { user_id: null, status: "active" }, error: null }),
   "podcast_persona_base_clips:select": () => ({
-    data: { id: "base-1", video_url: "https://cdn.example.com/base.mp4", duration_seconds: 4.5 },
+    data: { id: "base-1", video_url: "https://cdn.example.com/base.mp4", duration_seconds: 2.4 },
     error: null,
   }),
   "podcast_segment_lipsync_clips:select": () => ({ data: null, error: null }),

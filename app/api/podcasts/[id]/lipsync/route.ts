@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
+import { mkdir, readFile, rm, writeFile } from "fs/promises";
+import os from "os";
+import path from "path";
+import { spawn } from "child_process";
+import ffmpegPath from "ffmpeg-static";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 import { createLipsync, getLipsyncTask } from "@/lib/heygen-client";
@@ -27,6 +33,60 @@ import {
 export const maxDuration = 60;
 
 const MODE = "precision" as const;
+
+function runFfmpeg(args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (!ffmpegPath) return reject(new Error("ffmpeg-static binary not available"));
+    const child = spawn(ffmpegPath as string, args, { stdio: ["ignore", "ignore", "pipe"] });
+    const chunks: Buffer[] = [];
+    child.stderr.on("data", (c) => chunks.push(Buffer.from(c)));
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg exited ${code}: ${Buffer.concat(chunks).toString("utf8").slice(0, 600)}`));
+    });
+  });
+}
+
+async function fetchBuffer(url: string): Promise<Buffer> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`download failed (${res.status})`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+async function createTrimmedBaseClipUrl(input: {
+  podcastId: string;
+  segmentId: string;
+  baseUrl: string;
+  durationSeconds: number;
+  cacheKey: string;
+}): Promise<string> {
+  const dur = Math.max(0.5, Math.round(input.durationSeconds * 100) / 100);
+  const dir = path.join(os.tmpdir(), `alphogen-lipsync-${randomUUID()}`);
+  await mkdir(dir, { recursive: true });
+  const inPath = path.join(dir, "base.mp4");
+  const outPath = path.join(dir, "trimmed.mp4");
+  try {
+    await writeFile(inPath, await fetchBuffer(input.baseUrl));
+    // HeyGen enforces audio/video duration within +/-15%. Physically trim the
+    // source clip before calling HeyGen; the API's end_time hint is not enough.
+    await runFfmpeg([
+      "-y",
+      "-i", inPath,
+      "-t", String(dur),
+      "-an",
+      "-c:v", "libx264",
+      "-pix_fmt", "yuv420p",
+      "-preset", "veryfast",
+      "-movflags", "+faststart",
+      outPath,
+    ]);
+    const key = `podcast/lipsync-trim/${input.podcastId}/${input.segmentId}-${input.cacheKey}.mp4`;
+    return await uploadBufferToR2(await readFile(outPath), key, "video/mp4");
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
 
 interface BaseClip {
   id: string;
@@ -240,7 +300,16 @@ export async function POST(
       }
 
       try {
-        const taskId = await createLipsync(base.url, seg.audio_url as string, MODE, trim.endTimeSeconds);
+        const lipsyncVideoUrl = trim.endTimeSeconds
+          ? await createTrimmedBaseClipUrl({
+              podcastId: id,
+              segmentId: seg.id,
+              baseUrl: base.url,
+              durationSeconds: dur,
+              cacheKey,
+            })
+          : base.url;
+        const taskId = await createLipsync(lipsyncVideoUrl, seg.audio_url as string, MODE);
         const { error: taskErr } = await service
           .from("podcast_segment_lipsync_clips")
           .update({ provider_task_id: taskId, status: "processing", error_message: null, updated_at: new Date().toISOString() })
