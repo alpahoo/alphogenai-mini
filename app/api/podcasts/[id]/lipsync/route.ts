@@ -160,6 +160,7 @@ export async function POST(
       cached: 0,
       skipped: 0,
       started: 0,
+      processing: 0,
       estimatedUsd: 0,
       actualNewSpendUsd: 0,
       capUsd: LIPSYNC_MAX_USD_PER_RENDER,
@@ -177,16 +178,22 @@ export async function POST(
       const cost = dur * LIPSYNC_USD_PER_SECOND;
       const cacheKey = lipsyncCacheKey({ audioUrl: seg.audio_url as string, baseClipId: base.id, mode: MODE });
 
-      // Cache hit? (same segment + key already ready)
+      // Cache hit? (same segment + key already ready or already processing)
       const { data: existing } = await service
         .from("podcast_segment_lipsync_clips")
-        .select("id,status,video_url")
+        .select("id,status,video_url,provider_task_id")
         .eq("segment_id", seg.id)
         .eq("cache_key", cacheKey)
         .maybeSingle();
       if (existing?.status === "ready" && existing.video_url) {
         result.selected++;
         result.cached++;
+        result.estimatedUsd += cost;
+        continue;
+      }
+      if (existing?.status === "processing" && existing.provider_task_id) {
+        result.selected++;
+        result.processing++;
         result.estimatedUsd += cost;
         continue;
       }

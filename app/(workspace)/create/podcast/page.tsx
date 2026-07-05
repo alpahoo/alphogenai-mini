@@ -876,7 +876,7 @@ export default function CreatePodcastPage() {
         const startJson = await start.json().catch(() => ({}));
         if (!start.ok) throw new Error(startJson?.error || "Could not start premium lip-sync.");
 
-        let processing = Number(startJson?.started || 0);
+        let processing = Number(startJson?.started || 0) + Number(startJson?.processing || 0);
         let lastStatus = startJson;
         for (let i = 0; i < 60 && processing > 0; i++) {
           setVoiceProgress(`Generating premium lip-sync clips… ${processing} left`);

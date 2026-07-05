@@ -95,6 +95,30 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
     expect(createLipsync).not.toHaveBeenCalled();
   });
 
+  it("reuses existing processing rows without calling HeyGen again", async () => {
+    const writes: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService(baseRoutes({
+        "podcast_segment_lipsync_clips:select": () => ({
+          data: {
+            id: "clip-1",
+            status: "processing",
+            video_url: null,
+            provider_task_id: "heygen-task-existing",
+          },
+          error: null,
+        }),
+      }), writes) as never,
+    );
+
+    const res = await POST(req({ action: "start" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.processing).toBe(1);
+    expect(json.actualNewSpendUsd).toBe(0);
+    expect(createLipsync).not.toHaveBeenCalled();
+    expect(writes).toHaveLength(0);
+  });
   it("does not call HeyGen when the cache reservation write fails", async () => {
     vi.mocked(createServiceClient).mockReturnValue(
       makeService(baseRoutes({

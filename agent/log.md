@@ -261,6 +261,12 @@ Entrée la plus récente en haut. Format :
 - Tests : (npm test / tsc / build) → résultat
 - Prochaine étape :
 ```
+## 2026-07-05 � Codex � T-1144b Phase 1 hardening: no double-spend on processing lip-sync rows
+- Hardened `POST /api/podcasts/[id]/lipsync` so an existing `processing` cache row with a saved HeyGen `provider_task_id` is reused instead of calling HeyGen again. Re-clicking premium render while clips are already processing now costs $0 extra.
+- UI polling now waits on `started + processing`, so already-running jobs continue to be polled after a retry/re-click.
+- Added a route test proving an existing processing row does not call `createLipsync` and performs no DB writes.
+- Validation: targeted lip-sync + estimate tests (20/20), `npx tsc --noEmit` clean, `npm run build` OK. Vercel-only change; no Modal redeploy and no HeyGen spend.
+
 
 ---
 ## 2026-07-03 — Claude — T-1138 My Personas upload V1 (personas utilisateur)
