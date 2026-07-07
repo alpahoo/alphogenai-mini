@@ -34,6 +34,8 @@ type Segment = {
   audio_url: string | null;
   status: "pending" | "ready" | "failed";
 };
+type SegmentLipsyncStatus = "needs_voice" | "missing" | "processing" | "ready" | "failed";
+type SegmentLipsyncSnapshot = { segment_id: string; status: SegmentLipsyncStatus; error_message?: string | null };
 type PodcastRow = {
   id: string;
   title: string;
@@ -79,9 +81,9 @@ const STYLE_OPTIONS = [
   { value: "documentary", label: "Documentary", desc: "Narrative explainer" },
 ];
 
-// Render mode (T-1144b-lite). Copy is deliberately explicit: "Talking visual"
-// animates real people but is NOT exact lip-sync. "Lip-sync premium" is not
-// active yet (soon) — shown disabled so the option is visible but not selectable.
+// Render mode. Copy is deliberately explicit: "Talking visual" animates
+// real people but is NOT exact lip-sync; "Lip-sync premium" is paid and uses
+// cached per-line HeyGen lip-sync clips.
 const RENDER_MODE_OPTIONS: { value: string; label: string; desc: string }[] = [
   { value: "static", label: "Static", desc: "Fixed portrait cards. Fastest. Free." },
   { value: "talking_visual", label: "Talking visual", desc: "Real people, animated — not exact lip-sync. Free." },
@@ -156,6 +158,9 @@ export default function CreatePodcastPage() {
   const [voiceProgress, setVoiceProgress] = useState<string | null>(null); // "N left" while batching
   const [savingSegmentId, setSavingSegmentId] = useState<string | null>(null);
   const [voicingSegmentId, setVoicingSegmentId] = useState<string | null>(null);
+  const [lipsyncStatusBySegment, setLipsyncStatusBySegment] = useState<Record<string, SegmentLipsyncSnapshot>>({});
+  const [syncingLipsyncSegmentId, setSyncingLipsyncSegmentId] = useState<string | null>(null);
+  const [syncingLipsyncAll, setSyncingLipsyncAll] = useState(false);
 
   const hostSpeaker = useMemo(() => speakers.find((s) => s.role === "host"), [speakers]);
   const guestSpeaker = useMemo(() => speakers.find((s) => s.role === "guest"), [speakers]);
@@ -169,6 +174,19 @@ export default function CreatePodcastPage() {
   const allReady = hasDialogue && segments.every((s) => s.status === "ready" && s.audio_url);
   const anyAudio = segments.some((s) => s.audio_url);
   const pendingVoiceCount = segments.filter((s) => s.status !== "ready" || !s.audio_url).length;
+  const segmentAudioSignature = useMemo(
+    () => segments.map((s) => `${s.id}:${s.status}:${s.audio_url || ""}`).join("|"),
+    [segments],
+  );
+  const premiumSyncNeededSegmentIds = useMemo(() => {
+    if (renderMode !== "lipsync_premium") return [];
+    return segments
+      .filter((seg) => {
+        const st = getSegmentPremiumStatus(seg, lipsyncStatusBySegment[seg.id]);
+        return st === "missing" || st === "failed";
+      })
+      .map((seg) => seg.id);
+  }, [lipsyncStatusBySegment, renderMode, segments]);
   // Live lip-sync estimate (T-1145): active-speaker lip-sync = one clip per segment.
   // Durations are proxied from text length pre-render. No HeyGen call, no spend.
   const lipsyncEstimate = useMemo(
@@ -185,6 +203,19 @@ export default function CreatePodcastPage() {
     return { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` };
   }, [supabase]);
 
+  const refreshLipsyncStatus = useCallback(async () => {
+    if (!podcast?.id) return;
+    const headers = await authHeaders();
+    if (!headers) return;
+    const res = await fetch(`/api/podcasts/${podcast.id}/lipsync`, { headers });
+    if (!res.ok) return;
+    const json = await res.json().catch(() => ({}));
+    const next = Object.fromEntries(
+      ((json.segments || []) as SegmentLipsyncSnapshot[]).map((item) => [item.segment_id, item]),
+    );
+    setLipsyncStatusBySegment(next);
+  }, [authHeaders, podcast?.id]);
+
   // ── cleanup ───────────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
@@ -193,6 +224,11 @@ export default function CreatePodcastPage() {
       if (previewAudioRef.current) previewAudioRef.current.pause();
     };
   }, []);
+
+  useEffect(() => {
+    if (renderMode !== "lipsync_premium" || !podcast?.id || segments.length === 0) return;
+    void refreshLipsyncStatus();
+  }, [podcast?.id, refreshLipsyncStatus, renderMode, segmentAudioSignature, segments.length]);
 
   // ── Step 1: create podcast + generate dialogue ────────────────────────
   async function generateDialogue() {
@@ -641,6 +677,7 @@ export default function CreatePodcastPage() {
       // Audio changed → drop the stale rendered video locally (backend reset it).
       if (anyReady) {
         setPodcast((p) => (p ? { ...p, video_url: null, render_status: "idle", render_error: null } : p));
+        await refreshLipsyncStatus();
       }
       if (lastFailed > 0) setError(`${lastFailed} segment(s) couldn't be voiced — try the line mic to retry.`);
     } catch (e) {
@@ -671,6 +708,7 @@ export default function CreatePodcastPage() {
       }
       if (json.ready > 0) {
         setPodcast((p) => (p ? { ...p, video_url: null, render_status: "idle", render_error: null } : p));
+        setLipsyncStatusBySegment((prev) => ({ ...prev, [seg.id]: { segment_id: seg.id, status: "missing" } }));
       }
       if (json.failed > 0) setError("This line could not be voiced. Try again or edit it.");
     } catch (e) {
@@ -733,6 +771,7 @@ export default function CreatePodcastPage() {
         setPlaying(null);
       }
       setPodcast((p) => (p ? { ...p, video_url: null, render_status: "idle", render_error: null } : p));
+      setLipsyncStatusBySegment((prev) => ({ ...prev, [seg.id]: { segment_id: seg.id, status: "needs_voice" } }));
       cancelEditSegment();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save this line.");
@@ -762,6 +801,7 @@ export default function CreatePodcastPage() {
       const json = await res.json();
       if (!res.ok || !json.segment) throw new Error(json?.error || "Could not add the line.");
       setSegments((prev) => [...prev, json.segment]);
+      setLipsyncStatusBySegment((prev) => ({ ...prev, [json.segment.id]: { segment_id: json.segment.id, status: "needs_voice" } }));
       setAddText("");
       clearLocalVideo();
     } catch (e) {
@@ -787,6 +827,11 @@ export default function CreatePodcastPage() {
       if (!res.ok) throw new Error(json?.error || "Could not delete the line.");
       if (playing === seg.id && audioRef.current) { audioRef.current.pause(); setPlaying(null); }
       setSegments((prev) => prev.filter((s) => s.id !== seg.id));
+      setLipsyncStatusBySegment((prev) => {
+        const next = { ...prev };
+        delete next[seg.id];
+        return next;
+      });
       clearLocalVideo();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not delete the line.");
@@ -847,6 +892,59 @@ export default function CreatePodcastPage() {
     }
   }, [podcast, authHeaders]);
 
+  async function generatePremiumLipsync(segmentIds?: string[]) {
+    if (!podcast) return false;
+    const selected = segmentIds?.length ? segments.filter((seg) => segmentIds.includes(seg.id)) : segments;
+    if (selected.length === 0) return true;
+    if (selected.some((seg) => seg.status !== "ready" || !seg.audio_url)) {
+      throw new Error("Generate the voice for this line before premium sync.");
+    }
+
+    const singleId = segmentIds?.length === 1 ? segmentIds[0] : null;
+    setError(null);
+    if (singleId) setSyncingLipsyncSegmentId(singleId);
+    else setSyncingLipsyncAll(true);
+    try {
+      const headers = await authHeaders();
+      if (!headers) throw new Error("Please sign in again.");
+      const start = await fetch(`/api/podcasts/${podcast.id}/lipsync`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ action: "start", ...(segmentIds?.length ? { segmentIds } : {}) }),
+      });
+      const startJson = await start.json().catch(() => ({}));
+      if (!start.ok) throw new Error(startJson?.error || "Could not start premium lip-sync.");
+      if (Number(startJson?.started || 0) > 0) clearLocalVideo();
+      await refreshLipsyncStatus();
+
+      let processing = Number(startJson?.started || 0) + Number(startJson?.processing || 0);
+      for (let i = 0; i < 60 && processing > 0; i++) {
+        setVoiceProgress(`Generating premium lip-sync clips... ${processing} left`);
+        await new Promise((resolve) => setTimeout(resolve, 3500));
+        const poll = await fetch(`/api/podcasts/${podcast.id}/lipsync`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ action: "poll" }),
+        });
+        const pollJson = await poll.json().catch(() => ({}));
+        if (!poll.ok) throw new Error(pollJson?.error || "Could not poll premium lip-sync.");
+        processing = Number(pollJson?.processing || 0);
+        await refreshLipsyncStatus();
+      }
+      setVoiceProgress(null);
+      if (processing > 0) throw new Error("Premium lip-sync is still processing. Try again in a moment.");
+      await refreshLipsyncStatus();
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not generate premium lip-sync.");
+      throw e;
+    } finally {
+      setVoiceProgress(null);
+      if (singleId) setSyncingLipsyncSegmentId(null);
+      else setSyncingLipsyncAll(false);
+    }
+  }
+
   async function renderPodcast() {
     if (!podcast || !allReady) return;
     setError(null);
@@ -868,32 +966,7 @@ export default function CreatePodcastPage() {
       }
       if (renderMode === "lipsync_premium") {
         setVoiceProgress("Preparing premium lip-sync clips...");
-        const start = await fetch(`/api/podcasts/${podcast.id}/lipsync`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ action: "start" }),
-        });
-        const startJson = await start.json().catch(() => ({}));
-        if (!start.ok) throw new Error(startJson?.error || "Could not start premium lip-sync.");
-
-        let processing = Number(startJson?.started || 0) + Number(startJson?.processing || 0);
-        let lastStatus = startJson;
-        for (let i = 0; i < 60 && processing > 0; i++) {
-          setVoiceProgress(`Generating premium lip-sync clips… ${processing} left`);
-          await new Promise((resolve) => setTimeout(resolve, 3500));
-          const poll = await fetch(`/api/podcasts/${podcast.id}/lipsync`, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({ action: "poll" }),
-          });
-          lastStatus = await poll.json().catch(() => ({}));
-          if (!poll.ok) throw new Error(lastStatus?.error || "Could not poll premium lip-sync.");
-          processing = Number(lastStatus?.processing || 0);
-        }
-        setVoiceProgress(null);
-        if (processing > 0) {
-          throw new Error("Premium lip-sync is still processing. Try rendering again in a moment.");
-        }
+        await generatePremiumLipsync();
       }
       const res = await fetch(`/api/podcasts/${podcast.id}/render`, { method: "POST", headers });
       const json = await res.json().catch(() => ({}));
@@ -1124,9 +1197,8 @@ export default function CreatePodcastPage() {
                 </p>
               )}
               <p className="mt-3 text-[11px] leading-snug text-neutral-400">
-                Estimate only — actual HeyGen credits vary. The real lip-sync render ships in a
-                later update (T-1144b); confirming here selects the premium mode and its cost
-                disclosure. <strong>No credits are spent now.</strong>
+                Estimate only - actual HeyGen credits vary. Confirming selects the premium mode;
+                credits are spent only when you generate premium sync clips or render in premium mode.
               </p>
               <div className="mt-4 flex justify-end gap-2">
                 <button type="button" onClick={() => setLipsyncConfirmOpen(false)} className="rounded-lg border border-neutral-200 px-3 py-2 text-sm font-semibold text-neutral-600 hover:bg-neutral-50">Cancel</button>
@@ -1415,12 +1487,30 @@ export default function CreatePodcastPage() {
             </div>
           )}
 
+          {renderMode === "lipsync_premium" && allReady && premiumSyncNeededSegmentIds.length > 0 && (
+            <div className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+              <span>{premiumSyncNeededSegmentIds.length} line{premiumSyncNeededSegmentIds.length === 1 ? "" : "s"} need premium lip-sync before the final premium render.</span>
+              <button
+                type="button"
+                onClick={() => generatePremiumLipsync(premiumSyncNeededSegmentIds).catch(() => undefined)}
+                disabled={syncingLipsyncAll || Boolean(syncingLipsyncSegmentId) || rendering}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-amber-700 disabled:opacity-50"
+              >
+                {syncingLipsyncAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                Generate missing sync
+              </button>
+            </div>
+          )}
+
           <div className="space-y-2.5">
             {segments.map((seg, idx) => {
               const sp = speakerById[seg.speaker_id];
               const role = sp?.role ?? "host";
               const color = ROLE_COLOR[role];
-              const busyRow = structuring || phase === "voicing" || Boolean(voicingSegmentId) || editingSegmentId !== null;
+              const premiumStatus = getSegmentPremiumStatus(seg, lipsyncStatusBySegment[seg.id]);
+              const showPremiumControls = renderMode === "lipsync_premium";
+              const syncingPremiumRow = syncingLipsyncSegmentId === seg.id;
+              const busyRow = structuring || phase === "voicing" || Boolean(voicingSegmentId) || Boolean(syncingLipsyncSegmentId) || syncingLipsyncAll || editingSegmentId !== null;
               return (
                 <div key={seg.id} className="flex items-start gap-3 rounded-xl border border-neutral-200 bg-white p-3">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: color }}>
@@ -1468,6 +1558,22 @@ export default function CreatePodcastPage() {
                     ) : (
                       <p className="mt-0.5 text-sm leading-relaxed text-neutral-800">{seg.text}</p>
                     )}
+                    {showPremiumControls && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <PremiumSyncBadge status={premiumStatus} />
+                        {(premiumStatus === "missing" || premiumStatus === "failed") && seg.status === "ready" && seg.audio_url && (
+                          <button
+                            type="button"
+                            onClick={() => generatePremiumLipsync([seg.id]).catch(() => undefined)}
+                            disabled={syncingPremiumRow || syncingLipsyncAll || rendering || editingSegmentId === seg.id}
+                            className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
+                          >
+                            {syncingPremiumRow ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                            Sync this line
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <div className="mr-1 flex flex-col">
@@ -1495,7 +1601,9 @@ export default function CreatePodcastPage() {
                         phase === "voicing" ||
                         Boolean(voicingSegmentId) ||
                         editingSegmentId === seg.id ||
-                        savingSegmentId === seg.id
+                        savingSegmentId === seg.id ||
+                        syncingPremiumRow ||
+                        syncingLipsyncAll
                       }
                       className={`rounded-full border p-2 transition disabled:opacity-50 ${
                         seg.status !== "ready" || !seg.audio_url
@@ -1514,7 +1622,7 @@ export default function CreatePodcastPage() {
                     <button
                       onClick={() => startEditSegment(seg)}
                       title="Edit line"
-                      disabled={editingSegmentId === seg.id || savingSegmentId === seg.id}
+                      disabled={busyRow}
                       className="rounded-full border border-neutral-200 p-2 text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-50"
                     >
                       <Pencil className="h-4 w-4" />
@@ -1717,6 +1825,27 @@ function DuoColumn({
       </div>
     </div>
   );
+}
+
+function getSegmentPremiumStatus(seg: Segment, info?: SegmentLipsyncSnapshot): SegmentLipsyncStatus {
+  if (seg.status !== "ready" || !seg.audio_url) return "needs_voice";
+  return info?.status ?? "missing";
+}
+
+function PremiumSyncBadge({ status }: { status: SegmentLipsyncStatus }) {
+  if (status === "ready") {
+    return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700"><CheckCircle2 className="h-3 w-3" /> Premium sync ready</span>;
+  }
+  if (status === "processing") {
+    return <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700"><Loader2 className="h-3 w-3 animate-spin" /> Generating sync</span>;
+  }
+  if (status === "failed") {
+    return <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase text-red-700"><AlertTriangle className="h-3 w-3" /> Fallback visual</span>;
+  }
+  if (status === "needs_voice") {
+    return <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-bold uppercase text-neutral-500">Voice needed first</span>;
+  }
+  return <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">Needs premium sync</span>;
 }
 
 function SegmentBadge({ status }: { status: Segment["status"] }) {

@@ -1,3 +1,9 @@
+## 2026-07-07 — Codex — T-1146 segment-level premium lip-sync regenerate
+- Added per-segment premium lip-sync state on `/create/podcast`: ready / needs voice / needs premium sync / processing / failed.
+- Added a line-level “Sync this line” action that calls the existing lipsync route with `segmentIds:[id]`; bulk “Generate missing sync” only targets missing/failed segments.
+- Hardened `/api/podcasts/[id]/lipsync`: cache-miss premium sync clears stale `video_url/render_status/render_error` before reserving/spending, while cached-only/poll-only flows do not reset; GET now returns current per-segment sync status and ignores stale clips from old audio URLs.
+- Editing or regenerating a line updates local premium state so the old final video is not shown as current. Existing cache/dedup is preserved: unchanged segments reuse their clips, edited lines generate only their own premium sync.
+- Validation: targeted lipsync route tests 9/9, full test suite 885/885, `npm run build` OK, `npx tsc --noEmit` clean after build.
 # agent/log.md â€” Journal chronologique
 
 EntrÃ©e la plus rÃ©cente en haut. Format :

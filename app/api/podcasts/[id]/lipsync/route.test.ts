@@ -3,7 +3,7 @@ import { getUserFromRequest } from "@/lib/podcast/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createLipsync } from "@/lib/heygen-client";
 import { trimLipsyncBaseClip } from "@/lib/modal-client";
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
 vi.mock("@/lib/podcast/auth", () => ({ getUserFromRequest: vi.fn() }));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: vi.fn() }));
@@ -135,6 +135,20 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
     expect(createLipsync).not.toHaveBeenCalled();
   });
 
+  it("does not call HeyGen when the stale render cannot be cleared", async () => {
+    const writes: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService(baseRoutes({
+        "podcasts:update": () => ({ data: null, error: { message: "db down" } }),
+      }), writes) as never,
+    );
+
+    const res = await POST(req({ action: "start" }), ctx("p1"));
+    expect(res.status).toBe(500);
+    expect(createLipsync).not.toHaveBeenCalled();
+    expect(writes.map((w) => `${w.table}:${w.op}`)).toEqual(["podcasts:update"]);
+  });
+
   it("reserves the cache row before starting HeyGen, then saves the provider task id", async () => {
     const writes: State[] = [];
     vi.mocked(createServiceClient).mockReturnValue(makeService(baseRoutes(), writes) as never);
@@ -145,8 +159,13 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
     expect(json.started).toBe(1);
     expect(json.actualNewSpendUsd).toBeGreaterThan(0);
     expect(createLipsync).toHaveBeenCalledTimes(1);
-    expect(writes.map((w) => w.op)).toEqual(["insert", "update"]);
-    expect(writes[1].payload).toMatchObject({ provider_task_id: "heygen-task-1", status: "processing" });
+    expect(writes.map((w) => `${w.table}:${w.op}`)).toEqual([
+      "podcasts:update",
+      "podcast_segment_lipsync_clips:insert",
+      "podcast_segment_lipsync_clips:update",
+    ]);
+    expect(writes[0].payload).toMatchObject({ video_url: null, render_status: "idle", render_error: null });
+    expect(writes[2].payload).toMatchObject({ provider_task_id: "heygen-task-1", status: "processing" });
   });
 
   it("trims the base clip on Modal when the audio is shorter, and sends the trimmed URL to HeyGen", async () => {
@@ -200,5 +219,45 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
     expect(createLipsync).not.toHaveBeenCalled();
     expect(json.started).toBe(0);
     expect(json.actualNewSpendUsd).toBe(0);
+  });
+});
+
+
+describe("GET /api/podcasts/[id]/lipsync", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+  });
+
+  it("returns per-segment premium status for the current audio and ignores stale clips", async () => {
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService(baseRoutes({
+        "podcast_segments:select": () => ({
+          data: [
+            { id: "segment-ready", order_index: 0, audio_url: "fresh-audio.mp3", status: "ready" },
+            { id: "segment-stale", order_index: 1, audio_url: "fresh-b.mp3", status: "ready" },
+            { id: "segment-pending", order_index: 2, audio_url: null, status: "pending" },
+          ],
+          error: null,
+        }),
+        "podcast_segment_lipsync_clips:select": () => ({
+          data: [
+            { segment_id: "segment-ready", audio_url: "old-audio.mp3", status: "ready", video_url: "old.mp4", updated_at: "2026-01-01", error_message: null },
+            { segment_id: "segment-ready", audio_url: "fresh-audio.mp3", status: "ready", video_url: "fresh.mp4", updated_at: "2026-01-02", error_message: null },
+            { segment_id: "segment-stale", audio_url: "old-b.mp3", status: "ready", video_url: "old-b.mp4", updated_at: "2026-01-02", error_message: null },
+          ],
+          error: null,
+        }),
+      })) as never,
+    );
+
+    const res = await GET(req(), ctx("p1"));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.segments).toEqual([
+      { segment_id: "segment-ready", status: "ready" },
+      { segment_id: "segment-stale", status: "missing" },
+      { segment_id: "segment-pending", status: "needs_voice" },
+    ]);
   });
 });

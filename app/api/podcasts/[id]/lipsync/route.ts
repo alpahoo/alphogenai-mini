@@ -76,6 +76,14 @@ function segmentSeconds(seg: { start_ms: number | null; end_ms: number | null; t
   return secondsFromText(seg.text);
 }
 
+type SegmentLipsyncStatus = "needs_voice" | "missing" | "processing" | "ready" | "failed";
+
+interface SegmentSnapshot {
+  segment_id: string;
+  status: SegmentLipsyncStatus;
+  error_message?: string | null;
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -164,6 +172,7 @@ export async function POST(
     }
 
     let newSpend = 0;
+    let renderCleared = false;
     const result = {
       selected: 0,
       cached: 0,
@@ -228,6 +237,18 @@ export async function POST(
 
       if (newSpend + cost > LIPSYNC_MAX_USD_PER_RENDER) {
         result.skipped++; result.skippedReasons.push(`${seg.order_index}:over_cap`); continue;
+      }
+
+      if (!renderCleared) {
+        const { error: resetErr } = await service
+          .from("podcasts")
+          .update({ video_url: null, render_status: "idle", render_error: null })
+          .eq("id", id);
+        if (resetErr) {
+          console.error("lipsync render reset failed before premium spend:", resetErr);
+          return NextResponse.json({ error: "Could not clear the stale video before premium sync." }, { status: 500 });
+        }
+        renderCleared = true;
       }
 
       // Create/refresh the cache row BEFORE HeyGen. If this write fails, do not
@@ -331,11 +352,30 @@ export async function GET(
 
     const { data: rows } = await service
       .from("podcast_segment_lipsync_clips")
-      .select("status")
+      .select("segment_id,audio_url,status,video_url,error_message,updated_at")
       .eq("podcast_id", id);
     const counts = { pending: 0, processing: 0, ready: 0, failed: 0 };
     for (const r of rows || []) counts[(r.status as keyof typeof counts)] = (counts[(r.status as keyof typeof counts)] || 0) + 1;
-    return NextResponse.json({ counts });
+
+    const { data: segments } = await service
+      .from("podcast_segments")
+      .select("id,order_index,audio_url,status")
+      .eq("podcast_id", id)
+      .order("order_index", { ascending: true });
+    const segmentSnapshots: SegmentSnapshot[] = (segments || []).map((seg) => {
+      if (seg.status !== "ready" || !seg.audio_url) return { segment_id: seg.id, status: "needs_voice" };
+      const currentRows = (rows || [])
+        .filter((row) => row.segment_id === seg.id && row.audio_url === seg.audio_url)
+        .sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+      const ready = currentRows.find((row) => row.status === "ready" && row.video_url);
+      if (ready) return { segment_id: seg.id, status: "ready" };
+      const processing = currentRows.find((row) => row.status === "processing");
+      if (processing) return { segment_id: seg.id, status: "processing" };
+      const failed = currentRows.find((row) => row.status === "failed");
+      if (failed) return { segment_id: seg.id, status: "failed", error_message: failed.error_message || null };
+      return { segment_id: seg.id, status: "missing" };
+    });
+    return NextResponse.json({ counts, segments: segmentSnapshots });
   } catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
