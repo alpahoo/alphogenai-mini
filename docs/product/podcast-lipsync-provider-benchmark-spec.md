@@ -95,6 +95,7 @@ A provider cannot be selected for production until it passes these gates:
 - Define `PodcastLipsyncProvider` TypeScript interface.
 - Wrap current HeyGen calls behind `heygenProvider` while preserving existing route behavior.
 - No new provider, no UI change, no spend beyond existing behavior.
+- Status 2026-07-08: implemented in `lib/podcast/lipsync-provider.ts`; `/api/podcasts/[id]/lipsync` now calls the provider adapter instead of importing HeyGen directly.
 
 ### T-1147c - Benchmark harness
 - Admin-only, one-segment benchmark route that runs a candidate provider against the same base clip and audio.

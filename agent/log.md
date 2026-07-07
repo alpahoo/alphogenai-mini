@@ -1,3 +1,8 @@
+## 2026-07-08 - Codex - T-1147b provider adapter around HeyGen
+- Added lib/podcast/lipsync-provider.ts with the provider-neutral `PodcastLipsyncProvider` interface and a HeyGen adapter wrapping the existing `createLipsync` / `getLipsyncTask` calls.
+- Refactored `/api/podcasts/[id]/lipsync` to use `getPodcastLipsyncProvider("heygen")` for create/poll while preserving existing cache rows, caps, cleanup, fallback, and provider id.
+- Added adapter unit tests and kept the existing lipsync route tests green. Scope: no UI, no Modal, no provider switch, no paid provider calls.
+
 ## 2026-07-07 - Codex - T-1147a provider benchmark framework
 - Added docs/product/podcast-lipsync-provider-benchmark-spec.md to define provider-neutral benchmark gates, candidate notes, sequence T-1147a-e, and the rules for replacing HeyGen only after measured quality/cost/latency evidence.
 - Added lib/podcast/lipsync-provider-benchmark.ts with a pure scoring helper and HeyGen baseline data. The score weighs quality, cost, latency, API/cache/consent fit, and integration effort.

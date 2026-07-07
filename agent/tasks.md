@@ -1415,3 +1415,10 @@ Contraintes :
 - Added lib/podcast/lipsync-provider-benchmark.ts: pure scoring helper for quality, cost, latency, API/cache/consent fit, and integration effort. Includes HeyGen baseline benchmark data.
 - Added lib/podcast/__tests__/lipsync-provider-benchmark.test.ts: baseline, cheaper candidate, reject gates, integration penalty, sort order.
 - Scope: no UI, no route, no Modal, no provider call, no spend. Next: T-1147b adapter interface wrapping current HeyGen calls without changing behavior.
+
+
+## T-1147b - Podcast lip-sync provider adapter (2026-07-08, Codex) - DONE
+- Added lib/podcast/lipsync-provider.ts with `PodcastLipsyncProvider`, `heygenPodcastLipsyncProvider`, and `getPodcastLipsyncProvider()`.
+- Refactored `/api/podcasts/[id]/lipsync` to call the provider adapter for create/poll while preserving the current HeyGen behavior, cache rows, caps, cleanup, and fallback semantics.
+- Added lib/podcast/__tests__/lipsync-provider.test.ts. No UI, no provider switch, no Modal, no provider calls, no spend.
+- Next: T-1147c admin benchmark harness for real candidate comparisons under a hard spend cap.

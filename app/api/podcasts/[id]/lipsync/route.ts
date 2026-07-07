@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
-import { createLipsync, getLipsyncTask } from "@/lib/heygen-client";
+import { getPodcastLipsyncProvider } from "@/lib/podcast/lipsync-provider";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { trimLipsyncBaseClip } from "@/lib/modal-client";
 import {
@@ -28,6 +28,7 @@ import {
 export const maxDuration = 60;
 
 const MODE = "precision" as const;
+const provider = getPodcastLipsyncProvider("heygen");
 
 interface BaseClip {
   id: string;
@@ -178,7 +179,7 @@ export async function POST(
       for (const row of rows || []) {
         if (!row.provider_task_id) { processing++; continue; }
         try {
-          const r = await getLipsyncTask(row.provider_task_id);
+          const r = await provider.pollClip(row.provider_task_id);
           if (r.status === "completed" && r.videoUrl) {
             // Persist the HeyGen output to our own R2 so the cache is durable.
             const dl = await fetch(r.videoUrl, { signal: AbortSignal.timeout(45_000) });
@@ -340,7 +341,7 @@ export async function POST(
         audio_url: seg.audio_url,
         cache_key: cacheKey,
         mode: MODE,
-        provider: "heygen",
+        provider: provider.id,
         provider_task_id: null,
         duration_seconds: Math.round(dur * 100) / 100,
         credits_usd: Math.round(cost * 100) / 100,
@@ -376,14 +377,14 @@ export async function POST(
               cacheKey,
             })
           : base.url;
-        const taskId = await createLipsync(lipsyncVideoUrl, seg.audio_url as string, MODE);
+        const task = await provider.createClip({ videoUrl: lipsyncVideoUrl, audioUrl: seg.audio_url as string, mode: MODE });
         const { error: taskErr } = await service
           .from("podcast_segment_lipsync_clips")
-          .update({ provider_task_id: taskId, status: "processing", error_message: null, updated_at: new Date().toISOString() })
+          .update({ provider_task_id: task.providerTaskId, status: "processing", error_message: null, updated_at: new Date().toISOString() })
           .eq("segment_id", seg.id)
           .eq("cache_key", cacheKey);
         if (taskErr) {
-          console.error("lipsync task id update failed after HeyGen accepted task:", { taskId, taskErr });
+          console.error("lipsync task id update failed after HeyGen accepted task:", { providerTaskId: task.providerTaskId, taskErr });
           return NextResponse.json({ error: "Lip-sync task started but could not be saved. Contact support before retrying." }, { status: 502 });
         }
         result.selected++;
