@@ -2817,3 +2817,20 @@ fallback-safe, no double-spend). Re-render = $0 (cache). 1er render 8 seg ≈ $1
 Spend session (max) ~$1.13 ; réel probable ~$0.87 (jobs échoués non facturés) — à
 confirmer dashboard. Aucune migration. Story/Product/Research non touchés.
 Bugs restants : aucun bloquant. Suite proposée : T-1146 regenerate segment-level.
+
+
+## T-1146 QA PASS (2026-07-07, Claude) — segment-level premium regenerate, 1 segment
+Pre-QA fix (140b79e) : Modal _resolve_segment_lipsync_clips ne prenait pas en compte
+l'audio_url courant → risque de clip STALE après revoicing (surtout avec un ancien ET
+un nouveau row ready). Corrigé : ne réutilise qu'un clip dont audio_url == audio courant
+du segment, newest wins ; sinon fallback. Deploy Modal OK. Aucune migration.
+QA prod e531f932 (premium complet 8/8) — édition d'1 ligne courte (order 5, guest) :
+- PATCH texte → audio null, status pending, render invalidé (video_url null, idle). GET: seg5 needs_voice, 7 autres ready.
+- /tts preview seg5 → nouvel audio_url, ready. GET: seg5 missing (nouvel audio ≠ ancien clip), 7 autres ready.
+- start segmentIds=[seg5] → selected 1, cached 0, started 1, actualNewSpendUsd $0.09 (< cap QA $0.25). 0 autre segment touché (vérifié: 0 rows récents ailleurs → pas de double-spend).
+- poll → ready ~102s. DB seg5 : 2 rows ready (nouvel audio=match TRUE le plus récent + ancien audio=match FALSE stale) + 2 failed anciens.
+- render premium gratuit → seg5 : caption = nouveau texte, guest actif (lip-sync nouveau clip), host gelé, tailles cohérentes ; host/guest motion 0.0/0.5. Durée 30.5s (ligne plus courte).
+Verdict : workflow Descript-like OK — édition ciblée régénère uniquement voix+lip-sync du segment, autres en cache, pas de double-spend, pas de stale MP4. Coût QA lip-sync $0.09.
+Note : les 2 clips Leo (ancien/nouveau) sont visuellement indiscernables ; la non-staleness
+est garantie par le resolver (match audio_url + newest), déployé avant la QA.
+Bugs restants : aucun bloquant. Anciennes rows stale/failed s'accumulent (nettoyage = amélioration future, non bloquant).
