@@ -206,9 +206,10 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
         "podcast_segments:select": () => ({ data: [{ id: "segment-1", audio_url: "AUDIO_A" }], error: null }),
         "podcast_segment_lipsync_clips:select": () => ({
           data: [
-            { id: "r1", segment_id: "segment-1", audio_url: "AUDIO_A", status: "ready" },   // current → keep
-            { id: "r2", segment_id: "segment-1", audio_url: "AUDIO_OLD", status: "ready" },  // stale → remove
-            { id: "r3", segment_id: "segment-1", audio_url: "AUDIO_OLD", status: "failed" }, // stale → remove
+            { id: "r1", segment_id: "segment-1", audio_url: "AUDIO_A", status: "ready", video_url: "https://cdn/r1.mp4", updated_at: "2026-01-02" }, // current newest → keep
+            { id: "r0", segment_id: "segment-1", audio_url: "AUDIO_A", status: "ready", video_url: "https://cdn/r0.mp4", updated_at: "2026-01-01" }, // current older dup → remove
+            { id: "r2", segment_id: "segment-1", audio_url: "AUDIO_OLD", status: "ready", video_url: "https://cdn/r2.mp4", updated_at: "2025-12-31" }, // stale audio → remove
+            { id: "r3", segment_id: "segment-1", audio_url: "AUDIO_OLD", status: "failed", video_url: null, updated_at: "2025-12-30" }, // stale failed → remove
           ],
           error: null,
         }),
@@ -218,8 +219,8 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
     const res = await POST(req({ action: "cleanup" }), ctx("p1"));
     expect(res.status).toBe(200);
     const json = await res.json();
-    expect(json.removed).toBe(2);
-    expect(json.scanned).toBe(3);
+    expect(json.removed).toBe(3); // r0 (dup), r2 (stale), r3 (stale failed); r1 kept
+    expect(json.scanned).toBe(4);
     const upd = writes.find((w) => w.op === "update" && w.table === "podcast_segment_lipsync_clips");
     expect(upd?.payload).toMatchObject({ status: "removed" });
     expect(createLipsync).not.toHaveBeenCalled();
