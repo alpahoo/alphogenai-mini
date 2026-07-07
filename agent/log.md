@@ -1,3 +1,8 @@
+## 2026-07-08 - Codex - T-1147c admin lip-sync benchmark harness
+- Added admin-gated `POST /api/admin/experiments/podcast-lipsync-benchmark` with `start`, `poll`, and `score` actions. `start` runs exactly one provider clip under a hard spend cap; `poll` copies completed provider output to R2; `score` uses the pure T-1147a scoring helper.
+- The harness is experimental/admin-only, stores no product DB rows, has no UI, and does not spend unless an admin explicitly calls `action:"start"` with valid URLs and cap.
+- Validation: targeted tests, full suite, build, and tsc green.
+
 ## 2026-07-08 - Codex - T-1147b provider adapter around HeyGen
 - Added lib/podcast/lipsync-provider.ts with the provider-neutral `PodcastLipsyncProvider` interface and a HeyGen adapter wrapping the existing `createLipsync` / `getLipsyncTask` calls.
 - Refactored `/api/podcasts/[id]/lipsync` to use `getPodcastLipsyncProvider("heygen")` for create/poll while preserving existing cache rows, caps, cleanup, fallback, and provider id.

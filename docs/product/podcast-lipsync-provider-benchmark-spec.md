@@ -136,3 +136,7 @@ Small price differences are not enough to justify a rewrite.
 ## 8. Immediate recommendation
 
 Keep HeyGen as the working baseline for now. Build the abstraction and benchmark process next, then test alternatives deliberately. Descript remains a workflow/product reference until API fit is verified.
+
+## 9. Implementation Notes
+
+- 2026-07-08: T-1147c implemented `POST /api/admin/experiments/podcast-lipsync-benchmark` with `start`, `poll`, and `score`. It is admin-only, one-clip, cap-guarded, copies completed outputs to R2, and does not write product DB rows.

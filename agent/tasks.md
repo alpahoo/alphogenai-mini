@@ -1422,3 +1422,7 @@ Contraintes :
 - Refactored `/api/podcasts/[id]/lipsync` to call the provider adapter for create/poll while preserving the current HeyGen behavior, cache rows, caps, cleanup, and fallback semantics.
 - Added lib/podcast/__tests__/lipsync-provider.test.ts. No UI, no provider switch, no Modal, no provider calls, no spend.
 - Next: T-1147c admin benchmark harness for real candidate comparisons under a hard spend cap.
+
+
+### [T-1147c] Admin lip-sync benchmark harness - `status: done` ? `owner: codex`
+- Added admin-only experimental route `POST /api/admin/experiments/podcast-lipsync-benchmark` with `start`/`poll`/`score`. One clip per run, hard spend cap, completed outputs copied to R2, no product DB rows, no UI.
