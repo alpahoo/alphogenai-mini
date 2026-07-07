@@ -2739,3 +2739,38 @@ findings level block/warn + message), `byteplus-cost.ts`
 - Validé : tsc OK, `npm run build` OK, vitest 172/172 (podcast + routes).
 - NON fait : rendu lip-sync réel (T-1144b), cache par segment, activation du
   spend premium. Coût réel HeyGen confirmé : $0.04/s (Video Translation).
+
+
+## T-1144b QA (2026-07-07, Claude) — commit 3b8d5d3 (main, deployed)
+QA prod du fix "trim + freeze inactive". Podcast e531f932 (8 segments, base clip 4.26s).
+Résultat : compositing Modal CORRECT, mais 2 bugs bloquants côté génération.
+
+VALIDÉ (Modal compositing, render gratuit) — mesuré par diff pixel inter-frames /panneau :
+- seg0 (host actif, vrai clip) : diff host=0.39 / guest=0.00 → seul l'actif bouge, inactif GELÉ.
+- seg1 (guest actif, SANS clip → fallback) : host=0.07 / guest=0.51 → fallback talking_visual OK.
+- seg3 (guest actif, vrai clip) : host=0.07 / guest=0.49 → OK.
+- Captions OK. Plus de "both lips moving". Speaker inactif = portrait statique dimmed.
+
+BUG 1 (BLOQUANT) — ffmpeg-static ne s'exécute pas sur Vercel :
+  error "spawn /var/task/.next/server/app/api/podcasts/[id]/lipsync/ffmpeg ENOENT".
+  → 7/8 segments (ceux nécessitant un trim physique, audio < base clip) échouent en
+  create_failed. Seul l'order 0 (audio 4.49 > base 4.26, pas de trim) est passé.
+  Binaire non tracé dans le bundle lambda. Fix = décision produit (bundling vs Modal-trim
+  vs HeyGen native trim).
+
+BUG 2 (DOUBLE-SPEND) — cache non déduplicant :
+  cache_key = hash(version|mode|base_clip_id|audio_url). Instable car (a) base_clip_id
+  "newest wins" alors qu'il existe plusieurs base clips ready/persona (ancien row=c6688552,
+  nouveau=1adb70f4), (b) format de hash changé (ancien ls-v1_dd16fbb8ea… hex vs nouveau
+  ls-v1_12vx6ta djb2). → l'order 0 déjà READY a été re-billé ($0.18). Fix = route cache :
+  dédupliquer sur (segment_id + audio_url courant) et réutiliser tout clip ready même audio,
+  indépendamment de base_clip_id/format de clé.
+
+COSMÉTIQUE (non bloquant) — dans la branche premium, le speaker inactif est collé via
+  host_dim/guest_dim (220px, rond) sans resize à avatar_size → l'actif (clip lip-sync, carré
+  ~180px) et l'inactif (portrait rond plus grand) ont des tailles/formes incohérentes.
+
+Spend réel session : $0.18 (1 seul appel HeyGen ; 7 échecs = 0 crédit ; cap $1.50 respecté).
+État cache final : 3 segments ready (4 rows, dont 1 doublon order0), 12 failed, 0 processing.
+Verdict : compositing prêt ; débloquer la génération (BUG 1) + stopper le double-spend (BUG 2)
+avant d'ouvrir plus large. Aucune migration. Story/Product/Research non touchés.
