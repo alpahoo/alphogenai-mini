@@ -374,8 +374,15 @@ export default function CreatePodcastPage() {
         const meta = p.metadata || {};
         if (meta.podcast_style) setPodcastStyle(meta.podcast_style);
         if (meta.target_duration_seconds) setTargetDuration(meta.target_duration_seconds);
-        // Only restore a real render mode; premium is not selectable yet.
-        if (meta.render_mode === "static" || meta.render_mode === "talking_visual") setRenderMode(meta.render_mode);
+        // Restore the saved render mode. Premium is live (T-1146): restore it and
+        // treat its cost as already acknowledged (the podcast was saved in premium),
+        // so the per-line premium badges/controls show immediately on reopen.
+        if (meta.render_mode === "static" || meta.render_mode === "talking_visual") {
+          setRenderMode(meta.render_mode);
+        } else if (meta.render_mode === "lipsync_premium") {
+          setRenderMode("lipsync_premium");
+          setLipsyncConfirmed(true);
+        }
       } catch {
         if (!cancelled) setError("Could not open that podcast.");
       }
