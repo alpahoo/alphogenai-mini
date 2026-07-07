@@ -2338,17 +2338,30 @@ def _resolve_segment_lipsync_clips(sb, podcast_id: str):
     """
     out = {}
     try:
+        # T-1146: only use a clip whose audio_url matches the segment's CURRENT
+        # audio. After a line is edited + revoiced, the old clip (old audio) must
+        # NOT be reused. Newest ready row per segment wins; stale/mismatched skip.
+        segs = (
+            sb.table("podcast_segments")
+            .select("id,audio_url").eq("podcast_id", podcast_id)
+            .execute().data
+        ) or []
+        cur_audio = {s.get("id"): (s.get("audio_url") or "") for s in segs}
         rows = (
             sb.table("podcast_segment_lipsync_clips")
-            .select("segment_id,video_url,status")
+            .select("segment_id,video_url,status,audio_url,updated_at")
             .eq("podcast_id", podcast_id).eq("status", "ready")
+            .order("updated_at", desc=True)
             .execute().data
         ) or []
         for r in rows:
             sid = r.get("segment_id")
             url = (r.get("video_url") or "").strip()
-            if sid and url:
-                out[sid] = url
+            if not sid or not url or sid in out:
+                continue
+            if (r.get("audio_url") or "") != cur_audio.get(sid, "__none__"):
+                continue  # stale clip (segment audio changed) -> fallback
+            out[sid] = url
     except Exception as e:
         log(podcast_id, f"lipsync clips resolve fallback: {e}")
     return out
