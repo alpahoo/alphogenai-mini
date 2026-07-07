@@ -2851,3 +2851,18 @@ Verdict UI : badges + bouton + progress par ligne OK et clairs. Workflow Descrip
 utilisable end-to-end depuis l'interface. Coût QA UI : $0.07.
 Suite convenue : cleanup des rows stale/failed (keep-latest ou purge), puis T-1147
 provider abstraction/benchmark.
+
+
+## T-1146 stale-row cleanup (2026-07-07, Claude) — commit 16addb5
+Ajout POST {action:"cleanup"} sur /api/podcasts/[id]/lipsync : règle "keep latest per
+segment" — garde uniquement le clip ready le plus récent qui matche l'audio courant du
+segment (exactement ce que le render utilise) ; soft-delete (status='removed') toutes les
+autres rows ready/failed (audio périmé, doublons même-audio, échecs supersédés). Ne touche
+jamais la row gardée ni 'processing', ne supprime aucun asset R2. Pas de spend, pas de migration.
+Test : keep newest current-audio, remove dup/stale/failed.
+QA prod e531f932 : avant 23 rows (11 ready dont doublons, 12 failed). cleanup → removed 15,
+scanned 23. Après : 8 ready (1/segment, audio courant) + 15 removed, 0 stale/failed. GET:
+8/8 segments ready, aucune régression. render inchangé (resolver prend toujours le ready courant).
+Verdict : table lean, correctness intacte. Coût cleanup $0.
+Suite convenue : T-1147 provider abstraction/benchmark (HeyGen interchangeable) — Descript
+reste inspiration workflow, pas dépendance. À démarrer sur GO.
