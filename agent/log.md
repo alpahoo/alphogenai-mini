@@ -2834,3 +2834,20 @@ Verdict : workflow Descript-like OK — édition ciblée régénère uniquement 
 Note : les 2 clips Leo (ancien/nouveau) sont visuellement indiscernables ; la non-staleness
 est garantie par le resolver (match audio_url + newest), déployé avant la QA.
 Bugs restants : aucun bloquant. Anciennes rows stale/failed s'accumulent (nettoyage = amélioration future, non bloquant).
+
+
+## T-1146 UI-click QA PASS (2026-07-07, Claude) — commit 4c15514
+Fix reopen (4c15514) : render_mode=lipsync_premium restauré à la réouverture (+ coût
+considéré acquitté) → badges premium par ligne visibles immédiatement. Deploy Vercel OK.
+QA UI prod (/create/podcast?podcast_id=e531f932) :
+- Réouverture : mode "Lip-sync premium" présélectionné (Est. $1.47 · ~3 min).
+- Chaque ligne affiche un badge : vert "PREMIUM SYNC READY".
+- Edité 1 ligne (order5) + revoicé via API → à la réouverture la ligne montre
+  badge ambre "NEEDS PREMIUM SYNC" + bouton "⚡ Sync this line".
+- Clic réel "Sync this line" dans l'UI → badge passe bleu "⟳ GENERATING SYNC"
+  (spinner) → puis vert "PREMIUM SYNC READY". Compréhensible.
+- DB : 1 seule row touchée, 1 seul segment, coût $0.07. Autres = cache. Pas de double-spend.
+Verdict UI : badges + bouton + progress par ligne OK et clairs. Workflow Descript-like
+utilisable end-to-end depuis l'interface. Coût QA UI : $0.07.
+Suite convenue : cleanup des rows stale/failed (keep-latest ou purge), puis T-1147
+provider abstraction/benchmark.
