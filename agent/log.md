@@ -2774,3 +2774,21 @@ Spend réel session : $0.18 (1 seul appel HeyGen ; 7 échecs = 0 crédit ; cap $
 État cache final : 3 segments ready (4 rows, dont 1 doublon order0), 12 failed, 0 processing.
 Verdict : compositing prêt ; débloquer la génération (BUG 1) + stopper le double-spend (BUG 2)
 avant d'ouvrir plus large. Aucune migration. Story/Product/Research non touchés.
+
+
+## T-1144b QA re-test PASS (2026-07-07, Claude) — 1 segment, capped
+Fixes déployés : trim sur Modal (bd399c9 chain), audio conservé (-c:a aac), clé R2 unique.
+Re-QA segment e6c2b9d4 (order 6, audio 3.26s, base 4.26s → trim requis) :
+- start segmentIds=[e6c2b9d4] → started:1, skipped:0, actualNewSpendUsd $0.13 (cap $1.50).
+- HeyGen a reçu l'URL R2 trimée (durée vue 3.28s ≈ audio 3.26s), pas l'original.
+- Job → ready en ~119s. Sortie finale valide : 720x720 h264 + AAC, 3.28s.
+Bugs résolus le long du chemin :
+  1. ffmpeg-static ENOENT Vercel → trim déplacé sur Modal (endpoint /trim-base-clip).
+  2. cache double-spend → dédup sur (segment_id + audio_url), clé sans base_clip_id.
+  3. "audio missing" (HeyGen) → le trim strippait l'audio (-an) → gardé en AAC.
+  4. "audio missing" persistant → CDN R2 servait la copie stale (même clé) → clé unique/uuid.
+Spend QA total session ~ $0.57 max (0.18 double-spend initial + 3×0.13 essais e6c2b9d4 ;
+les jobs échoués HeyGen ne sont en principe pas facturés → réel probablement ~$0.31 ;
+à confirmer dashboard). Aucune migration. Podcast complet NON relancé (attente GO).
+Reste validé antérieurement : compositing (actif bouge / inactif gelé / fallback), captions.
+Cosmétique connu non corrigé : taille actif (clip carré) vs inactif (portrait rond) incohérente.
