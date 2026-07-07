@@ -2884,9 +2884,14 @@ def trim_base_clip_for_lipsync(
             with open(in_path, "wb") as f:
                 for chunk in r.iter_bytes():
                     f.write(chunk)
+        # Keep the base clip's audio track (trimmed to the same length): HeyGen
+        # lip-sync REQUIRES the source video to have audio, even though it replaces
+        # it with our TTS. Stripping it (-an) → "audio is missing or corrupted"
+        # (T-1144b QA, 2026-07-07).
         subprocess.run(
-            ["ffmpeg", "-y", "-i", in_path, "-t", str(dur), "-an",
+            ["ffmpeg", "-y", "-i", in_path, "-t", str(dur),
              "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast",
+             "-c:a", "aac",
              "-movflags", "+faststart", out_path],
             check=True, capture_output=True,
         )
