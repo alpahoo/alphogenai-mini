@@ -95,13 +95,44 @@ export async function POST(
     const { id } = await params;
     const service = createServiceClient();
     const body = await request.json().catch(() => ({}));
-    const action = body.action === "poll" ? "poll" : "start";
+    const action = body.action === "poll" ? "poll" : body.action === "cleanup" ? "cleanup" : "start";
 
     const { data: podcast } = await service.from("podcasts").select("id,user_id").eq("id", id).single();
     if (!podcast || podcast.user_id !== user.id) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     const ownerId = podcast.user_id as string;
+
+    if (action === "cleanup") {
+      // T-1146 stale purge: mark ready/failed rows whose audio_url no longer
+      // matches their segment's CURRENT audio as 'removed' (soft-delete). These
+      // are already ignored by the render/GET; this just keeps the table lean.
+      // NEVER touches a row matching the current audio, and never deletes assets.
+      const { data: segs } = await service
+        .from("podcast_segments").select("id,audio_url").eq("podcast_id", id);
+      const curAudio = new Map<string, string | null>((segs || []).map((s) => [s.id, s.audio_url]));
+      const { data: rows } = await service
+        .from("podcast_segment_lipsync_clips")
+        .select("id,segment_id,audio_url,status")
+        .eq("podcast_id", id)
+        .in("status", ["ready", "failed"]);
+      const staleIds = (rows || [])
+        .filter((r) => r.audio_url !== (curAudio.get(r.segment_id) ?? "__none__"))
+        .map((r) => r.id);
+      let removed = 0;
+      if (staleIds.length > 0) {
+        const { error } = await service
+          .from("podcast_segment_lipsync_clips")
+          .update({ status: "removed", updated_at: new Date().toISOString() })
+          .in("id", staleIds);
+        if (error) {
+          console.error("lipsync cleanup failed:", error);
+          return NextResponse.json({ error: "Cleanup failed" }, { status: 500 });
+        }
+        removed = staleIds.length;
+      }
+      return NextResponse.json({ action, removed, scanned: (rows || []).length });
+    }
 
     if (action === "poll") {
       const { data: rows } = await service

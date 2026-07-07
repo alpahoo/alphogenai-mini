@@ -28,6 +28,7 @@ function makeService(routes: Record<string, (s: State) => Result>, writes: State
       update: (obj: unknown) => { st.op = "update"; st.payload = obj; return b; },
       eq: (k: string, v: unknown) => { st.filters[k] = v; return b; },
       not: () => b,
+      in: () => b,
       order: () => b,
       limit: () => b,
       single: () => run(),
@@ -195,6 +196,32 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
     // segment-1 is the only ready segment; selecting a different id → nothing to do.
     const res = await POST(req({ action: "start", segmentIds: ["nope"] }), ctx("p1"));
     expect(res.status).toBe(400);
+    expect(createLipsync).not.toHaveBeenCalled();
+  });
+
+  it("cleanup soft-deletes only rows whose audio no longer matches the segment", async () => {
+    const writes: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService(baseRoutes({
+        "podcast_segments:select": () => ({ data: [{ id: "segment-1", audio_url: "AUDIO_A" }], error: null }),
+        "podcast_segment_lipsync_clips:select": () => ({
+          data: [
+            { id: "r1", segment_id: "segment-1", audio_url: "AUDIO_A", status: "ready" },   // current → keep
+            { id: "r2", segment_id: "segment-1", audio_url: "AUDIO_OLD", status: "ready" },  // stale → remove
+            { id: "r3", segment_id: "segment-1", audio_url: "AUDIO_OLD", status: "failed" }, // stale → remove
+          ],
+          error: null,
+        }),
+      }), writes) as never,
+    );
+
+    const res = await POST(req({ action: "cleanup" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.removed).toBe(2);
+    expect(json.scanned).toBe(3);
+    const upd = writes.find((w) => w.op === "update" && w.table === "podcast_segment_lipsync_clips");
+    expect(upd?.payload).toMatchObject({ status: "removed" });
     expect(createLipsync).not.toHaveBeenCalled();
   });
 
