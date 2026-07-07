@@ -84,6 +84,60 @@ interface SegmentSnapshot {
   error_message?: string | null;
 }
 
+interface CleanupResult {
+  removed: number;
+  scanned: number;
+}
+
+/**
+ * Keep only the newest ready clip matching each segment's current audio.
+ * Everything else (older duplicates, stale-audio ready rows, failed rows) is
+ * soft-deleted so premium status/render keep using the current cache only.
+ */
+async function cleanupStaleLipsyncRows(
+  service: ReturnType<typeof createServiceClient>,
+  podcastId: string,
+): Promise<CleanupResult> {
+  const { data: segs } = await service
+    .from("podcast_segments")
+    .select("id,audio_url")
+    .eq("podcast_id", podcastId);
+  const curAudio = new Map<string, string | null>((segs || []).map((s) => [s.id, s.audio_url]));
+  const { data: rows } = await service
+    .from("podcast_segment_lipsync_clips")
+    .select("id,segment_id,audio_url,status,video_url,updated_at")
+    .eq("podcast_id", podcastId)
+    .in("status", ["ready", "failed"]);
+
+  const bySeg = new Map<string, NonNullable<typeof rows>>();
+  for (const r of rows || []) {
+    const arr = bySeg.get(r.segment_id) || [];
+    arr.push(r);
+    bySeg.set(r.segment_id, arr);
+  }
+
+  const removeIds: string[] = [];
+  for (const [segId, segRows] of bySeg) {
+    const cur = curAudio.get(segId) ?? "__none__";
+    const keep = (segRows || [])
+      .filter((r) => r.status === "ready" && r.video_url && r.audio_url === cur)
+      .sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))[0];
+    for (const r of segRows || []) {
+      if (!keep || r.id !== keep.id) removeIds.push(r.id);
+    }
+  }
+
+  if (removeIds.length > 0) {
+    const { error } = await service
+      .from("podcast_segment_lipsync_clips")
+      .update({ status: "removed", updated_at: new Date().toISOString() })
+      .in("id", removeIds);
+    if (error) throw error;
+  }
+
+  return { removed: removeIds.length, scanned: (rows || []).length };
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -104,51 +158,14 @@ export async function POST(
     const ownerId = podcast.user_id as string;
 
     if (action === "cleanup") {
-      // T-1146 stale purge — "keep latest per segment": for each segment keep only
-      // the NEWEST ready clip matching its current audio (exactly what the render
-      // uses); soft-delete every other ready/failed row (stale audio, duplicate
-      // same-audio, superseded failures) by setting status='removed'. These are
-      // already ignored by render/GET; this just keeps the table lean. Never touches
-      // the kept row, never deletes R2 assets, never touches 'processing' rows.
-      const { data: segs } = await service
-        .from("podcast_segments").select("id,audio_url").eq("podcast_id", id);
-      const curAudio = new Map<string, string | null>((segs || []).map((s) => [s.id, s.audio_url]));
-      const { data: rows } = await service
-        .from("podcast_segment_lipsync_clips")
-        .select("id,segment_id,audio_url,status,video_url,updated_at")
-        .eq("podcast_id", id)
-        .in("status", ["ready", "failed"]);
-
-      const bySeg = new Map<string, typeof rows>();
-      for (const r of rows || []) {
-        const arr = bySeg.get(r.segment_id) || [];
-        arr.push(r);
-        bySeg.set(r.segment_id, arr);
+      // T-1146 stale purge: keep latest per segment, soft-delete stale rows.
+      try {
+        const cleanup = await cleanupStaleLipsyncRows(service, id);
+        return NextResponse.json({ action, ...cleanup });
+      } catch (error) {
+        console.error("lipsync cleanup failed:", error);
+        return NextResponse.json({ error: "Cleanup failed" }, { status: 500 });
       }
-      const removeIds: string[] = [];
-      for (const [segId, segRows] of bySeg) {
-        const cur = curAudio.get(segId) ?? "__none__";
-        const keep = (segRows || [])
-          .filter((r) => r.status === "ready" && r.video_url && r.audio_url === cur)
-          .sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))[0];
-        for (const r of segRows || []) {
-          if (!keep || r.id !== keep.id) removeIds.push(r.id);
-        }
-      }
-
-      let removed = 0;
-      if (removeIds.length > 0) {
-        const { error } = await service
-          .from("podcast_segment_lipsync_clips")
-          .update({ status: "removed", updated_at: new Date().toISOString() })
-          .in("id", removeIds);
-        if (error) {
-          console.error("lipsync cleanup failed:", error);
-          return NextResponse.json({ error: "Cleanup failed" }, { status: 500 });
-        }
-        removed = removeIds.length;
-      }
-      return NextResponse.json({ action, removed, scanned: (rows || []).length });
     }
 
     if (action === "poll") {
@@ -188,7 +205,17 @@ export async function POST(
           failed++;
         }
       }
-      return NextResponse.json({ action, ready, failed, processing });
+      let cleanup: CleanupResult | null = null;
+      if (processing === 0) {
+        try {
+          cleanup = await cleanupStaleLipsyncRows(service, id);
+        } catch (error) {
+          // Automatic cleanup is table-hygiene only. Do not fail a completed
+          // lip-sync poll just because stale-row pruning had a transient DB issue.
+          console.warn("automatic lipsync cleanup failed:", error);
+        }
+      }
+      return NextResponse.json({ action, ready, failed, processing, cleanup });
     }
 
     // ---- action === "start" ----

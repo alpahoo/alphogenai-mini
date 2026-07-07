@@ -28,7 +28,7 @@ function makeService(routes: Record<string, (s: State) => Result>, writes: State
       update: (obj: unknown) => { st.op = "update"; st.payload = obj; return b; },
       eq: (k: string, v: unknown) => { st.filters[k] = v; return b; },
       not: () => b,
-      in: () => b,
+      in: (k: string, v: unknown) => { st.filters[k] = v; return b; },
       order: () => b,
       limit: () => b,
       single: () => run(),
@@ -197,6 +197,34 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
     const res = await POST(req({ action: "start", segmentIds: ["nope"] }), ctx("p1"));
     expect(res.status).toBe(400);
     expect(createLipsync).not.toHaveBeenCalled();
+  });
+
+  it("automatically cleans stale rows when polling finishes", async () => {
+    const writes: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService(baseRoutes({
+        "podcast_segments:select": () => ({ data: [{ id: "segment-1", audio_url: "AUDIO_A" }], error: null }),
+        "podcast_segment_lipsync_clips:select": (s) => {
+          if (s.filters.status === "processing") return { data: [], error: null };
+          return {
+            data: [
+              { id: "keep", segment_id: "segment-1", audio_url: "AUDIO_A", status: "ready", video_url: "https://cdn/keep.mp4", updated_at: "2026-01-02" },
+              { id: "stale", segment_id: "segment-1", audio_url: "AUDIO_OLD", status: "ready", video_url: "https://cdn/stale.mp4", updated_at: "2026-01-01" },
+            ],
+            error: null,
+          };
+        },
+      }), writes) as never,
+    );
+
+    const res = await POST(req({ action: "poll" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.processing).toBe(0);
+    expect(json.cleanup).toMatchObject({ removed: 1, scanned: 2 });
+    const cleanupWrite = writes.find((w) => w.table === "podcast_segment_lipsync_clips" && w.op === "update");
+    expect(cleanupWrite?.payload).toMatchObject({ status: "removed" });
+    expect(cleanupWrite?.filters.id).toEqual(["stale"]);
   });
 
   it("cleanup soft-deletes only rows whose audio no longer matches the segment", async () => {

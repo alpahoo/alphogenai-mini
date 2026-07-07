@@ -1,3 +1,9 @@
+## 2026-07-07 - Codex - T-1146 auto cleanup after premium poll
+- Refactored the existing manual lipsync cleanup into `cleanupStaleLipsyncRows`, keeping only the newest ready clip that matches each segment's current `audio_url` and soft-removing stale/duplicate ready rows plus failed rows.
+- `POST /api/podcasts/[id]/lipsync` now runs this cleanup automatically when `action:"poll"` finishes with `processing === 0`; automatic cleanup is fail-soft so a transient prune issue cannot break a completed premium sync.
+- The explicit `action:"cleanup"` remains available and still returns 500 on cleanup failure for manual/support use.
+- Validation: targeted lipsync route tests 11/11, full test suite 887/887, `npm run build` OK, `npx tsc --noEmit` clean after build. No HeyGen calls, no Modal changes, no credit spend.
+
 ## 2026-07-07 — Codex — T-1146 segment-level premium lip-sync regenerate
 - Added per-segment premium lip-sync state on `/create/podcast`: ready / needs voice / needs premium sync / processing / failed.
 - Added a line-level “Sync this line” action that calls the existing lipsync route with `segmentIds:[id]`; bulk “Generate missing sync” only targets missing/failed segments.
