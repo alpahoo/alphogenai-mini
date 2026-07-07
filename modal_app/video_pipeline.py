@@ -2809,7 +2809,16 @@ def render_podcast(podcast_id: str) -> str:
                         _cur = _lst[min(_j, len(_lst) - 1)]
                         img.paste(_cur, (_px + (panel_w - avatar_size) // 2, ay), _cur)
                     elif render_mode == "lipsync_premium" and _role != active_role:
-                        _cur = host_dim if _role == "host" else guest_dim
+                        # Frozen inactive speaker, matched to the active clip's size
+                        # and shape: reuse the talking_visual base-clip DIM frame
+                        # (already avatar_size, rounded square). Only fall back to the
+                        # round portrait — resized to avatar_size — if there is no base
+                        # clip, so active/inactive cards never mismatch in size.
+                        if _fr:
+                            _cur = _fr["dim"][0]
+                        else:
+                            _base_dim = host_dim if _role == "host" else guest_dim
+                            _cur = _base_dim.resize((avatar_size, avatar_size))
                         img.paste(_cur, (_px + (panel_w - avatar_size) // 2, ay), _cur)
                     elif _fr:
                         _lst = _fr["bright"] if _role == active_role else _fr["dim"]
