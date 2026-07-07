@@ -1409,3 +1409,9 @@ Contraintes :
   vs talking_visual base clips host=yes guest=yes. Commit 768fedc.
 - Suite recommandée : mini-gate lip-sync 1 segment (qualité/délai/coût réel) → T-1144b
   complet (lip-sync par segment actif, cache, fallback T-1144a, activation lipsync_premium).
+
+## T-1147a - Podcast lip-sync provider benchmark framework (2026-07-07, Codex) - DONE
+- Added docs/product/podcast-lipsync-provider-benchmark-spec.md: provider-neutral benchmark gates, candidate notes (HeyGen baseline, Descript workflow reference, BytePlus, Google, OpenAI, open-source), sequence T-1147a-e, and decision rules before any provider switch.
+- Added lib/podcast/lipsync-provider-benchmark.ts: pure scoring helper for quality, cost, latency, API/cache/consent fit, and integration effort. Includes HeyGen baseline benchmark data.
+- Added lib/podcast/__tests__/lipsync-provider-benchmark.test.ts: baseline, cheaper candidate, reject gates, integration penalty, sort order.
+- Scope: no UI, no route, no Modal, no provider call, no spend. Next: T-1147b adapter interface wrapping current HeyGen calls without changing behavior.

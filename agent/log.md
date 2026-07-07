@@ -1,3 +1,9 @@
+## 2026-07-07 - Codex - T-1147a provider benchmark framework
+- Added docs/product/podcast-lipsync-provider-benchmark-spec.md to define provider-neutral benchmark gates, candidate notes, sequence T-1147a-e, and the rules for replacing HeyGen only after measured quality/cost/latency evidence.
+- Added lib/podcast/lipsync-provider-benchmark.ts with a pure scoring helper and HeyGen baseline data. The score weighs quality, cost, latency, API/cache/consent fit, and integration effort.
+- Added lib/podcast/__tests__/lipsync-provider-benchmark.test.ts covering baseline scoring, cheaper candidates, reject gates, integration penalty, and sorted comparisons.
+- Scope: no UI, no route, no Modal, no provider call, no credit spend. Next recommended slice: T-1147b adapter interface around the existing HeyGen calls.
+
 ## 2026-07-07 - Codex - T-1146 auto cleanup after premium poll
 - Refactored the existing manual lipsync cleanup into `cleanupStaleLipsyncRows`, keeping only the newest ready clip that matches each segment's current `audio_url` and soft-removing stale/duplicate ready rows plus failed rows.
 - `POST /api/podcasts/[id]/lipsync` now runs this cleanup automatically when `action:"poll"` finishes with `processing === 0`; automatic cleanup is fail-soft so a transient prune issue cannot break a completed premium sync.
