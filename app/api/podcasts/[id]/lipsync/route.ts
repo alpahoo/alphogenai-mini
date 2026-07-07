@@ -144,7 +144,15 @@ export async function POST(
       .eq("podcast_id", id)
       .order("order_index", { ascending: true });
 
-    const readySegs = (segments || []).filter((s) => s.status === "ready" && s.audio_url);
+    // Optional partial selection (T-1144b): lip-sync only these segment ids.
+    // Enables targeted regenerate + controlled/low-spend QA. Omitted → all ready.
+    const segmentIds: string[] | null = Array.isArray(body.segmentIds)
+      ? body.segmentIds.filter((x: unknown) => typeof x === "string")
+      : null;
+    let readySegs = (segments || []).filter((s) => s.status === "ready" && s.audio_url);
+    if (segmentIds && segmentIds.length > 0) {
+      readySegs = readySegs.filter((s) => segmentIds.includes(s.id));
+    }
     if (readySegs.length === 0) {
       return NextResponse.json({ error: "No ready segments to lip-sync." }, { status: 400 });
     }

@@ -171,6 +171,14 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
     expect(createLipsync).toHaveBeenCalledWith("https://cdn.example.com/trimmed.mp4", "https://cdn.example.com/audio.mp3", "precision");
   });
 
+  it("limits work to the selected segmentIds (partial render)", async () => {
+    vi.mocked(createServiceClient).mockReturnValue(makeService(baseRoutes()) as never);
+    // segment-1 is the only ready segment; selecting a different id → nothing to do.
+    const res = await POST(req({ action: "start", segmentIds: ["nope"] }), ctx("p1"));
+    expect(res.status).toBe(400);
+    expect(createLipsync).not.toHaveBeenCalled();
+  });
+
   it("does not spend when the Modal trim fails", async () => {
     vi.mocked(trimLipsyncBaseClip).mockRejectedValue(new Error("modal trim down"));
     vi.mocked(createServiceClient).mockReturnValue(
