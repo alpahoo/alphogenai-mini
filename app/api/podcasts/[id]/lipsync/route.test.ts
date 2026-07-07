@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createLipsync } from "@/lib/heygen-client";
+import { trimLipsyncBaseClip } from "@/lib/modal-client";
 import { POST } from "./route";
 
 vi.mock("@/lib/podcast/auth", () => ({ getUserFromRequest: vi.fn() }));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: vi.fn() }));
 vi.mock("@/lib/heygen-client", () => ({ createLipsync: vi.fn(), getLipsyncTask: vi.fn() }));
 vi.mock("@/lib/r2", () => ({ uploadBufferToR2: vi.fn() }));
+vi.mock("@/lib/modal-client", () => ({ trimLipsyncBaseClip: vi.fn() }));
 
 const USER = { id: "user-1" };
 type Result = { data?: unknown; error?: unknown };
@@ -25,6 +27,7 @@ function makeService(routes: Record<string, (s: State) => Result>, writes: State
       insert: (obj: unknown) => { st.op = "insert"; st.payload = obj; return b; },
       update: (obj: unknown) => { st.op = "update"; st.payload = obj; return b; },
       eq: (k: string, v: unknown) => { st.filters[k] = v; return b; },
+      not: () => b,
       order: () => b,
       limit: () => b,
       single: () => run(),
@@ -74,6 +77,7 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
     vi.clearAllMocks();
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     vi.mocked(createLipsync).mockResolvedValue("heygen-task-1");
+    vi.mocked(trimLipsyncBaseClip).mockResolvedValue("https://cdn.example.com/trimmed.mp4");
   });
 
   it("reuses ready cache rows without calling HeyGen or consuming new spend", async () => {
@@ -143,5 +147,50 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
     expect(createLipsync).toHaveBeenCalledTimes(1);
     expect(writes.map((w) => w.op)).toEqual(["insert", "update"]);
     expect(writes[1].payload).toMatchObject({ provider_task_id: "heygen-task-1", status: "processing" });
+  });
+
+  it("trims the base clip on Modal when the audio is shorter, and sends the trimmed URL to HeyGen", async () => {
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService(baseRoutes({
+        // audio 1.5s < base 2.4s → physical trim required
+        "podcast_segments:select": () => ({
+          data: [{
+            id: "segment-1", speaker_id: "speaker-1", order_index: 0,
+            text: "short", audio_url: "https://cdn.example.com/audio.mp3",
+            start_ms: 0, end_ms: 1500, status: "ready",
+          }],
+          error: null,
+        }),
+      })) as never,
+    );
+
+    const res = await POST(req({ action: "start" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect(trimLipsyncBaseClip).toHaveBeenCalledTimes(1);
+    expect(trimLipsyncBaseClip).toHaveBeenCalledWith(expect.objectContaining({ segmentId: "segment-1", durationSeconds: 1.5 }));
+    expect(createLipsync).toHaveBeenCalledWith("https://cdn.example.com/trimmed.mp4", "https://cdn.example.com/audio.mp3", "precision");
+  });
+
+  it("does not spend when the Modal trim fails", async () => {
+    vi.mocked(trimLipsyncBaseClip).mockRejectedValue(new Error("modal trim down"));
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService(baseRoutes({
+        "podcast_segments:select": () => ({
+          data: [{
+            id: "segment-1", speaker_id: "speaker-1", order_index: 0,
+            text: "short", audio_url: "https://cdn.example.com/audio.mp3",
+            start_ms: 0, end_ms: 1500, status: "ready",
+          }],
+          error: null,
+        }),
+      })) as never,
+    );
+
+    const res = await POST(req({ action: "start" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(createLipsync).not.toHaveBeenCalled();
+    expect(json.started).toBe(0);
+    expect(json.actualNewSpendUsd).toBe(0);
   });
 });

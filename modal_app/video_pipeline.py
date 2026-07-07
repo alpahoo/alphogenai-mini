@@ -2852,6 +2852,66 @@ def render_podcast(podcast_id: str) -> str:
         return fail(normalize_error(e))
 
 
+@app.function(image=base_image, secrets=[secrets], timeout=180, retries=0)
+def trim_base_clip_for_lipsync(
+    base_url: str,
+    duration_seconds: float,
+    podcast_id: str,
+    segment_id: str,
+    cache_key: str,
+) -> str:
+    """Physically trim a persona base clip to `duration_seconds` (T-1144b).
+
+    HeyGen lip-sync requires the audio/video duration within ±15% and its
+    end_time hint alone is not enough — so the Next orchestration delegates the
+    real trim here (Modal has ffmpeg; Vercel's ffmpeg-static is too fragile).
+    Downloads base_url, trims (video only), uploads a permanent R2 copy and
+    returns its URL. NO HeyGen call, no credit spend, no DB write.
+    """
+    import os as _os
+    import shutil
+    import subprocess
+    import tempfile
+    import httpx
+
+    dur = max(0.5, round(float(duration_seconds), 2))
+    workdir = tempfile.mkdtemp()
+    in_path = _os.path.join(workdir, "base.mp4")
+    out_path = _os.path.join(workdir, "trimmed.mp4")
+    try:
+        with httpx.stream("GET", base_url, timeout=90, follow_redirects=True) as r:
+            r.raise_for_status()
+            with open(in_path, "wb") as f:
+                for chunk in r.iter_bytes():
+                    f.write(chunk)
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", in_path, "-t", str(dur), "-an",
+             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast",
+             "-movflags", "+faststart", out_path],
+            check=True, capture_output=True,
+        )
+        with open(out_path, "rb") as f:
+            data = f.read()
+
+        import boto3
+        from botocore.config import Config
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=os.environ["R2_ENDPOINT"],
+            aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+            aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+            config=Config(signature_version="s3v4"),
+            region_name="auto",
+        )
+        bucket = os.environ.get("R2_BUCKET_NAME", "alphogenai-assets")
+        key = f"podcast/lipsync-trim/{podcast_id}/{segment_id}-{cache_key}.mp4"
+        s3.put_object(Bucket=bucket, Key=key, Body=data, ContentType="video/mp4")
+        public = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")
+        return f"{public}/{key}"
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
 # ===========================================================================
 # Webhook (FastAPI)
 # ===========================================================================
@@ -2891,6 +2951,13 @@ def webhook():
 
     class RenderPodcastRequest(BaseModel):
         podcast_id: str
+
+    class TrimBaseClipRequest(BaseModel):
+        podcast_id: str
+        segment_id: str
+        base_url: str
+        duration_seconds: float
+        cache_key: str
 
     @web.post("/webhook")
     async def trigger(req: JobRequest, x_webhook_secret: str = Header(None)):
@@ -2998,6 +3065,24 @@ def webhook():
             print(f"[webhook /render-podcast] spawn failed: {e}")
             raise HTTPException(status_code=500, detail=str(e)[:200])
         return {"success": True, "podcast_id": req.podcast_id}
+
+    @web.post("/trim-base-clip")
+    async def trim_base_clip_ep(req: TrimBaseClipRequest, x_webhook_secret: str = Header(None)):
+        """Trim a persona base clip to a segment's audio length for lip-sync
+        (T-1144b). Runs ffmpeg on a CPU image and returns the R2 URL synchronously
+        so the Next orchestration can pass a correctly-sized clip to HeyGen. No
+        HeyGen call here, no credit spend."""
+        expected = os.environ.get("MODAL_WEBHOOK_SECRET")
+        if expected and x_webhook_secret != expected:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        try:
+            url = await trim_base_clip_for_lipsync.remote.aio(
+                req.base_url, req.duration_seconds, req.podcast_id, req.segment_id, req.cache_key,
+            )
+        except Exception as e:
+            print(f"[webhook /trim-base-clip] failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e)[:200])
+        return {"success": True, "url": url}
 
     @web.post("/apply-voiceover")
     async def apply_voiceover(req: ConcatRequest, x_webhook_secret: str = Header(None)):

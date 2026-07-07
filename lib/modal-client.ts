@@ -229,3 +229,44 @@ export async function triggerRenderPodcast(podcastId: string): Promise<void> {
     throw new Error(`Modal /render-podcast ${res.status}: ${detail.slice(0, 200)}`);
   }
 }
+
+/**
+ * Physically trim a persona base clip to a segment's audio length on Modal
+ * (T-1144b). HeyGen requires audio/video within ±15% and its end_time hint is
+ * insufficient; Vercel can't run ffmpeg reliably, so Modal (which has ffmpeg)
+ * does the trim and returns a permanent R2 URL. Synchronous: the lip-sync
+ * orchestration must have the trimmed URL before calling HeyGen. Throws on
+ * failure so the caller can skip the HeyGen spend and fall back.
+ */
+export async function trimLipsyncBaseClip(input: {
+  podcastId: string;
+  segmentId: string;
+  baseUrl: string;
+  durationSeconds: number;
+  cacheKey: string;
+}): Promise<string> {
+  const url = `${modalBase()}/trim-base-clip`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-webhook-secret": secret(),
+    },
+    body: JSON.stringify({
+      podcast_id: input.podcastId,
+      segment_id: input.segmentId,
+      base_url: input.baseUrl,
+      duration_seconds: input.durationSeconds,
+      cache_key: input.cacheKey,
+    }),
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(`Modal /trim-base-clip ${res.status}: ${detail.slice(0, 200)}`);
+  }
+  const data = (await res.json().catch(() => null)) as { url?: unknown } | null;
+  const outUrl = typeof data?.url === "string" ? data.url : null;
+  if (!outUrl) throw new Error("Modal /trim-base-clip returned no url");
+  return outUrl;
+}
