@@ -2792,3 +2792,22 @@ les jobs échoués HeyGen ne sont en principe pas facturés → réel probableme
 à confirmer dashboard). Aucune migration. Podcast complet NON relancé (attente GO).
 Reste validé antérieurement : compositing (actif bouge / inactif gelé / fallback), captions.
 Cosmétique connu non corrigé : taille actif (clip carré) vs inactif (portrait rond) incohérente.
+
+
+## T-1144b full short-podcast QA PASS (2026-07-07, Claude) — commit 95494d9
+Cosmétique fix : inactif premium collé via base-clip dim frame (avatar_size, rounded
+square) → même taille/forme que le clip actif. Deploy Modal OK.
+Full premium QA sur e531f932 (8 segments, base 4.26s) :
+- start (tous) → selected 8, cached 4 (0 re-spend), started 4, skipped 0,
+  actualNewSpendUsd $0.56, estimatedUsd total $1.17 (cap $1.50). Pas de double-spend.
+- poll → 8/8 ready, 0 failed, ~181s wall-clock (4 clips en //).
+- render premium gratuit → vidéo finale 1280x720, 31.67s, valide.
+Vérifs visuelles (diff pixel /panneau) :
+  seg0 host 0.64 / guest 0.00 ; seg1 host 0.07 / guest 0.44 ;
+  seg2 host 0.57 / guest 0.00 ; seg5 host 0.00 / guest 0.62.
+  → seul l'actif bouge, inactif gelé, tailles/cadrages cohérents, captions OK.
+Verdict : pipeline premium T-1144b Phase 1 opérationnel end-to-end (capped, cached,
+fallback-safe, no double-spend). Re-render = $0 (cache). 1er render 8 seg ≈ $1.17.
+Spend session (max) ~$1.13 ; réel probable ~$0.87 (jobs échoués non facturés) — à
+confirmer dashboard. Aucune migration. Story/Product/Research non touchés.
+Bugs restants : aucun bloquant. Suite proposée : T-1146 regenerate segment-level.
