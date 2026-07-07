@@ -2872,6 +2872,7 @@ def trim_base_clip_for_lipsync(
     import shutil
     import subprocess
     import tempfile
+    import uuid as _uuid
     import httpx
 
     dur = max(0.5, round(float(duration_seconds), 2))
@@ -2909,7 +2910,10 @@ def trim_base_clip_for_lipsync(
             region_name="auto",
         )
         bucket = os.environ.get("R2_BUCKET_NAME", "alphogenai-assets")
-        key = f"podcast/lipsync-trim/{podcast_id}/{segment_id}-{cache_key}.mp4"
+        # Unique suffix per trim: the R2 public host is a CDN, so reusing a key
+        # can serve a stale edge copy to HeyGen (a prior trim of the same segment
+        # was cached audio-less → "audio missing"). A fresh key = fresh fetch.
+        key = f"podcast/lipsync-trim/{podcast_id}/{segment_id}-{cache_key}-{_uuid.uuid4().hex[:8]}.mp4"
         s3.put_object(Bucket=bucket, Key=key, Body=data, ContentType="video/mp4")
         public = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")
         return f"{public}/{key}"
