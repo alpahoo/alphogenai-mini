@@ -1426,3 +1426,7 @@ Contraintes :
 
 ### [T-1147c] Admin lip-sync benchmark harness - `status: done` ? `owner: codex`
 - Added admin-only experimental route `POST /api/admin/experiments/podcast-lipsync-benchmark` with `start`/`poll`/`score`. One clip per run, hard spend cap, completed outputs copied to R2, no product DB rows, no UI.
+
+
+### [T-1147d] Provider comparison report - `status: done` ? `owner: codex`
+- Added `docs/product/podcast-lipsync-provider-comparison-report.md`: HeyGen remains the baseline; Descript is workflow inspiration, Google/OpenAI/BytePlus are watchlist/use-case-specific, and self-hosted lip-sync is the next benchmark candidate.

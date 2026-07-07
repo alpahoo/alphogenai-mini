@@ -1,3 +1,8 @@
+## 2026-07-08 - Codex - T-1147d provider comparison report
+- Added docs/product/podcast-lipsync-provider-comparison-report.md. Recommendation: keep HeyGen as the current production baseline; do not switch provider without a measured drop-in replacement.
+- Screened Descript, Google/Veo/Flow, OpenAI video, BytePlus media, and self-hosted lip-sync against the exact AlphoGen contract: base clip + our TTS audio -> downloadable MP4 segment clip -> copied to R2.
+- Next recommended slice: self-hosted/open-source lip-sync feasibility spike, because it is the most plausible cost-reduction path after HeyGen.
+
 ## 2026-07-08 - Codex - T-1147c admin lip-sync benchmark harness
 - Added admin-gated `POST /api/admin/experiments/podcast-lipsync-benchmark` with `start`, `poll`, and `score` actions. `start` runs exactly one provider clip under a hard spend cap; `poll` copies completed provider output to R2; `score` uses the pure T-1147a scoring helper.
 - The harness is experimental/admin-only, stores no product DB rows, has no UI, and does not spend unless an admin explicitly calls `action:"start"` with valid URLs and cap.
