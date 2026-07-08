@@ -1,3 +1,7 @@
+## 2026-07-09 - Codex - T-1147e1 Modal GPU one-clip spike harness
+- Added `modal_app/self_hosted_lipsync_spike.py`: an isolated Modal app for an operator-run MuseTalk one-clip GPU spike. It is not imported by production, has no UI, no route, and spends no GPU time unless manually invoked with `modal run`.
+- The harness downloads one base clip and one AlphoGen TTS segment, trims them to a small cap, runs MuseTalk on A10G, uploads the output MP4 to R2, and returns probes/timing/output URL for comparison against the HeyGen one-segment gate.
+- Updated the self-hosted feasibility spec with the run command, acceptance criteria, and stop conditions. Validation: Python syntax compile only; no Modal deploy/run, no GPU spend, no provider switch.
 ## 2026-07-09 - Codex - T-1149e premium Jogg-like UX polish
 - Improved `/create/podcast` premium render UX with a clearer 3-step Jogg-like path: voices -> talking clips -> final render, plus a progress bar and synced percentage.
 - Surfaced the max estimated cost for missing premium clips and moved the explicit "Generate missing clips" action into the premium readiness card, while keeping generation user-triggered.

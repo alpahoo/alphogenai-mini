@@ -153,3 +153,48 @@ Hard stop after one clip. No long podcast, no provider switch, no UI.
 Proceed with **T-1147e1 Modal GPU one-clip spike** only after the current HeyGen premium path remains stable. The spike should answer one question: can an open-source/self-hosted model produce a cacheable per-segment clip good enough and cheap enough to challenge HeyGen?
 
 Until that answer is measured, HeyGen remains the production premium provider and the product stays provider-neutral.
+
+## 11. T-1147e1 Modal GPU Spike Harness
+
+Status: implemented as an isolated operator-run harness. No production route, no UI, no product DB mutation, and no GPU spend unless a human runs the Modal entrypoint explicitly.
+
+File: `modal_app/self_hosted_lipsync_spike.py`.
+
+### Candidate selected for the first run
+
+**MuseTalk** is the first candidate for the one-clip GPU spike because it is a lip-sync-focused model family and therefore closer to the current HeyGen contract than broader half-body animation models. EchoMimic remains a second candidate for a more ambitious half-body/persona motion test, but the existing `modal_app/engines/echomimic.py` adapter is still a stub.
+
+### Why this harness is separate
+
+The spike has a very different dependency stack from the production Modal render image. It is intentionally isolated under a separate Modal app (`alphogenai-self-hosted-lipsync-spike`) so dependency drift, model download issues, or GPU failures cannot affect podcast rendering.
+
+### Manual run command
+
+```bash
+modal run modal_app/self_hosted_lipsync_spike.py \
+  --video-url "<ready persona base clip R2 URL>" \
+  --audio-url "<short AlphoGen TTS segment audio URL>" \
+  --max-seconds 5
+```
+
+The function will:
+
+1. download a base clip and one TTS segment,
+2. trim both to `max_seconds` (hard-capped to 8 seconds),
+3. download MuseTalk weights into a persistent Modal volume if missing,
+4. run MuseTalk inference on GPU (`A10G`),
+5. upload the output MP4 to R2 under `experiments/self-hosted-lipsync/musetalk/`,
+6. return probes for input/output streams, wall-clock time, GPU class, and output URL.
+
+### Acceptance criteria for the first real run
+
+- Output MP4 has video + audio and duration within +/- 15% of the TTS segment.
+- Face/mouth motion is visibly synced enough to compare against the HeyGen one-segment gate.
+- Total elapsed time and projected Modal GPU cost are meaningfully below HeyGen's observed `$0.04/s`, or quality is meaningfully better.
+- The output fits the existing rounded-square active speaker card without obvious black bars or face crop artifacts.
+
+### Stop conditions
+
+Stop after one clip. Do not wire this into `/create/podcast`, do not replace HeyGen, and do not run a full podcast until this single-clip result is reviewed.
+
+If the first execution fails due to upstream dependency or model-weight drift, that is still a valid spike result. The next action should be to pin the exact MuseTalk commit/dependencies or switch the one-clip harness to EchoMimic/LatentSync, not to patch production code.
