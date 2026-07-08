@@ -229,16 +229,17 @@ export default function CreatePodcastPage() {
   }, [supabase]);
 
   const refreshLipsyncStatus = useCallback(async () => {
-    if (!podcast?.id) return;
+    if (!podcast?.id) return null;
     const headers = await authHeaders();
-    if (!headers) return;
+    if (!headers) return null;
     const res = await fetch(`/api/podcasts/${podcast.id}/lipsync`, { headers });
-    if (!res.ok) return;
+    if (!res.ok) return null;
     const json = await res.json().catch(() => ({}));
     const next = Object.fromEntries(
       ((json.segments || []) as SegmentLipsyncSnapshot[]).map((item) => [item.segment_id, item]),
-    );
+    ) as Record<string, SegmentLipsyncSnapshot>;
     setLipsyncStatusBySegment(next);
+    return next;
   }, [authHeaders, podcast?.id]);
 
   // ── cleanup ───────────────────────────────────────────────────────────
@@ -997,8 +998,14 @@ export default function CreatePodcastPage() {
         throw new Error(j?.error || "Could not save the render mode. Try again.");
       }
       if (renderMode === "lipsync_premium") {
-        await refreshLipsyncStatus();
-        if (premiumSyncBlockingRender) {
+        const freshStatus = await refreshLipsyncStatus();
+        const freshBlocksRender = freshStatus
+          ? segments.some((seg) => {
+              const st = getSegmentPremiumStatus(seg, freshStatus[seg.id]);
+              return st === "missing" || st === "failed" || st === "processing" || st === "needs_voice";
+            })
+          : premiumSyncBlockingRender;
+        if (freshBlocksRender) {
           throw new Error("Generate all premium lip-sync clips before rendering the premium video.");
         }
       }

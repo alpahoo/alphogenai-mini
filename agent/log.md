@@ -1,3 +1,7 @@
+## 2026-07-08 - Codex - T-1149b fresh premium render gate
+- Hardened the /create/podcast premium render guard so the final Render action uses the freshly fetched `/lipsync` snapshot instead of potentially stale React state.
+- If the refresh succeeds, render is blocked from the fresh per-segment statuses (`missing`, `failed`, `processing`, `needs_voice`); if refresh fails, it falls back to the existing UI-derived guard.
+- Scope: UI-only; no API, Modal, DB, provider call, or credit spend. Validation: tsc clean and production build OK.
 ## 2026-07-08 - Codex - T-1149 podcast premium UX hardening
 - Hardened /create/podcast premium render UX: premium render no longer auto-starts paid lip-sync generation; users must generate missing premium clips explicitly before final render.
 - Added a premium readiness checklist (voices, lip-sync clips, final render) and clearer render copy/button state for lipsync_premium.
@@ -29,9 +33,9 @@
 - The explicit `action:"cleanup"` remains available and still returns 500 on cleanup failure for manual/support use.
 - Validation: targeted lipsync route tests 11/11, full test suite 887/887, `npm run build` OK, `npx tsc --noEmit` clean after build. No HeyGen calls, no Modal changes, no credit spend.
 
-## 2026-07-07 — Codex — T-1146 segment-level premium lip-sync regenerate
+## 2026-07-07 ï¿½ Codex ï¿½ T-1146 segment-level premium lip-sync regenerate
 - Added per-segment premium lip-sync state on `/create/podcast`: ready / needs voice / needs premium sync / processing / failed.
-- Added a line-level “Sync this line” action that calls the existing lipsync route with `segmentIds:[id]`; bulk “Generate missing sync” only targets missing/failed segments.
+- Added a line-level ï¿½Sync this lineï¿½ action that calls the existing lipsync route with `segmentIds:[id]`; bulk ï¿½Generate missing syncï¿½ only targets missing/failed segments.
 - Hardened `/api/podcasts/[id]/lipsync`: cache-miss premium sync clears stale `video_url/render_status/render_error` before reserving/spending, while cached-only/poll-only flows do not reset; GET now returns current per-segment sync status and ignores stale clips from old audio URLs.
 - Editing or regenerating a line updates local premium state so the old final video is not shown as current. Existing cache/dedup is preserved: unchanged segments reuse their clips, edited lines generate only their own premium sync.
 - Validation: targeted lipsync route tests 9/9, full test suite 885/885, `npm run build` OK, `npx tsc --noEmit` clean after build.
