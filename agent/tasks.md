@@ -1430,3 +1430,7 @@ Contraintes :
 
 ### [T-1147d] Provider comparison report - `status: done` ? `owner: codex`
 - Added `docs/product/podcast-lipsync-provider-comparison-report.md`: HeyGen remains the baseline; Descript is workflow inspiration, Google/OpenAI/BytePlus are watchlist/use-case-specific, and self-hosted lip-sync is the next benchmark candidate.
+
+### [T-1147e] Self-hosted lip-sync feasibility spec - `status: done` ? `owner: codex`
+- Added `docs/product/podcast-self-hosted-lipsync-feasibility.md`: defines the no-switch feasibility path for open-source/self-hosted lip-sync, candidate families, drop-in contract, acceptance gates, and the recommended T-1147e1 Modal GPU one-clip spike.
+- Scope: docs/spec only; no provider call, no GPU run, no UI, no route, no product switch, no spend.

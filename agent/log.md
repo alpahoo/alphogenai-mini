@@ -1,3 +1,7 @@
+## 2026-07-09 - Codex - T-1147e self-hosted lip-sync feasibility spec
+- Added `docs/product/podcast-self-hosted-lipsync-feasibility.md`: a no-spend feasibility plan for testing open-source/self-hosted lip-sync as the next cost-reduction path after the proven HeyGen baseline.
+- The spec defines candidate families, the exact drop-in output contract, acceptance gates (quality/cost/latency/license/cache/fallback), and recommends a Modal GPU one-clip spike before any product integration.
+- Scope: docs/spec only; no provider call, no GPU run, no UI, no route, no Modal deploy, no credit spend.
 ## 2026-07-09 - Codex - T-1149d premium render verification hardening
 - Hardened `POST /api/podcasts/[id]/render`: if the premium lip-sync cache verification query fails, the API now returns 500 and never marks the podcast as rendering or triggers Modal.
 - This keeps the premium path fail-closed while distinguishing an infrastructure verification issue from genuinely missing lip-sync clips.
