@@ -64,10 +64,14 @@ export async function POST(
 
     const renderMode = getPodcastRenderMode(podcast);
     if (renderMode === "lipsync_premium") {
-      const { data: clips } = await service
+      const { data: clips, error: clipsErr } = await service
         .from("podcast_segment_lipsync_clips")
         .select("segment_id,audio_url,status,video_url,updated_at")
         .eq("podcast_id", id);
+      if (clipsErr) {
+        console.error("[podcasts/render] could not verify premium clips:", clipsErr);
+        return NextResponse.json({ error: "Could not verify premium lip-sync clips." }, { status: 500 });
+      }
       const hasReadyClipForCurrentAudio = (segment: { id: string; audio_url: string | null }) => (clips || [])
         .filter((clip) => clip.segment_id === segment.id && clip.audio_url === segment.audio_url)
         .sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))

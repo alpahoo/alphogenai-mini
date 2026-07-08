@@ -122,6 +122,23 @@ describe("POST /api/podcasts/[id]/render", () => {
     expect(updates).toHaveLength(0);
   });
 
+  it("500 and does NOT trigger Modal when premium clip verification fails", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: podcast({ metadata: { render_mode: "lipsync_premium" } }), error: null }),
+        "podcast_segments:select": () => ({ data: readySegs, error: null }),
+        "podcast_segment_lipsync_clips:select": () => ({ data: null, error: { message: "db down" } }),
+        "podcasts:update": () => ({ data: null, error: null }),
+      }, updates) as never,
+    );
+    const res = await POST(req(), ctx("p1"));
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "Could not verify premium lip-sync clips." });
+    expect(triggerRenderPodcast).not.toHaveBeenCalled();
+    expect(updates).toHaveLength(0);
+  });
   it("202 for premium render when all current-audio lip-sync clips are ready", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     const updates: State[] = [];

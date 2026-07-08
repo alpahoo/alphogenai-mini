@@ -1,3 +1,7 @@
+## 2026-07-09 - Codex - T-1149d premium render verification hardening
+- Hardened `POST /api/podcasts/[id]/render`: if the premium lip-sync cache verification query fails, the API now returns 500 and never marks the podcast as rendering or triggers Modal.
+- This keeps the premium path fail-closed while distinguishing an infrastructure verification issue from genuinely missing lip-sync clips.
+- Scope: API guard only; no Modal, DB, provider call, or credit spend. Validation: render/lipsync route tests 23/23, production build OK, tsc clean after build.
 ## 2026-07-08 - Codex - T-1149c backend premium render guard
 - Hardened `POST /api/podcasts/[id]/render`: when `metadata.render_mode` is `lipsync_premium`, the API now requires every ready segment to have a ready lip-sync clip for its current `audio_url` before marking the podcast as rendering.
 - Direct API calls can no longer bypass the UI premium checklist; missing/processing/failed/stale-audio premium clips return 400 and never trigger Modal.
