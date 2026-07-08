@@ -1,3 +1,7 @@
+## 2026-07-08 - Codex - T-1149 podcast premium UX hardening
+- Hardened /create/podcast premium render UX: premium render no longer auto-starts paid lip-sync generation; users must generate missing premium clips explicitly before final render.
+- Added a premium readiness checklist (voices, lip-sync clips, final render) and clearer render copy/button state for lipsync_premium.
+- Scope: UI-only; no API, Modal, DB, provider call, or credit spend. Validation: tsc clean and production build OK.
 ## 2026-07-08 - Codex - T-1147d provider comparison report
 - Added docs/product/podcast-lipsync-provider-comparison-report.md. Recommendation: keep HeyGen as the current production baseline; do not switch provider without a measured drop-in replacement.
 - Screened Descript, Google/Veo/Flow, OpenAI video, BytePlus media, and self-hosted lip-sync against the exact AlphoGen contract: base clip + our TTS audio -> downloadable MP4 segment clip -> copied to R2.

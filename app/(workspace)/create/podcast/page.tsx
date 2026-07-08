@@ -178,6 +178,20 @@ export default function CreatePodcastPage() {
     () => segments.map((s) => `${s.id}:${s.status}:${s.audio_url || ""}`).join("|"),
     [segments],
   );
+  const premiumSyncSummary = useMemo(() => {
+    const summary = { ready: 0, missing: 0, processing: 0, failed: 0, needsVoice: 0, total: segments.length };
+    if (renderMode !== "lipsync_premium") return summary;
+    for (const seg of segments) {
+      const st = getSegmentPremiumStatus(seg, lipsyncStatusBySegment[seg.id]);
+      if (st === "ready") summary.ready += 1;
+      else if (st === "processing") summary.processing += 1;
+      else if (st === "failed") summary.failed += 1;
+      else if (st === "needs_voice") summary.needsVoice += 1;
+      else summary.missing += 1;
+    }
+    return summary;
+  }, [lipsyncStatusBySegment, renderMode, segments]);
+
   const premiumSyncNeededSegmentIds = useMemo(() => {
     if (renderMode !== "lipsync_premium") return [];
     return segments
@@ -187,6 +201,16 @@ export default function CreatePodcastPage() {
       })
       .map((seg) => seg.id);
   }, [lipsyncStatusBySegment, renderMode, segments]);
+
+  const premiumSyncBlockingRender = renderMode === "lipsync_premium"
+    && (premiumSyncNeededSegmentIds.length > 0 || premiumSyncSummary.processing > 0 || premiumSyncSummary.needsVoice > 0);
+  const renderHelpText = !allReady
+    ? "Generate voices for every line before rendering."
+    : renderMode === "lipsync_premium"
+      ? premiumSyncBlockingRender
+        ? "Generate premium lip-sync clips before rendering the final premium video."
+        : "Premium lip-sync clips are ready - render the final two-shot video."
+      : "All voices are ready - render the two-shot video.";
   // Live lip-sync estimate (T-1145): active-speaker lip-sync = one clip per segment.
   // Durations are proxied from text length pre-render. No HeyGen call, no spend.
   const lipsyncEstimate = useMemo(
@@ -194,6 +218,7 @@ export default function CreatePodcastPage() {
     [segments],
   );
   const rendering = podcast?.render_status === "rendering" || phase === "rendering";
+  const renderCtaDisabled = !allReady || rendering || premiumSyncBlockingRender;
   const currentStep = !hasDialogue ? 1 : !anyAudio ? 2 : podcast?.video_url ? 4 : 3;
 
   // ── auth header helper ────────────────────────────────────────────────
@@ -972,8 +997,10 @@ export default function CreatePodcastPage() {
         throw new Error(j?.error || "Could not save the render mode. Try again.");
       }
       if (renderMode === "lipsync_premium") {
-        setVoiceProgress("Preparing premium lip-sync clips...");
-        await generatePremiumLipsync();
+        await refreshLipsyncStatus();
+        if (premiumSyncBlockingRender) {
+          throw new Error("Generate all premium lip-sync clips before rendering the premium video.");
+        }
       }
       const res = await fetch(`/api/podcasts/${podcast.id}/render`, { method: "POST", headers });
       const json = await res.json().catch(() => ({}));
@@ -1181,6 +1208,36 @@ export default function CreatePodcastPage() {
           </p>
         </div>
 
+        {renderMode === "lipsync_premium" && (
+          <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 font-bold">
+                <Sparkles className="h-3.5 w-3.5" /> Premium readiness
+              </div>
+              <span className="rounded-full bg-white px-2 py-1 font-semibold text-amber-700">
+                {premiumSyncSummary.ready}/{premiumSyncSummary.total} synced
+              </span>
+            </div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+              <div className="rounded-lg bg-white/75 px-2.5 py-2">
+                <div className="font-semibold text-neutral-800">Voices</div>
+                <div className="mt-0.5 text-neutral-500">{allReady ? "Ready" : `${pendingVoiceCount} pending`}</div>
+              </div>
+              <div className="rounded-lg bg-white/75 px-2.5 py-2">
+                <div className="font-semibold text-neutral-800">Lip-sync clips</div>
+                <div className="mt-0.5 text-neutral-500">
+                  {premiumSyncSummary.ready} ready
+                  {premiumSyncSummary.processing > 0 ? ` - ${premiumSyncSummary.processing} processing` : ""}
+                  {premiumSyncSummary.failed > 0 ? ` - ${premiumSyncSummary.failed} failed` : ""}
+                </div>
+              </div>
+              <div className="rounded-lg bg-white/75 px-2.5 py-2">
+                <div className="font-semibold text-neutral-800">Final render</div>
+                <div className="mt-0.5 text-neutral-500">{premiumSyncBlockingRender ? "Blocked until synced" : "Ready"}</div>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Lip-sync premium opt-in gate (T-1145) — cost disclosure + explicit
             confirmation before the paid mode can be selected. No spend here. */}
         {lipsyncConfirmOpen && (
@@ -1687,18 +1744,18 @@ export default function CreatePodcastPage() {
           <div className="mt-6 rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h3 className="text-base font-bold text-neutral-900">Render podcast</h3>
-                <p className="mt-0.5 text-sm text-neutral-500">
-                  {allReady ? "All voices are ready — render the two-shot video." : "Generate voices for every line before rendering."}
-                </p>
+                <h3 className="text-base font-bold text-neutral-900">
+                  {renderMode === "lipsync_premium" ? "Render premium video" : "Render podcast"}
+                </h3>
+                <p className="mt-0.5 text-sm text-neutral-500">{renderHelpText}</p>
               </div>
               <button
                 onClick={renderPodcast}
-                disabled={!allReady || rendering}
+                disabled={renderCtaDisabled}
                 className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {rendering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clapperboard className="h-4 w-4" />}
-                {rendering ? "Rendering…" : "Render podcast"}
+                {rendering ? "Rendering..." : renderMode === "lipsync_premium" ? "Render premium video" : "Render podcast"}
               </button>
             </div>
 
