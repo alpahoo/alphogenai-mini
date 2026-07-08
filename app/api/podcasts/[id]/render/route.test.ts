@@ -101,6 +101,50 @@ describe("POST /api/podcasts/[id]/render", () => {
     expect(triggerRenderPodcast).not.toHaveBeenCalled();
   });
 
+  it("400 for premium render when lip-sync clips are missing", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: podcast({ metadata: { render_mode: "lipsync_premium" } }), error: null }),
+        "podcast_segments:select": () => ({ data: readySegs, error: null }),
+        "podcast_segment_lipsync_clips:select": () => ({
+          data: [{ segment_id: "s0", audio_url: "https://cdn/a0.mp3", status: "ready", video_url: "https://cdn/s0.mp4", updated_at: "2026-01-01" }],
+          error: null,
+        }),
+        "podcasts:update": () => ({ data: null, error: null }),
+      }, updates) as never,
+    );
+    const res = await POST(req(), ctx("p1"));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Generate all premium lip-sync clips before rendering the premium video." });
+    expect(triggerRenderPodcast).not.toHaveBeenCalled();
+    expect(updates).toHaveLength(0);
+  });
+
+  it("202 for premium render when all current-audio lip-sync clips are ready", async () => {
+    vi.mocked(getUserFromRequest).mockResolvedValue(USER);
+    const updates: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService({
+        "podcasts:select": () => ({ data: podcast({ metadata: { render_mode: "lipsync_premium" } }), error: null }),
+        "podcast_segments:select": () => ({ data: readySegs, error: null }),
+        "podcast_segment_lipsync_clips:select": () => ({
+          data: [
+            { segment_id: "s0", audio_url: "https://cdn/a0.mp3", status: "ready", video_url: "https://cdn/s0.mp4", updated_at: "2026-01-01" },
+            { segment_id: "s1", audio_url: "https://cdn/a1.mp3", status: "ready", video_url: "https://cdn/s1.mp4", updated_at: "2026-01-01" },
+          ],
+          error: null,
+        }),
+        "podcasts:update": () => ({ data: null, error: null }),
+      }, updates) as never,
+    );
+    vi.mocked(triggerRenderPodcast).mockResolvedValue(undefined);
+    const res = await POST(req(), ctx("p1"));
+    expect(res.status).toBe(202);
+    expect(triggerRenderPodcast).toHaveBeenCalledWith("p1");
+    expect(updates.some((u) => (u.payload as { render_status?: string }).render_status === "rendering")).toBe(true);
+  });
   it("202 + marks rendering + triggers Modal when ready", async () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     const updates: State[] = [];

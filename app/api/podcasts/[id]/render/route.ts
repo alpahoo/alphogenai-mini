@@ -3,6 +3,12 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 import { triggerRenderPodcast } from "@/lib/modal-client";
 
+function getPodcastRenderMode(podcast: { metadata?: unknown }): "static" | "talking_visual" | "lipsync_premium" {
+  const metadata = podcast.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return "talking_visual";
+  const mode = (metadata as { render_mode?: unknown }).render_mode;
+  return mode === "static" || mode === "lipsync_premium" ? mode : "talking_visual";
+}
 /**
  * POST /api/podcasts/[id]/render
  * Explicitly render a two-shot voice-first podcast MP4 (T-1131e). Never auto-run.
@@ -54,6 +60,25 @@ export async function POST(
         { error: "Generate voice-over for all segments before rendering." },
         { status: 400 },
       );
+    }
+
+    const renderMode = getPodcastRenderMode(podcast);
+    if (renderMode === "lipsync_premium") {
+      const { data: clips } = await service
+        .from("podcast_segment_lipsync_clips")
+        .select("segment_id,audio_url,status,video_url,updated_at")
+        .eq("podcast_id", id);
+      const hasReadyClipForCurrentAudio = (segment: { id: string; audio_url: string | null }) => (clips || [])
+        .filter((clip) => clip.segment_id === segment.id && clip.audio_url === segment.audio_url)
+        .sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
+        .some((clip) => clip.status === "ready" && !!clip.video_url);
+      const premiumReady = segments.every((segment) => hasReadyClipForCurrentAudio(segment));
+      if (!premiumReady) {
+        return NextResponse.json(
+          { error: "Generate all premium lip-sync clips before rendering the premium video." },
+          { status: 400 },
+        );
+      }
     }
 
     // Mark rendering before triggering so the UI/poll reflects it immediately.

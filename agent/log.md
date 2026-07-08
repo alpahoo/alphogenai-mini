@@ -1,3 +1,7 @@
+## 2026-07-08 - Codex - T-1149c backend premium render guard
+- Hardened `POST /api/podcasts/[id]/render`: when `metadata.render_mode` is `lipsync_premium`, the API now requires every ready segment to have a ready lip-sync clip for its current `audio_url` before marking the podcast as rendering.
+- Direct API calls can no longer bypass the UI premium checklist; missing/processing/failed/stale-audio premium clips return 400 and never trigger Modal.
+- Scope: API guard only; no Modal, DB, provider call, or credit spend. Validation: render/lipsync route tests 22/22, tsc clean, production build OK.
 ## 2026-07-08 - Codex - T-1149b fresh premium render gate
 - Hardened the /create/podcast premium render guard so the final Render action uses the freshly fetched `/lipsync` snapshot instead of potentially stale React state.
 - If the refresh succeeds, render is blocked from the fresh per-segment statuses (`missing`, `failed`, `processing`, `needs_voice`); if refresh fails, it falls back to the existing UI-derived guard.
