@@ -13,7 +13,7 @@ import { motion } from "framer-motion";
 import {
   AlertTriangle, ArrowLeft, CheckCircle2, Loader2, Mic, Pause, Play,
   Podcast, Sparkles, Film, FileText, Clapperboard, Clock, Globe2, Link2, Upload,
-  Pencil, Save, X, ChevronUp, ChevronDown, Trash2, Plus, Copy, Archive,
+  Pencil, Save, X, ChevronUp, ChevronDown, Trash2, Plus, Copy, Archive, ShieldCheck, RefreshCw,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { PODCAST_VOICES, DEFAULT_HOST_VOICE, DEFAULT_GUEST_VOICE, getPodcastVoice } from "@/lib/podcast/voice-catalog";
@@ -202,6 +202,20 @@ export default function CreatePodcastPage() {
       .map((seg) => seg.id);
   }, [lipsyncStatusBySegment, renderMode, segments]);
 
+  const missingLipsyncEstimate = useMemo(
+    () => estimatePodcastLipsync(
+      segments
+        .filter((s) => premiumSyncNeededSegmentIds.includes(s.id))
+        .map((s) => secondsFromText(s.text)),
+    ),
+    [premiumSyncNeededSegmentIds, segments],
+  );
+  const premiumSyncReadyPercent = premiumSyncSummary.total > 0
+    ? Math.round((premiumSyncSummary.ready / premiumSyncSummary.total) * 100)
+    : 0;
+  const premiumCanGenerateMissing = renderMode === "lipsync_premium"
+    && allReady
+    && premiumSyncNeededSegmentIds.length > 0;
   const premiumSyncBlockingRender = renderMode === "lipsync_premium"
     && (premiumSyncNeededSegmentIds.length > 0 || premiumSyncSummary.processing > 0 || premiumSyncSummary.needsVoice > 0);
   const renderHelpText = !allReady
@@ -1216,32 +1230,74 @@ export default function CreatePodcastPage() {
         </div>
 
         {renderMode === "lipsync_premium" && (
-          <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2 font-bold">
-                <Sparkles className="h-3.5 w-3.5" /> Premium readiness
+          <div className="mt-3 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-4 text-xs text-amber-950 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-bold text-amber-950">
+                  <Sparkles className="h-4 w-4" /> Premium Jogg-like path
+                </div>
+                <p className="mt-1 max-w-xl text-[11px] leading-relaxed text-amber-800">
+                  Generate exact mouth-sync clips first, then render the final MP4. Cached lines are reused,
+                  so unchanged dialogue/audio/personas do not spend again.
+                </p>
               </div>
-              <span className="rounded-full bg-white px-2 py-1 font-semibold text-amber-700">
-                {premiumSyncSummary.ready}/{premiumSyncSummary.total} synced
+              <span className="rounded-full bg-white px-2.5 py-1 font-bold text-amber-700 shadow-sm">
+                {premiumSyncReadyPercent}% synced
               </span>
             </div>
-            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-              <div className="rounded-lg bg-white/75 px-2.5 py-2">
-                <div className="font-semibold text-neutral-800">Voices</div>
-                <div className="mt-0.5 text-neutral-500">{allReady ? "Ready" : `${pendingVoiceCount} pending`}</div>
+
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/80">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all"
+                style={{ width: `${premiumSyncReadyPercent}%` }}
+              />
+            </div>
+
+            <div className="mt-3 grid gap-2 lg:grid-cols-3">
+              <div className="rounded-xl bg-white/80 px-3 py-2.5 shadow-sm">
+                <div className="flex items-center gap-2 font-semibold text-neutral-900">
+                  <Mic className="h-3.5 w-3.5 text-neutral-500" /> 1. Voices
+                </div>
+                <div className="mt-1 text-neutral-500">{allReady ? "All dialogue lines voiced" : `${pendingVoiceCount} voice pending`}</div>
               </div>
-              <div className="rounded-lg bg-white/75 px-2.5 py-2">
-                <div className="font-semibold text-neutral-800">Lip-sync clips</div>
-                <div className="mt-0.5 text-neutral-500">
+              <div className="rounded-xl bg-white/80 px-3 py-2.5 shadow-sm">
+                <div className="flex items-center gap-2 font-semibold text-neutral-900">
+                  <RefreshCw className="h-3.5 w-3.5 text-amber-600" /> 2. Talking clips
+                </div>
+                <div className="mt-1 text-neutral-500">
                   {premiumSyncSummary.ready} ready
                   {premiumSyncSummary.processing > 0 ? ` - ${premiumSyncSummary.processing} processing` : ""}
-                  {premiumSyncSummary.failed > 0 ? ` - ${premiumSyncSummary.failed} failed` : ""}
+                  {premiumSyncSummary.failed > 0 ? ` - ${premiumSyncSummary.failed} fallback` : ""}
+                  {premiumSyncNeededSegmentIds.length > 0 ? ` - ${premiumSyncNeededSegmentIds.length} missing` : ""}
                 </div>
+                {premiumCanGenerateMissing && (
+                  <button
+                    type="button"
+                    onClick={() => generatePremiumLipsync(premiumSyncNeededSegmentIds).catch(() => undefined)}
+                    disabled={syncingLipsyncAll || Boolean(syncingLipsyncSegmentId) || rendering}
+                    className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-bold text-white transition hover:bg-amber-700 disabled:opacity-50"
+                  >
+                    {syncingLipsyncAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    Generate missing clips
+                  </button>
+                )}
+                {premiumCanGenerateMissing && missingLipsyncEstimate.clips > 0 && (
+                  <div className="mt-1 text-[10px] font-semibold text-amber-700">
+                    Max est. {formatUsd(missingLipsyncEstimate.estimatedUsdWithMargin)} for missing lines
+                  </div>
+                )}
               </div>
-              <div className="rounded-lg bg-white/75 px-2.5 py-2">
-                <div className="font-semibold text-neutral-800">Final render</div>
-                <div className="mt-0.5 text-neutral-500">{premiumSyncBlockingRender ? "Blocked until synced" : "Ready"}</div>
+              <div className="rounded-xl bg-white/80 px-3 py-2.5 shadow-sm">
+                <div className="flex items-center gap-2 font-semibold text-neutral-900">
+                  <Clapperboard className="h-3.5 w-3.5 text-neutral-500" /> 3. Final render
+                </div>
+                <div className="mt-1 text-neutral-500">{premiumSyncBlockingRender ? "Blocked until sync is ready" : "Ready to compose"}</div>
               </div>
+            </div>
+
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200/70 bg-white/70 px-3 py-2 text-[11px] leading-relaxed text-amber-800">
+              <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>Cache protected: re-rendering uses existing premium clips unless a line, voice, audio, or persona changes.</span>
             </div>
           </div>
         )}
@@ -1560,7 +1616,10 @@ export default function CreatePodcastPage() {
 
           {renderMode === "lipsync_premium" && allReady && premiumSyncNeededSegmentIds.length > 0 && (
             <div className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
-              <span>{premiumSyncNeededSegmentIds.length} line{premiumSyncNeededSegmentIds.length === 1 ? "" : "s"} need premium lip-sync before the final premium render.</span>
+              <span>
+                {premiumSyncNeededSegmentIds.length} line{premiumSyncNeededSegmentIds.length === 1 ? "" : "s"} need premium lip-sync before the final premium render
+                {missingLipsyncEstimate.clips > 0 ? ` (max est. ${formatUsd(missingLipsyncEstimate.estimatedUsdWithMargin)})` : ""}.
+              </span>
               <button
                 type="button"
                 onClick={() => generatePremiumLipsync(premiumSyncNeededSegmentIds).catch(() => undefined)}
@@ -1766,6 +1825,12 @@ export default function CreatePodcastPage() {
               </button>
             </div>
 
+            {renderMode === "lipsync_premium" && allReady && !premiumSyncBlockingRender && !rendering && (
+              <div className="mt-4 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>Premium clips are ready. Rendering now composes cached clips only; it should not call HeyGen again.</span>
+              </div>
+            )}
             {rendering && (
               <div className="mt-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
                 <Loader2 className="h-4 w-4 animate-spin" /> Composing your podcast video — this usually takes under a minute.

@@ -1,3 +1,7 @@
+## 2026-07-09 - Codex - T-1149e premium Jogg-like UX polish
+- Improved `/create/podcast` premium render UX with a clearer 3-step Jogg-like path: voices -> talking clips -> final render, plus a progress bar and synced percentage.
+- Surfaced the max estimated cost for missing premium clips and moved the explicit "Generate missing clips" action into the premium readiness card, while keeping generation user-triggered.
+- Added cache/no-re-spend reassurance before final premium render. Scope: UI-only; no API, Modal, DB, provider call, or credit spend. Validation: tsc clean and production build OK.
 ## 2026-07-09 - Codex - T-1147e self-hosted lip-sync feasibility spec
 - Added `docs/product/podcast-self-hosted-lipsync-feasibility.md`: a no-spend feasibility plan for testing open-source/self-hosted lip-sync as the next cost-reduction path after the proven HeyGen baseline.
 - The spec defines candidate families, the exact drop-in output contract, acceptance gates (quality/cost/latency/license/cache/fallback), and recommends a Modal GPU one-clip spike before any product integration.
