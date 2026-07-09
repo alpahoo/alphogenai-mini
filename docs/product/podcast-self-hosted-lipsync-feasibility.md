@@ -231,3 +231,31 @@ Do not spend more GPU time on ad-hoc patching in the product thread. HeyGen rema
 - Shortlist a more packaged self-hosted provider first, ideally one with a working Docker image or Modal example.
 - Keep Voicebox/Kokoro/TTS benchmarking separate; those affect voice cost/quality, not video lip-sync.
 - Continue optimizing the provider abstraction around the already-working HeyGen path so a future self-hosted adapter can drop in cleanly.
+
+## 9. Provider Shortlist After MuseTalk
+
+After the MuseTalk A10G spike, the benchmark should not continue by patching random missing packages. The next candidates are ranked by fit with the AlphoGen contract.
+
+### Next candidate: LatentSync
+
+LatentSync is the strongest next spike candidate because:
+
+- license is Apache-2.0,
+- the repo exposes a command-line inference path,
+- checkpoints are published on Hugging Face,
+- it is a lip-sync model rather than a general avatar/talking-portrait tool,
+- VRAM requirements are explicit: 8 GB for v1.5 and 18 GB for v1.6, so Modal A10G should be a plausible target.
+
+Risk: heavier diffusion stack, slower inference, larger image/model setup. Use the same one-clip input contract and hard-stop after one build/run failure cluster.
+
+### Not next: Wav2Lip open-source
+
+The original open-source Wav2Lip repo is useful as a historical baseline, but it is not the next commercial candidate because the README states the open-source model is for research/academic/personal use and points commercial users to Sync.so. It should not be integrated into AlphoGen production without a separate commercial license/provider path.
+
+### Later: SadTalker / LivePortrait
+
+SadTalker and LivePortrait are interesting for portrait animation / base-clip generation, but they are not the cleanest drop-in replacement for the current segment-level contract (`base_clip + audio_segment -> lip-synced MP4`). Keep them for a separate “base avatar motion / talking portrait” benchmark, not the first provider replacement path.
+
+### Current production decision
+
+HeyGen stays the production baseline until one alternative produces a valid MP4 with better economics and acceptable quality on the exact same benchmark input.

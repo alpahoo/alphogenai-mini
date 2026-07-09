@@ -2929,3 +2929,9 @@ reste inspiration workflow, pas dépendance. À démarrer sur GO.
 - Added dependency pins for `huggingface_hub<1.0` and `torchvision` in the harness.
 - MuseTalk still failed before producing MP4 due to missing OpenMMLab runtime dependency: `ModuleNotFoundError: No module named 'mmpose'`.
 - Decision: stop ad-hoc patching; HeyGen remains production baseline. MuseTalk requires a separate packaged-provider spike if revisited.
+
+## 2026-07-09 � T-1147e2 provider shortlist after MuseTalk
+
+- Next benchmark candidate selected: LatentSync (Apache-2.0, CLI inference, HF checkpoints, explicit VRAM requirements).
+- Wav2Lip open-source excluded from next commercial path because upstream README marks the open-source code research/academic/personal and points commercial use to Sync.so.
+- SadTalker / LivePortrait deferred to a separate talking-portrait/base-motion benchmark, not the segment-level provider replacement path.
