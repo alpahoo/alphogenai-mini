@@ -2935,3 +2935,10 @@ reste inspiration workflow, pas dépendance. À démarrer sur GO.
 - Next benchmark candidate selected: LatentSync (Apache-2.0, CLI inference, HF checkpoints, explicit VRAM requirements).
 - Wav2Lip open-source excluded from next commercial path because upstream README marks the open-source code research/academic/personal and points commercial use to Sync.so.
 - SadTalker / LivePortrait deferred to a separate talking-portrait/base-motion benchmark, not the segment-level provider replacement path.
+
+## 2026-07-09 — T-1147e2 LatentSync Modal GPU one-clip spike
+- Implemented isolated Modal harness `modal_app/latentsync_lipsync_spike.py` (separate app/volume, no prod route/UI/DB).
+- Ran one A10G benchmark against the same AlphoGen base clip + TTS segment contract as MuseTalk.
+- Result: **technical PASS**. LatentSync built, downloaded weights, ran inference, and produced a valid 512x512 MP4 with H.264 video + AAC audio, 3.36s duration, 151.12s elapsed.
+- Artifact downloaded locally to `C:/tmp/latentsync-spike/latentsync-output.mp4`. Visual/product review still pending because local browser `file://` video inspection was blocked and the experimental R2 prefix is private.
+- Decision: LatentSync is the first self-hosted candidate worth visual comparison against HeyGen; do not integrate into product until human visual QA and 2-3 segment cost sampling pass.

@@ -259,3 +259,52 @@ SadTalker and LivePortrait are interesting for portrait animation / base-clip ge
 ### Current production decision
 
 HeyGen stays the production baseline until one alternative produces a valid MP4 with better economics and acceptable quality on the exact same benchmark input.
+
+## 10. T-1147e2 LatentSync A10G Spike (2026-07-09)
+
+Status: **technical pass, visual review pending**.
+
+LatentSync was tested with the same benchmark contract as MuseTalk:
+
+- base clip: existing AlphoGen persona base clip, normalized to 512x512 / 25fps,
+- audio: one real AlphoGen TTS segment, normalized to 16 kHz mono,
+- max duration: 5 seconds,
+- GPU: Modal A10G,
+- isolation: separate Modal app and volume, no production route, no UI, no DB mutation.
+
+### Result
+
+LatentSync produced a valid MP4 where MuseTalk did not.
+
+| Metric | Result |
+|---|---|
+| Build | Pass |
+| Weights | Downloaded from Hugging Face into Modal volume |
+| Inference | Pass |
+| Output duration | 3.36 s |
+| Output streams | H.264 video + AAC audio |
+| Output resolution | 512x512 |
+| Elapsed wall time | 151.12 s |
+| Public R2 URL | 403 on the experimental prefix; object was retrieved via R2 credentials for local QA |
+| Local artifact | `C:/tmp/latentsync-spike/latentsync-output.mp4` |
+
+### Interpretation
+
+This is the first self-hosted candidate to pass the basic technical gate:
+
+1. run on Modal GPU,
+2. consume the AlphoGen base-clip + TTS contract,
+3. produce a cacheable MP4 with video and audio.
+
+However, it is **not approved for product integration yet**. The local browser could not open `file://` video due browser policy, and the experimental R2 prefix is not public. A human visual review of the local MP4 is still required before comparing quality against HeyGen.
+
+### Next step
+
+Open `C:/tmp/latentsync-spike/latentsync-output.mp4` locally and compare against the HeyGen one-segment gate:
+
+- mouth sync quality,
+- identity preservation,
+- face/crop artifacts,
+- suitability inside the current rounded-square active speaker card.
+
+If visual quality is acceptable, run 2-3 more segments and estimate Modal GPU cost per lip-sync second. If quality is poor, keep LatentSync as a research option and continue to the next candidate rather than wiring it into product.
