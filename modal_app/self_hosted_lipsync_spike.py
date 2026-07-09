@@ -36,6 +36,8 @@ musetalk_image = (
     .run_commands(
         "git clone --depth 1 https://github.com/TMElyralab/MuseTalk.git /opt/MuseTalk",
         "cd /opt/MuseTalk && pip install -r requirements.txt",
+        "pip install 'huggingface_hub>=0.19.3,<1.0'",
+        "pip install torchvision",
     )
 )
 
@@ -256,3 +258,4 @@ def main(video_url: str, audio_url: str, max_seconds: float = 5.0):
     """
     result = run_musetalk_one_clip.remote(video_url, audio_url, max_seconds)
     print(json.dumps(result, indent=2))
+

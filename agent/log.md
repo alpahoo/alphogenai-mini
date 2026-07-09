@@ -2921,3 +2921,11 @@ scanned 23. Après : 8 ready (1/segment, audio courant) + 15 removed, 0 stale/fa
 Verdict : table lean, correctness intacte. Coût cleanup $0.
 Suite convenue : T-1147 provider abstraction/benchmark (HeyGen interchangeable) — Descript
 reste inspiration workflow, pas dépendance. À démarrer sur GO.
+
+## 2026-07-09 � T-1147e1 MuseTalk Modal GPU spike result
+
+- Ran the isolated Modal A10G harness against one existing persona base clip + one real AlphoGen TTS segment.
+- Modal auth/GPU/build path worked.
+- Added dependency pins for `huggingface_hub<1.0` and `torchvision` in the harness.
+- MuseTalk still failed before producing MP4 due to missing OpenMMLab runtime dependency: `ModuleNotFoundError: No module named 'mmpose'`.
+- Decision: stop ad-hoc patching; HeyGen remains production baseline. MuseTalk requires a separate packaged-provider spike if revisited.

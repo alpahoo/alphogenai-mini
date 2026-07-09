@@ -198,3 +198,36 @@ The function will:
 Stop after one clip. Do not wire this into `/create/podcast`, do not replace HeyGen, and do not run a full podcast until this single-clip result is reviewed.
 
 If the first execution fails due to upstream dependency or model-weight drift, that is still a valid spike result. The next action should be to pin the exact MuseTalk commit/dependencies or switch the one-clip harness to EchoMimic/LatentSync, not to patch production code.
+
+## 8. Run Result — MuseTalk A10G Spike (2026-07-09)
+
+One Modal A10G run was executed against the agreed 5-second contract using an existing AlphoGen persona base clip and a real AlphoGen TTS segment.
+
+### What worked
+
+- Modal authentication and GPU execution worked.
+- The isolated app/image built successfully.
+- The spike reached MuseTalk's official inference entrypoint.
+- Required first-order dependency drift was identified and pinned in the harness:
+  - `huggingface_hub>=0.19.3,<1.0`
+  - `torchvision`
+
+### What failed
+
+MuseTalk did **not** produce an MP4. After fixing the first two dependency issues, inference failed on another missing runtime dependency:
+
+```text
+ModuleNotFoundError: No module named 'mmpose'
+```
+
+This means the upstream MuseTalk repo is not currently plug-and-play for our Modal spike. It requires a dedicated packaging pass for the OpenMMLab stack (`mmpose` / related native dependencies / compatible Torch-CUDA matrix) before quality can even be evaluated.
+
+### Decision
+
+Do not spend more GPU time on ad-hoc patching in the product thread. HeyGen remains the production provider. MuseTalk remains a research candidate only if we schedule a dedicated provider-packaging spike with a hard timebox and a pinned Docker/image recipe.
+
+### Recommended next candidates
+
+- Shortlist a more packaged self-hosted provider first, ideally one with a working Docker image or Modal example.
+- Keep Voicebox/Kokoro/TTS benchmarking separate; those affect voice cost/quality, not video lip-sync.
+- Continue optimizing the provider abstraction around the already-working HeyGen path so a future self-hosted adapter can drop in cleanly.
