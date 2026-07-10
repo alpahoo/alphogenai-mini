@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 import { getPodcastLipsyncProvider } from "@/lib/podcast/lipsync-provider";
+import { resolvePodcastLipsyncRoutingPlan } from "@/lib/podcast/lipsync-routing";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { trimLipsyncBaseClip } from "@/lib/modal-client";
 import {
@@ -27,8 +28,9 @@ import {
  */
 export const maxDuration = 60;
 
-const MODE = "precision" as const;
-const provider = getPodcastLipsyncProvider("heygen");
+const LIPSYNC_ROUTING = resolvePodcastLipsyncRoutingPlan();
+const MODE = LIPSYNC_ROUTING.providerMode;
+const provider = getPodcastLipsyncProvider(LIPSYNC_ROUTING.providerId);
 
 interface BaseClip {
   id: string;

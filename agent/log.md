@@ -1,3 +1,8 @@
+## 2026-07-11 - Codex - T-1148 provider router quality modes
+- Added a provider-neutral lip-sync routing layer with product-facing quality modes: Economy, Balanced, Premium, and Cinema. Public labels/descriptions intentionally do not expose provider names.
+- Routed the existing premium lip-sync endpoint through the new resolver while preserving current production behavior: Premium -> current baseline provider in precision mode. Planned modes fall back to Premium unless explicitly enabled for internal benchmark work.
+- Scope: no UI change, no provider switch, no Modal change, no migration, no credit spend. Validation: targeted routing/provider tests 11/11, tsc clean, production build OK.
+
 ## 2026-07-09 - Codex - T-1147e1 Modal GPU one-clip spike harness
 - Added `modal_app/self_hosted_lipsync_spike.py`: an isolated Modal app for an operator-run MuseTalk one-clip GPU spike. It is not imported by production, has no UI, no route, and spends no GPU time unless manually invoked with `modal run`.
 - The harness downloads one base clip and one AlphoGen TTS segment, trims them to a small cap, runs MuseTalk on A10G, uploads the output MP4 to R2, and returns probes/timing/output URL for comparison against the HeyGen one-segment gate.
@@ -2922,7 +2927,7 @@ Verdict : table lean, correctness intacte. Coût cleanup $0.
 Suite convenue : T-1147 provider abstraction/benchmark (HeyGen interchangeable) — Descript
 reste inspiration workflow, pas dépendance. À démarrer sur GO.
 
-## 2026-07-09 � T-1147e1 MuseTalk Modal GPU spike result
+## 2026-07-09 � T-1147e1 MuseTalk Modal GPU spike result
 
 - Ran the isolated Modal A10G harness against one existing persona base clip + one real AlphoGen TTS segment.
 - Modal auth/GPU/build path worked.
@@ -2930,7 +2935,7 @@ reste inspiration workflow, pas dépendance. À démarrer sur GO.
 - MuseTalk still failed before producing MP4 due to missing OpenMMLab runtime dependency: `ModuleNotFoundError: No module named 'mmpose'`.
 - Decision: stop ad-hoc patching; HeyGen remains production baseline. MuseTalk requires a separate packaged-provider spike if revisited.
 
-## 2026-07-09 � T-1147e2 provider shortlist after MuseTalk
+## 2026-07-09 � T-1147e2 provider shortlist after MuseTalk
 
 - Next benchmark candidate selected: LatentSync (Apache-2.0, CLI inference, HF checkpoints, explicit VRAM requirements).
 - Wav2Lip open-source excluded from next commercial path because upstream README marks the open-source code research/academic/personal and points commercial use to Sync.so.
