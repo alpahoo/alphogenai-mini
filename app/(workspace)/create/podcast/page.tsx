@@ -1377,7 +1377,7 @@ export default function CreatePodcastPage() {
             <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-base font-bold text-neutral-900">Lip-sync premium — cost estimate</h3>
               <p className="mt-1 text-sm text-neutral-600">
-                Exact per-speaker lip-sync generates one paid HeyGen clip per dialogue line.
+                Exact per-speaker lip-sync generates one paid premium sync clip per dialogue line.
                 Here’s the estimate for this podcast:
               </p>
               {lipsyncEstimate.clips > 0 ? (
@@ -1393,7 +1393,7 @@ export default function CreatePodcastPage() {
                 </p>
               )}
               <p className="mt-3 text-[11px] leading-snug text-neutral-400">
-                Estimate only - actual HeyGen credits vary. Confirming selects the premium mode;
+                Estimate only - actual premium sync cost can vary. Confirming selects the premium mode;
                 credits are spent only when you generate premium sync clips or render in premium mode.
               </p>
               <div className="mt-4 flex justify-end gap-2">
@@ -1897,7 +1897,7 @@ export default function CreatePodcastPage() {
             {renderMode === "lipsync_premium" && allReady && !premiumSyncBlockingRender && !rendering && (
               <div className="mt-4 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>Premium clips are ready. Rendering now composes cached clips only; it should not call HeyGen again.</span>
+                <span>Premium clips are ready. Rendering now composes cached clips only; it should not call the sync provider again.</span>
               </div>
             )}
             {rendering && (
