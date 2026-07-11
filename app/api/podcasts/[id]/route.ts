@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 import { TITLE_MAX, isAspectRatio, isLanguage, isLayout, isPodcastRenderMode, isPodcastStyle, isPodcastTargetDuration } from "@/lib/podcast/podcast";
+import { isPodcastLipsyncQualityMode } from "@/lib/podcast/lipsync-routing";
 
 /**
  * GET /api/podcasts/[id] — full podcast (with speakers + segments). 404 if not owned.
@@ -91,6 +92,15 @@ export async function PATCH(
         return NextResponse.json({ error: "target_duration_seconds must be 30, 60, 120, 300 or 600" }, { status: 400 });
       }
       nextMeta.target_duration_seconds = body.target_duration_seconds;
+      metaChanged = true;
+    }
+    if (body.lipsync_quality_mode !== undefined) {
+      if (!isPodcastLipsyncQualityMode(body.lipsync_quality_mode)) {
+        return NextResponse.json({ error: "lipsync_quality_mode must be economy | balanced | premium | cinema" }, { status: 400 });
+      }
+      // Provider quality is a studio preference. It does not invalidate the current
+      // MP4 until the effective provider route actually changes in a future ticket.
+      nextMeta.lipsync_quality_mode = body.lipsync_quality_mode;
       metaChanged = true;
     }
     if (body.render_mode !== undefined) {

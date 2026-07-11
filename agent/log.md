@@ -1,3 +1,8 @@
+## 2026-07-11 - Codex - T-1148b premium quality target UI
+- Added a provider-neutral Quality target card inside /create/podcast when Lip-sync premium is selected. Economy, Balanced, Premium, and Cinema are visible as product modes; only Premium is currently selectable, while planned modes remain locked until benchmark/cost gates pass.
+- Persisted `lipsync_quality_mode` in podcast metadata through POST/PATCH and restored it on reopen. This is treated as a studio preference and does not invalidate existing renders while the effective production route remains unchanged.
+- Scope: no provider switch, no Modal change, no migration, no credit spend. Validation: routing + podcast route tests 40/40, tsc clean, production build OK.
+
 ## 2026-07-11 - Codex - T-1148 provider router quality modes
 - Added a provider-neutral lip-sync routing layer with product-facing quality modes: Economy, Balanced, Premium, and Cinema. Public labels/descriptions intentionally do not expose provider names.
 - Routed the existing premium lip-sync endpoint through the new resolver while preserving current production behavior: Premium -> current baseline provider in precision mode. Planned modes fall back to Premium unless explicitly enabled for internal benchmark work.

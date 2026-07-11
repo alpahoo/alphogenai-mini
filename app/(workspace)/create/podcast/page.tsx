@@ -23,6 +23,12 @@ import {
   formatUsd,
   formatEstimatedTime,
 } from "@/lib/podcast/lipsync-estimate";
+import {
+  isPodcastLipsyncQualityMode,
+  listPodcastLipsyncQualityPresets,
+  resolvePodcastLipsyncRoutingPlan,
+  type PodcastLipsyncQualityMode,
+} from "@/lib/podcast/lipsync-routing";
 
 type Speaker = { id: string; role: "host" | "guest"; name: string; position: number; voice_id?: string | null; persona_id?: string | null };
 type Persona = { id: string; name: string; portrait_url: string | null; thumb_url: string | null; is_catalog: boolean };
@@ -50,7 +56,7 @@ type PodcastRow = {
   created_at?: string | null;
   source_topic?: string | null;
   source_asset_url?: string | null;
-  metadata?: { podcast_style?: string; target_duration_seconds?: number; render_mode?: string } | null;
+  metadata?: { podcast_style?: string; target_duration_seconds?: number; render_mode?: string; lipsync_quality_mode?: string } | null;
 };
 
 const LANGUAGES = [
@@ -114,11 +120,17 @@ export default function CreatePodcastPage() {
   const [targetDuration, setTargetDuration] = useState(120);
   const [podcastStyle, setPodcastStyle] = useState("casual");
   const [renderMode, setRenderMode] = useState("talking_visual");
+  const [lipsyncQualityMode, setLipsyncQualityMode] = useState<PodcastLipsyncQualityMode>("premium");
   // Lip-sync premium opt-in gate (T-1145). Confirmation is required (with a cost
   // estimate) before the premium mode can be selected. No credits are spent here;
   // the real lip-sync render ships in T-1144b.
   const [lipsyncConfirmOpen, setLipsyncConfirmOpen] = useState(false);
   const [lipsyncConfirmed, setLipsyncConfirmed] = useState(false);
+  const lipsyncQualityPresets = useMemo(() => listPodcastLipsyncQualityPresets(), []);
+  const lipsyncQualityPlan = useMemo(
+    () => resolvePodcastLipsyncRoutingPlan({ qualityMode: lipsyncQualityMode }),
+    [lipsyncQualityMode],
+  );
 
   const [podcast, setPodcast] = useState<PodcastRow | null>(null);
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
@@ -303,6 +315,7 @@ export default function CreatePodcastPage() {
             podcast_style: podcastStyle,
             target_duration_seconds: targetDuration,
             render_mode: persistRenderMode,
+            lipsync_quality_mode: lipsyncQualityMode,
           }),
         });
         const json = await res.json();
@@ -317,7 +330,12 @@ export default function CreatePodcastPage() {
         const metaRes = await fetch(`/api/podcasts/${pid}`, {
           method: "PATCH",
           headers,
-          body: JSON.stringify({ podcast_style: podcastStyle, target_duration_seconds: targetDuration, render_mode: persistRenderMode }),
+          body: JSON.stringify({
+            podcast_style: podcastStyle,
+            target_duration_seconds: targetDuration,
+            render_mode: persistRenderMode,
+            lipsync_quality_mode: lipsyncQualityMode,
+          }),
         }).catch(() => null);
         if (!metaRes || !metaRes.ok) {
           const j = metaRes ? await metaRes.json().catch(() => ({})) : {};
@@ -414,6 +432,7 @@ export default function CreatePodcastPage() {
         const meta = p.metadata || {};
         if (meta.podcast_style) setPodcastStyle(meta.podcast_style);
         if (meta.target_duration_seconds) setTargetDuration(meta.target_duration_seconds);
+        if (isPodcastLipsyncQualityMode(meta.lipsync_quality_mode)) setLipsyncQualityMode(meta.lipsync_quality_mode);
         // Restore the saved render mode. Premium is live (T-1146): restore it and
         // treat its cost as already acknowledged (the podcast was saved in premium),
         // so the per-line premium badges/controls show immediately on reopen.
@@ -1228,6 +1247,56 @@ export default function CreatePodcastPage() {
             shown and confirmed before anything is generated.
           </p>
         </div>
+
+        {renderMode === "lipsync_premium" && (
+          <div className="mt-3 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-sm font-bold text-neutral-900">
+                  <ShieldCheck className="h-4 w-4 text-neutral-600" /> Quality target
+                </div>
+                <p className="mt-1 max-w-xl text-[11px] leading-relaxed text-neutral-500">
+                  Choose the result level. AlphoGen keeps providers hidden and routes the job behind the scenes.
+                </p>
+              </div>
+              {lipsyncQualityPlan.fallbackReason && (
+                <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-[10px] font-bold uppercase text-neutral-500">
+                  Using Premium today
+                </span>
+              )}
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-4">
+              {lipsyncQualityPresets.map((preset) => {
+                const active = lipsyncQualityMode === preset.id;
+                const available = preset.status === "available";
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    disabled={!available}
+                    onClick={() => setLipsyncQualityMode(preset.id)}
+                    className={`rounded-xl border px-3 py-2.5 text-left transition ${
+                      active
+                        ? "border-neutral-900 bg-neutral-900/[0.03] ring-1 ring-neutral-900"
+                        : available
+                          ? "border-neutral-200 bg-white hover:bg-neutral-50"
+                          : "cursor-not-allowed border-neutral-200 bg-neutral-50 opacity-70"
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-neutral-800">
+                      {preset.publicLabel}
+                      {!available && <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-bold uppercase text-neutral-500">Soon</span>}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-neutral-500">{preset.publicDescription}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-[11px] text-neutral-400">
+              Premium is the validated production route today. Economy, Balanced, and Cinema stay locked until their providers pass benchmark and cost gates.
+            </p>
+          </div>
+        )}
 
         {renderMode === "lipsync_premium" && (
           <div className="mt-3 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-4 text-xs text-amber-950 shadow-sm">

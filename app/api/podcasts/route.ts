@@ -14,6 +14,7 @@ import {
   isPodcastTargetDuration,
   isSourceMode,
 } from "@/lib/podcast/podcast";
+import { isPodcastLipsyncQualityMode } from "@/lib/podcast/lipsync-routing";
 
 /**
  * GET /api/podcasts — list the authenticated user's podcasts (newest first).
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => ({}));
     const { source_mode, source_topic, source_asset_url, title, layout, aspect_ratio, language,
-      podcast_style, target_duration_seconds, render_mode } = body;
+      podcast_style, target_duration_seconds, render_mode, lipsync_quality_mode } = body;
 
     if (!isSourceMode(source_mode)) {
       return NextResponse.json({ error: "source_mode must be 'generate' or 'upload'" }, { status: 400 });
@@ -104,6 +105,12 @@ export async function POST(request: NextRequest) {
       // lipsync_premium is live as of T-1144b Phase 1 (capped, cached, fallback-safe).
       // Actual spend is gated by POST /api/podcasts/[id]/lipsync, not here.
       metadata.render_mode = render_mode;
+    }
+    if (lipsync_quality_mode !== undefined) {
+      if (!isPodcastLipsyncQualityMode(lipsync_quality_mode)) {
+        return NextResponse.json({ error: "lipsync_quality_mode must be economy | balanced | premium | cinema" }, { status: 400 });
+      }
+      metadata.lipsync_quality_mode = lipsync_quality_mode;
     }
 
     const service = createServiceClient();
