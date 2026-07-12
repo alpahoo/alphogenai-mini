@@ -65,7 +65,7 @@ async function resolveBaseClip(
     .eq("aspect_ratio", "1:1")
     .eq("resolution", "720p")
     .eq("clip_kind", "talking_head")
-    .eq("prompt_version", "base-v1")
+    .eq("prompt_version", "base-v2-8s")
     .eq("status", "ready")
     .order("created_at", { ascending: false })
     .limit(1)

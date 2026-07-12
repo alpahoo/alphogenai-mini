@@ -1005,6 +1005,15 @@ export default function CreatePodcastPage() {
     try {
       const headers = await authHeaders();
       if (!headers) throw new Error("Please sign in again.");
+      const qualityRes = await fetch(`/api/podcasts/${podcast.id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ lipsync_quality_mode: lipsyncQualityMode }),
+      }).catch(() => null);
+      if (!qualityRes || !qualityRes.ok) {
+        const qualityJson = qualityRes ? await qualityRes.json().catch(() => ({})) : {};
+        throw new Error(qualityJson?.error || "Could not save the lip-sync quality. Try again.");
+      }
       const start = await fetch(`/api/podcasts/${podcast.id}/lipsync`, {
         method: "POST",
         headers,
@@ -1012,6 +1021,25 @@ export default function CreatePodcastPage() {
       });
       const startJson = await start.json().catch(() => ({}));
       if (!start.ok) throw new Error(startJson?.error || "Could not start premium lip-sync.");
+      const skippedReasons = Array.isArray(startJson?.skippedReasons)
+        ? startJson.skippedReasons.filter((reason: unknown): reason is string => typeof reason === "string")
+        : [];
+      const durationSkipped = skippedReasons.filter((reason: string) => reason.endsWith(":duration_out_of_range")).length;
+      const noBaseSkipped = skippedReasons.filter((reason: string) => reason.endsWith(":no_base_clip")).length;
+      const overCapSkipped = skippedReasons.filter((reason: string) => reason.endsWith(":over_cap")).length;
+      const startedOrCached = Number(startJson?.started || 0) + Number(startJson?.processing || 0) + Number(startJson?.cached || 0);
+      if (skippedReasons.length > 0 && startedOrCached === 0) {
+        if (durationSkipped > 0) {
+          throw new Error(`${durationSkipped} dialogue line${durationSkipped === 1 ? " is" : "s are"} longer than the presenter clip. Shorten the line or regenerate the presenter clip.`);
+        }
+        if (noBaseSkipped > 0) {
+          throw new Error("The selected presenters do not have a ready talking clip yet.");
+        }
+        if (overCapSkipped > 0) {
+          throw new Error("This premium sync exceeds the spending cap. Shorten the podcast or sync fewer lines.");
+        }
+        throw new Error("No dialogue line could be prepared for premium sync.");
+      }
       if (Number(startJson?.started || 0) > 0) clearLocalVideo();
       await refreshLipsyncStatus();
 
@@ -1037,6 +1065,14 @@ export default function CreatePodcastPage() {
       setVoiceProgress(null);
       if (processing > 0) throw new Error("Premium lip-sync is still processing. Try again in a moment.");
       await refreshLipsyncStatus();
+      if (skippedReasons.length > 0) {
+        const details = [
+          durationSkipped > 0 ? `${durationSkipped} too long` : null,
+          noBaseSkipped > 0 ? `${noBaseSkipped} without presenter clip` : null,
+          overCapSkipped > 0 ? `${overCapSkipped} over the spending cap` : null,
+        ].filter(Boolean).join(", ");
+        setError(`Premium sync completed partially${details ? `: ${details}` : ""}. The remaining lines will use the talking visual fallback.`);
+      }
       return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not generate premium lip-sync.");

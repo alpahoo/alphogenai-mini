@@ -1,3 +1,8 @@
+## 2026-07-12 - Codex - T-1156a 60-second observation unblocker
+- Diagnosed the observation stop as a base-clip contract issue, not a podcast-duration or provider-cap issue: the existing 4.26-second `base-v1` presenter clips reject longer dialogue turns before any lip-sync job starts.
+- Introduced cache-isolated `base-v2-8s` presenter clips with a longer neutral script, switched the lip-sync resolver to v2, persisted the selected quality before generation, and surfaced skipped reasons instead of silently completing.
+- Validation: 25/25 targeted tests, 950/950 full tests, tsc, and production build pass. No provider job or paid generation was started in this change.
+
 ## 2026-07-12 - Codex - T-1155 Controlled Balanced beta production QA PASS
 - Deployed commit `a9ff295`, enabled the production server flag, and verified the controlled beta in the signed-in admin account without starting any provider job or spending credits.
 - Balanced renders as an enabled `Beta` quality target with a conservative queue ETA, two-at-a-time disclosure, and automatic Premium fallback copy. The UI exposes no provider names. Switching back to Premium restores the validated production copy and leaves generation enabled.

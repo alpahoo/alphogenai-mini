@@ -39,7 +39,7 @@ const readyClip = {
   aspect_ratio: "16:9",
   resolution: "720p",
   clip_kind: "talking_head",
-  prompt_version: "base-v1",
+  prompt_version: "base-v2-8s",
   video_url: "https://cdn.example.com/base.mp4",
   storage_key: "podcast/base-clips/persona-1/base.mp4",
   duration_seconds: 4.2,
@@ -178,7 +178,13 @@ describe("POST /api/admin/podcast-base-clips", () => {
     expect(json.stage).toBe("video_processing");
     expect(createPhotoAvatar).not.toHaveBeenCalled();
     expect(createAvatarVideo).toHaveBeenCalledWith(
-      expect.objectContaining({ avatarId: "avatar-new", voiceId: "voice-1", aspectRatio: "16:9", resolution: "720p" }),
+      expect.objectContaining({
+        avatarId: "avatar-new",
+        voiceId: "voice-1",
+        aspectRatio: "16:9",
+        resolution: "720p",
+        scriptText: expect.stringContaining("what you can do next"),
+      }),
     );
     expect(json.clip.provider_video_id).toBe("video-new");
   });

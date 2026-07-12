@@ -13,9 +13,9 @@ const VALID_RESOLUTIONS = new Set(["720p", "1080p"]);
 const DEFAULT_ASPECT = "16:9";
 const DEFAULT_RESOLUTION = "720p";
 const DEFAULT_CLIP_KIND = "talking_head";
-const DEFAULT_PROMPT_VERSION = "base-v1";
+const DEFAULT_PROMPT_VERSION = "base-v2-8s";
 const DEFAULT_SCRIPT =
-  "Welcome back to the show. Today we are unpacking one clear idea, step by step.";
+  "Welcome back to the show. Today we're exploring one practical idea, why it matters, how it works, and what you can do next to put it into practice.";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
