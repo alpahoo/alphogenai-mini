@@ -1,3 +1,8 @@
+## 2026-07-12 - Codex - T-1155 Controlled Balanced beta implementation
+- Added a server-enforced cohort gate: Balanced requires the global server flag plus an admin account or a Premium account on the private email allowlist. Direct API requests outside the cohort fail closed to the validated Premium route.
+- Added provider-neutral `/api/podcasts/quality-access` capability discovery and a Beta-only Studio control with conservative queue ETA, two-at-a-time disclosure, automatic Premium fallback copy, and an extended polling budget for queued GPU work.
+- Validation: 950/950 full tests, 245 podcast/API tests, 32 targeted tests, production build, and tsc all pass. No migration, Modal change, or provider spend.
+
 ## 2026-07-12 - Codex - T-1154 Balanced internal mini-batch PASS
 - Ran a production-only three-clip LatentSync batch on the QA podcast while the public Balanced control remained locked. Result: 3/3 ready, zero fallback, zero failure, two A10G workers maximum, and the third task queued as designed.
 - Structured metrics: 13.80s output, 481.93s cumulative GPU time, per-clip latency 123.72-220.32s. Provider-aware estimates stored $0.05-$0.06 per clip ($0.17 total), instead of the former HeyGen estimate.

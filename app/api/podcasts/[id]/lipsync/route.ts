@@ -8,6 +8,8 @@ import {
   providerSupportsInputSeconds,
 } from "@/lib/podcast/lipsync-provider";
 import { resolvePodcastLipsyncRoutingPlan } from "@/lib/podcast/lipsync-routing";
+import { isPodcastBalancedBetaEligible } from "@/lib/podcast/lipsync-beta";
+import { resolveUserPlan } from "@/lib/jobs/guard";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { trimLipsyncBaseClip } from "@/lib/modal-client";
 import {
@@ -236,7 +238,15 @@ export async function POST(
     const metadata = podcast.metadata && typeof podcast.metadata === "object"
       ? podcast.metadata as Record<string, unknown>
       : {};
-    const routing = resolvePodcastLipsyncRoutingPlan({ qualityMode: metadata.lipsync_quality_mode });
+    let balancedCohortEligible = false;
+    if (metadata.lipsync_quality_mode === "balanced") {
+      const plan = await resolveUserPlan(service, user.id);
+      balancedCohortEligible = isPodcastBalancedBetaEligible({ email: user.email, plan });
+    }
+    const routing = resolvePodcastLipsyncRoutingPlan({
+      qualityMode: metadata.lipsync_quality_mode,
+      balancedCohortEligible,
+    });
     const mode = routing.providerMode;
     const startProvider = getPodcastLipsyncProvider(routing.providerId);
 

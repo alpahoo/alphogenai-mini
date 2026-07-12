@@ -66,18 +66,30 @@ describe("podcast lip-sync quality routing", () => {
     vi.stubEnv("PODCAST_LATENTSYNC_BALANCED_ENABLED", "true");
     vi.stubEnv("MODAL_LATENTSYNC_URL", "https://latent.example.com");
 
-    const plan = resolvePodcastLipsyncRoutingPlan({ qualityMode: "balanced" });
+    const plan = resolvePodcastLipsyncRoutingPlan({ qualityMode: "balanced", balancedCohortEligible: true });
     expect(plan.requestedQualityMode).toBe("balanced");
     expect(plan.effectiveQualityMode).toBe("balanced");
     expect(plan.providerId).toBe("latentsync_modal");
     expect(plan.status).toBe("available");
   });
 
+  it("fails closed to Premium outside the controlled Balanced cohort", () => {
+    vi.stubEnv("PODCAST_LATENTSYNC_BALANCED_ENABLED", "true");
+    vi.stubEnv("MODAL_LATENTSYNC_URL", "https://latent.example.com");
+
+    const plan = resolvePodcastLipsyncRoutingPlan({
+      qualityMode: "balanced",
+      balancedCohortEligible: false,
+    });
+    expect(plan.effectiveQualityMode).toBe("premium");
+    expect(plan.providerId).toBe("heygen");
+  });
+
   it("fails closed to Premium when the Balanced endpoint is missing", () => {
     vi.stubEnv("PODCAST_LATENTSYNC_BALANCED_ENABLED", "true");
     vi.stubEnv("MODAL_LATENTSYNC_URL", "");
 
-    const plan = resolvePodcastLipsyncRoutingPlan({ qualityMode: "balanced" });
+    const plan = resolvePodcastLipsyncRoutingPlan({ qualityMode: "balanced", balancedCohortEligible: true });
     expect(plan.effectiveQualityMode).toBe("premium");
     expect(plan.providerId).toBe("heygen");
   });

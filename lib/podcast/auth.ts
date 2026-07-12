@@ -11,6 +11,7 @@ import type { NextRequest } from "next/server";
 
 export interface AuthedUser {
   id: string;
+  email?: string | null;
 }
 
 export async function getUserFromRequest(request: NextRequest): Promise<AuthedUser | null> {
@@ -28,5 +29,5 @@ export async function getUserFromRequest(request: NextRequest): Promise<AuthedUs
   } = await supabase.auth.getUser(token);
 
   if (error || !user) return null;
-  return { id: user.id };
+  return { id: user.id, email: user.email ?? null };
 }

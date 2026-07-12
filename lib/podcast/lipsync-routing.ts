@@ -75,13 +75,16 @@ export function isLatentSyncBalancedEnabled(): boolean {
 export function resolvePodcastLipsyncRoutingPlan(options?: {
   qualityMode?: unknown;
   allowPlanned?: boolean;
+  balancedCohortEligible?: boolean;
 }): PodcastLipsyncRoutingPlan {
   const requestedQualityMode = isPodcastLipsyncQualityMode(options?.qualityMode)
     ? options.qualityMode
     : DEFAULT_PODCAST_LIPSYNC_QUALITY_MODE;
   const requestedPreset = getPodcastLipsyncQualityPreset(requestedQualityMode);
   const requestedStatus = getPublicPodcastLipsyncQualityPreset(requestedQualityMode).status;
-  const balancedEnabled = requestedQualityMode === "balanced" && isLatentSyncBalancedEnabled();
+  const balancedEnabled = requestedQualityMode === "balanced"
+    && options?.balancedCohortEligible === true
+    && isLatentSyncBalancedEnabled();
 
   if (requestedStatus === "available" || balancedEnabled || options?.allowPlanned) {
     return {

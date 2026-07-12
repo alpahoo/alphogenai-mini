@@ -11,7 +11,7 @@ vi.mock("@/lib/heygen-client", () => ({ createLipsync: vi.fn(), getLipsyncTask: 
 vi.mock("@/lib/r2", () => ({ uploadBufferToR2: vi.fn() }));
 vi.mock("@/lib/modal-client", () => ({ trimLipsyncBaseClip: vi.fn() }));
 
-const USER = { id: "user-1" };
+const USER = { id: "user-1", email: "beta@example.com" };
 type Result = { data?: unknown; error?: unknown };
 type State = { table: string; op: string; filters: Record<string, unknown>; payload: unknown };
 
@@ -45,6 +45,7 @@ const req = (body?: unknown) => ({ url: "http://localhost", json: async () => bo
 
 const baseRoutes = (overrides: Record<string, (s: State) => Result> = {}) => ({
   "podcasts:select": () => ({ data: { id: "p1", user_id: USER.id }, error: null }),
+  "profiles:select": () => ({ data: { plan: "premium" }, error: null }),
   "podcast_speakers:select": () => ({
     data: [{ id: "speaker-1", role: "host", persona_id: "persona-1" }],
     error: null,
@@ -84,6 +85,7 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(USER);
     vi.mocked(createLipsync).mockResolvedValue("heygen-task-1");
     vi.mocked(trimLipsyncBaseClip).mockResolvedValue("https://cdn.example.com/trimmed.mp4");
+    vi.stubEnv("PODCAST_BALANCED_BETA_EMAILS", USER.email);
   });
 
   it("reuses ready cache rows without calling HeyGen or consuming new spend", async () => {
@@ -201,6 +203,27 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
       provider_task_id: "fc-balanced",
       status: "processing",
     });
+  });
+
+  it("keeps direct Balanced requests on Premium outside the beta cohort", async () => {
+    vi.stubEnv("PODCAST_LATENTSYNC_BALANCED_ENABLED", "true");
+    vi.stubEnv("MODAL_LATENTSYNC_URL", "https://latent.example.com");
+    vi.stubEnv("PODCAST_BALANCED_BETA_EMAILS", "someone-else@example.com");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const writes: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(makeService(baseRoutes({
+      "podcasts:select": () => ({
+        data: { id: "p1", user_id: USER.id, metadata: { lipsync_quality_mode: "balanced" } },
+        error: null,
+      }),
+    }), writes) as never);
+
+    const res = await POST(req({ action: "start" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(createLipsync).toHaveBeenCalledTimes(1);
+    expect(writes.at(-1)?.payload).toMatchObject({ provider: "heygen" });
   });
 
   it("routes an over-limit Balanced segment directly to HeyGen before any GPU call", async () => {
