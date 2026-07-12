@@ -1,3 +1,9 @@
+## 2026-07-12 - Codex - T-1154 Balanced internal mini-batch PASS
+- Ran a production-only three-clip LatentSync batch on the QA podcast while the public Balanced control remained locked. Result: 3/3 ready, zero fallback, zero failure, two A10G workers maximum, and the third task queued as designed.
+- Structured metrics: 13.80s output, 481.93s cumulative GPU time, per-clip latency 123.72-220.32s. Provider-aware estimates stored $0.05-$0.06 per clip ($0.17 total), instead of the former HeyGen estimate.
+- Human frame/motion review passed on both personas: stable identity, visible mouth movement, stable studio framing. One duplicated completion log was observed from overlapping UI polls; it caused no duplicate provider spend and only rewrote the same durable R2 key.
+- Restored QA podcast metadata to `{}`, reset `PODCAST_LATENTSYNC_BALANCED_ENABLED=false`, and redeployed Vercel production. Decision: internal beta gate passed; public Balanced remains locked until queue/ETA UX and controlled cohort monitoring exist.
+
 ## 2026-07-12 - Codex - T-1154 Balanced production hardening (pre-QA)
 - Added provider capability contracts (max input, concurrency, measured cost) and provider-aware estimates. Balanced no longer reports HeyGen pricing; the production cap reserves worst-case HeyGen fallback cost before any GPU task starts.
 - Segments outside LatentSync's 8-second input contract route directly to HeyGen before cache reservation/GPU spend. Modal A10G concurrency is explicitly bounded to two containers.

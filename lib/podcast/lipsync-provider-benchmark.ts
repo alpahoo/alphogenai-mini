@@ -109,10 +109,10 @@ export const LATENTSYNC_A10_BENCHMARK: LipsyncProviderBenchmarkInput = {
     metricsSource: "measured",
     technicalPass: true,
     visualReview: "passed",
-    sampleCount: 4,
-    humanReviewedSampleCount: 4,
+    sampleCount: 7,
+    humanReviewedSampleCount: 7,
     measuredAt: "2026-07-12",
-    note: "Four technical and moving human-review passes across two personas and varied durations. HeyGen remains slightly ahead on quality.",
+    note: "Seven technical and moving human-review passes across two personas and varied durations, including a three-clip concurrency-capped production batch. HeyGen remains slightly ahead on quality.",
   },
 };
 

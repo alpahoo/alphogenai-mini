@@ -94,3 +94,20 @@ Goal: one Modal/GPU or local/off-prod spike using the same benchmark inputs:
 - compare against HeyGen on quality, latency, estimated GPU cost, and failure behavior.
 
 Hard stop if quality is visibly worse or GPU cost/latency makes it non-competitive.
+
+## 6. T-1154 Balanced Hardening Gate (2026-07-12)
+
+LatentSync passed a three-clip production mini-batch with the public Balanced
+mode kept locked:
+
+- 3/3 clips ready, zero provider fallback and zero failed task;
+- two A10G containers maximum, with the third task queued as intended;
+- 13.80 seconds of valid output for 481.93 cumulative GPU seconds;
+- directional provider cost recorded at $0.17 total ($0.05-$0.06 per clip);
+- visual review passed across both personas with stable identity and real mouth motion;
+- cold latency remained 124-220 seconds per clip, so public activation still
+  requires an explicit waiting/queue UX and operational monitoring.
+
+Decision: **successful internal beta gate; keep public Balanced locked**. The
+next product slice should add queue/ETA copy and a controlled beta cohort rather
+than silently replacing Premium.

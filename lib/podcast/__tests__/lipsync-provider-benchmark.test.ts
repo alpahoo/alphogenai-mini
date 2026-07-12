@@ -163,6 +163,6 @@ describe("measured provider matrix", () => {
   it("projects comparable costs for 10 and 45 minute active-speaker output", () => {
     expect(projectedLipsyncCostUsd(HEYGEN_BASELINE_BENCHMARK, 600)).toBe(24);
     expect(projectedLipsyncCostUsd(HEYGEN_BASELINE_BENCHMARK, 2700)).toBe(108);
-    expect(projectedLipsyncCostUsd(LATENTSYNC_A10_BENCHMARK, 600)).toBeCloseTo(7.33, 1);
+    expect(projectedLipsyncCostUsd(LATENTSYNC_A10_BENCHMARK, 600)).toBeCloseTo(6.88, 1);
   });
 });
