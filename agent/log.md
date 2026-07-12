@@ -1,3 +1,8 @@
+## 2026-07-12 - Codex - T-1150 measured lip-sync provider matrix
+- Replaced theory-only promotion with evidence-gated scoring: production candidates now require a technical pass, a human visual pass, measured metrics, and at least three same-input samples.
+- Encoded the measured matrix: current SaaS baseline 82/high/production; LatentSync Modal A10 62/medium/watchlist; MuseTalk 28/low/reject. LatentSync is roughly 3x cheaper per measured output-second but slower and supported by one reviewed sample.
+- Added long-form directional cost projections and the internal routing decision report. No provider switch, UI change, migration, Modal run, or credit spend.
+
 ## 2026-07-11 - Codex - T-1148b premium quality target UI
 - Added a provider-neutral Quality target card inside /create/podcast when Lip-sync premium is selected. Economy, Balanced, Premium, and Cinema are visible as product modes; only Premium is currently selectable, while planned modes remain locked until benchmark/cost gates pass.
 - Persisted `lipsync_quality_mode` in podcast metadata through POST/PATCH and restored it on reopen. This is treated as a studio preference and does not invalidate existing renders while the effective production route remains unchanged.
