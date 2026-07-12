@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_PODCAST_LIPSYNC_QUALITY_MODE,
   getPodcastLipsyncQualityPreset,
@@ -7,6 +7,8 @@ import {
   PODCAST_LIPSYNC_QUALITY_MODES,
   resolvePodcastLipsyncRoutingPlan,
 } from "../lipsync-routing";
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("podcast lip-sync quality routing", () => {
   it("keeps premium as the production default", () => {
@@ -58,5 +60,25 @@ describe("podcast lip-sync quality routing", () => {
 
   it("exposes internal notes separately from public copy", () => {
     expect(getPodcastLipsyncQualityPreset("cinema").internalNote).toMatch(/Runway|Act-Two/i);
+  });
+
+  it("routes Balanced to LatentSync only when the server-side flag and endpoint are configured", () => {
+    vi.stubEnv("PODCAST_LATENTSYNC_BALANCED_ENABLED", "true");
+    vi.stubEnv("MODAL_LATENTSYNC_URL", "https://latent.example.com");
+
+    const plan = resolvePodcastLipsyncRoutingPlan({ qualityMode: "balanced" });
+    expect(plan.requestedQualityMode).toBe("balanced");
+    expect(plan.effectiveQualityMode).toBe("balanced");
+    expect(plan.providerId).toBe("latentsync_modal");
+    expect(plan.status).toBe("available");
+  });
+
+  it("fails closed to Premium when the Balanced endpoint is missing", () => {
+    vi.stubEnv("PODCAST_LATENTSYNC_BALANCED_ENABLED", "true");
+    vi.stubEnv("MODAL_LATENTSYNC_URL", "");
+
+    const plan = resolvePodcastLipsyncRoutingPlan({ qualityMode: "balanced" });
+    expect(plan.effectiveQualityMode).toBe("premium");
+    expect(plan.providerId).toBe("heygen");
   });
 });

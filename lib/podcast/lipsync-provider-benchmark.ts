@@ -104,9 +104,9 @@ export const LATENTSYNC_A10_BENCHMARK: LipsyncProviderBenchmarkInput = {
     technicalPass: true,
     visualReview: "passed",
     sampleCount: 4,
-    humanReviewedSampleCount: 1,
+    humanReviewedSampleCount: 4,
     measuredAt: "2026-07-12",
-    note: "Four technical passes across two personas and varied durations. One moving clip was human-reviewed; three additional clips passed codec/probe and multi-frame identity/artifact review.",
+    note: "Four technical and moving human-review passes across two personas and varied durations. HeyGen remains slightly ahead on quality.",
   },
 };
 

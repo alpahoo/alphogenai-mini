@@ -5,7 +5,7 @@ Status: measured matrix v1. Date: 2026-07-12. Scope: internal provider routing f
 ## Decision
 
 - **Premium stays on the current production baseline.** It is the only path with high-confidence evidence across a full short podcast and a same-input comparison.
-- **LatentSync on Modal remains the leading Balanced/Economy candidate.** It is materially cheaper on the measured clip and visually very good, but slower, operationally heavier, and supported by only one reviewed sample.
+- **LatentSync on Modal is the feature-flagged Balanced candidate.** It is materially cheaper and passed four moving human reviews, but remains slower than the Premium baseline and is not publicly enabled yet.
 - **MuseTalk is rejected for now.** The spike did not produce an MP4 with the pinned experimental package.
 - **Runway/Act-Two is not scored yet.** Marketing capability or generic character generation is not evidence for AlphoGen's exact contract: `base clip + AlphoGen TTS segment -> downloadable lip-synced MP4`.
 
@@ -18,7 +18,7 @@ The reviewed comparison used the same AlphoGen persona base clip and the same re
 | Path | Output | Wall time | Measured cost | Human review | Evidence |
 |---|---:|---:|---:|---|---|
 | Current SaaS baseline | 3.31 s | 90.06 s | $0.13 (~$0.04/output-s) | Best of the two by a small margin | High: 8-line production QA + comparison clip |
-| LatentSync / Modal A10 | 14.56 s total | 581.32 s total | ~$0.178 GPU (~$0.0122/output-s) | First clip very good/slightly behind; 3 more pass frame QA | Medium: 4 technical passes, 1 moving human review |
+| LatentSync / Modal A10 | 14.56 s total | 581.32 s total | ~$0.178 GPU (~$0.0122/output-s) | All 4 moving outputs approved; baseline slightly ahead | High: 4 technical + 4 moving human reviews |
 | MuseTalk / Modal A10 | No MP4 | Failed | Not comparable | Not reviewable | Low: technical failure |
 
 The Modal calculation uses the current official A10 price of `$0.000306/s`. It is a compute estimate based on measured wall time; storage, CPU/memory, regional multipliers, cold starts, and future pricing can change the final bill.
@@ -28,7 +28,7 @@ The Modal calculation uses the current official A10 price of `$0.000306/s`. It i
 | Path | Score | Confidence | Verdict | Why |
 |---|---:|---|---|---|
 | Current SaaS baseline | **82** | High | `production_candidate` | Best reviewed quality, proven API/cache/fallback path |
-| LatentSync / Modal A10 | **63** | Medium | `watchlist` | ~3.3x cheaper measured output-second, but slower and not production-packaged |
+| LatentSync / Modal A10 | **63** | High | `watchlist` | ~3.3x cheaper measured output-second; now packaged behind a private Balanced feature flag with fallback |
 | MuseTalk / Modal A10 | **28** | Low | `reject` | No valid output, unresolved packaging/runtime stack |
 
 Production promotion requires all of the following:
@@ -59,8 +59,14 @@ This validates the tier strategy:
 
 ## Next measured work
 
-1. Human-review the three new moving outputs (Aria 2.08 s, Leo 4.48 s, Aria 4.64 s); frame QA already passed.
+1. Run one private Balanced end-to-end podcast QA after deploying the adapter and enabling the server flag only in the controlled environment.
 2. Add a French sample, then record cold and warm latency separately and estimate concurrency/batch economics.
-3. Build no production adapter until those samples pass identity, mouth-sync, crop, and failure tests.
+3. Keep the public Balanced selector locked until the private adapter/fallback QA passes.
 4. When Runway Dev access is available, run exactly one capped Act-Two clip through the same harness before assigning it to Cinema.
 5. Keep Descript outside this provider matrix unless it exposes an official server API for the same lip-sync contract; use it later as an edit/polish/export integration.
+
+## T-1152 controlled production adapter
+
+LatentSync is packaged as a separate, pinned Modal app with asynchronous `start/status` endpoints. The Next.js provider adapter keeps the existing neutral create/poll contract. Balanced routes to LatentSync only when both `PODCAST_LATENTSYNC_BALANCED_ENABLED=true` and `MODAL_LATENTSYNC_URL` are configured; otherwise it fails closed to Premium. Start/poll failures automatically fall back to the current baseline, and the provider actually used is persisted in the segment cache. Premium and Balanced cache rows coexist and the Modal renderer selects the provider appropriate to the requested quality tier.
+
+Deployment: `alphogenai-latentsync`, health-checked on 2026-07-12 at `https://alpahoo--alphogenai-latentsync-latentsync-api.modal.run/health`. The production flag remains off pending a private end-to-end QA.

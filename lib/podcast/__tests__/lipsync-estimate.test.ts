@@ -78,6 +78,13 @@ describe("lipsyncCacheKey", () => {
     expect(lipsyncCacheKey({ audioUrl: "https://r2/x.mp3", baseClipId: "b2", mode: "precision" })).not.toBe(base);
     expect(lipsyncCacheKey({ audioUrl: "https://r2/x.mp3", baseClipId: "b1", mode: "speed" })).not.toBe(base);
   });
+  it("namespaces non-default providers while preserving historical HeyGen keys", () => {
+    const historical = lipsyncCacheKey({ audioUrl: "https://r2/x.mp3", mode: "precision" });
+    const explicitHeygen = lipsyncCacheKey({ audioUrl: "https://r2/x.mp3", mode: "precision", providerId: "heygen" });
+    const latent = lipsyncCacheKey({ audioUrl: "https://r2/x.mp3", mode: "precision", providerId: "latentsync_modal" });
+    expect(explicitHeygen).toBe(historical);
+    expect(latent).not.toBe(historical);
+  });
 });
 
 describe("planLipsyncTrim", () => {

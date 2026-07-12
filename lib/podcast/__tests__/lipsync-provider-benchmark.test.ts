@@ -145,7 +145,7 @@ describe("measured provider matrix", () => {
     });
     expect(results.find((row) => row.id === LATENTSYNC_A10_BENCHMARK.id)).toMatchObject({
       verdict: "watchlist",
-      confidence: "medium",
+      confidence: "high",
     });
     expect(results.find((row) => row.id === MUSETALK_A10_BENCHMARK.id)).toMatchObject({
       verdict: "reject",

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createLipsync } from "@/lib/heygen-client";
@@ -71,6 +71,11 @@ const baseRoutes = (overrides: Record<string, (s: State) => Result> = {}) => ({
   "podcast_segment_lipsync_clips:insert": () => ({ data: null, error: null }),
   "podcast_segment_lipsync_clips:update": () => ({ data: null, error: null }),
   ...overrides,
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 describe("POST /api/podcasts/[id]/lipsync", () => {
@@ -169,6 +174,55 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
     expect(writes[2].payload).toMatchObject({ provider_task_id: "heygen-task-1", status: "processing" });
   });
 
+  it("starts LatentSync for Balanced when the server-side flag is enabled", async () => {
+    vi.stubEnv("PODCAST_LATENTSYNC_BALANCED_ENABLED", "true");
+    vi.stubEnv("MODAL_LATENTSYNC_URL", "https://latent.example.com");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ call_id: "fc-balanced" }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+    const writes: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(makeService(baseRoutes({
+      "podcasts:select": () => ({
+        data: { id: "p1", user_id: USER.id, metadata: { lipsync_quality_mode: "balanced" } },
+        error: null,
+      }),
+    }), writes) as never);
+
+    const res = await POST(req({ action: "start" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect((await res.json()).fallbackStarted).toBe(0);
+    expect(createLipsync).not.toHaveBeenCalled();
+    expect(writes.at(-1)?.payload).toMatchObject({
+      provider: "latentsync_modal",
+      provider_task_id: "fc-balanced",
+      status: "processing",
+    });
+  });
+
+  it("falls back to HeyGen when Balanced cannot start LatentSync", async () => {
+    vi.stubEnv("PODCAST_LATENTSYNC_BALANCED_ENABLED", "true");
+    vi.stubEnv("MODAL_LATENTSYNC_URL", "https://latent.example.com");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Modal unavailable")));
+    const writes: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(makeService(baseRoutes({
+      "podcasts:select": () => ({
+        data: { id: "p1", user_id: USER.id, metadata: { lipsync_quality_mode: "balanced" } },
+        error: null,
+      }),
+    }), writes) as never);
+
+    const res = await POST(req({ action: "start" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect((await res.json()).fallbackStarted).toBe(1);
+    expect(createLipsync).toHaveBeenCalledTimes(1);
+    expect(writes.at(-1)?.payload).toMatchObject({
+      provider: "heygen",
+      provider_task_id: "heygen-task-1",
+      status: "processing",
+    });
+  });
+
   it("trims the base clip on Modal when the audio is shorter, and sends the trimmed URL to HeyGen", async () => {
     vi.mocked(createServiceClient).mockReturnValue(
       makeService(baseRoutes({
@@ -252,6 +306,77 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
     const upd = writes.find((w) => w.op === "update" && w.table === "podcast_segment_lipsync_clips");
     expect(upd?.payload).toMatchObject({ status: "removed" });
     expect(createLipsync).not.toHaveBeenCalled();
+  });
+
+  it("falls back to HeyGen when a processing LatentSync task fails", async () => {
+    vi.stubEnv("MODAL_LATENTSYNC_URL", "https://latent.example.com");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ status: "failed", error: "GPU worker failed" }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+    const writes: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService(baseRoutes({
+        "podcast_segment_lipsync_clips:select": (s) => {
+          if (s.filters.status === "processing") {
+            return {
+              data: [{
+                id: "clip-latent",
+                provider: "latentsync_modal",
+                provider_task_id: "fc-failed",
+                status: "processing",
+                segment_id: "segment-1",
+                audio_url: "https://cdn.example.com/audio.mp3",
+                base_clip_id: "base-1",
+                cache_key: "latent-key",
+                mode: "precision",
+                duration_seconds: 2.5,
+              }],
+              error: null,
+            };
+          }
+          return { data: [], error: null };
+        },
+      }), writes) as never,
+    );
+
+    const res = await POST(req({ action: "poll" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ processing: 1, failed: 0, fallbacks: 1 });
+    expect(createLipsync).toHaveBeenCalledTimes(1);
+    const fallbackWrite = writes.find((w) =>
+      w.table === "podcast_segment_lipsync_clips" &&
+      w.op === "update" &&
+      (w.payload as Record<string, unknown>)?.provider === "heygen"
+    );
+    expect(fallbackWrite?.payload).toMatchObject({
+      provider: "heygen",
+      provider_task_id: "heygen-task-1",
+      status: "processing",
+    });
+  });
+
+  it("cleanup preserves one current cache row per provider", async () => {
+    const writes: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService(baseRoutes({
+        "podcast_segments:select": () => ({ data: [{ id: "segment-1", audio_url: "AUDIO_A" }], error: null }),
+        "podcast_segment_lipsync_clips:select": () => ({
+          data: [
+            { id: "h1", segment_id: "segment-1", provider: "heygen", audio_url: "AUDIO_A", status: "ready", video_url: "h.mp4", updated_at: "2026-01-02" },
+            { id: "l1", segment_id: "segment-1", provider: "latentsync_modal", audio_url: "AUDIO_A", status: "ready", video_url: "l.mp4", updated_at: "2026-01-03" },
+            { id: "l0", segment_id: "segment-1", provider: "latentsync_modal", audio_url: "AUDIO_A", status: "ready", video_url: "old-l.mp4", updated_at: "2026-01-01" },
+          ],
+          error: null,
+        }),
+      }), writes) as never,
+    );
+
+    const res = await POST(req({ action: "cleanup" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect((await res.json()).removed).toBe(1);
+    const cleanupWrite = writes.find((w) => w.table === "podcast_segment_lipsync_clips" && w.op === "update");
+    expect(cleanupWrite?.filters.id).toEqual(["l0"]);
   });
 
   it("does not spend when the Modal trim fails", async () => {

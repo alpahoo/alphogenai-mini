@@ -16,8 +16,8 @@ import {
 /**
  * POST /api/podcasts/[id]/lipsync — T-1144b Phase 1 (capped, cached, fallback-safe).
  *
- * Next orchestrates HeyGen (key stays server-side); Modal only composites the
- * cached clips later. This route spends REAL credits, so it is hard-capped at
+ * Next orchestrates the selected provider; Modal only composites the cached
+ * clips later. This route can spend real provider/GPU budget, so it is hard-capped at
  * LIPSYNC_MAX_USD_PER_RENDER: segments are lip-synced greedily in order until the
  * cap is reached; the rest are left for the talking_visual fallback. Cache hits
  * (same audio + base clip + mode) never re-spend.
@@ -88,10 +88,72 @@ interface CleanupResult {
   scanned: number;
 }
 
+function logProviderEvent(event: string, details: Record<string, unknown>): void {
+  console.info(JSON.stringify({ scope: "podcast_lipsync", event, ...details }));
+}
+
+async function startHeygenFallback(
+  service: ReturnType<typeof createServiceClient>,
+  podcastId: string,
+  row: {
+    id: string;
+    segment_id: string;
+    audio_url: string;
+    base_clip_id: string;
+    cache_key: string;
+    mode: string | null;
+    duration_seconds: number | null;
+  },
+  reason: string,
+): Promise<void> {
+  const { data: base } = await service
+    .from("podcast_persona_base_clips")
+    .select("video_url,duration_seconds")
+    .eq("id", row.base_clip_id)
+    .maybeSingle();
+  const duration = Number(row.duration_seconds || 0);
+  const baseDuration = Number(base?.duration_seconds || 0);
+  if (!base?.video_url || !(duration > 0) || !(baseDuration > 0)) {
+    throw new Error("Fallback base clip is unavailable");
+  }
+  const trim = planLipsyncTrim(duration, baseDuration);
+  if (!trim.ok) throw new Error("Fallback duration is outside the supported range");
+  const videoUrl = trim.endTimeSeconds
+    ? await trimLipsyncBaseClip({
+        podcastId,
+        segmentId: row.segment_id,
+        baseUrl: base.video_url,
+        durationSeconds: duration,
+        cacheKey: `${row.cache_key}-fallback`,
+      })
+    : base.video_url;
+  const fallback = getPodcastLipsyncProvider("heygen");
+  const mode = row.mode === "speed" ? "speed" : "precision";
+  const task = await fallback.createClip({ videoUrl, audioUrl: row.audio_url, mode });
+  const { error } = await service
+    .from("podcast_segment_lipsync_clips")
+    .update({
+      provider: fallback.id,
+      provider_task_id: task.providerTaskId,
+      status: "processing",
+      error_message: `automatic fallback: ${reason}`.slice(0, 500),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", row.id);
+  if (error) throw error;
+  logProviderEvent("fallback_started", {
+    podcastId,
+    segmentId: row.segment_id,
+    fromProvider: "latentsync_modal",
+    toProvider: fallback.id,
+    reason,
+  });
+}
+
 /**
- * Keep only the newest ready clip matching each segment's current audio.
- * Everything else (older duplicates, stale-audio ready rows, failed rows) is
- * soft-deleted so premium status/render keep using the current cache only.
+ * Keep the newest ready clip per provider matching each segment's current
+ * audio. Provider caches must coexist so switching Balanced/Premium never
+ * deletes the other tier or forces needless re-spend.
  */
 async function cleanupStaleLipsyncRows(
   service: ReturnType<typeof createServiceClient>,
@@ -104,7 +166,7 @@ async function cleanupStaleLipsyncRows(
   const curAudio = new Map<string, string | null>((segs || []).map((s) => [s.id, s.audio_url]));
   const { data: rows } = await service
     .from("podcast_segment_lipsync_clips")
-    .select("id,segment_id,audio_url,status,video_url,updated_at")
+      .select("id,segment_id,audio_url,status,video_url,provider,updated_at")
     .eq("podcast_id", podcastId)
     .in("status", ["ready", "failed"]);
 
@@ -118,11 +180,22 @@ async function cleanupStaleLipsyncRows(
   const removeIds: string[] = [];
   for (const [segId, segRows] of bySeg) {
     const cur = curAudio.get(segId) ?? "__none__";
-    const keep = (segRows || [])
-      .filter((r) => r.status === "ready" && r.video_url && r.audio_url === cur)
-      .sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))[0];
+    const keepIds = new Set<string>();
+    const byProvider = new Map<string, typeof segRows>();
+    for (const row of segRows || []) {
+      if (row.status !== "ready" || !row.video_url || row.audio_url !== cur) continue;
+      const provider = row.provider || "heygen";
+      const providerRows = byProvider.get(provider) || [];
+      providerRows.push(row);
+      byProvider.set(provider, providerRows);
+    }
+    for (const providerRows of byProvider.values()) {
+      const newest = providerRows
+        .sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))[0];
+      if (newest?.id) keepIds.add(newest.id);
+    }
     for (const r of segRows || []) {
-      if (!keep || r.id !== keep.id) removeIds.push(r.id);
+      if (!keepIds.has(r.id)) removeIds.push(r.id);
     }
   }
 
@@ -176,10 +249,10 @@ export async function POST(
     if (action === "poll") {
       const { data: rows } = await service
         .from("podcast_segment_lipsync_clips")
-        .select("id,provider,provider_task_id,status")
+        .select("id,provider,provider_task_id,status,segment_id,audio_url,base_clip_id,cache_key,mode,duration_seconds")
         .eq("podcast_id", id)
         .eq("status", "processing");
-      let ready = 0, failed = 0, processing = 0;
+      let ready = 0, failed = 0, processing = 0, fallbacks = 0;
       for (const row of rows || []) {
         if (!row.provider_task_id) { processing++; continue; }
         try {
@@ -201,6 +274,10 @@ export async function POST(
               .update({ status: "ready", video_url: url, storage_key: key, updated_at: new Date().toISOString() })
               .eq("id", row.id);
             ready++;
+          } else if (r.status === "failed" && taskProvider.id !== "heygen") {
+            await startHeygenFallback(service, id, row, r.error || "provider task failed");
+            fallbacks++;
+            processing++;
           } else if (r.status === "failed") {
             await service.from("podcast_segment_lipsync_clips")
               .update({ status: "failed", error_message: (r.error || "lipsync failed").slice(0, 500), updated_at: new Date().toISOString() })
@@ -210,6 +287,17 @@ export async function POST(
             processing++;
           }
         } catch (e) {
+          if (row.provider === "latentsync_modal") {
+            try {
+              const reason = e instanceof Error ? e.message : String(e);
+              await startHeygenFallback(service, id, row, reason);
+              fallbacks++;
+              processing++;
+              continue;
+            } catch (fallbackError) {
+              e = fallbackError;
+            }
+          }
           await service.from("podcast_segment_lipsync_clips")
             .update({ status: "failed", error_message: (e instanceof Error ? e.message : String(e)).slice(0, 500), updated_at: new Date().toISOString() })
             .eq("id", row.id);
@@ -226,7 +314,7 @@ export async function POST(
           console.warn("automatic lipsync cleanup failed:", error);
         }
       }
-      return NextResponse.json({ action, ready, failed, processing, cleanup });
+      return NextResponse.json({ action, ready, failed, processing, fallbacks, cleanup });
     }
 
     // ---- action === "start" ----
@@ -267,6 +355,7 @@ export async function POST(
       processing: 0,
       estimatedUsd: 0,
       actualNewSpendUsd: 0,
+      fallbackStarted: 0,
       capUsd: LIPSYNC_MAX_USD_PER_RENDER,
       skippedReasons: [] as string[],
     };
@@ -284,20 +373,42 @@ export async function POST(
       // signal is the TTS audio (its R2 URL changes when the line is re-synthesized).
       // Keying on the persona's base clip caused double-spend when the resolver
       // picked a newer ready base clip (T-1144b QA, 2026-07-07).
-      const cacheKey = lipsyncCacheKey({ audioUrl: seg.audio_url as string, mode });
+      const cacheKey = lipsyncCacheKey({
+        audioUrl: seg.audio_url as string,
+        mode,
+        providerId: startProvider.id,
+      });
 
       // No-double-spend: reuse ANY ready clip for this segment + current audio,
       // regardless of which base clip / cache-key format produced it.
-      const { data: readyRow } = await service
+      const { data: preferredReadyRow } = await service
         .from("podcast_segment_lipsync_clips")
         .select("id,video_url")
         .eq("segment_id", seg.id)
         .eq("audio_url", seg.audio_url)
+        .eq("provider", startProvider.id)
         .eq("status", "ready")
         .not("video_url", "is", null)
         .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+      let readyRow = preferredReadyRow;
+      // A Balanced task that already fell back successfully should remain a
+      // free cache hit on re-render instead of retrying and spending again.
+      if (!readyRow && startProvider.id !== "heygen") {
+        const { data: fallbackReadyRow } = await service
+          .from("podcast_segment_lipsync_clips")
+          .select("id,video_url")
+          .eq("segment_id", seg.id)
+          .eq("audio_url", seg.audio_url)
+          .eq("provider", "heygen")
+          .eq("status", "ready")
+          .not("video_url", "is", null)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        readyRow = fallbackReadyRow;
+      }
       if (readyRow?.video_url) {
         result.selected++;
         result.cached++;
@@ -310,6 +421,7 @@ export async function POST(
         .select("id,provider_task_id")
         .eq("segment_id", seg.id)
         .eq("audio_url", seg.audio_url)
+        .eq("provider", startProvider.id)
         .eq("status", "processing")
         .not("provider_task_id", "is", null)
         .limit(1)
@@ -387,14 +499,31 @@ export async function POST(
               cacheKey,
             })
           : base.url;
-        const task = await startProvider.createClip({ videoUrl: lipsyncVideoUrl, audioUrl: seg.audio_url as string, mode });
+        let taskProvider = startProvider;
+        let task;
+        try {
+          task = await taskProvider.createClip({ videoUrl: lipsyncVideoUrl, audioUrl: seg.audio_url as string, mode });
+        } catch (primaryError) {
+          if (taskProvider.id === "heygen") throw primaryError;
+          const reason = primaryError instanceof Error ? primaryError.message : String(primaryError);
+          taskProvider = getPodcastLipsyncProvider("heygen");
+          task = await taskProvider.createClip({ videoUrl: lipsyncVideoUrl, audioUrl: seg.audio_url as string, mode });
+          result.fallbackStarted++;
+          logProviderEvent("fallback_started", {
+            podcastId: id,
+            segmentId: seg.id,
+            fromProvider: startProvider.id,
+            toProvider: taskProvider.id,
+            reason: reason.slice(0, 200),
+          });
+        }
         const { error: taskErr } = await service
           .from("podcast_segment_lipsync_clips")
-          .update({ provider_task_id: task.providerTaskId, status: "processing", error_message: null, updated_at: new Date().toISOString() })
+          .update({ provider: taskProvider.id, provider_task_id: task.providerTaskId, status: "processing", error_message: null, updated_at: new Date().toISOString() })
           .eq("segment_id", seg.id)
           .eq("cache_key", cacheKey);
         if (taskErr) {
-          console.error("lipsync task id update failed after HeyGen accepted task:", { providerTaskId: task.providerTaskId, taskErr });
+          console.error("lipsync task id update failed after provider accepted task:", { providerTaskId: task.providerTaskId, taskErr });
           return NextResponse.json({ error: "Lip-sync task started but could not be saved. Contact support before retrying." }, { status: 502 });
         }
         result.selected++;
@@ -402,6 +531,14 @@ export async function POST(
         newSpend += cost;
         result.actualNewSpendUsd += cost;
         result.estimatedUsd += cost;
+        logProviderEvent("task_started", {
+          podcastId: id,
+          segmentId: seg.id,
+          requestedQualityMode: routing.requestedQualityMode,
+          effectiveQualityMode: routing.effectiveQualityMode,
+          provider: taskProvider.id,
+          fallback: taskProvider.id !== startProvider.id,
+        });
       } catch (e) {
         const msg = (e instanceof Error ? e.message : String(e)).slice(0, 500);
         await service

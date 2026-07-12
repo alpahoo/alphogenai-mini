@@ -39,9 +39,9 @@ export const PODCAST_LIPSYNC_QUALITY_PRESETS = {
   },
   balanced: {
     id: "balanced",
-    providerId: "heygen",
+    providerId: "latentsync_modal",
     providerMode: "precision",
-    internalNote: "Reserved for provider arbitration once more production candidates are available.",
+    internalNote: "LatentSync on Modal behind a server-side feature flag, with HeyGen fallback.",
   },
   premium: {
     id: "premium",
@@ -67,6 +67,11 @@ export function getPodcastLipsyncQualityPreset(
   return PODCAST_LIPSYNC_QUALITY_PRESETS[mode];
 }
 
+export function isLatentSyncBalancedEnabled(): boolean {
+  return process.env.PODCAST_LATENTSYNC_BALANCED_ENABLED === "true" &&
+    Boolean(process.env.MODAL_LATENTSYNC_URL);
+}
+
 export function resolvePodcastLipsyncRoutingPlan(options?: {
   qualityMode?: unknown;
   allowPlanned?: boolean;
@@ -76,11 +81,12 @@ export function resolvePodcastLipsyncRoutingPlan(options?: {
     : DEFAULT_PODCAST_LIPSYNC_QUALITY_MODE;
   const requestedPreset = getPodcastLipsyncQualityPreset(requestedQualityMode);
   const requestedStatus = getPublicPodcastLipsyncQualityPreset(requestedQualityMode).status;
+  const balancedEnabled = requestedQualityMode === "balanced" && isLatentSyncBalancedEnabled();
 
-  if (requestedStatus === "available" || options?.allowPlanned) {
+  if (requestedStatus === "available" || balancedEnabled || options?.allowPlanned) {
     return {
       ...requestedPreset,
-      status: requestedStatus,
+      status: balancedEnabled ? "available" : requestedStatus,
       requestedQualityMode,
       effectiveQualityMode: requestedQualityMode,
     };

@@ -40,8 +40,13 @@ export function lipsyncCacheKey(input: {
   audioUrl: string;
   baseClipId?: string | null;
   mode?: string;
+  providerId?: string | null;
 }): string {
-  const raw = `${LIPSYNC_CACHE_VERSION}|${input.mode || "precision"}|${input.baseClipId || ""}|${input.audioUrl}`;
+  // Keep the historical HeyGen key stable while namespacing every additional
+  // provider. This prevents cross-quality cache reuse without invalidating the
+  // production clips that already exist.
+  const providerPart = input.providerId && input.providerId !== "heygen" ? input.providerId : "";
+  const raw = `${LIPSYNC_CACHE_VERSION}|${providerPart}|${input.mode || "precision"}|${input.baseClipId || ""}|${input.audioUrl}`;
   // djb2 — short, stable, no crypto dependency.
   let h = 5381;
   for (let i = 0; i < raw.length; i++) h = ((h << 5) + h + raw.charCodeAt(i)) | 0;

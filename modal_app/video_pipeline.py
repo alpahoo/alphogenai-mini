@@ -2330,10 +2330,10 @@ def _resolve_base_clip_url(sb, speaker: dict, podcast_id: str, owner_id=None):
         return None
 
 
-def _resolve_segment_lipsync_clips(sb, podcast_id: str):
+def _resolve_segment_lipsync_clips(sb, podcast_id: str, quality_mode: str = "premium"):
     """Return {segment_id: r2_video_url} for READY per-segment lip-sync clips
-    (T-1144b). Next orchestrates HeyGen + caches into podcast_segment_lipsync_clips;
-    Modal only READS ready rows here â€” NO HeyGen call, no credit spend. Never raises.
+    Next orchestrates providers and caches into podcast_segment_lipsync_clips;
+    Modal only reads ready rows here and never calls a provider. Never raises.
     Any missing/failed segment simply falls back to the talking_visual visual.
     """
     out = {}
@@ -2349,15 +2349,33 @@ def _resolve_segment_lipsync_clips(sb, podcast_id: str):
         cur_audio = {s.get("id"): (s.get("audio_url") or "") for s in segs}
         rows = (
             sb.table("podcast_segment_lipsync_clips")
-            .select("segment_id,video_url,status,audio_url,updated_at")
+            .select("segment_id,video_url,status,audio_url,provider,updated_at")
             .eq("podcast_id", podcast_id).eq("status", "ready")
             .order("updated_at", desc=True)
             .execute().data
         ) or []
-        for r in rows:
+        preferred_provider = "latentsync_modal" if quality_mode == "balanced" else "heygen"
+        # Balanced may use a cached HeyGen fallback, but Premium must never pick
+        # a cheaper Balanced clip just because it is newer.
+        # The query already returns newest-first. Python's stable sort keeps
+        # that order within each provider priority without parsing timestamps.
+        ordered_rows = sorted(
+            rows,
+            key=lambda r: (
+                0 if r.get("provider") == preferred_provider else
+                1 if preferred_provider == "latentsync_modal" and r.get("provider") == "heygen" else
+                2
+            ),
+        )
+        for r in ordered_rows:
             sid = r.get("segment_id")
             url = (r.get("video_url") or "").strip()
             if not sid or not url or sid in out:
+                continue
+            provider = r.get("provider") or "heygen"
+            if provider != preferred_provider and not (
+                preferred_provider == "latentsync_modal" and provider == "heygen"
+            ):
                 continue
             if (r.get("audio_url") or "") != cur_audio.get(sid, "__none__"):
                 continue  # stale clip (segment audio changed) -> fallback
@@ -2713,7 +2731,8 @@ def render_podcast(podcast_id: str) -> str:
                 # them). Extract each into frames; the active speaker plays its clip
                 # in sync during its segment. Missing/failed segments fall back to the
                 # talking_visual base-clip loop above. NO HeyGen call here.
-                _ls = _resolve_segment_lipsync_clips(sb, podcast_id)
+                _quality_mode = _meta.get("lipsync_quality_mode") if isinstance(_meta, dict) else None
+                _ls = _resolve_segment_lipsync_clips(sb, podcast_id, _quality_mode or "premium")
                 for _seg_id, _url in _ls.items():
                     _f = _extract_base_clip_frames(_url, workdir, f"ls_{str(_seg_id)[:8]}", avatar_size, podcast_id)
                     if _f:

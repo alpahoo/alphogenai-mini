@@ -2962,3 +2962,8 @@ reste inspiration workflow, pas dépendance. À démarrer sur GO.
 - Result: **technical PASS**. LatentSync built, downloaded weights, ran inference, and produced a valid 512x512 MP4 with H.264 video + AAC audio, 3.36s duration, 151.12s elapsed.
 - Artifact downloaded locally to `C:/tmp/latentsync-spike/latentsync-output.mp4`. Visual/product review still pending because local browser `file://` video inspection was blocked and the experimental R2 prefix is private.
 - Decision: LatentSync is the first self-hosted candidate worth visual comparison against HeyGen; do not integrate into product until human visual QA and 2-3 segment cost sampling pass.
+## 2026-07-12 - Codex - T-1152 LatentSync Balanced production adapter
+- Promoted the four approved LatentSync samples to high-confidence human evidence and packaged the pinned model (`a229c394...`) as a separate asynchronous Modal service.
+- Added a server-only Balanced feature flag, provider-neutral start/poll adapter, structured routing telemetry, automatic HeyGen fallback, and provider-aware cache isolation/cleanup/render selection.
+- Public Balanced remains locked; when the flag or endpoint is absent, routing fails closed to Premium. No migration and no provider spend in this implementation slice.
+- Deployed `alphogenai-latentsync` on Modal and verified its health endpoint returns the pinned commit. The GPU function was not invoked and the Balanced flag remains disabled.
