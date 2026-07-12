@@ -4,7 +4,8 @@
  * Returns the authenticated admin user or a 403 response.
  * Uses service client for DB queries (bypasses RLS).
  */
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminEmail } from "@/lib/flags";
 
@@ -17,14 +18,21 @@ export interface AdminUser {
  * Verify the caller is an authenticated admin.
  * Returns { user } on success or { response } with 401/403 on failure.
  */
-export async function requireAdmin(): Promise<
+export async function requireAdmin(request?: NextRequest): Promise<
   { user: AdminUser; response?: never } | { user?: never; response: NextResponse }
 > {
-  const supabase = await createClient();
+  const bearer = request?.headers.get("authorization");
+  const token = bearer?.startsWith("Bearer ") ? bearer.slice(7) : null;
+  const supabase = token
+    ? createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      )
+    : await createClient();
   const {
     data: { user },
     error,
-  } = await supabase.auth.getUser();
+  } = await supabase.auth.getUser(token ?? undefined);
 
   if (error || !user?.email) {
     return {

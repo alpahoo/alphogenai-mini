@@ -342,7 +342,7 @@ async function handlePoll(service: ServiceClient, body: Record<string, unknown>)
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin();
+  const auth = await requireAdmin(request);
   if (auth.response) return auth.response;
 
   const body = await request.json().catch(() => ({}));
