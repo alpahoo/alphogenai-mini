@@ -1,3 +1,8 @@
+## 2026-07-12 - Codex - T-1151 LatentSync multi-sample qualification
+- Ran three additional capped Modal A10 samples across Aria/Leo and 2.02-4.56s inputs. All produced valid 512x512 H.264+AAC outputs; aggregate LatentSync evidence is now 4 technical passes / 14.56s output / 581.32s GPU wall time.
+- Fixed the isolated spike harness so checkpoint symlinks are recreated in every ephemeral Modal container while model downloads remain volume-cached.
+- Estimated new-session GPU spend including one failed bootstrap was ~$0.142, below the approved $0.30 ceiling. Frame QA passed; only one clip has moving human review, so LatentSync remains medium-confidence watchlist and is not production-routed.
+
 ## 2026-07-12 - Codex - T-1150 measured lip-sync provider matrix
 - Replaced theory-only promotion with evidence-gated scoring: production candidates now require a technical pass, a human visual pass, measured metrics, and at least three same-input samples.
 - Encoded the measured matrix: current SaaS baseline 82/high/production; LatentSync Modal A10 62/medium/watchlist; MuseTalk 28/low/reject. LatentSync is roughly 3x cheaper per measured output-second but slower and supported by one reviewed sample.

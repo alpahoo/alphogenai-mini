@@ -308,3 +308,19 @@ Open `C:/tmp/latentsync-spike/latentsync-output.mp4` locally and compare against
 - suitability inside the current rounded-square active speaker card.
 
 If visual quality is acceptable, run 2-3 more segments and estimate Modal GPU cost per lip-sync second. If quality is poor, keep LatentSync as a research option and continue to the next candidate rather than wiring it into product.
+
+## 11. T-1151 Multi-Sample Qualification (2026-07-12)
+
+Three additional English segments were run under a `$0.30` GPU ceiling. All produced valid 512x512 H.264 + AAC outputs. Together with the original clip, LatentSync now has four technical passes across two personas and varied line lengths.
+
+| Persona | Output | GPU wall time | Estimated A10 cost |
+|---|---:|---:|---:|
+| Aria (short) | 2.08 s | 121.89 s | ~$0.037 |
+| Leo (medium) | 4.48 s | 145.89 s | ~$0.045 |
+| Aria (long) | 4.64 s | 162.42 s | ~$0.050 |
+
+The first attempt exposed a harness bootstrap bug: persisted weights existed, but symlinks were not recreated in each fresh Modal image. The harness now always recreates checkpoint symlinks while downloading only when the volume marker is absent. The failed attempt cost estimate was below `$0.01`.
+
+Successful aggregate: `14.56 s` output, `581.32 s` GPU wall time including the original sample, approximately `$0.178` A10 compute, or `$0.0122/output-s`. New T-1151 session spend including the failed bootstrap attempt is approximately `$0.142`, below the `$0.30` ceiling.
+
+Multi-frame QA found stable identity/crop, natural blinks, changing mouth poses, and no obvious face deformation on the three new outputs. However, only the original sample has been reviewed by a human as moving audio/video. LatentSync therefore remains `watchlist`; it is not activated in Balanced until at least three moving samples pass human review and a production adapter/operations pass exists.

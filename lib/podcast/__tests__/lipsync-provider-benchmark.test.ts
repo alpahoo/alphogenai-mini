@@ -27,6 +27,7 @@ const strongCandidate: LipsyncProviderBenchmarkInput = {
     technicalPass: true,
     visualReview: "passed",
     sampleCount: 4,
+    humanReviewedSampleCount: 4,
   },
 };
 
@@ -93,6 +94,19 @@ describe("scoreLipsyncProvider", () => {
     expect(score.confidence).toBe("low");
     expect(score.verdict).toBe("watchlist");
   });
+
+  it("requires three moving human reviews even after multiple technical passes", () => {
+    const score = scoreLipsyncProvider({
+      ...strongCandidate,
+      evidence: {
+        ...strongCandidate.evidence!,
+        sampleCount: 4,
+        humanReviewedSampleCount: 1,
+      },
+    });
+    expect(score.confidence).toBe("medium");
+    expect(score.verdict).toBe("watchlist");
+  });
 });
 
 describe("compareLipsyncProviders", () => {
@@ -149,6 +163,6 @@ describe("measured provider matrix", () => {
   it("projects comparable costs for 10 and 45 minute active-speaker output", () => {
     expect(projectedLipsyncCostUsd(HEYGEN_BASELINE_BENCHMARK, 600)).toBe(24);
     expect(projectedLipsyncCostUsd(HEYGEN_BASELINE_BENCHMARK, 2700)).toBe(108);
-    expect(projectedLipsyncCostUsd(LATENTSYNC_A10_BENCHMARK, 600)).toBeCloseTo(8.26, 1);
+    expect(projectedLipsyncCostUsd(LATENTSYNC_A10_BENCHMARK, 600)).toBeCloseTo(7.33, 1);
   });
 });

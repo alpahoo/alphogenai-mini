@@ -116,48 +116,46 @@ def _upload_to_r2(file_bytes: bytes, key: str, content_type: str = "video/mp4") 
 
 def _ensure_latentsync_weights() -> None:
     marker = MODEL_ROOT / ".downloaded"
-    if marker.exists():
-        return
-
     MODEL_ROOT.mkdir(parents=True, exist_ok=True)
     repo = Path("/opt/LatentSync")
     checkpoints = repo / "checkpoints"
     checkpoints.mkdir(parents=True, exist_ok=True)
 
-    _run(
-        [
-            "huggingface-cli",
-            "download",
-            "ByteDance/LatentSync-1.6",
-            "latentsync_unet.pt",
-            "--local-dir",
-            str(MODEL_ROOT),
-        ],
-        timeout=3600,
-    )
-    _run(
-        [
-            "huggingface-cli",
-            "download",
-            "ByteDance/LatentSync-1.6",
-            "whisper/tiny.pt",
-            "--local-dir",
-            str(MODEL_ROOT),
-        ],
-        timeout=3600,
-    )
+    if not marker.exists():
+        _run(
+            [
+                "huggingface-cli",
+                "download",
+                "ByteDance/LatentSync-1.6",
+                "latentsync_unet.pt",
+                "--local-dir",
+                str(MODEL_ROOT),
+            ],
+            timeout=3600,
+        )
+        _run(
+            [
+                "huggingface-cli",
+                "download",
+                "ByteDance/LatentSync-1.6",
+                "whisper/tiny.pt",
+                "--local-dir",
+                str(MODEL_ROOT),
+            ],
+            timeout=3600,
+        )
+        marker.write_text(str(time.time()), encoding="utf-8")
+        latentsync_volume.commit()
 
     # LatentSync's scripts expect checkpoints under the repo. Symlink from the
-    # persistent volume so later runs skip the heavy downloads.
+    # persistent volume on every fresh container. The image clone is ephemeral,
+    # even when the downloaded weights and marker persist in the Modal volume.
     for relative in ["latentsync_unet.pt", "whisper"]:
         src = MODEL_ROOT / relative
         dst = checkpoints / relative
         if dst.exists() or dst.is_symlink():
             continue
         dst.symlink_to(src, target_is_directory=src.is_dir())
-
-    marker.write_text(str(time.time()), encoding="utf-8")
-    latentsync_volume.commit()
 
 
 def _prepare_inputs(video_url: str, audio_url: str, max_seconds: float, workdir: Path) -> tuple[Path, Path]:

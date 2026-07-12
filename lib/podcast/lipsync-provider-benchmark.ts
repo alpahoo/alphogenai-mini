@@ -8,6 +8,8 @@ export interface LipsyncProviderBenchmarkEvidence {
   technicalPass: boolean;
   visualReview: LipsyncBenchmarkVisualReview;
   sampleCount: number;
+  /** Samples reviewed as moving audio/video by a human, not only probed or frame-checked. */
+  humanReviewedSampleCount?: number;
   measuredAt?: string;
   note?: string;
 }
@@ -71,14 +73,15 @@ export const HEYGEN_BASELINE_BENCHMARK: LipsyncProviderBenchmarkInput = {
     technicalPass: true,
     visualReview: "passed",
     sampleCount: 9,
+    humanReviewedSampleCount: 9,
     measuredAt: "2026-07-10",
     note: "Full eight-line podcast QA plus same-input one-clip comparison.",
   },
 };
 
 export const MODAL_A10_GPU_USD_PER_SECOND = 0.000306;
-export const LATENTSYNC_MEASURED_OUTPUT_SECONDS = 3.36;
-export const LATENTSYNC_MEASURED_ELAPSED_SECONDS = 151.12;
+export const LATENTSYNC_MEASURED_OUTPUT_SECONDS = 14.56;
+export const LATENTSYNC_MEASURED_ELAPSED_SECONDS = 581.32;
 export const LATENTSYNC_MEASURED_USD_PER_OUTPUT_SECOND =
   (LATENTSYNC_MEASURED_ELAPSED_SECONDS * MODAL_A10_GPU_USD_PER_SECOND) /
   LATENTSYNC_MEASURED_OUTPUT_SECONDS;
@@ -100,9 +103,10 @@ export const LATENTSYNC_A10_BENCHMARK: LipsyncProviderBenchmarkInput = {
     metricsSource: "measured",
     technicalPass: true,
     visualReview: "passed",
-    sampleCount: 1,
-    measuredAt: "2026-07-10",
-    note: "Same base clip and TTS input as baseline; human review rated it very good but slightly behind baseline.",
+    sampleCount: 4,
+    humanReviewedSampleCount: 1,
+    measuredAt: "2026-07-12",
+    note: "Four technical passes across two personas and varied durations. One moving clip was human-reviewed; three additional clips passed codec/probe and multi-frame identity/artifact review.",
   },
 };
 
@@ -123,6 +127,7 @@ export const MUSETALK_A10_BENCHMARK: LipsyncProviderBenchmarkInput = {
     technicalPass: false,
     visualReview: "pending",
     sampleCount: 0,
+    humanReviewedSampleCount: 0,
     measuredAt: "2026-07-09",
     note: "Packaging/runtime failure before MP4 output; no visual quality score is available.",
   },
@@ -168,7 +173,8 @@ function confidenceFor(input: LipsyncProviderBenchmarkInput): LipsyncBenchmarkCo
   if (
     evidence.metricsSource === "measured" &&
     evidence.visualReview === "passed" &&
-    evidence.sampleCount >= 3
+    evidence.sampleCount >= 3 &&
+    (evidence.humanReviewedSampleCount ?? 0) >= 3
   ) return "high";
   if (evidence.metricsSource === "measured" && evidence.visualReview === "passed") return "medium";
   return "low";

@@ -18,7 +18,7 @@ The reviewed comparison used the same AlphoGen persona base clip and the same re
 | Path | Output | Wall time | Measured cost | Human review | Evidence |
 |---|---:|---:|---:|---|---|
 | Current SaaS baseline | 3.31 s | 90.06 s | $0.13 (~$0.04/output-s) | Best of the two by a small margin | High: 8-line production QA + comparison clip |
-| LatentSync / Modal A10 | 3.36 s | 151.12 s | ~$0.046 GPU (~$0.0138/output-s) | Very good, slightly behind baseline | Medium: one reviewed technical pass |
+| LatentSync / Modal A10 | 14.56 s total | 581.32 s total | ~$0.178 GPU (~$0.0122/output-s) | First clip very good/slightly behind; 3 more pass frame QA | Medium: 4 technical passes, 1 moving human review |
 | MuseTalk / Modal A10 | No MP4 | Failed | Not comparable | Not reviewable | Low: technical failure |
 
 The Modal calculation uses the current official A10 price of `$0.000306/s`. It is a compute estimate based on measured wall time; storage, CPU/memory, regional multipliers, cold starts, and future pricing can change the final bill.
@@ -28,14 +28,14 @@ The Modal calculation uses the current official A10 price of `$0.000306/s`. It i
 | Path | Score | Confidence | Verdict | Why |
 |---|---:|---|---|---|
 | Current SaaS baseline | **82** | High | `production_candidate` | Best reviewed quality, proven API/cache/fallback path |
-| LatentSync / Modal A10 | **62** | Medium | `watchlist` | ~3x cheaper measured output-second, but slower and not production-packaged |
+| LatentSync / Modal A10 | **63** | Medium | `watchlist` | ~3.3x cheaper measured output-second, but slower and not production-packaged |
 | MuseTalk / Modal A10 | **28** | Low | `reject` | No valid output, unresolved packaging/runtime stack |
 
 Production promotion requires all of the following:
 
 1. technical pass on the exact AlphoGen contract,
 2. human visual review pass,
-3. at least three same-input samples,
+3. at least three same-input samples reviewed in motion by a human,
 4. server-side adapter, durable output URL, cache, consent fit, and failure fallback,
 5. measured cost and latency under the intended concurrency model.
 
@@ -47,8 +47,8 @@ These projections assume every second is premium active-speaker lip-sync and no 
 
 | Active lip-sync duration | Current baseline | LatentSync measured projection |
 |---:|---:|---:|
-| 10 min | ~$24.00 | ~$8.26 |
-| 45 min | ~$108.00 | ~$37.15 |
+| 10 min | ~$24.00 | ~$7.33 |
+| 45 min | ~$108.00 | ~$32.98 |
 
 This validates the tier strategy:
 
@@ -59,9 +59,8 @@ This validates the tier strategy:
 
 ## Next measured work
 
-1. Run LatentSync on 3–5 varied segments: two personas, short/long lines, English/French, quiet/expressive delivery.
-2. Record cold and warm latency separately; estimate concurrency and batch economics.
+1. Human-review the three new moving outputs (Aria 2.08 s, Leo 4.48 s, Aria 4.64 s); frame QA already passed.
+2. Add a French sample, then record cold and warm latency separately and estimate concurrency/batch economics.
 3. Build no production adapter until those samples pass identity, mouth-sync, crop, and failure tests.
 4. When Runway Dev access is available, run exactly one capped Act-Two clip through the same harness before assigning it to Cinema.
 5. Keep Descript outside this provider matrix unless it exposes an official server API for the same lip-sync contract; use it later as an edit/polish/export integration.
-
