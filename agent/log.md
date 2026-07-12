@@ -1,3 +1,9 @@
+## 2026-07-12 - Codex - T-1153 same-input LatentSync vs HeyGen comparison
+- Generated a provider-controlled comparison for the exact same podcast segment, persona, base clip, and TTS audio. The existing LatentSync cache was temporarily hidden, one HeyGen precision clip was generated (~$0.13), then both provider rows were restored as ready and the podcast metadata was returned to its original state.
+- LatentSync: 3.36s, 512x512 H.264 + 16kHz mono AAC, ~176s cold end-to-end. HeyGen: 3.32s, 720x720 H.264 + 48kHz stereo AAC, ~99s end-to-end. Frame inspection shows both preserve the persona and studio framing; HeyGen remains sharper and slightly more stable around the mouth/lower face.
+- Decision: keep HeyGen as the public Premium production route. LatentSync remains disabled publicly but is now the validated leading Balanced candidate: close visual quality, materially lower measured cost, slower cold latency. No provider switch or batch generation was performed.
+- Local review artifacts: `C:\tmp\t1153-latentsync-vs-heygen.mp4` and `C:\tmp\t1153-latentsync-vs-heygen.jpg` (not committed).
+
 ## 2026-07-12 - Codex - T-1153 Balanced LatentSync production gate
 - Ran a one-segment, feature-flagged production gate on podcast `307e628c-96a0-4ad6-b948-60a2f57c2f9a`; public Balanced UI remained locked and only the QA podcast metadata was temporarily overridden.
 - Found and fixed a real HTTP-contract bug: the local Pydantic request model combined with postponed annotations made FastAPI expose `req` as a query parameter, so `/start` returned 422 and correctly fell back to HeyGen. The request model now lives at module scope and an OpenAPI contract test asserts a JSON request body with no `req` query parameter.
