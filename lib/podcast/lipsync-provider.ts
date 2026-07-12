@@ -40,6 +40,10 @@ export const heygenPodcastLipsyncProvider: PodcastLipsyncProvider = {
   },
 };
 
+export function isPodcastLipsyncProviderId(value: unknown): value is PodcastLipsyncProviderId {
+  return value === "heygen";
+}
+
 export function getPodcastLipsyncProvider(
   providerId: PodcastLipsyncProviderId = "heygen",
 ): PodcastLipsyncProvider {

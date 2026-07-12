@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
-import { getPodcastLipsyncProvider } from "@/lib/podcast/lipsync-provider";
+import { getPodcastLipsyncProvider, isPodcastLipsyncProviderId } from "@/lib/podcast/lipsync-provider";
 import { resolvePodcastLipsyncRoutingPlan } from "@/lib/podcast/lipsync-routing";
 import { uploadBufferToR2 } from "@/lib/r2";
 import { trimLipsyncBaseClip } from "@/lib/modal-client";
@@ -27,10 +27,6 @@ import {
  * polls until nothing is processing, then triggers the premium render.
  */
 export const maxDuration = 60;
-
-const LIPSYNC_ROUTING = resolvePodcastLipsyncRoutingPlan();
-const MODE = LIPSYNC_ROUTING.providerMode;
-const provider = getPodcastLipsyncProvider(LIPSYNC_ROUTING.providerId);
 
 interface BaseClip {
   id: string;
@@ -154,11 +150,17 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     const action = body.action === "poll" ? "poll" : body.action === "cleanup" ? "cleanup" : "start";
 
-    const { data: podcast } = await service.from("podcasts").select("id,user_id").eq("id", id).single();
+    const { data: podcast } = await service.from("podcasts").select("id,user_id,metadata").eq("id", id).single();
     if (!podcast || podcast.user_id !== user.id) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     const ownerId = podcast.user_id as string;
+    const metadata = podcast.metadata && typeof podcast.metadata === "object"
+      ? podcast.metadata as Record<string, unknown>
+      : {};
+    const routing = resolvePodcastLipsyncRoutingPlan({ qualityMode: metadata.lipsync_quality_mode });
+    const mode = routing.providerMode;
+    const startProvider = getPodcastLipsyncProvider(routing.providerId);
 
     if (action === "cleanup") {
       // T-1146 stale purge: keep latest per segment, soft-delete stale rows.
@@ -174,14 +176,20 @@ export async function POST(
     if (action === "poll") {
       const { data: rows } = await service
         .from("podcast_segment_lipsync_clips")
-        .select("id,provider_task_id,status")
+        .select("id,provider,provider_task_id,status")
         .eq("podcast_id", id)
         .eq("status", "processing");
       let ready = 0, failed = 0, processing = 0;
       for (const row of rows || []) {
         if (!row.provider_task_id) { processing++; continue; }
         try {
-          const r = await provider.pollClip(row.provider_task_id);
+          const taskProvider = row.provider == null
+            ? getPodcastLipsyncProvider()
+            : isPodcastLipsyncProviderId(row.provider)
+              ? getPodcastLipsyncProvider(row.provider)
+              : null;
+          if (!taskProvider) throw new Error("Unsupported sync provider for cached task");
+          const r = await taskProvider.pollClip(row.provider_task_id);
           if (r.status === "completed" && r.videoUrl) {
             // Persist the HeyGen output to our own R2 so the cache is durable.
             const dl = await fetch(r.videoUrl, { signal: AbortSignal.timeout(45_000) });
@@ -276,7 +284,7 @@ export async function POST(
       // signal is the TTS audio (its R2 URL changes when the line is re-synthesized).
       // Keying on the persona's base clip caused double-spend when the resolver
       // picked a newer ready base clip (T-1144b QA, 2026-07-07).
-      const cacheKey = lipsyncCacheKey({ audioUrl: seg.audio_url as string, mode: MODE });
+      const cacheKey = lipsyncCacheKey({ audioUrl: seg.audio_url as string, mode });
 
       // No-double-spend: reuse ANY ready clip for this segment + current audio,
       // regardless of which base clip / cache-key format produced it.
@@ -342,8 +350,8 @@ export async function POST(
         base_clip_id: base.id,
         audio_url: seg.audio_url,
         cache_key: cacheKey,
-        mode: MODE,
-        provider: provider.id,
+        mode,
+        provider: startProvider.id,
         provider_task_id: null,
         duration_seconds: Math.round(dur * 100) / 100,
         credits_usd: Math.round(cost * 100) / 100,
@@ -379,7 +387,7 @@ export async function POST(
               cacheKey,
             })
           : base.url;
-        const task = await provider.createClip({ videoUrl: lipsyncVideoUrl, audioUrl: seg.audio_url as string, mode: MODE });
+        const task = await startProvider.createClip({ videoUrl: lipsyncVideoUrl, audioUrl: seg.audio_url as string, mode });
         const { error: taskErr } = await service
           .from("podcast_segment_lipsync_clips")
           .update({ provider_task_id: task.providerTaskId, status: "processing", error_message: null, updated_at: new Date().toISOString() })

@@ -14,7 +14,7 @@ import {
   isPodcastTargetDuration,
   isSourceMode,
 } from "@/lib/podcast/podcast";
-import { isPodcastLipsyncQualityMode } from "@/lib/podcast/lipsync-routing";
+import { isPodcastLipsyncQualityMode } from "@/lib/podcast/lipsync-quality";
 
 /**
  * GET /api/podcasts — list the authenticated user's podcasts (newest first).

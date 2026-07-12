@@ -7,7 +7,7 @@
  * Host/Guest pickers and the preview route.
  *
  * Provider display is HYBRID: the UI leads with `label`/`tone` (product-facing)
- * and shows `provider` only as a small secondary tag. Adding Google/Gemini,
+ * while `provider` remains internal routing metadata. Adding Google/Gemini,
  * Kokoro, etc. later = append rows here (+ a lib/tts branch), no UI rewrite.
  */
 
@@ -18,7 +18,7 @@ export interface PodcastVoice {
   id: string;
   /** Product-facing label (not a provider name). */
   label: string;
-  /** Public provider, shown only as a small secondary tag. */
+  /** Internal provider id. Never expose it as a product choice. */
   provider: VoiceProvider;
   gender: "female" | "male" | "neutral";
   tone: string;

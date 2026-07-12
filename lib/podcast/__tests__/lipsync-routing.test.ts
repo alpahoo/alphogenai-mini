@@ -46,16 +46,7 @@ describe("podcast lip-sync quality routing", () => {
     expect(resolvePodcastLipsyncRoutingPlan({ qualityMode: null }).effectiveQualityMode).toBe("premium");
   });
 
-  it("keeps public labels provider-neutral", () => {
-    const forbidden = /heygen|runway|latentsync|musetalk|seedance|elevenlabs/i;
-
-    for (const preset of listPodcastLipsyncQualityPresets()) {
-      expect(preset.publicLabel).not.toMatch(forbidden);
-      expect(preset.publicDescription).not.toMatch(forbidden);
-    }
-  });
-
-  it("lists all product-facing quality modes", () => {
+  it("lists internal routing entries for all product quality modes", () => {
     expect(PODCAST_LIPSYNC_QUALITY_MODES).toEqual(["economy", "balanced", "premium", "cinema"]);
     expect(listPodcastLipsyncQualityPresets().map((preset) => preset.id)).toEqual(PODCAST_LIPSYNC_QUALITY_MODES);
   });
@@ -67,6 +58,5 @@ describe("podcast lip-sync quality routing", () => {
 
   it("exposes internal notes separately from public copy", () => {
     expect(getPodcastLipsyncQualityPreset("cinema").internalNote).toMatch(/Runway|Act-Two/i);
-    expect(getPodcastLipsyncQualityPreset("cinema").publicDescription).not.toMatch(/Runway|Act-Two/i);
   });
 });

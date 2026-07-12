@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 import { TITLE_MAX, isAspectRatio, isLanguage, isLayout, isPodcastRenderMode, isPodcastStyle, isPodcastTargetDuration } from "@/lib/podcast/podcast";
-import { isPodcastLipsyncQualityMode } from "@/lib/podcast/lipsync-routing";
+import { isPodcastLipsyncQualityMode } from "@/lib/podcast/lipsync-quality";
 
 /**
  * GET /api/podcasts/[id] — full podcast (with speakers + segments). 404 if not owned.

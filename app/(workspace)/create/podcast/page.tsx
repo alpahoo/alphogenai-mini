@@ -25,10 +25,10 @@ import {
 } from "@/lib/podcast/lipsync-estimate";
 import {
   isPodcastLipsyncQualityMode,
-  listPodcastLipsyncQualityPresets,
-  resolvePodcastLipsyncRoutingPlan,
+  listPublicPodcastLipsyncQualityPresets,
+  resolvePublicPodcastLipsyncQualitySelection,
   type PodcastLipsyncQualityMode,
-} from "@/lib/podcast/lipsync-routing";
+} from "@/lib/podcast/lipsync-quality";
 
 type Speaker = { id: string; role: "host" | "guest"; name: string; position: number; voice_id?: string | null; persona_id?: string | null };
 type Persona = { id: string; name: string; portrait_url: string | null; thumb_url: string | null; is_catalog: boolean };
@@ -126,9 +126,9 @@ export default function CreatePodcastPage() {
   // the real lip-sync render ships in T-1144b.
   const [lipsyncConfirmOpen, setLipsyncConfirmOpen] = useState(false);
   const [lipsyncConfirmed, setLipsyncConfirmed] = useState(false);
-  const lipsyncQualityPresets = useMemo(() => listPodcastLipsyncQualityPresets(), []);
+  const lipsyncQualityPresets = useMemo(() => listPublicPodcastLipsyncQualityPresets(), []);
   const lipsyncQualityPlan = useMemo(
-    () => resolvePodcastLipsyncRoutingPlan({ qualityMode: lipsyncQualityMode }),
+    () => resolvePublicPodcastLipsyncQualitySelection(lipsyncQualityMode),
     [lipsyncQualityMode],
   );
 
@@ -1259,7 +1259,7 @@ export default function CreatePodcastPage() {
                   Choose the result level. AlphoGen keeps providers hidden and routes the job behind the scenes.
                 </p>
               </div>
-              {lipsyncQualityPlan.fallbackReason && (
+              {lipsyncQualityPlan.fallbackNotice && (
                 <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-[10px] font-bold uppercase text-neutral-500">
                   Using Premium today
                 </span>
@@ -1284,10 +1284,10 @@ export default function CreatePodcastPage() {
                     }`}
                   >
                     <span className="flex items-center gap-1.5 text-sm font-semibold text-neutral-800">
-                      {preset.publicLabel}
+                      {preset.label}
                       {!available && <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-bold uppercase text-neutral-500">Soon</span>}
                     </span>
-                    <span className="mt-0.5 block text-[11px] leading-snug text-neutral-500">{preset.publicDescription}</span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-neutral-500">{preset.description}</span>
                   </button>
                 );
               })}
@@ -1943,7 +1943,6 @@ function VoicePicker({
         {current && (
           <span className="flex items-center gap-1.5 text-[11px] text-neutral-500">
             <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-semibold text-neutral-700">{current.label}</span>
-            <span className="text-neutral-400">· {current.provider}</span>
           </span>
         )}
       </div>

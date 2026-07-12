@@ -1,6 +1,6 @@
 ﻿import { describe, expect, it, vi } from "vitest";
 import { createLipsync, getLipsyncTask } from "@/lib/heygen-client";
-import { getPodcastLipsyncProvider, heygenPodcastLipsyncProvider } from "../lipsync-provider";
+import { getPodcastLipsyncProvider, heygenPodcastLipsyncProvider, isPodcastLipsyncProviderId } from "../lipsync-provider";
 
 vi.mock("@/lib/heygen-client", () => ({
   createLipsync: vi.fn(),
@@ -42,5 +42,11 @@ describe("getPodcastLipsyncProvider", () => {
   it("returns HeyGen as the current baseline provider", () => {
     expect(getPodcastLipsyncProvider()).toBe(heygenPodcastLipsyncProvider);
     expect(getPodcastLipsyncProvider("heygen")).toBe(heygenPodcastLipsyncProvider);
+  });
+
+  it("validates persisted provider ids before polling cached tasks", () => {
+    expect(isPodcastLipsyncProviderId("heygen")).toBe(true);
+    expect(isPodcastLipsyncProviderId("runway")).toBe(false);
+    expect(isPodcastLipsyncProviderId(null)).toBe(false);
   });
 });
