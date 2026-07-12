@@ -31,6 +31,7 @@ class LatentSyncStartRequest(BaseModel):
 # Keep this separate from the production Modal image. LatentSync pins a CUDA
 # PyTorch stack and diffusion/video dependencies that should not touch render_podcast.
 LATENTSYNC_COMMIT = "a229c3948406bc2cf6eaf4873e662e70c6a04746"
+LATENTSYNC_MAX_CONTAINERS = 2
 
 latentsync_image = (
     modal.Image.debian_slim(python_version="3.10")
@@ -225,6 +226,7 @@ def _prepare_inputs(video_url: str, audio_url: str, max_seconds: float, workdir:
     volumes={"/models": latentsync_volume},
     timeout=3600,
     retries=0,
+    max_containers=LATENTSYNC_MAX_CONTAINERS,
 )
 def run_latentsync_clip(video_url: str, audio_url: str, max_seconds: float = 8.0) -> dict[str, Any]:
     if max_seconds <= 0 or max_seconds > 8:
@@ -339,6 +341,7 @@ def _create_latentsync_web():
             "output_url": output_url,
             "elapsed_seconds": result.get("elapsed_seconds"),
             "output_probe": result.get("output_probe"),
+            "gpu": "A10G",
         }
 
     @web.get("/health")

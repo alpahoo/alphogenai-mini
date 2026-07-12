@@ -191,13 +191,56 @@ describe("POST /api/podcasts/[id]/lipsync", () => {
 
     const res = await POST(req({ action: "start" }), ctx("p1"));
     expect(res.status).toBe(200);
-    expect((await res.json()).fallbackStarted).toBe(0);
+    const json = await res.json();
+    expect(json.fallbackStarted).toBe(0);
+    expect(json.capacityFallbacks).toBe(0);
+    expect(json.actualNewSpendUsd).toBe(0.03);
     expect(createLipsync).not.toHaveBeenCalled();
     expect(writes.at(-1)?.payload).toMatchObject({
       provider: "latentsync_modal",
       provider_task_id: "fc-balanced",
       status: "processing",
     });
+  });
+
+  it("routes an over-limit Balanced segment directly to HeyGen before any GPU call", async () => {
+    vi.stubEnv("PODCAST_LATENTSYNC_BALANCED_ENABLED", "true");
+    vi.stubEnv("MODAL_LATENTSYNC_URL", "https://latent.example.com");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const writes: State[] = [];
+    vi.mocked(createServiceClient).mockReturnValue(makeService(baseRoutes({
+      "podcasts:select": () => ({
+        data: { id: "p1", user_id: USER.id, metadata: { lipsync_quality_mode: "balanced" } },
+        error: null,
+      }),
+      "podcast_segments:select": () => ({
+        data: [{
+          id: "segment-1",
+          speaker_id: "speaker-1",
+          order_index: 0,
+          text: "A deliberately longer line.",
+          audio_url: "https://cdn.example.com/audio.mp3",
+          start_ms: 0,
+          end_ms: 9000,
+          status: "ready",
+        }],
+        error: null,
+      }),
+      "podcast_persona_base_clips:select": () => ({
+        data: { id: "base-1", video_url: "https://cdn.example.com/base.mp4", duration_seconds: 10 },
+        error: null,
+      }),
+    }), writes) as never);
+
+    const res = await POST(req({ action: "start" }), ctx("p1"));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.capacityFallbacks).toBe(1);
+    expect(json.actualNewSpendUsd).toBe(0.36);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(createLipsync).toHaveBeenCalledTimes(1);
+    expect(writes.at(-1)?.payload).toMatchObject({ provider: "heygen" });
   });
 
   it("falls back to HeyGen when Balanced cannot start LatentSync", async () => {

@@ -1,3 +1,9 @@
+## 2026-07-12 - Codex - T-1154 Balanced production hardening (pre-QA)
+- Added provider capability contracts (max input, concurrency, measured cost) and provider-aware estimates. Balanced no longer reports HeyGen pricing; the production cap reserves worst-case HeyGen fallback cost before any GPU task starts.
+- Segments outside LatentSync's 8-second input contract route directly to HeyGen before cache reservation/GPU spend. Modal A10G concurrency is explicitly bounded to two containers.
+- LatentSync completion telemetry now crosses the neutral provider contract and is emitted as structured completion metrics. Public Balanced remains disabled pending the capped internal mini-batch.
+- Validation: 943/943 tests, 45 targeted provider/route tests, 2 Python contract tests, py_compile, tsc, and production build all pass. No migration or public UI change.
+
 ## 2026-07-12 - Codex - T-1153 same-input LatentSync vs HeyGen comparison
 - Generated a provider-controlled comparison for the exact same podcast segment, persona, base clip, and TTS audio. The existing LatentSync cache was temporarily hidden, one HeyGen precision clip was generated (~$0.13), then both provider rows were restored as ready and the podcast metadata was returned to its original state.
 - LatentSync: 3.36s, 512x512 H.264 + 16kHz mono AAC, ~176s cold end-to-end. HeyGen: 3.32s, 720x720 H.264 + 48kHz stereo AAC, ~99s end-to-end. Frame inspection shows both preserve the persona and studio framing; HeyGen remains sharper and slightly more stable around the mouth/lower face.

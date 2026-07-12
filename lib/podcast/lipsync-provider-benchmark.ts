@@ -1,3 +1,9 @@
+import {
+  LATENTSYNC_MEASURED_ELAPSED_SECONDS,
+  LATENTSYNC_MEASURED_OUTPUT_SECONDS,
+  LATENTSYNC_MEASURED_USD_PER_OUTPUT_SECOND,
+} from "./lipsync-provider-metrics";
+
 export type LipsyncProviderVerdict = "production_candidate" | "watchlist" | "reject";
 export type LipsyncBenchmarkConfidence = "high" | "medium" | "low";
 export type LipsyncBenchmarkMetricsSource = "measured" | "estimated" | "screened";
@@ -79,12 +85,12 @@ export const HEYGEN_BASELINE_BENCHMARK: LipsyncProviderBenchmarkInput = {
   },
 };
 
-export const MODAL_A10_GPU_USD_PER_SECOND = 0.000306;
-export const LATENTSYNC_MEASURED_OUTPUT_SECONDS = 14.56;
-export const LATENTSYNC_MEASURED_ELAPSED_SECONDS = 581.32;
-export const LATENTSYNC_MEASURED_USD_PER_OUTPUT_SECOND =
-  (LATENTSYNC_MEASURED_ELAPSED_SECONDS * MODAL_A10_GPU_USD_PER_SECOND) /
-  LATENTSYNC_MEASURED_OUTPUT_SECONDS;
+export {
+  LATENTSYNC_MEASURED_ELAPSED_SECONDS,
+  LATENTSYNC_MEASURED_OUTPUT_SECONDS,
+  LATENTSYNC_MEASURED_USD_PER_OUTPUT_SECOND,
+  MODAL_A10_GPU_USD_PER_SECOND,
+} from "./lipsync-provider-metrics";
 
 export const LATENTSYNC_A10_BENCHMARK: LipsyncProviderBenchmarkInput = {
   id: "latentsync-modal-a10",

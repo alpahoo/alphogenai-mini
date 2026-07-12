@@ -27,6 +27,7 @@ beforeEach(() => {
   vi.mocked(getPodcastLipsyncProvider).mockReturnValue({
     id: "heygen",
     label: "HeyGen",
+    capabilities: { estimatedUsdPerOutputSecond: 0.04 },
     createClip,
     pollClip,
   });
