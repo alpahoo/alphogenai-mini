@@ -1,3 +1,8 @@
+## 2026-07-13 - Codex - T-1156 60-second cache-resume production PASS
+- Resumed the existing English 60-second casual podcast (`847955bc`) that had previously stopped at 5/8 clips because of the 4.26-second presenter contract. The v2 run reused all 5 cached clips and generated only the 3 missing clips: 8 selected, 5 cached, 3 started, 0 skipped, 0 failed.
+- The three Balanced clips completed in about 4.7 minutes and the final compositing render reached `done` with 8 segments. This validates the requested one-minute upper bound and proves incremental cache reuse avoids re-spend.
+- T-1156 observation is closed with two end-to-end cases (30s French expert and 60s English casual). A third paid run would add little signal, so it was deliberately not launched.
+
 ## 2026-07-13 - Codex - T-1156 short Balanced podcast production PASS
 - Re-ran the previously blocked French expert podcast (`fd67bd3c`) after deploying the 8.6-second presenter clips. All 8 dialogue segments started, none were skipped, and all 8 completed on Balanced with zero failed clips or provider fallback.
 - The two-worker queue completed in about 9.7 minutes; the final free compositing render reached `done` after 9 polls and produced a durable R2 MP4 with 8 segments. This validates the complete 30-second path while keeping the observation policy capped at 60-second podcasts.
