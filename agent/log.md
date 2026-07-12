@@ -1,3 +1,13 @@
+## 2026-07-13 - Codex - T-1156 short Balanced podcast production PASS
+- Re-ran the previously blocked French expert podcast (`fd67bd3c`) after deploying the 8.6-second presenter clips. All 8 dialogue segments started, none were skipped, and all 8 completed on Balanced with zero failed clips or provider fallback.
+- The two-worker queue completed in about 9.7 minutes; the final free compositing render reached `done` after 9 polls and produced a durable R2 MP4 with 8 segments. This validates the complete 30-second path while keeping the observation policy capped at 60-second podcasts.
+- The in-app browser blocked direct R2 playback, so this pass validates API state, cache completion, and the final render artifact rather than adding a redundant visual-frame review; talking-duo compositing was already visually qualified in T-1144/T-1154.
+
+## 2026-07-13 - Codex - T-1156a base-v2 presenter clips production PASS
+- Generated the four cache-isolated `base-v2-8s` catalog presenter clips through the staged admin route, under the approved EUR 5 ceiling and without retrying failed provider jobs.
+- Maya 8.80s, Leo 8.62s, Aria 8.62s, and Nova 8.62s all reached `ready` and were copied to durable R2 URLs. The first dry run stopped before provider generation because a historical persona id was stale; resolving active personas by name fixed the operation with zero wasted provider spend.
+- The 30-60 second observation can now resume against dialogue turns up to roughly 9.9 seconds (base duration plus the existing 15% tolerance).
+
 ## 2026-07-12 - Codex - T-1156a 60-second observation unblocker
 - Diagnosed the observation stop as a base-clip contract issue, not a podcast-duration or provider-cap issue: the existing 4.26-second `base-v1` presenter clips reject longer dialogue turns before any lip-sync job starts.
 - Introduced cache-isolated `base-v2-8s` presenter clips with a longer neutral script, switched the lip-sync resolver to v2, persisted the selected quality before generation, and surfaced skipped reasons instead of silently completing.
