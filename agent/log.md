@@ -1,3 +1,9 @@
+## 2026-07-12 - Codex - T-1153 Balanced LatentSync production gate
+- Ran a one-segment, feature-flagged production gate on podcast `307e628c-96a0-4ad6-b948-60a2f57c2f9a`; public Balanced UI remained locked and only the QA podcast metadata was temporarily overridden.
+- Found and fixed a real HTTP-contract bug: the local Pydantic request model combined with postponed annotations made FastAPI expose `req` as a query parameter, so `/start` returned 422 and correctly fell back to HeyGen. The request model now lives at module scope and an OpenAPI contract test asserts a JSON request body with no `req` query parameter.
+- Redeployed `alphogenai-latentsync` and re-ran one clean segment. It completed with provider `latentsync_modal`, no fallback, a durable R2 cache URL, and a valid 3.36s 512x512 H.264 + AAC output. Visual frame inspection passed.
+- Restored the QA podcast metadata, set `PODCAST_LATENTSYNC_BALANCED_ENABLED=false`, and redeployed Vercel production. Balanced remains internal/locked pending broader human comparison; no batch was run.
+
 ## 2026-07-12 - Codex - T-1151 LatentSync multi-sample qualification
 - Ran three additional capped Modal A10 samples across Aria/Leo and 2.02-4.56s inputs. All produced valid 512x512 H.264+AAC outputs; aggregate LatentSync evidence is now 4 technical passes / 14.56s output / 581.32s GPU wall time.
 - Fixed the isolated spike harness so checkpoint symlinks are recreated in every ephemeral Modal container while model downloads remain volume-cached.

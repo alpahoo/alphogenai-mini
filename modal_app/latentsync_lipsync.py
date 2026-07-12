@@ -15,11 +15,18 @@ from pathlib import Path
 from typing import Any
 
 import modal
+from pydantic import BaseModel
 
 app = modal.App("alphogenai-latentsync")
 
 secrets = modal.Secret.from_name("alphogenai-secrets-corrected-v2")
 latentsync_volume = modal.Volume.from_name("alphogenai-latentsync-spike", create_if_missing=True)
+
+
+class LatentSyncStartRequest(BaseModel):
+    video_url: str
+    audio_url: str
+    max_seconds: float = 8.0
 
 # Keep this separate from the production Modal image. LatentSync pins a CUDA
 # PyTorch stack and diffusion/video dependencies that should not touch render_podcast.
@@ -288,19 +295,11 @@ def run_latentsync_clip(video_url: str, audio_url: str, max_seconds: float = 8.0
 web_image = modal.Image.debian_slim(python_version="3.11").pip_install("fastapi[standard]")
 
 
-@app.function(image=web_image, secrets=[secrets], timeout=30)
-@modal.asgi_app()
-def latentsync_api():
+def _create_latentsync_web():
     from fastapi import FastAPI, Header, HTTPException, Query
     from fastapi.responses import JSONResponse
-    from pydantic import BaseModel
 
     web = FastAPI()
-
-    class StartRequest(BaseModel):
-        video_url: str
-        audio_url: str
-        max_seconds: float = 8.0
 
     def authorize(provided: str | None) -> None:
         expected = os.environ.get("MODAL_WEBHOOK_SECRET")
@@ -310,7 +309,7 @@ def latentsync_api():
             raise HTTPException(status_code=401, detail="Unauthorized")
 
     @web.post("/start")
-    async def start(req: StartRequest, x_webhook_secret: str | None = Header(None)):
+    async def start(req: LatentSyncStartRequest, x_webhook_secret: str | None = Header(None)):
         authorize(x_webhook_secret)
         if not req.video_url.startswith("https://") or not req.audio_url.startswith("https://"):
             raise HTTPException(status_code=400, detail="HTTPS media URLs are required")
@@ -347,6 +346,12 @@ def latentsync_api():
         return {"status": "ok", "provider": "latentsync_modal", "commit": LATENTSYNC_COMMIT}
 
     return web
+
+
+@app.function(image=web_image, secrets=[secrets], timeout=30)
+@modal.asgi_app()
+def latentsync_api():
+    return _create_latentsync_web()
 
 
 @app.local_entrypoint()
