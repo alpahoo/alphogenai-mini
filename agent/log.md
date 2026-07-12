@@ -1,3 +1,8 @@
+## 2026-07-12 - Codex - T-1155 Controlled Balanced beta production QA PASS
+- Deployed commit `a9ff295`, enabled the production server flag, and verified the controlled beta in the signed-in admin account without starting any provider job or spending credits.
+- Balanced renders as an enabled `Beta` quality target with a conservative queue ETA, two-at-a-time disclosure, and automatic Premium fallback copy. The UI exposes no provider names. Switching back to Premium restores the validated production copy and leaves generation enabled.
+- The server-side cohort gate remains authoritative: non-eligible direct API requests are covered by tests and fail closed to Premium. Production deployment `dpl_E2aRZGa1ndF84NaCgCzJGLK86Yx3` is READY and aliased to `www.alphogen.com`.
+
 ## 2026-07-12 - Codex - T-1155 Controlled Balanced beta implementation
 - Added a server-enforced cohort gate: Balanced requires the global server flag plus an admin account or a Premium account on the private email allowlist. Direct API requests outside the cohort fail closed to the validated Premium route.
 - Added provider-neutral `/api/podcasts/quality-access` capability discovery and a Beta-only Studio control with conservative queue ETA, two-at-a-time disclosure, automatic Premium fallback copy, and an extended polling budget for queued GPU work.
