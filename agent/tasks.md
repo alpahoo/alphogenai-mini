@@ -12,7 +12,17 @@ Format d'une tâche :
 
 ---
 
-# Backlog — Roadmap Director Console (6 axes)
+### [T-1157] Premium lipsync QA follow-up and failure observability - `status: blocked` · `owner: claude`
+- Objective: finish the short Jogg-like premium render only after explaining the two remaining missing lip-sync clips.
+- Current production case: podcast `307e628c-96a0-4ad6-b948-60a2f57c2f9a`; 8 voiced dialogue lines; 6 premium clips ready, 2 missing.
+- Failed lines: `Break them down into daily habits, like checking email only twice a day.` and `Exactly, and then reviewing your progress each Friday to adjust for the next week.`
+- Already attempted: one grouped retry plus one individual retry per missing line. Do not spend more credits blindly.
+- First inspect the live lipsync status/API and `podcast_segment_lipsync_clips` rows, including `status`, `provider`, `provider_task_id`, `audio_url`, `base_clip_id`, `cache_key`, and `error_message`. Fix the real cause or improve error propagation before one targeted retry.
+- Once 8/8 clips are ready: render the premium video, verify the active speaker moves while the inactive speaker stays frozen, verify captions/studio layout, then document actual spend and result.
+- Related delivered commit: `51bdbdc` (premium sync failure details in UI), pushed and validated with 950 tests, tsc, and build.
+- Risk: paid provider calls. No more than one targeted retry after the cause is understood.
+
+# Backlog - Roadmap Director Console (6 axes)
 
 ## Axe 1 — Polish du create flow  `status: in_progress`
 
