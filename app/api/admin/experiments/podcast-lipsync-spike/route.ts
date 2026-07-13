@@ -25,7 +25,10 @@ import { randomUUID } from "crypto";
  *
  * POST body: { step: 'avatars' | 'voices' | 'base' | 'poll_base' | 'lipsync' | 'poll_lipsync', ... }
  */
-export const maxDuration = 60;
+// Studio packs can take longer than the legacy 60-second lip-sync spike.
+// Keep the synchronous provider response inside one server invocation so the
+// generated URLs can be copied to permanent R2 storage before they expire.
+export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request);
