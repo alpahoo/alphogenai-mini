@@ -241,6 +241,60 @@ export async function POST(request: NextRequest) {
           usage: genJson.usage,
         });
       }
+      case "bind_studio_pack": {
+        const podcastId = typeof body.podcastId === "string" ? body.podcastId : "";
+        const packId = typeof body.packId === "string" ? body.packId : "";
+        const shots = Array.isArray(body.shots) ? body.shots : [];
+        if (!podcastId || !packId || shots.length < 3) {
+          return NextResponse.json({ error: "podcastId + packId + at least 3 shots required" }, { status: 400 });
+        }
+        const urls = shots
+          .map((shot: unknown) =>
+            shot && typeof shot === "object" && typeof (shot as { url?: unknown }).url === "string"
+              ? (shot as { url: string }).url
+              : "",
+          )
+          .filter(Boolean);
+        const expectedPath = `/podcast/studio-packs/${packId}/`;
+        if (urls.length < 3 || urls.some((url: string) => !url.startsWith("https://") || !url.includes(expectedPath))) {
+          return NextResponse.json({ error: "studio shots must be permanent URLs from this pack" }, { status: 400 });
+        }
+        const service = createServiceClient();
+        const { data: podcast, error: loadError } = await service
+          .from("podcasts").select("metadata").eq("id", podcastId).maybeSingle();
+        if (loadError || !podcast) {
+          return NextResponse.json({ error: "Podcast not found" }, { status: 404 });
+        }
+        const current = podcast.metadata && typeof podcast.metadata === "object"
+          ? podcast.metadata as Record<string, unknown>
+          : {};
+        const studioBaseClips: Record<string, string> = {};
+        if (typeof body.hostBaseClipId === "string" && body.hostBaseClipId) {
+          studioBaseClips.host = body.hostBaseClipId;
+        }
+        if (typeof body.guestBaseClipId === "string" && body.guestBaseClipId) {
+          studioBaseClips.guest = body.guestBaseClipId;
+        }
+        const metadata = {
+          ...current,
+          studio_pack_id: packId,
+          studio_shots: {
+            wide: urls[0],
+            host: urls[1],
+            guest: urls[2],
+            ...(urls[3] ? { alternate: urls[3] } : {}),
+          },
+          ...(Object.keys(studioBaseClips).length > 0 ? { studio_base_clips: studioBaseClips } : {}),
+        };
+        const { error: updateError } = await service.from("podcasts").update({
+          metadata,
+          video_url: null,
+          render_status: "idle",
+          render_error: null,
+        }).eq("id", podcastId);
+        if (updateError) throw new Error(`Could not bind studio pack: ${updateError.message}`);
+        return NextResponse.json({ podcastId, packId, metadata });
+      }
       case "normalize_jpeg": {
         // T-1143d: fetch a staging portrait (PNG), re-encode to a stable 1024 JPEG
         // (HeyGen photo-avatar needs JPEG with readable dimensions), upload to a

@@ -2294,7 +2294,7 @@ def _resolve_persona_avatar(sb, speaker: dict, size: int, podcast_id: str, owner
         return None
 
 
-def _resolve_base_clip_url(sb, speaker: dict, podcast_id: str, owner_id=None):
+def _resolve_base_clip_url(sb, speaker: dict, podcast_id: str, owner_id=None, preferred_clip_id=None):
     """Return a ready 1:1 talking-head base clip R2 URL for a speaker's persona,
     or None (â†’ keep the static portrait). T-1144a. Never raises.
 
@@ -2315,14 +2315,21 @@ def _resolve_base_clip_url(sb, speaker: dict, podcast_id: str, owner_id=None):
         p_owner = prows[0].get("user_id")
         if p_owner is not None and p_owner != owner_id:
             return None
-        rows = (
-            sb.table("podcast_persona_base_clips").select("video_url,status,created_at")
-            .eq("persona_id", persona_id).eq("provider", "heygen")
-            .eq("aspect_ratio", "1:1").eq("resolution", "720p")
-            .eq("clip_kind", "talking_head").eq("prompt_version", "base-v1")
-            .eq("status", "ready").order("created_at", desc=True).limit(1)
-            .execute().data
-        ) or []
+        if preferred_clip_id:
+            rows = (
+                sb.table("podcast_persona_base_clips").select("video_url,status,created_at")
+                .eq("id", preferred_clip_id).eq("persona_id", persona_id)
+                .eq("status", "ready").limit(1).execute().data
+            ) or []
+        else:
+            rows = (
+                sb.table("podcast_persona_base_clips").select("video_url,status,created_at")
+                .eq("persona_id", persona_id).eq("provider", "heygen")
+                .eq("aspect_ratio", "1:1").eq("resolution", "720p")
+                .eq("clip_kind", "talking_head").eq("prompt_version", "base-v1")
+                .eq("status", "ready").order("created_at", desc=True).limit(1)
+                .execute().data
+            ) or []
         url = (rows[0].get("video_url") or "").strip() if rows else ""
         return url or None
     except Exception as e:
@@ -2433,6 +2440,55 @@ def _extract_base_clip_frames(video_url: str, workdir: str, label: str, size: in
         return {"fps": EXTRACT_FPS, "bright": bright, "dim": dim}
     except Exception as e:
         log(podcast_id, f"base clip frames fallback ({label}): {e}")
+        return None
+
+
+def _extract_editorial_clip_frames(video_url: str, workdir: str, label: str, width: int, height: int, podcast_id: str):
+    """Extract a studio clip as full-frame editorial images.
+
+    Frames are kept at half resolution to bound memory, then upscaled while
+    composing. This is the real-studio path: no avatar cards or split screen.
+    """
+    import glob
+    import subprocess
+    import httpx
+    from PIL import Image
+    extract_fps = 8
+    iw, ih = max(320, width // 2), max(180, height // 2)
+    try:
+        clip_path = os.path.join(workdir, f"editorial_{label}.mp4")
+        with httpx.Client(timeout=90, follow_redirects=True) as client:
+            resp = client.get(video_url)
+            resp.raise_for_status()
+            with open(clip_path, "wb") as fh:
+                fh.write(resp.content)
+        frames_dir = os.path.join(workdir, f"editorial_{label}_frames")
+        os.makedirs(frames_dir, exist_ok=True)
+        vf = f"fps={extract_fps},scale={iw}:{ih}:force_original_aspect_ratio=increase,crop={iw}:{ih}"
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", clip_path, "-vf", vf, os.path.join(frames_dir, "%04d.jpg")],
+            capture_output=True, timeout=180,
+        )
+        files = sorted(glob.glob(os.path.join(frames_dir, "*.jpg")))
+        frames = [Image.open(fp).convert("RGB").copy() for fp in files]
+        return {"fps": extract_fps, "frames": frames} if frames else None
+    except Exception as e:
+        log(podcast_id, f"editorial clip frames fallback ({label}): {e}")
+        return None
+
+
+def _load_editorial_still(image_url: str, width: int, height: int, podcast_id: str):
+    """Load one permanent studio-pack still and crop it to the output frame."""
+    import io
+    import httpx
+    from PIL import Image, ImageOps
+    try:
+        with httpx.Client(timeout=60, follow_redirects=True) as client:
+            resp = client.get(image_url)
+            resp.raise_for_status()
+        return ImageOps.fit(Image.open(io.BytesIO(resp.content)).convert("RGB"), (width, height))
+    except Exception as e:
+        log(podcast_id, f"studio still fallback: {e}")
         return None
 
 
@@ -2713,18 +2769,54 @@ def render_podcast(podcast_id: str) -> str:
         render_mode = _meta.get("render_mode") if isinstance(_meta, dict) else None
         if render_mode not in ("static", "talking_visual", "lipsync_premium"):
             render_mode = "talking_visual"
+        _studio_base_ids = _meta.get("studio_base_clips") if isinstance(_meta, dict) else {}
+        if not isinstance(_studio_base_ids, dict):
+            _studio_base_ids = {}
+        _studio_shot_urls = _meta.get("studio_shots") if isinstance(_meta, dict) else {}
+        if not isinstance(_studio_shot_urls, dict):
+            _studio_shot_urls = {}
+        editorial_mode = bool(
+            W >= H
+            and render_mode in ("talking_visual", "lipsync_premium")
+            and all(isinstance(_studio_shot_urls.get(k), str) for k in ("wide", "host", "guest"))
+        )
+        editorial_stills = {}
+        if editorial_mode:
+            for _key in ("wide", "host", "guest", "alternate"):
+                _url = _studio_shot_urls.get(_key)
+                if isinstance(_url, str) and _url.startswith("http"):
+                    _still = _load_editorial_still(_url, W, H, podcast_id)
+                    if _still:
+                        editorial_stills[_key] = _still
+            editorial_mode = all(k in editorial_stills for k in ("wide", "host", "guest"))
         # Per-segment lip-sync frames (T-1144b premium): {segment_id: frames dict}.
         # Populated only for lipsync_premium; empty otherwise â†’ talking_visual path.
         seg_lipsync_frames = {}
+        host_editorial_frames = None
+        guest_editorial_frames = None
         if render_mode == "static":
             host_frames = None
             guest_frames = None
             log(podcast_id, "render_mode=static â†’ static portraits (base clips bypassed)")
         else:
-            _host_clip = _resolve_base_clip_url(sb, host, podcast_id, owner_id)
-            _guest_clip = _resolve_base_clip_url(sb, guest, podcast_id, owner_id)
-            host_frames = _extract_base_clip_frames(_host_clip, workdir, "host", avatar_size, podcast_id) if _host_clip else None
-            guest_frames = _extract_base_clip_frames(_guest_clip, workdir, "guest", avatar_size, podcast_id) if _guest_clip else None
+            _host_clip = _resolve_base_clip_url(
+                sb, host, podcast_id, owner_id, _studio_base_ids.get("host")
+            )
+            _guest_clip = _resolve_base_clip_url(
+                sb, guest, podcast_id, owner_id, _studio_base_ids.get("guest")
+            )
+            if editorial_mode:
+                host_frames = None
+                guest_frames = None
+                host_editorial_frames = _extract_editorial_clip_frames(
+                    _host_clip, workdir, "host", W, H, podcast_id
+                ) if _host_clip else None
+                guest_editorial_frames = _extract_editorial_clip_frames(
+                    _guest_clip, workdir, "guest", W, H, podcast_id
+                ) if _guest_clip else None
+            else:
+                host_frames = _extract_base_clip_frames(_host_clip, workdir, "host", avatar_size, podcast_id) if _host_clip else None
+                guest_frames = _extract_base_clip_frames(_guest_clip, workdir, "guest", avatar_size, podcast_id) if _guest_clip else None
             log(podcast_id, f"render_mode={render_mode} â†’ talking-duo base clips host={'yes' if host_frames else 'no'} guest={'yes' if guest_frames else 'no'}")
             if render_mode == "lipsync_premium":
                 # Read the cached per-segment lip-sync clips (Next already generated
@@ -2734,7 +2826,15 @@ def render_podcast(podcast_id: str) -> str:
                 _quality_mode = _meta.get("lipsync_quality_mode") if isinstance(_meta, dict) else None
                 _ls = _resolve_segment_lipsync_clips(sb, podcast_id, _quality_mode or "premium")
                 for _seg_id, _url in _ls.items():
-                    _f = _extract_base_clip_frames(_url, workdir, f"ls_{str(_seg_id)[:8]}", avatar_size, podcast_id)
+                    _f = (
+                        _extract_editorial_clip_frames(
+                            _url, workdir, f"ls_{str(_seg_id)[:8]}", W, H, podcast_id
+                        )
+                        if editorial_mode
+                        else _extract_base_clip_frames(
+                            _url, workdir, f"ls_{str(_seg_id)[:8]}", avatar_size, podcast_id
+                        )
+                    )
                     if _f:
                         seg_lipsync_frames[_seg_id] = _f
                 log(podcast_id, f"lipsync_premium â†’ {len(seg_lipsync_frames)}/{len(_ls)} segment clips ready (rest fallback to talking_visual)")
@@ -2810,14 +2910,85 @@ def render_podcast(podcast_id: str) -> str:
             d.rounded_rectangle([bar_x, bar_y, bar_x + bar_w, bar_y + 8], radius=4, fill=(207, 216, 229))
             return img, acol
 
+        def build_editorial_overlay(active):
+            """Broadcast graphics over a real, full-frame shared studio shot."""
+            overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            d = ImageDraw.Draw(overlay, "RGBA")
+            active_role = spk_by_id.get(active["speaker_id"], {}).get("role", "host")
+            active_speaker = host if active_role == "host" else guest
+            acol = _PODCAST_COLORS[active_role]
+            # Gentle broadcast-safe gradients keep captions readable without
+            # hiding the studio, microphones or the second person in wide shots.
+            d.rectangle([0, 0, W, int(H * 0.15)], fill=(6, 10, 17, 112))
+            d.rectangle([0, int(H * 0.64), W, H], fill=(6, 10, 17, 178))
+            d.text((34, 24), "AlphoGen Podcast", font=f_small, fill=(244, 247, 252, 235))
+            podcast_title = (podcast.get("title") or "Podcast Video").strip()[:54]
+            title_w = d.textlength(podcast_title, font=f_title)
+            d.text(((W - title_w) / 2, 20), podcast_title, font=f_title, fill=(255, 255, 255, 242))
+
+            role_label = "HOST" if active_role == "host" else "GUEST"
+            name = (active_speaker.get("name") or active_role.title()).strip()[:28]
+            name_y = int(H * 0.68)
+            role_end = draw_text_box(
+                d, (42, name_y), role_label, f_role, (8, 14, 24, 255),
+                bg=(*acol, 240), radius=10,
+            )
+            d.text((role_end + 16, name_y + 5), name, font=f_name, fill=(255, 255, 255, 245))
+
+            caption_lines = wrap(d, active["text"], f_cap, W - 110, maxlines=3)
+            line_h = 38 if W >= 1000 else 34
+            cap_y = name_y + 52
+            for line in caption_lines:
+                d.text((48, cap_y), line, font=f_cap, fill=(255, 255, 255, 255),
+                       stroke_width=1, stroke_fill=(0, 0, 0, 180))
+                cap_y += line_h
+            d.rounded_rectangle([bar_x, bar_y, bar_x + bar_w, bar_y + 8], radius=4, fill=(184, 194, 209, 170))
+            return overlay, acol
+
         # One base per timeline entry (segment). Reused across all frames of that segment.
         bases = [build_base(seg) for (_st, _en, seg) in timeline]
+        editorial_overlays = [build_editorial_overlay(seg) for (_st, _en, seg) in timeline] if editorial_mode else []
 
         def active_index(t):
             for i, (st, en, _s) in enumerate(timeline):
                 if st <= t < en:
                     return i
-            return len(timeline) - 1  # gaps / tail â†’ last segment (unchanged behaviour)
+                if t < st:
+                    return max(0, i - 1)
+            return len(timeline) - 1
+
+        def compose_editorial_frame(idx, t):
+            """Director-style shared-studio edit: wide, active close-up, reaction."""
+            from PIL import Image
+            st, en, active_seg = timeline[idx]
+            active_role = spk_by_id.get(active_seg["speaker_id"], {}).get("role", "host")
+            local_t = max(0.0, t - st)
+            in_gap = not (st <= t < en)
+            # Establish the physical shared set, then cut to the current speaker.
+            if idx == 0 and local_t < min(1.15, max(0.0, en - st)):
+                bg = editorial_stills["wide"]
+            elif in_gap:
+                bg = editorial_stills.get("alternate") or editorial_stills["wide"]
+            else:
+                segment_frames = seg_lipsync_frames.get(active_seg.get("id"))
+                role_frames = host_editorial_frames if active_role == "host" else guest_editorial_frames
+                chosen = segment_frames or role_frames
+                if chosen and chosen.get("frames"):
+                    frames = chosen["frames"]
+                    frame_i = min(int(local_t * chosen["fps"]), len(frames) - 1)
+                    bg = frames[frame_i]
+                else:
+                    bg = editorial_stills[active_role]
+            if bg.size != (W, H):
+                bg = bg.resize((W, H), Image.Resampling.LANCZOS)
+            img = bg.convert("RGBA")
+            overlay, acol = editorial_overlays[idx]
+            img = Image.alpha_composite(img, overlay)
+            d = ImageDraw.Draw(img, "RGBA")
+            elapsed = min(1.0, max(0.0, t / total))
+            fill_w = int(bar_w * elapsed)
+            d.rounded_rectangle([bar_x, bar_y, bar_x + fill_w, bar_y + 8], radius=4, fill=(*acol, 255))
+            return img.convert("RGB")
 
         def compose_frame(idx, t):
             base_img, acol = bases[idx]
@@ -2875,7 +3046,9 @@ def render_podcast(podcast_id: str) -> str:
         n_frames = int(total * PODCAST_FPS) + 1
         for fi in range(n_frames):
             t = fi / PODCAST_FPS
-            proc.stdin.write(compose_frame(active_index(t), t).tobytes())
+            idx = active_index(t)
+            frame = compose_editorial_frame(idx, t) if editorial_mode else compose_frame(idx, t)
+            proc.stdin.write(frame.tobytes())
         proc.stdin.close()
         if proc.wait() != 0:
             return fail("ffmpeg encode failed")
