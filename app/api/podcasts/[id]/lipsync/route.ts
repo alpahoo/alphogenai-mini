@@ -138,15 +138,15 @@ async function startHeygenFallback(
   }
   const trim = planLipsyncTrim(duration, baseDuration);
   if (!trim.ok) throw new Error("Fallback duration is outside the supported range");
-  const videoUrl = trim.endTimeSeconds
-    ? await trimLipsyncBaseClip({
-        podcastId,
-        segmentId: row.segment_id,
-        baseUrl: base.video_url,
-        durationSeconds: duration,
-        cacheKey: `${row.cache_key}-fallback`,
-      })
-    : base.video_url;
+  // Always prepare the clip on Modal: trims when shorter, and ALWAYS guarantees
+  // an audio track (HeyGen rejects audio-less sources, e.g. BytePlus studio bases).
+  const videoUrl = await trimLipsyncBaseClip({
+    podcastId,
+    segmentId: row.segment_id,
+    baseUrl: base.video_url,
+    durationSeconds: trim.endTimeSeconds ? duration : 0,
+    cacheKey: `${row.cache_key}-fallback`,
+  });
   const fallback = getPodcastLipsyncProvider("heygen");
   const mode = row.mode === "speed" ? "speed" : "precision";
   const task = await fallback.createClip({ videoUrl, audioUrl: row.audio_url, mode });
@@ -578,18 +578,17 @@ export async function POST(
       }
 
       try {
-        // If the audio is shorter than the base clip, trim the clip to match on
-        // Modal (ffmpeg there; Vercel can't run it). Otherwise (small overshoot
-        // within ±15%) HeyGen handles it, so send the base clip as-is.
-        const lipsyncVideoUrl = trim.endTimeSeconds
-          ? await trimLipsyncBaseClip({
-              podcastId: id,
-              segmentId: seg.id,
-              baseUrl: base.url,
-              durationSeconds: dur,
-              cacheKey,
-            })
-          : base.url;
+        // Always prepare the clip on Modal (ffmpeg there; Vercel can't run it):
+        // trims to the audio length when the clip is longer, and ALWAYS guarantees
+        // an audio track — HeyGen rejects audio-less sources (e.g. BytePlus studio
+        // motion bases). durationSeconds=0 → keep full length, just ensure audio.
+        const lipsyncVideoUrl = await trimLipsyncBaseClip({
+          podcastId: id,
+          segmentId: seg.id,
+          baseUrl: base.url,
+          durationSeconds: trim.endTimeSeconds ? dur : 0,
+          cacheKey,
+        });
         let taskProvider = segmentProvider;
         let task;
         try {
