@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "../middleware";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createAvatarVideo, createPhotoAvatar, getHeyGenTask } from "@/lib/heygen-client";
+import { createBytePlusTask, getBytePlusTask } from "@/lib/byteplus-client";
 import { uploadBufferToR2 } from "@/lib/r2";
 
 export const maxDuration = 60;
@@ -14,6 +15,10 @@ const DEFAULT_ASPECT = "16:9";
 const DEFAULT_RESOLUTION = "720p";
 const DEFAULT_CLIP_KIND = "talking_head";
 const DEFAULT_PROMPT_VERSION = "base-v2-8s";
+const DEFAULT_BYTEPLUS_ENGINE = "seedance10pro_fast_byteplus";
+const VALID_PROVIDERS = new Set(["heygen", "byteplus"]);
+const DEFAULT_MOTION_PROMPT =
+  "Natural podcast host listening attentively in a professional studio. Subtle breathing, occasional blinking, small head movements and relaxed hand gestures. Keep the camera locked, preserve identity, clothing, microphone, desk and studio background. No speaking, no exaggerated motion, no camera movement.";
 const DEFAULT_SCRIPT =
   "Welcome back to the show. Today we're exploring one practical idea, why it matters, how it works, and what you can do next to put it into practice.";
 
@@ -65,6 +70,7 @@ function publicClip(row: BaseClipRow, reused = false) {
   return {
     id: row.id,
     persona_id: row.persona_id,
+    provider: row.provider,
     status: row.status,
     provider_avatar_id: row.provider_avatar_id,
     provider_video_id: row.provider_video_id,
@@ -104,6 +110,7 @@ async function loadPersona(service: ServiceClient, personaId: string): Promise<P
 async function findClip(
   service: ServiceClient,
   personaId: string,
+  provider: string,
   aspectRatio: string,
   resolution: string,
   promptVersion: string,
@@ -112,7 +119,7 @@ async function findClip(
     .from("podcast_persona_base_clips")
     .select("*")
     .eq("persona_id", personaId)
-    .eq("provider", "heygen")
+    .eq("provider", provider)
     .eq("aspect_ratio", aspectRatio)
     .eq("resolution", resolution)
     .eq("clip_kind", DEFAULT_CLIP_KIND)
@@ -126,6 +133,7 @@ async function findClip(
 async function insertClip(
   service: ServiceClient,
   personaId: string,
+  provider: string,
   aspectRatio: string,
   resolution: string,
   promptVersion: string,
@@ -134,7 +142,7 @@ async function insertClip(
     .from("podcast_persona_base_clips")
     .insert({
       persona_id: personaId,
-      provider: "heygen",
+      provider,
       aspect_ratio: aspectRatio,
       resolution,
       clip_kind: DEFAULT_CLIP_KIND,
@@ -181,8 +189,12 @@ async function handleEnsure(service: ServiceClient, body: Record<string, unknown
   const personaId = typeof body.persona_id === "string" ? body.persona_id : "";
   if (!personaId) return jsonError("persona_id is required", 400);
 
+  const provider =
+    typeof body.provider === "string" && VALID_PROVIDERS.has(body.provider)
+      ? body.provider
+      : "heygen";
   const voiceId = typeof body.voice_id === "string" ? body.voice_id.trim() : "";
-  if (!voiceId) return jsonError("voice_id is required", 400);
+  if (provider === "heygen" && !voiceId) return jsonError("voice_id is required", 400);
 
   const aspectRatio = cleanDimension(body.aspect_ratio, VALID_ASPECTS, DEFAULT_ASPECT);
   const resolution = cleanDimension(body.resolution, VALID_RESOLUTIONS, DEFAULT_RESOLUTION);
@@ -196,11 +208,19 @@ async function handleEnsure(service: ServiceClient, body: Record<string, unknown
     typeof body.script_text === "string" && body.script_text.trim()
       ? body.script_text.trim().slice(0, 600)
       : DEFAULT_SCRIPT;
+  const motionPrompt =
+    typeof body.motion_prompt === "string" && body.motion_prompt.trim()
+      ? body.motion_prompt.trim().slice(0, 2000)
+      : DEFAULT_MOTION_PROMPT;
+  const requestedDuration = Math.max(
+    4,
+    Math.min(12, Math.round(typeof body.duration_seconds === "number" ? body.duration_seconds : 5)),
+  );
 
   const persona = await loadPersona(service, personaId);
   if (!persona) return jsonError("Persona not found", 404);
 
-  let clip = await findClip(service, personaId, aspectRatio, resolution, promptVersion);
+  let clip = await findClip(service, personaId, provider, aspectRatio, resolution, promptVersion);
 
   // ── Cache hits ─────────────────────────────────────────────────────────
   if (clip?.status === "ready" && clip.video_url && !force) {
@@ -213,7 +233,7 @@ async function handleEnsure(service: ServiceClient, body: Record<string, unknown
 
   // ── Create or reset the row to a fresh pending cycle ───────────────────
   if (!clip) {
-    clip = await insertClip(service, personaId, aspectRatio, resolution, promptVersion);
+    clip = await insertClip(service, personaId, provider, aspectRatio, resolution, promptVersion);
   } else if (force || clip.status === "failed" || clip.status === "ready") {
     const patch: Record<string, unknown> = {
       status: "pending",
@@ -225,8 +245,57 @@ async function handleEnsure(service: ServiceClient, body: Record<string, unknown
       metadata: { ...(clip.metadata ?? {}), restarted_at: new Date().toISOString(), force },
     };
     // force restarts the whole staged cycle, including a fresh photo avatar.
-    if (force) patch.provider_avatar_id = null;
+    if (force && provider === "heygen") patch.provider_avatar_id = null;
     clip = await updateClip(service, clip.id, patch);
+  }
+
+  // BytePlus creates a neutral motion base directly from the selected studio
+  // frame. It deliberately has no voice; segment audio/lip-sync is layered by
+  // the downstream provider-neutral podcast pipeline.
+  if (provider === "byteplus") {
+    if (!clip.provider_video_id) {
+      const cachedSourceImageUrl =
+        typeof clip.metadata?.source_image_url === "string" && isHttpUrl(clip.metadata.source_image_url)
+          ? clip.metadata.source_image_url
+          : "";
+      const imageUrl =
+        requestedSourceImageUrl ||
+        cachedSourceImageUrl ||
+        (await resolvePortraitUrl(service, persona.portrait_path));
+      const taskId = await createBytePlusTask({
+        engineKey: DEFAULT_BYTEPLUS_ENGINE,
+        prompt: motionPrompt,
+        duration: requestedDuration,
+        imageUrl,
+        aspectRatio,
+        generateAudio: false,
+      });
+      clip = await updateClip(service, clip.id, {
+        provider_video_id: taskId,
+        status: "pending",
+        error_message: null,
+        metadata: {
+          ...(clip.metadata ?? {}),
+          source_image_url: imageUrl,
+          engine_key: DEFAULT_BYTEPLUS_ENGINE,
+          requested_duration_seconds: requestedDuration,
+          motion_prompt: motionPrompt,
+          base_video_started_at: new Date().toISOString(),
+        },
+      });
+      return NextResponse.json({
+        clip: publicClip(clip),
+        status: "pending",
+        stage: "video_processing",
+        reused: false,
+      });
+    }
+    return NextResponse.json({
+      clip: publicClip(clip),
+      status: "pending",
+      stage: "video_processing",
+      reused: false,
+    });
   }
 
   // ── STAGE 1 — no avatar yet: create the photo avatar and STOP. ─────────
@@ -310,7 +379,10 @@ async function handlePoll(service: ServiceClient, body: Record<string, unknown>)
   }
   if (!clip.provider_video_id) return jsonError("Base clip has no provider video task", 400);
 
-  const task = await getHeyGenTask(clip.provider_video_id);
+  const task =
+    clip.provider === "byteplus"
+      ? await getBytePlusTask(clip.provider_video_id)
+      : await getHeyGenTask(clip.provider_video_id);
   if (task.status === "pending" || task.status === "processing") {
     const updated = await updateClip(service, clip.id, {
       status: "pending",
@@ -321,17 +393,19 @@ async function handlePoll(service: ServiceClient, body: Record<string, unknown>)
   if (task.status === "failed") {
     const updated = await updateClip(service, clip.id, {
       status: "failed",
-      error_message: task.error ?? "HeyGen base clip failed",
+      error_message: task.error ?? `${clip.provider} base clip failed`,
       metadata: { ...(clip.metadata ?? {}), failed_at: new Date().toISOString() },
     });
     return NextResponse.json({ clip: publicClip(updated), status: "failed" });
   }
-  if (!task.videoUrl) throw new Error("HeyGen completed without a video URL");
+  if (!task.videoUrl) throw new Error(`${clip.provider} completed without a video URL`);
 
   const res = await fetch(task.videoUrl, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Could not download HeyGen base clip: ${res.status}`);
+  if (!res.ok) throw new Error(`Could not download ${clip.provider} base clip: ${res.status}`);
   const buffer = Buffer.from(await res.arrayBuffer());
-  if (buffer.length < 1000) throw new Error(`HeyGen base clip is suspiciously small (${buffer.length} bytes)`);
+  if (buffer.length < 1000) {
+    throw new Error(`${clip.provider} base clip is suspiciously small (${buffer.length} bytes)`);
+  }
 
   const key = `podcast/base-clips/${clip.persona_id}/${clip.id}-${randomUUID()}.mp4`;
   const url = await uploadBufferToR2(buffer, key, "video/mp4");
@@ -339,7 +413,12 @@ async function handlePoll(service: ServiceClient, body: Record<string, unknown>)
     status: "ready",
     video_url: url,
     storage_key: key,
-    duration_seconds: task.duration ?? null,
+    duration_seconds:
+      "duration" in task && typeof task.duration === "number"
+        ? task.duration
+        : typeof clip.metadata?.requested_duration_seconds === "number"
+          ? clip.metadata.requested_duration_seconds
+          : null,
     error_message: null,
     metadata: {
       ...(clip.metadata ?? {}),

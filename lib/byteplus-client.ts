@@ -33,6 +33,16 @@ export interface BytePlusEngineConfig {
  * ModelArk model sent to the API.
  */
 export const BYTEPLUS_ENGINES: Record<string, BytePlusEngineConfig> = {
+  // Seedance 1.0 Pro Fast — fast, inexpensive I2V for neutral studio motion
+  // bases. The generated clip is later lip-synced by the selected provider.
+  seedance10pro_fast_byteplus: {
+    modelId:
+      process.env.BYTEPLUS_SEEDANCE_10PRO_FAST_MODEL || "seedance-1-0-pro-fast-251015",
+    label: "Seedance 1.0 Pro Fast · 720p (Direct)",
+    maxDuration: 12,
+    resolution: "720p",
+    supportsReferences: false,
+  },
   // Seedance 1.5 Pro — verified working on the account (model id confirmed live).
   // Native synchronized audio (dialogue + SFX), up to 1080p, 4–12s.
   seedance15pro_byteplus: {
