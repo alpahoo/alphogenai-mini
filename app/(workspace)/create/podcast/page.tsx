@@ -23,28 +23,10 @@ import {
   formatUsd,
   formatEstimatedTime,
 } from "@/lib/podcast/lipsync-estimate";
-import {
-  isPodcastLipsyncQualityMode,
-  listPublicPodcastLipsyncQualityPresets,
-  resolvePublicPodcastLipsyncQualitySelection,
-  type PodcastLipsyncQualityMode,
-} from "@/lib/podcast/lipsync-quality";
-import {
-  BALANCED_BETA_MAX_CONCURRENT_CLIPS,
-  formatBalancedBetaEta,
-  estimateBalancedBetaQueueSeconds,
-} from "@/lib/podcast/lipsync-beta";
+import { type PodcastLipsyncQualityMode } from "@/lib/podcast/lipsync-quality";
 
 type Speaker = { id: string; role: "host" | "guest"; name: string; position: number; voice_id?: string | null; persona_id?: string | null };
 type Persona = { id: string; name: string; portrait_url: string | null; thumb_url: string | null; is_catalog: boolean };
-type PodcastQualityAccess = {
-  balanced?: {
-    eligible?: boolean;
-    status?: "beta" | "locked";
-    maxConcurrentClips?: number;
-    secondsPerWave?: number;
-  };
-};
 type Segment = {
   id: string;
   speaker_id: string;
@@ -133,19 +115,14 @@ export default function CreatePodcastPage() {
   const [targetDuration, setTargetDuration] = useState(120);
   const [podcastStyle, setPodcastStyle] = useState("casual");
   const [renderMode, setRenderMode] = useState("talking_visual");
-  const [lipsyncQualityMode, setLipsyncQualityMode] = useState<PodcastLipsyncQualityMode>("premium");
-  const [qualityAccess, setQualityAccess] = useState<PodcastQualityAccess | null>(null);
+  // Lip-sync quality is pinned to the validated production path; the internal
+  // provider router still reads this value. No tier UI is shown to the user.
+  const [lipsyncQualityMode] = useState<PodcastLipsyncQualityMode>("premium");
   // Lip-sync premium opt-in gate (T-1145). Confirmation is required (with a cost
   // estimate) before the premium mode can be selected. No credits are spent here;
   // the real lip-sync render ships in T-1144b.
   const [lipsyncConfirmOpen, setLipsyncConfirmOpen] = useState(false);
   const [lipsyncConfirmed, setLipsyncConfirmed] = useState(false);
-  const lipsyncQualityPresets = useMemo(() => listPublicPodcastLipsyncQualityPresets(), []);
-  const lipsyncQualityPlan = useMemo(
-    () => resolvePublicPodcastLipsyncQualitySelection(lipsyncQualityMode),
-    [lipsyncQualityMode],
-  );
-  const balancedBetaEligible = qualityAccess?.balanced?.eligible === true;
 
   const [podcast, setPodcast] = useState<PodcastRow | null>(null);
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
@@ -249,10 +226,6 @@ export default function CreatePodcastPage() {
     ),
     [premiumSyncNeededSegmentIds, segments],
   );
-  const balancedBetaEta = useMemo(
-    () => formatBalancedBetaEta(premiumSyncNeededSegmentIds.length),
-    [premiumSyncNeededSegmentIds.length],
-  );
   const premiumSyncReadyPercent = premiumSyncSummary.total > 0
     ? Math.round((premiumSyncSummary.ready / premiumSyncSummary.total) * 100)
     : 0;
@@ -307,19 +280,6 @@ export default function CreatePodcastPage() {
       if (previewAudioRef.current) previewAudioRef.current.pause();
     };
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const headers = await authHeaders();
-      if (!headers) return;
-      const res = await fetch("/api/podcasts/quality-access", { headers }).catch(() => null);
-      if (!res?.ok) return;
-      const json = await res.json().catch(() => ({}));
-      if (!cancelled) setQualityAccess(json as PodcastQualityAccess);
-    })();
-    return () => { cancelled = true; };
-  }, [authHeaders]);
 
   useEffect(() => {
     if (renderMode !== "lipsync_premium" || !podcast?.id || segments.length === 0) return;
@@ -476,7 +436,6 @@ export default function CreatePodcastPage() {
         const meta = p.metadata || {};
         if (meta.podcast_style) setPodcastStyle(meta.podcast_style);
         if (meta.target_duration_seconds) setTargetDuration(meta.target_duration_seconds);
-        if (isPodcastLipsyncQualityMode(meta.lipsync_quality_mode)) setLipsyncQualityMode(meta.lipsync_quality_mode);
         // Restore the saved render mode. Premium is live (T-1146): restore it and
         // treat its cost as already acknowledged (the podcast was saved in premium),
         // so the per-line premium badges/controls show immediately on reopen.
@@ -1056,13 +1015,9 @@ export default function CreatePodcastPage() {
       await refreshLipsyncStatus();
 
       let processing = Number(startJson?.started || 0) + Number(startJson?.processing || 0);
-      const balancedRun = lipsyncQualityMode === "balanced" && balancedBetaEligible;
-      const balancedPollBudget = Math.ceil((estimateBalancedBetaQueueSeconds(selected.length) + 180) / 3.5);
-      const maxPolls = balancedRun ? Math.max(60, balancedPollBudget) : 60;
+      const maxPolls = 60;
       for (let i = 0; i < maxPolls && processing > 0; i++) {
-        setVoiceProgress(balancedRun
-          ? `Balanced beta - ${processing} queued or generating - ${formatBalancedBetaEta(processing)}`
-          : `Generating premium lip-sync clips... ${processing} left`);
+        setVoiceProgress(`Generating premium lip-sync clips... ${processing} left`);
         await new Promise((resolve) => setTimeout(resolve, 3500));
         const poll = await fetch(`/api/podcasts/${podcast.id}/lipsync`, {
           method: "POST",
@@ -1332,64 +1287,6 @@ export default function CreatePodcastPage() {
             shown and confirmed before anything is generated.
           </p>
         </div>
-
-        {renderMode === "lipsync_premium" && (
-          <div className="mt-3 rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2 text-sm font-bold text-neutral-900">
-                  <ShieldCheck className="h-4 w-4 text-neutral-600" /> Quality target
-                </div>
-                <p className="mt-1 max-w-xl text-[11px] leading-relaxed text-neutral-500">
-                  Choose the result level. AlphoGen keeps providers hidden and routes the job behind the scenes.
-                </p>
-              </div>
-              {lipsyncQualityPlan.fallbackNotice && !(lipsyncQualityMode === "balanced" && balancedBetaEligible) && (
-                <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-[10px] font-bold uppercase text-neutral-500">
-                  Using Premium today
-                </span>
-              )}
-            </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-4">
-              {lipsyncQualityPresets.map((preset) => {
-                const active = lipsyncQualityMode === preset.id;
-                const beta = preset.id === "balanced" && balancedBetaEligible;
-                const available = preset.status === "available" || beta;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    disabled={!available}
-                    onClick={() => setLipsyncQualityMode(preset.id)}
-                    className={`rounded-xl border px-3 py-2.5 text-left transition ${
-                      active
-                        ? "border-neutral-900 bg-neutral-900/[0.03] ring-1 ring-neutral-900"
-                        : available
-                          ? "border-neutral-200 bg-white hover:bg-neutral-50"
-                          : "cursor-not-allowed border-neutral-200 bg-neutral-50 opacity-70"
-                    }`}
-                  >
-                    <span className="flex items-center gap-1.5 text-sm font-semibold text-neutral-800">
-                      {preset.label}
-                      {beta && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700">Beta</span>}
-                      {!available && <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-bold uppercase text-neutral-500">Soon</span>}
-                    </span>
-                    <span className="mt-0.5 block text-[11px] leading-snug text-neutral-500">{preset.description}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {lipsyncQualityMode === "balanced" && balancedBetaEligible ? (
-              <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] leading-relaxed text-emerald-800">
-                <strong>Balanced beta.</strong> Lower-cost generation with a longer wait. Up to {qualityAccess?.balanced?.maxConcurrentClips ?? BALANCED_BETA_MAX_CONCURRENT_CLIPS} clips process at once; unavailable or failed clips automatically use the validated Premium path. {premiumSyncNeededSegmentIds.length > 0 ? `Current wait estimate: ${balancedBetaEta}.` : "Cached clips are reused at no new cost."}
-              </div>
-            ) : (
-              <p className="mt-2 text-[11px] text-neutral-400">
-                Premium is the validated production route today. Economy and Cinema stay locked; Balanced is available only to the controlled beta cohort.
-              </p>
-            )}
-          </div>
-        )}
 
         {renderMode === "lipsync_premium" && (
           <div className="mt-3 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-4 text-xs text-amber-950 shadow-sm">
