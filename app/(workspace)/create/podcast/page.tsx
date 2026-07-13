@@ -228,6 +228,18 @@ export default function CreatePodcastPage() {
       })
       .map((seg) => seg.id);
   }, [lipsyncStatusBySegment, renderMode, segments]);
+  const premiumSyncFailedDetails = useMemo(
+    () => segments
+      .map((seg) => ({ seg, info: lipsyncStatusBySegment[seg.id] }))
+      .filter(({ info }) => info?.status === "failed")
+      .map(({ seg, info }) => ({
+        id: seg.id,
+        order: seg.order_index + 1,
+        text: seg.text,
+        reason: info?.error_message || "The provider did not return a usable lip-sync clip.",
+      })),
+    [lipsyncStatusBySegment, segments],
+  );
 
   const missingLipsyncEstimate = useMemo(
     () => estimatePodcastLipsync(
@@ -1436,6 +1448,16 @@ export default function CreatePodcastPage() {
                     Max est. {formatUsd(missingLipsyncEstimate.estimatedUsdWithMargin)} for missing lines
                   </div>
                 )}
+                {premiumSyncFailedDetails.length > 0 && (
+                  <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 text-[10px] leading-relaxed text-red-800">
+                    <div className="font-bold">Why these lines need a retry</div>
+                    {premiumSyncFailedDetails.map((item) => (
+                      <div key={item.id} className="mt-1">
+                        <span className="font-semibold">Line {item.order}:</span> {item.reason}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="rounded-xl bg-white/80 px-3 py-2.5 shadow-sm">
                 <div className="flex items-center gap-2 font-semibold text-neutral-900">
@@ -1841,6 +1863,11 @@ export default function CreatePodcastPage() {
                     {showPremiumControls && (
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <PremiumSyncBadge status={premiumStatus} />
+                        {premiumStatus === "failed" && lipsyncStatusBySegment[seg.id]?.error_message && (
+                          <span className="max-w-full text-[11px] leading-relaxed text-red-700">
+                            {lipsyncStatusBySegment[seg.id]?.error_message}
+                          </span>
+                        )}
                         {(premiumStatus === "missing" || premiumStatus === "failed") && seg.status === "ready" && seg.audio_url && (
                           <button
                             type="button"
