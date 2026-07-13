@@ -3067,3 +3067,20 @@ STOP après Phase 2 (pas de Phase 3, pas de nouveau provider/abstraction).
   Les 6 lignes OK utilisaient un base clip HeyGen 1:1 close-up.
 - STOP retries (même base clip = même échec). Render premium exige 8/8 → podcast NON exportable en
   premium (exportable en talking_visual). Bug audio = fermé ; blocker P0 = incompat BytePlus wide ↔ HeyGen.
+
+
+## 2026-07-13 — Claude — P0 règle métier close-up (commit dc873e5) + limite qualité base clip
+- Fix P0 (business rule) : le résolveur premium n'honore un base clip "preferred" QUE s'il est 1:1
+  close-up ; un asset studio 16:9 (BytePlus) est ignoré → fallback vers le close-up HeyGen. ~1 ligne,
+  pas d'abstraction. tsc/build/17 tests OK, Vercel déployé.
+- E2E retry 307e628c (2 lignes) : la sélection est CORRIGÉE (utilise bien e5699083 = heygen 1:1
+  base-v2-8s), MAIS HeyGen échoue encore "No speaker detected".
+- Cause vérifiée (frames côté-à-côté) : le clip guest base-v2-8s (e5699083) est une GÉNÉRATION
+  défectueuse pour le lip-sync HeyGen — yeux fermés + micro devant la bouche dans la fenêtre trimée.
+  Le clip host base-v2-8s (cb84af4a, ligne 6) marche = même code, clip différent. Donc problème de
+  QUALITÉ d'asset, pas de code. STOP (règle #4 : pas de hack/crop/OpenCV/refactor).
+- Contrainte durée : base-v1 (4.26s) marche pour order5 (4.49s) mais PAS order7 (5.09s > 4.9) → base-v1
+  ne peut pas remplacer base-v2-8s partout ; d'où la nécessité d'un base-v2-8s guest propre.
+- Spend session : 2 rounds retry × $0.38 (échecs HeyGen, en principe non facturés). Plus de retry.
+- Blocker V1 réel : la génération de base clips close-up doit produire un visage lip-syncable
+  (yeux ouverts, bouche dégagée, micro sur le côté). Décision requise.
