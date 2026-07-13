@@ -3057,3 +3057,13 @@ Aucune var d'env orpheline. Docs de décision conservées (historique). Router p
 - Moteur/back inchangés (quality-access route, lipsync-beta, router, LatentSync restent internes).
 - tsc + build clean, 929 tests. Podcast existant reste générable (chemins generate/render intacts).
 STOP après Phase 2 (pas de Phase 3, pas de nouveau provider/abstraction).
+
+
+## 2026-07-13 — Claude — Retry E2E 307e628c : bug audio FERMÉ, nouveau blocker P0
+- Session reconnectée (user). Retry des 2 lignes SEULEMENT (order 5,7), $0.38.
+- Audio fix VALIDÉ : HeyGen accepte désormais les clips (started:2, plus de "audio missing").
+- MAIS échec HeyGen brut : "No speaker is detected in the video." → les 2 lignes sont liées à un
+  base clip BytePlus studio (16:9 wide 1248x704), visage trop petit/ambigu pour la détection HeyGen.
+  Les 6 lignes OK utilisaient un base clip HeyGen 1:1 close-up.
+- STOP retries (même base clip = même échec). Render premium exige 8/8 → podcast NON exportable en
+  premium (exportable en talking_visual). Bug audio = fermé ; blocker P0 = incompat BytePlus wide ↔ HeyGen.
