@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { isAdminEmail } from "@/lib/flags";
+import { requireAdmin } from "../../middleware";
 import { uploadBufferToR2 } from "@/lib/r2";
 import {
   listAvatars,
@@ -29,11 +28,8 @@ import { randomUUID } from "crypto";
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user || !isAdminEmail(user.email)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const auth = await requireAdmin(request);
+  if (auth.response) return auth.response;
 
   const body = await request.json().catch(() => ({}));
   const step = body.step;
