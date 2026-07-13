@@ -45,6 +45,7 @@ async function resolveBaseClip(
   service: ReturnType<typeof createServiceClient>,
   personaId: string | null | undefined,
   ownerId: string,
+  preferredBaseClipId?: string,
 ): Promise<BaseClip | null> {
   if (!personaId) return null;
   // Visibility: persona must be the owner's or an active catalog persona.
@@ -56,6 +57,19 @@ async function resolveBaseClip(
   if (!persona) return null;
   const visible = persona.user_id === ownerId || (persona.user_id === null && persona.status === "active");
   if (!visible) return null;
+
+  if (preferredBaseClipId) {
+    const { data: preferred } = await service
+      .from("podcast_persona_base_clips")
+      .select("id,video_url,duration_seconds")
+      .eq("id", preferredBaseClipId)
+      .eq("persona_id", personaId)
+      .eq("status", "ready")
+      .maybeSingle();
+    if (preferred?.video_url && preferred.duration_seconds) {
+      return { id: preferred.id, url: preferred.video_url, seconds: Number(preferred.duration_seconds) };
+    }
+  }
 
   const { data: clip } = await service
     .from("podcast_persona_base_clips")
@@ -382,8 +396,14 @@ export async function POST(
 
     // Resolve each speaker's base clip once.
     const baseBySpeaker = new Map<string, BaseClip | null>();
+    const studioBaseClips = metadata.studio_base_clips && typeof metadata.studio_base_clips === "object"
+      ? metadata.studio_base_clips as Record<string, unknown>
+      : {};
     for (const sp of speakers || []) {
-      baseBySpeaker.set(sp.id, await resolveBaseClip(service, sp.persona_id, ownerId));
+      const preferredId = typeof studioBaseClips[sp.role] === "string"
+        ? studioBaseClips[sp.role] as string
+        : undefined;
+      baseBySpeaker.set(sp.id, await resolveBaseClip(service, sp.persona_id, ownerId, preferredId));
     }
 
     let reservedMaxSpend = 0;

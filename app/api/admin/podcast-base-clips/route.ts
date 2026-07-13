@@ -188,6 +188,10 @@ async function handleEnsure(service: ServiceClient, body: Record<string, unknown
   const resolution = cleanDimension(body.resolution, VALID_RESOLUTIONS, DEFAULT_RESOLUTION);
   const promptVersion = cleanPromptVersion(body.prompt_version);
   const force = body.force === true;
+  const requestedSourceImageUrl =
+    typeof body.source_image_url === "string" && isHttpUrl(body.source_image_url)
+      ? body.source_image_url
+      : "";
   const scriptText =
     typeof body.script_text === "string" && body.script_text.trim()
       ? body.script_text.trim().slice(0, 600)
@@ -229,7 +233,11 @@ async function handleEnsure(service: ServiceClient, body: Record<string, unknown
   // Do NOT call createAvatarVideo in the same request; the avatar needs time
   // to process. The caller re-invokes ensure to move to stage 2.
   if (!clip.provider_avatar_id) {
-    const imageUrl = await resolvePortraitUrl(service, persona.portrait_path);
+    const cachedSourceImageUrl =
+      typeof clip.metadata?.source_image_url === "string" && isHttpUrl(clip.metadata.source_image_url)
+        ? clip.metadata.source_image_url
+        : "";
+    const imageUrl = requestedSourceImageUrl || cachedSourceImageUrl || await resolvePortraitUrl(service, persona.portrait_path);
     const photo = await createPhotoAvatar({ imageUrl, name: `${persona.name} podcast base` });
     clip = await updateClip(service, clip.id, {
       provider_avatar_id: photo.avatarId,
@@ -237,6 +245,7 @@ async function handleEnsure(service: ServiceClient, body: Record<string, unknown
       error_message: null,
       metadata: {
         ...(clip.metadata ?? {}),
+        ...(requestedSourceImageUrl ? { source_image_url: requestedSourceImageUrl } : {}),
         photo_avatar_status: photo.status,
         photo_avatar_created_at: new Date().toISOString(),
       },
