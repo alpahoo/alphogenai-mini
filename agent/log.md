@@ -3029,3 +3029,31 @@ reste inspiration workflow, pas dépendance. À démarrer sur GO.
 - The new UI diagnostic commit `51bdbdc` is pushed on `origin/main`. It adds `premiumSyncFailedDetails` and displays backend `error_message` when available in the premium panel and dialogue rows. In this QA, no failure reason was returned to the UI, so the diagnostic block did not appear.
 - Validation for `51bdbdc`: `npx tsc --noEmit` clean, `npm test` 82 files / 950 tests passed, `npm run build` passed. Existing build warnings only concern `<img>` usage.
 - **Handoff / next action:** inspect the live `/api/podcasts/[id]/lipsync` response and the corresponding `podcast_segment_lipsync_clips` rows for the two current audio URLs. Determine whether the failure is HeyGen/trim/provider, stale cache/base-clip selection, or a missing cache row. Do not blindly repeat paid retries. Once the root cause is fixed, run at most one targeted retry, confirm `8/8 ready`, then render premium and visually verify both active-speaker directions.
+
+
+## 2026-07-13 — Claude (CTO mode) — Bug audio + Phase 1 purge + Phase 2 UX
+### Bug audio (T-1149e) — commit 01b3524 [FIX déployé + prouvé]
+- Cause : base clips BytePlus (studio) = vidéo sans piste audio → HeyGen refuse ("Unknown lipsync error").
+- Fix : Modal `trim_base_clip_for_lipsync` mux TOUJOURS une piste AAC silencieuse (anullsrc) ;
+  trim seulement si dur>0 ; la route Next passe TOUT clip par Modal (garantie inconditionnelle).
+- Prouvé : clip BytePlus repassé → `Stream Audio: aac 48000 stereo`. Modal+Vercel déployés, 950 tests.
+- Reste : relance E2E des 2 lignes (podcast 307e628c) — bloquée sur auth navigateur (session expirée),
+  à faire par l'utilisateur reconnecté. Aucun contournement d'auth, aucun spend sans action user.
+
+### Phase 1 — purge R&D morte — commit 8520f48 [-1311 lignes]
+Supprimés (non référencés en prod, vérifié par grep) :
+- modal_app/self_hosted_lipsync_spike.py (MuseTalk, échec, archivé)
+- modal_app/latentsync_lipsync_spike.py (remplacé par latentsync_lipsync.py)
+- app/api/admin/experiments/podcast-lipsync-benchmark/ (route + test)
+- lib/podcast/lipsync-provider-benchmark.ts (+ test)
+Aucune var d'env orpheline. Docs de décision conservées (historique). Router prod intact
+(lipsync-provider/routing/quality). ltx_video/model_lab/LatentSync NON touchés (sur demande).
+
+### Phase 2 — dé-jargon UX (UI seule) — commit aca9b10 [-109 lignes]
+- Retiré de l'UI podcast : bloc "Quality target" (Balanced / Beta / Economy / Cinema locked /
+  "Using Premium today"), badges Beta/Soon, fetch quality-access, noms de tiers.
+- lip-sync quality épinglée à "premium" (chemin validé) mais toujours persistée → le router
+  interne la lit. Aucun choix de tier montré à l'utilisateur.
+- Moteur/back inchangés (quality-access route, lipsync-beta, router, LatentSync restent internes).
+- tsc + build clean, 929 tests. Podcast existant reste générable (chemins generate/render intacts).
+STOP après Phase 2 (pas de Phase 3, pas de nouveau provider/abstraction).
