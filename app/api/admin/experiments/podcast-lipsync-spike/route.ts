@@ -210,7 +210,7 @@ export async function POST(request: NextRequest) {
             response_format: "url",
             watermark: false,
           }),
-          signal: AbortSignal.timeout(60_000),
+          signal: AbortSignal.timeout(240_000),
         });
         const genJson = await gen.json().catch(() => ({}));
         if (!gen.ok) {
