@@ -173,6 +173,75 @@ export async function POST(request: NextRequest) {
         const url = await uploadBufferToR2(buffer, key, "image/png");
         return NextResponse.json({ elapsedMs: Date.now() - t0, ark_status: gen.status, src: srcInfo, r2_url: url, bytes: buffer.length, usage: genJson.usage });
       }
+      case "gen_studio_pack": {
+        // T-1157: generate a coherent shared podcast-studio shot pack from the
+        // two selected persona portraits. This deliberately produces full-frame
+        // editorial shots, not two independent avatar cards.
+        const hostImageUrl = typeof body.hostImageUrl === "string" ? body.hostImageUrl : "";
+        const guestImageUrl = typeof body.guestImageUrl === "string" ? body.guestImageUrl : "";
+        if (!hostImageUrl || !guestImageUrl) {
+          return NextResponse.json({ error: "hostImageUrl + guestImageUrl required" }, { status: 400 });
+        }
+
+        const model = typeof body.model === "string" ? body.model : "seedream-4-5-251128";
+        const style = typeof body.style === "string" ? body.style.trim().slice(0, 200) : "premium modern podcast studio";
+        const arkBase = process.env.BYTEPLUS_BASE_URL || "https://ark.ap-southeast.bytepluses.com";
+        const arkKey = process.env.BYTEPLUS_ARK_API_KEY || "";
+        if (!arkKey) return NextResponse.json({ error: "BYTEPLUS_ARK_API_KEY not configured" }, { status: 503 });
+
+        const prompt = [
+          "Create a coherent four-shot editorial photo set for one premium video podcast episode.",
+          "Image 1 is the HOST identity. Image 2 is the GUEST identity. Preserve both faces, age, skin tone, hair and wardrobe consistently in every shot.",
+          `Location and art direction: ${style}.`,
+          "Both people are seated across the same desk with professional broadcast microphones, believable eye-lines and natural conversational posture.",
+          "Return these four related 16:9 shots: (1) a shared wide two-shot showing both people in the same physical studio; (2) medium close-up of the host from the shared set; (3) medium close-up of the guest from the shared set; (4) an alternate shared angle suitable for a listener reaction or transition.",
+          "Photorealistic humans, premium documentary lighting, realistic skin and hands, consistent furniture and background, no split screen, no cards, no collage, no text, no logos, no watermark.",
+        ].join(" ");
+
+        const gen = await fetch(`${arkBase}/api/v3/images/generations`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${arkKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model,
+            prompt,
+            image: [hostImageUrl, guestImageUrl],
+            size: "2K",
+            sequential_image_generation: "auto",
+            sequential_image_generation_options: { max_images: 4 },
+            response_format: "url",
+            watermark: false,
+          }),
+          signal: AbortSignal.timeout(60_000),
+        });
+        const genJson = await gen.json().catch(() => ({}));
+        if (!gen.ok) {
+          return NextResponse.json({ elapsedMs: Date.now() - t0, ark_status: gen.status, ark_error: genJson }, { status: 502 });
+        }
+
+        const rows = Array.isArray(genJson.data) ? genJson.data.slice(0, 4) : [];
+        if (rows.length === 0) return NextResponse.json({ error: "Seedream returned no studio images" }, { status: 502 });
+        const packId = randomUUID();
+        const shots = [];
+        for (let index = 0; index < rows.length; index++) {
+          const srcUrl = typeof rows[index]?.url === "string" ? rows[index].url : "";
+          if (!srcUrl) continue;
+          const dl = await fetch(srcUrl, { signal: AbortSignal.timeout(30_000) });
+          if (!dl.ok) throw new Error(`studio shot ${index + 1} download failed (${dl.status})`);
+          const buffer = Buffer.from(await dl.arrayBuffer());
+          if (buffer.length < 1000) throw new Error(`studio shot ${index + 1} is suspiciously small`);
+          const key = `podcast/studio-packs/${packId}/shot-${index + 1}.jpg`;
+          const url = await uploadBufferToR2(buffer, key, "image/jpeg");
+          shots.push({ index: index + 1, url, key, bytes: buffer.length, size: rows[index]?.size ?? null });
+        }
+        if (shots.length === 0) return NextResponse.json({ error: "No studio images could be persisted" }, { status: 502 });
+        return NextResponse.json({
+          elapsedMs: Date.now() - t0,
+          packId,
+          model,
+          shots,
+          usage: genJson.usage,
+        });
+      }
       case "normalize_jpeg": {
         // T-1143d: fetch a staging portrait (PNG), re-encode to a stable 1024 JPEG
         // (HeyGen photo-avatar needs JPEG with readable dimensions), upload to a
