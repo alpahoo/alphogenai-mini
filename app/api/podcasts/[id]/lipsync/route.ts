@@ -59,11 +59,18 @@ async function resolveBaseClip(
   if (!visible) return null;
 
   if (preferredBaseClipId) {
+    // Business rule: face-based lip-sync (this route) needs a CLOSE-UP asset.
+    // Only honor a preferred base clip if it is 1:1 close-up; a wide 16:9 studio
+    // asset (e.g. BytePlus studio pack) is not compatible with HeyGen face
+    // detection ("No speaker detected"), so we ignore it and fall back to the
+    // persona's close-up below. Studio assets belong to the Talking Visual /
+    // full-frame workflow, never to Premium lip-sync. No cropping, no hacks.
     const { data: preferred } = await service
       .from("podcast_persona_base_clips")
       .select("id,video_url,duration_seconds")
       .eq("id", preferredBaseClipId)
       .eq("persona_id", personaId)
+      .eq("aspect_ratio", "1:1")
       .eq("status", "ready")
       .maybeSingle();
     if (preferred?.video_url && preferred.duration_seconds) {
