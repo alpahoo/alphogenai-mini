@@ -449,26 +449,33 @@ export async function POST(
         cost,
         estimateProviderLipsyncUsd(getPodcastLipsyncProvider("heygen"), dur),
       );
-      // Cache key intentionally excludes base_clip_id: the true invalidation
-      // signal is the TTS audio (its R2 URL changes when the line is re-synthesized).
-      // Keying on the persona's base clip caused double-spend when the resolver
-      // picked a newer ready base clip (T-1144b QA, 2026-07-07).
+      const speaker = (speakers || []).find((x) => x.id === seg.speaker_id);
+      const hasExplicitStudioBase = Boolean(
+        speaker?.role && typeof studioBaseClips[speaker.role] === "string",
+      );
+      // Preserve the historical audio-only cache for automatically resolved
+      // talking heads (prevents the old "newest clip" double-spend). A studio
+      // base is an explicit editorial source, so it must participate in the key:
+      // otherwise old card/talking-head outputs would leak into the new set.
       const cacheKey = lipsyncCacheKey({
         audioUrl: seg.audio_url as string,
+        baseClipId: hasExplicitStudioBase ? base.id : null,
         mode,
         providerId: segmentProvider.id,
       });
 
       // No-double-spend: reuse ANY ready clip for this segment + current audio,
       // regardless of which base clip / cache-key format produced it.
-      const { data: preferredReadyRow } = await service
+      let readyQuery = service
         .from("podcast_segment_lipsync_clips")
         .select("id,video_url")
         .eq("segment_id", seg.id)
         .eq("audio_url", seg.audio_url)
         .eq("provider", segmentProvider.id)
         .eq("status", "ready")
-        .not("video_url", "is", null)
+        .not("video_url", "is", null);
+      if (hasExplicitStudioBase) readyQuery = readyQuery.eq("base_clip_id", base.id);
+      const { data: preferredReadyRow } = await readyQuery
         .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -476,14 +483,16 @@ export async function POST(
       // A Balanced task that already fell back successfully should remain a
       // free cache hit on re-render instead of retrying and spending again.
       if (!readyRow && segmentProvider.id !== "heygen") {
-        const { data: fallbackReadyRow } = await service
+        let fallbackQuery = service
           .from("podcast_segment_lipsync_clips")
           .select("id,video_url")
           .eq("segment_id", seg.id)
           .eq("audio_url", seg.audio_url)
           .eq("provider", "heygen")
           .eq("status", "ready")
-          .not("video_url", "is", null)
+          .not("video_url", "is", null);
+        if (hasExplicitStudioBase) fallbackQuery = fallbackQuery.eq("base_clip_id", base.id);
+        const { data: fallbackReadyRow } = await fallbackQuery
           .order("updated_at", { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -496,14 +505,16 @@ export async function POST(
         continue;
       }
       // Already in-flight for this audio → don't spend again.
-      const { data: procRow } = await service
+      let processingQuery = service
         .from("podcast_segment_lipsync_clips")
         .select("id,provider_task_id")
         .eq("segment_id", seg.id)
         .eq("audio_url", seg.audio_url)
         .eq("provider", segmentProvider.id)
         .eq("status", "processing")
-        .not("provider_task_id", "is", null)
+        .not("provider_task_id", "is", null);
+      if (hasExplicitStudioBase) processingQuery = processingQuery.eq("base_clip_id", base.id);
+      const { data: procRow } = await processingQuery
         .limit(1)
         .maybeSingle();
       if (procRow?.provider_task_id) {
@@ -533,7 +544,7 @@ export async function POST(
       // spend credits because we would risk losing the provider task id. Do not
       // use PostgREST upsert here: the DB uniqueness is a partial index
       // (status <> 'removed'), and explicit insert/update is more portable.
-      const sp = (speakers || []).find((x) => x.id === seg.speaker_id);
+      const sp = speaker;
       const queuedRow = {
         podcast_id: id,
         segment_id: seg.id,
