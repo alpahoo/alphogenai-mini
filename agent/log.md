@@ -3097,3 +3097,21 @@ Total POC ~$1.87 (< cap $2). 2/2 réussis 1er essai, aucun base clip, aucun retr
 Fabric = image+audio→clip parlant en 1 appel → remplace base clip→trim→piste silencieuse→HeyGen→retry.
 Coût : $0.08/s (480p) / $0.15/s (720p) ≈ 2-4x HeyGen ($0.04/s) mais élimine tout le pipeline fragile.
 Verdict GO. Non branché en prod, ancien pipeline non supprimé (attente décision remplacement).
+
+
+## 2026-07-14 — Claude — E2E Podcast Premium Fabric (T-1151) — GO
+Podcast e3691b4f (Maya host / Leo guest, 9 segments, 39.3s parlé). Stills persona réutilisés
+(maya-face/leo-face, extraits des base clips). Route POC évoluée en orchestrateur E2E
+(plan/submit/poll_podcast) écrivant dans la table EXISTANTE podcast_segment_lipsync_clips
+(provider='veed_fabric') → compositeur Modal render_podcast premium INCHANGÉ les consomme.
+- plan : 9 seg, 39.3s, $3.14 (< cap $8).
+- submit : 9/9 soumis, 0 skip, spend $3.14.
+- poll : 9/9 ready, 0 échec, 1er essai (aucun retry). ~70s pour les 9 (parallèle).
+- render (Modal existant, gratuit) : final 1280x720 16:9, h264+aac, 42.0s.
+- Diff pixel : seg0 host 0.34/guest 0.00 ; seg1 host 0.10/guest 0.61 ; seg3 0.13/0.32 →
+  alternance OK, speaker actif=Fabric bouge, inactif gelé. Captions synchro. Identités stables.
+Coût théorique = réel = $3.14. Aucun lip-sync HeyGen lancé. Réserve : la still de l'inactif
+provient encore du base clip persona (origine HeyGen) — simple image figée, pas de lip-sync.
+Verdict : GO. Pipeline image+audio→clip en 1 appel, 9/9 1er essai, nettement plus simple/fiable
+que HeyGen (base clip→trim→piste silencieuse→lip-sync→retry, échecs répétés). Rien supprimé,
+UI non branchée, en attente décision remplacement.
