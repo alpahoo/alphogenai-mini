@@ -43,7 +43,11 @@ export async function createVadooPodcast(
     body: JSON.stringify(input),
     signal: AbortSignal.timeout(45_000),
   });
-  const raw = await res.json().catch(() => ({}));
+  // Capture the raw body verbatim (JSON or text) so a non-2xx error message is
+  // never swallowed — the raw provider error is a required POC measurement.
+  const text = await res.text().catch(() => "");
+  let raw: unknown = text;
+  try { raw = JSON.parse(text); } catch { /* keep text */ }
   const vid =
     (raw && typeof raw === "object" && "vid" in raw
       ? String((raw as { vid: unknown }).vid)
