@@ -3084,3 +3084,16 @@ STOP après Phase 2 (pas de Phase 3, pas de nouveau provider/abstraction).
 - Spend session : 2 rounds retry × $0.38 (échecs HeyGen, en principe non facturés). Plus de retry.
 - Blocker V1 réel : la génération de base clips close-up doit produire un visage lip-syncable
   (yeux ouverts, bouche dégagée, micro sur le côté). Décision requise.
+
+
+## 2026-07-14 — Claude — POC VEED Fabric 1.0 (T-1151) — GO
+Harness isolé (commit 92d0875) : lib/veed-fabric-client.ts (fal.ai queue REST, no SDK) +
+route admin experiments/veed-fabric-poc (create/poll → R2). Aucune UI/DB/abstraction/fallback.
+Test 1 (Maya) : image still + audio TTS 11.94s, 480p → COMPLETED ~105s, 640x640 h264+aac 11.92s,
+  2.27MB. Lip-sync OK, identité stable, décor conservé. 1er essai. ~$0.95.
+Test 2 (Leo) : still + audio 11.47s, 480p → COMPLETED ~52s, 640x640 h264+aac 11.44s, 2.32MB.
+  Yeux ouverts, lip-sync OK, identité stable. 1er essai. ~$0.92.
+Total POC ~$1.87 (< cap $2). 2/2 réussis 1er essai, aucun base clip, aucun retry.
+Fabric = image+audio→clip parlant en 1 appel → remplace base clip→trim→piste silencieuse→HeyGen→retry.
+Coût : $0.08/s (480p) / $0.15/s (720p) ≈ 2-4x HeyGen ($0.04/s) mais élimine tout le pipeline fragile.
+Verdict GO. Non branché en prod, ancien pipeline non supprimé (attente décision remplacement).
