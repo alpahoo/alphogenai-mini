@@ -2,14 +2,22 @@
 
 ## Statut
 
-**VALIDÉ** — ⚙️ **intégration en cours** (PAS encore gelé) · Provider retenu : 🥇 **Jogg**
+**GELÉ** — 🔒 **validé en production** · Provider retenu : 🥇 **Jogg**
 Date de validation : **16 juillet 2026**
 Références : [benchmark](./url-to-video.md) · [POC + audit API](./url-to-video-poc.md) · [plan d'intégration minimal](./url-to-video-v1-integration.md)
 
-> Le choix du provider est figé (Jogg) — on n'y revient pas **sauf bug critique ou évolution majeure du marché**.
-> Le **workflow sera officiellement GELÉ** une fois **l'intégration minimale terminée ET validée en production**. Alors seulement on ouvrira le Decision Book suivant.
->
-> **Intégration V1 codée (16 juil. 2026)** : `lib/jogg-client.ts`, `app/api/admin/experiments/url-to-video/route.ts`, `app/api/cron/jogg-poll/route.ts` + step Jogg dans `evolink-cron.yml`. Reste : déploiement + validation prod (voir P0).
+> Workflow **figé**. Aucun nouveau développement hors périmètre, **sauf bug bloquant**. Le prochain workflow sera traité dans son propre Decision Book.
+
+## Validation production (16 juil. 2026)
+- **Commit** : `2c760e3` — *feat: URL-to-Video V1 via Jogg* (branche `main`, déployé Vercel).
+- **Job de validation prod** : `75c17c27-35c6-4446-9201-7b2a67b1922a` → `done`.
+- **Chaîne déployée prouvée** : route admin (admin-only, 401 sans auth) → job `pending` → **cron GH Actions → `/api/cron/jogg-poll`** (`polled:1`) → `getProductVideo` (clé Vercel) → **download → R2** → `status='done'`, `final_url`.
+- **Livrable R2** : `https://pub-17f0392d1f8d4270ad79966ad1ea7545.r2.dev/url-to-video/75c17c27-35c6-4446-9201-7b2a67b1922a.mp4`
+- **ffprobe** : **1080×1920 (9:16) · H264 High · 30 fps · AAC mono · 36,4 s · 24,4 Mo · sans watermark**.
+- **Temps de génération** : ~**80 s** (mesuré E2E). **Idempotence** : 1 job = 1 `external_task_id`, aucun double traitement (crons suivants ignorent les jobs `done`).
+- **Coût** : ~**1 crédit Jogg** / vidéo (0 débité sur la clé test *quota-0* ; référence contractuelle ≈ **0,99 $** sur plan Advanced).
+- **Prérequis résolu pendant la validation** : `JOGG_API_KEY` ajoutée aux env **Vercel Production** (`CRON_SECRET` déjà présent). Un premier passage cron avait renvoyé `errors:1` (clé absente) → corrigé.
+- **P0 business restant (n'empêche PAS la validation technique)** : plan **Advanced** contractuel + compte prod confirmé + CGU Jogg **avant ouverture payante publique**.
 
 ---
 
@@ -189,7 +197,7 @@ Désactiver la soumission de jobs `engine='jogg'` (feature flag / ne pas appeler
 
 ## Décision officielle
 
-Le workflow **URL → Video V1 est VALIDÉ** sur **Jogg**, périmètre **URL→Video (copie auto)**.
-Provider figé. **Intégration minimale codée** ; le workflow sera **officiellement GELÉ après
-validation en production** (P0 ci-dessus). Ce n'est qu'**après ce gel** qu'on ouvrira le
-Decision Book du workflow suivant.
+Le workflow **URL → Video V1 est GELÉ** sur **Jogg**, périmètre **URL→Video (copie auto)**,
+**validé en production le 16 juil. 2026** (voir section Validation production).
+**Aucun nouveau développement hors périmètre n'est autorisé, sauf bug bloquant.**
+On peut désormais ouvrir le Decision Book du **workflow suivant**.
