@@ -1444,3 +1444,16 @@ Contraintes :
 ### [T-1147e] Self-hosted lip-sync feasibility spec - `status: done` ? `owner: codex`
 - Added `docs/product/podcast-self-hosted-lipsync-feasibility.md`: defines the no-switch feasibility path for open-source/self-hosted lip-sync, candidate families, drop-in contract, acceptance gates, and the recommended T-1147e1 Modal GPU one-clip spike.
 - Scope: docs/spec only; no provider call, no GPU run, no UI, no route, no product switch, no spend.
+
+
+## URL→Video V1 (Jogg) — 2026-07-16, Claude — DONE (GELÉ, validé prod)
+- Livré + gelé : `lib/jogg-client.ts`, `app/api/admin/experiments/url-to-video`,
+  `app/api/cron/jogg-poll`, step Jogg dans `evolink-cron.yml`, docs `docs/decision-books/url-to-video-v1*.md`.
+- Commit feature `2c760e3`, gel docs `6292f95`. Job prod `75c17c27-...-b1922a` = done, MP4 R2 valide.
+- Env : `JOGG_API_KEY` ajoutée Vercel prod. Admin-only, "Jogg" jamais exposé UI publique.
+- Détails complets + relais : voir `agent/log.md` (entrée 2026-07-16 "BILAN CTO / RELAIS CODEX").
+- Backlog V2 (non commencé) : Avatar Video verbatim, webhooks, UI publique, overlay T-1111.
+- P0 business avant ouverture payante : plan Advanced + compte prod confirmé + CGU Jogg.
+
+## Prochain workflow — Publication → benchmark Postiz — TODO
+- Ouvrir un nouveau Decision Book (open-source, self-hostable, API). Un workflow à la fois.

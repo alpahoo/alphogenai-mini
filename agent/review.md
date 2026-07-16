@@ -380,3 +380,14 @@ Audit + actions 2026-06-09 (go Paul) sur les 4 items de durcissement restants :
 - Build local doit passer **sans secrets** (`/gallery` dégrade proprement) — acquis.
 - Lint doit rester « no warnings or errors » — acquis.
 
+
+## 2026-07-16 (Claude) — Risques / décisions ouvertes — URL→Video V1 (Jogg)
+- ATTENTION **Clé Jogg test à entitlement spécial** (génère à quota=0, non contractuel, cycle 30j).
+  Décision **financière = Paul** : passer plan **Advanced** avant ouverture payante publique.
+- ATTENTION **`remaining_quota` Jogg non fiable** — ne jamais s'en servir comme budget-guard
+  (compteur maison dans `jobs` à la place).
+- ATTENTION **Overlay branding T-1111 non branché** sur URL→Video (V1 ship rendu Jogg brut). À
+  valider que T-1111 accepte un MP4 externe avant de l'activer (seam déjà marqué dans jogg-poll).
+- ATTENTION **URL→Video ne respecte pas un script imposé** (`override_script` ignoré) — c'est voulu
+  (copie auto). Script verbatim = Avatar Video (V2). À cadrer côté UX quand UI publique.
+- Décision actée : URL→Video V1 **GELÉ** sur Jogg (validé prod 2026-07-16), périmètre copie auto.

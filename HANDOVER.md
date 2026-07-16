@@ -5,6 +5,18 @@
 > Runpod/SVI/AudioLDM2/LangGraph notes that no longer reflect the system).
 > Last updated: 2026-06-08.
 
+## Update 2026-07-16 (Claude) — Decision Books + URL→Video V1 live
+
+- **Méthode produit** : on avance **un workflow à la fois** via des **Capability Decision Books** dans `docs/decision-books/` (`README.md` = index des états). Un workflow est **gelé** avant d'ouvrir le suivant. Sources officielles uniquement ; noms providers **jamais** en UI publique (garde-fou `lib/__tests__/provider-leak-guard.test.ts`).
+- **États des workflows** :
+  - 🎙️ **Podcast Premium V1** → 🔒 GELÉ (VEED web worker — `podcast-premium-v1.md`).
+  - 🛒 **URL → Video V1** → 🔒 **GELÉ, validé en prod le 2026-07-16** sur **Jogg** (provider interne) — `url-to-video-v1.md`.
+  - ✂️ **Editing/Enhancement (V1.1)** → 🔬 **Descript audité** (GO pré-V1.1 ; P0 = coût crédits/action) — `editing-enhancement-descript-audit.md`. Pas démarré.
+  - 📢 **Publication** → **Postiz** (à benchmarker — prochain candidat).
+- **Nouveau provider** : **Jogg** — URL/produit → vidéo ad (admin-only) — `lib/jogg-client.ts`. Label public « URL to Video », « Jogg » interne only.
+- **Nouvel env Vercel prod** : **`JOGG_API_KEY`** (ajouté le 2026-07-16). `CRON_SECRET` déjà présent (protège aussi `/api/cron/jogg-poll`).
+- **Bilan CTO complet de la session (relais Codex)** : voir l'entrée `agent/log.md` du **2026-07-16**.
+
 ## What it is
 
 AlphoGen (**alphogen.com**) is an AI video-generation SaaS. Core product:

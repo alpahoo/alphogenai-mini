@@ -3115,3 +3115,92 @@ provient encore du base clip persona (origine HeyGen) — simple image figée, p
 Verdict : GO. Pipeline image+audio→clip en 1 appel, 9/9 1er essai, nettement plus simple/fiable
 que HeyGen (base clip→trim→piste silencieuse→lip-sync→retry, échecs répétés). Rien supprimé,
 UI non branchée, en attente décision remplacement.
+
+
+## 2026-07-16 — Claude — BILAN CTO / RELAIS CODEX — URL→Video V1 (Jogg) livrée + gelée
+
+But de cette entrée : permettre à Codex de reprendre le relais sans contexte implicite.
+
+### Méthode produit en vigueur (à respecter)
+- On construit un **SaaS rentable, pas un labo** : réutiliser l'existant, coder le minimum,
+  "une intégration doit supprimer plus qu'elle n'ajoute".
+- **Un workflow à la fois**, formalisé dans `docs/decision-books/` (README.md = index).
+  Benchmark → POC réels → audit API → coût → décision → **gel** → workflow suivant.
+- Sources **officielles uniquement** (docs/CGU/pricing). Ne jamais survendre : distinguer
+  E2E prouvé / endpoint+auth / lecture. Noms providers **jamais en UI publique** (T-102 ;
+  garde-fou provider-leak-guard.test.ts). Noms OK en code/commentaires/logs/admin.
+
+### État des workflows (source : docs/decision-books/README.md)
+- 🎙️ Podcast Premium V1 — 🔒 GELÉ (VEED web worker). NB : un POC Fabric/fal.ai E2E existe
+  (log 2026-07-14, GO) mais **non branché** ; le decision book fige VEED.
+- 🛒 URL → Video V1 — 🔒 GELÉ, **validé en prod ce jour** (Jogg). Détails ci-dessous.
+- ✂️ Editing/Enhancement (V1.1) — 🔬 Descript audité (clé testée lecture seule, GO pré-V1.1).
+  P0 = chiffrer le **coût crédits/action** (job agent ~32 cr ; plans 400/800/1500). Pas démarré.
+- 📢 Publication — Postiz (open-source) à benchmarker = prochain candidat.
+
+### URL → Video V1 — ce qui a été livré (commit 2c760e3, gel 6292f95)
+Périmètre : **URL/produit → vidéo ad (copie auto Jogg)**, admin-only, pas d'UI publique.
+Net code = 3 fichiers, 0 nouvelle table, 0 nouveau scheduler, 0 GPU :
+- `lib/jogg-client.ts` — client REST Jogg (`/product` → `/create_video_from_product` → poll
+  `/product_video/{id}`). Header `x-api-key`. Réponses wrappées `{code,msg,data}` (code 0 = OK).
+  ATTENTION : la réponse create renvoie `data.video_id` (pas `product_video_id`) → le client lit
+  `data.product_video_id ?? data.video_id`.
+- `app/api/admin/experiments/url-to-video/route.ts` — submit/status, `requireAdmin`,
+  budget-guard maison (plafond 20/j ; `remaining_quota` Jogg NON fiable → ne pas l'utiliser).
+- `app/api/cron/jogg-poll/route.ts` — poller : `pending` → poll Jogg → download → R2 → `done`.
+  Idempotent (1 job = 1 `external_task_id`). Seam overlay branding T-1111 marqué (fast-follow,
+  pas branché : rendu Jogg déjà propre/sans watermark).
+- `.github/workflows/evolink-cron.yml` — +1 step curl vers `/api/cron/jogg-poll` (réutilise le
+  scheduler existant, pas de nouveau workflow).
+Réutilise : table `jobs` (`engine_used='jogg'`, `external_task_id`=video_id Jogg, `app_state`),
+`lib/r2.ts` (`downloadAndUploadToR2`), `requireAdmin`, `CRON_SECRET`.
+
+Findings Jogg intégrés : `override_script` IGNORÉ (copie auto, pas verbatim) ; pas de webhook
+joignable → polling ; sortie sans watermark 1080×1920 ; rate limit 20 POST/min.
+
+### Env / secrets
+- `JOGG_API_KEY` — **ajoutée aux env Vercel Production le 2026-07-16** (était local only ; un
+  1er passage cron avait renvoyé `errors:1` faute de clé). Aussi dans `.env.local`. Doc dans
+  `.env.example` (sans valeur). Clé "test" à entitlement spécial (génère à quota=0) — voir P0.
+- `CRON_SECRET` — déjà en prod (protège evolink-poll ET jogg-poll).
+- Autres clés utiles en `.env.local` (jamais commit) : `HEYGEN_API_KEY`, `DESCRIPT_API_KEY`.
+
+### Validation production (preuves)
+- Job prod `75c17c27-35c6-4446-9201-7b2a67b1922a` → `done`.
+- Chaîne prouvée : route admin (401 sans auth) → job pending → cron GH Actions → jogg-poll
+  (`polled:1`) → download → R2 → `final_url`.
+- R2 : `https://pub-17f0392d1f8d4270ad79966ad1ea7545.r2.dev/url-to-video/75c17c27-35c6-4446-9201-7b2a67b1922a.mp4`
+  (HTTP 200, video/mp4, 24,4 Mo). ffprobe : 1080×1920 · H264 High · 30fps · AAC mono · 36,4s.
+- Temps génération ~80s. Coût ~1 crédit (0 débité sur clé test ; ≈0,99$ contractuel Advanced).
+- Idempotence confirmée : 1 job jogg, 1 done, 0 double traitement.
+- Gates verts : tsc 0 err · lint (warnings préexistants `<img>` seulement) · vitest 929/929 ·
+  next build OK · provider-leak-guard 6/6.
+
+### Technique de validation prod utilisée (réutilisable par Codex en headless)
+Impossible de s'authentifier admin en session headless, et connecteur Vercel non authentifié.
+Donc : (1) générer un `video_id` Jogg réel via le client (clé locale = même compte) ; (2) INSERT
+un job `pending` (`engine_used='jogg'`, `external_task_id`) dans la DB **prod** via Supabase MCP ;
+(3) déclencher le cron déployé via GitHub API `workflow_dispatch` sur `evolink-cron.yml` (token
+récupéré du credential store git, non affiché) ; (4) poller le job via PostgREST (clé service).
+
+### Backlog V2 URL→Video (repoussé volontairement)
+Avatar Video (script **verbatim** via `/create_video_from_avatar` `voice.script` — prouvé POC),
+AI Script pré-généré, preview 13-variantes, Lip Sync, Traduction, Templates, Photo Avatar/Motion,
+**webhooks** (remplacer polling), **UI publique self-service**, branding overlay T-1111.
+
+### P0 restants
+- Business (avant ouverture PAYANTE publique, ne bloque pas la validation technique) :
+  plan **Advanced** contractuel (URL→Video y est gaté) + confirmer le **compte prod** de la clé
+  (`gvnahid292`) + **CGU commerciales** Jogg (revente/multi-tenant).
+- La clé test génère à quota=0 = **temporaire/non contractuel** → ne pas bâtir le P&L dessus.
+
+### Connecteurs MCP (état session)
+- OK Supabase (`supabase`, projet qbrpzmuedfugbhoeytdj) — authentifié, utilisé.
+- ATTENTION HeyGen "classique" (`heygen`, mcp.heygen.com/mcp/v1/) — enregistré dans ~/.claude.json
+  mais **OAuth non fait** (headless) → travail HeyGen fait via **API REST** (HEYGEN_API_KEY).
+  Le connecteur claude.ai "HyperFrames by HeyGen" (projets vidéo) est distinct et connecté.
+- Vercel MCP — non authentifié (impossible de lire/écrire env Vercel depuis l'agent).
+
+### Next
+Ouvrir le Decision Book du **workflow suivant** (proposé : 📢 Publication → benchmark Postiz).
+Ne PAS rouvrir URL→Video / Podcast (gelés) sauf bug bloquant.
