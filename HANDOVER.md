@@ -3,7 +3,7 @@
 > Short, current, actionable onboarding doc. If anything here disagrees with
 > `README.md`, **trust this file** (the README still contains historical
 > Runpod/SVI/AudioLDM2/LangGraph notes that no longer reflect the system).
-> Last updated: 2026-06-08.
+> Last updated: 2026-07-16 (voir l'addendum daté ci-dessous ; corps historique 2026-06-08).
 
 ## Update 2026-07-16 (Claude) — Decision Books + URL→Video V1 live
 

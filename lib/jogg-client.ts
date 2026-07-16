@@ -38,8 +38,11 @@ function headers(): Record<string, string> {
   return { "x-api-key": apiKey(), "Content-Type": "application/json" };
 }
 
-/** Jogg wraps every response as { code, msg, data }. code === 0 means success. */
-function unwrap(json: unknown, ctx: string): Record<string, unknown> {
+/**
+ * Jogg wraps every response as { code, msg, data }. code === 0 means success.
+ * Exported for unit testing (see lib/__tests__/jogg-client.test.ts).
+ */
+export function parseJoggEnvelope(json: unknown, ctx: string): Record<string, unknown> {
   const j = (json ?? {}) as Record<string, unknown>;
   const code = j.code;
   if (code !== undefined && code !== null && code !== 0) {
@@ -73,7 +76,7 @@ export async function createProductFromUrl(
     const err = await res.text().catch(() => res.statusText);
     throw new Error(`Jogg /product failed (${res.status}): ${err.slice(0, 200)}`);
   }
-  const data = unwrap(await res.json(), "/product");
+  const data = parseJoggEnvelope(await res.json(), "/product");
   const productId = data.product_id;
   if (!productId) {
     throw new Error("Jogg /product returned no product_id");
@@ -137,7 +140,7 @@ export async function createVideoFromProduct(
       `Jogg /create_video_from_product failed (${res.status}): ${err.slice(0, 200)}`,
     );
   }
-  const data = unwrap(await res.json(), "/create_video_from_product");
+  const data = parseJoggEnvelope(await res.json(), "/create_video_from_product");
   const videoId = data.product_video_id ?? data.video_id;
   if (!videoId) {
     throw new Error("Jogg /create_video_from_product returned no product_video_id");
@@ -158,27 +161,17 @@ export interface JoggVideoResult {
 }
 
 /**
- * Poll a product video. Free step. Called from the cron poller (jogg-poll).
+ * Classify a Jogg product-video `data` payload into a JoggVideoResult.
+ * Pure — exported for unit testing (see lib/__tests__/jogg-client.test.ts).
+ * Throws if a terminal "completed" state carries no video_url.
  */
-export async function getProductVideo(productVideoId: string): Promise<JoggVideoResult> {
-  const res = await fetch(`${JOGG_API}/product_video/${productVideoId}`, {
-    headers: { "x-api-key": apiKey() },
-    cache: "no-store",
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!res.ok) {
-    throw new Error(`Jogg /product_video poll failed (${res.status})`);
-  }
-  const data = unwrap(await res.json(), "/product_video");
-
+export function parseProductVideo(data: Record<string, unknown>): JoggVideoResult {
   const state = String(data.status ?? "").toLowerCase();
   const videoUrl = (data.video_url as string | undefined) || undefined;
 
   if (videoUrl || ["completed", "success", "succeeded", "done", "finished"].includes(state)) {
     if (!videoUrl) {
-      throw new Error(
-        `Jogg video ${productVideoId} reports "${state}" but no video_url yet`,
-      );
+      throw new Error(`Jogg video reports "${state}" but no video_url yet`);
     }
     return { status: "completed", videoUrl };
   }
@@ -193,4 +186,19 @@ export async function getProductVideo(productVideoId: string): Promise<JoggVideo
   }
 
   return { status: state === "pending" || state === "queued" ? "pending" : "processing" };
+}
+
+/**
+ * Poll a product video. Free step. Called from the cron poller (jogg-poll).
+ */
+export async function getProductVideo(productVideoId: string): Promise<JoggVideoResult> {
+  const res = await fetch(`${JOGG_API}/product_video/${productVideoId}`, {
+    headers: { "x-api-key": apiKey() },
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    throw new Error(`Jogg /product_video poll failed (${res.status})`);
+  }
+  return parseProductVideo(parseJoggEnvelope(await res.json(), "/product_video"));
 }

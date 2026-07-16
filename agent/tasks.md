@@ -12,8 +12,9 @@ Format d'une tâche :
 
 ---
 
-### [T-1157] Premium lipsync QA follow-up and failure observability - `status: blocked` · `owner: claude`
-- Objective: finish the short Jogg-like premium render only after explaining the two remaining missing lip-sync clips.
+### [T-1157] Premium lipsync QA follow-up and failure observability - `status: superseded` · `owner: claude`
+- **SUPERSEDED (2026-07-16)** par le gel de **Podcast Premium V1 = VEED web worker** (voir `docs/decision-books/podcast-premium-v1.md`). Ce suivi QA portait sur l'ancienne voie **HeyGen lip-sync premium**, qui n'est plus la brique V1. Conservé pour historique ; aucune action.
+- Objective (historique): finish the short premium render only after explaining the two remaining missing lip-sync clips.
 - Current production case: podcast `307e628c-96a0-4ad6-b948-60a2f57c2f9a`; 8 voiced dialogue lines; 6 premium clips ready, 2 missing.
 - Failed lines: `Break them down into daily habits, like checking email only twice a day.` and `Exactly, and then reviewing your progress each Friday to adjust for the next week.`
 - Already attempted: one grouped retry plus one individual retry per missing line. Do not spend more credits blindly.
@@ -1457,3 +1458,13 @@ Contraintes :
 
 ## Prochain workflow — Publication → benchmark Postiz — TODO
 - Ouvrir un nouveau Decision Book (open-source, self-hostable, API). Un workflow à la fois.
+
+
+## URL→Video V1 — lot "AVANT OUVERTURE PAYANTE" — 2026-07-16, Claude — TODO (nouveau GO requis)
+Durcissements robustesse/charge issus de la revue Codex. **Ne PAS implémenter sans nouveau GO.**
+Bêta fermée admin-only OK sans eux ; **requis avant tout trafic client payant.**
+- [ ] **DB-first reservation + reprise des orphelins** (Codex P1 #2) : insérer la ligne `jobs` (`pending`) AVANT l'appel Jogg, puis stocker `external_task_id` ; si l'appel Jogg échoue → `failed`. Ajouter une reprise des jobs restés sans `external_task_id` (génération dépensée mais non suivie).
+- [ ] **Quota atomique** (Codex P1 #3) : compter TOUTES les soumissions (y compris `failed`, qui peut avoir consommé un crédit) + réservation atomique côté DB pour empêcher le dépassement du plafond en concurrence (le `count → appel` actuel n'est pas atomique).
+- [ ] **Poller batché** (Codex P1 #4) : borner le nombre de jobs traités par run + concurrence limitée + budget temps < `maxDuration` (éviter le timeout en plein download quand plusieurs jobs sont actifs).
+- [ ] **Couverture tests complète submit/status/poll/idempotence** : validation d'entrée, quota, échec provider, transitions poll, idempotence bout-en-bout (l'auth cron + parsing + persistance poller sont déjà couverts par le lot quick-wins).
+Réfs : revue Codex 2026-07-16 ; `agent/log.md` (entrée durcissement).

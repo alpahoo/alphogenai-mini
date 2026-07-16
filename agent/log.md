@@ -3204,3 +3204,29 @@ AI Script pré-généré, preview 13-variantes, Lip Sync, Traduction, Templates,
 ### Next
 Ouvrir le Decision Book du **workflow suivant** (proposé : 📢 Publication → benchmark Postiz).
 Ne PAS rouvrir URL→Video / Podcast (gelés) sauf bug bloquant.
+
+
+## 2026-07-16 — Claude — Durcissement URL→Video V1 (quick-wins revue Codex)
+
+Suite à la revue de code Codex (9 constats, tous vérifiés exacts). Lot "quick-wins" traité
+(GO Paul, périmètre borné). Lot "avant ouverture payante" planifié dans tasks.md (pas de dev sans GO).
+
+Corrigé :
+1. **Confidentialité provider** (Codex #7, élevé P1) : `jogg → "URL to Video"` dans ENGINE_DISPLAY_NAMES ;
+   `jogg` ajouté aux 2 regex de `cleanModelName` ; `Jogg` ajouté à FORBIDDEN/FORBIDDEN_RE du leak-guard ;
+   tests prouvant que `/jobs/[id]` (cleanModelName∘getEngineDisplayName) ET `/v/[id]` (getEngineDisplayName) n'exposent jamais "jogg".
+2. **Cron fail-closed** (Codex #1) : nouveau `lib/cron-auth.ts` (`assertCronAuth`) — refuse si CRON_SECRET absent/incorrect,
+   AVANT tout `createServiceClient`. Appliqué à `jogg-poll` ET `evolink-poll` (politique cohérente). Tests: absent/incorrect/correct.
+3. **Persistance honnête du poller** (Codex #5) : logique extraite dans `lib/jogg-poll-core.ts` (`settleJoggJob`, DI).
+   `done`/`failed` comptés seulement après écriture DB réussie ; écriture ratée → `errors` + job récupérable (pas de faux `done`).
+   Tests: échec update final, échec markFailed, missing task id, pending sans write/download.
+4. **Handover reproductible** (Codex #8) : commit `podcast-premium-v1.md` + sources VEED web (worker/login/README + route)
+   = brique V1 gelée réellement référencée. `.gitignore` étendus (logs/OTP, downloads, shots, *.mp4, .pytest_cache).
+   Décision VEED : la V1 Podcast gelée EST le worker web → sources versionnées ; logs/downloads/shots/pycache JAMAIS commités.
+5. **Cohérence docs** (Codex #9) : HANDOVER "Last updated" → 2026-07-16 ; T-1157 marquée `superseded`
+   (ancienne voie HeyGen lip-sync, remplacée par le gel VEED web) ; README URL→Video = "GELÉ après hardening".
+
+Parsing client extrait (`parseJoggEnvelope`, `parseProductVideo`) pour test unitaire (0 réseau).
+Validation : tsc clean, nouveaux tests verts (voir commit). AUCUN appel Jogg payant, aucune génération prod pour ce lot.
+
+Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, poller batché, couverture submit/status complète.

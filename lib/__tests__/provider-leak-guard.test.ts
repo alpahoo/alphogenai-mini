@@ -10,8 +10,8 @@ import { cleanModelName } from "../engine-intentions";
  * This locks in T-102 + T-605 so a future engine cannot reintroduce a leak.
  */
 
-const FORBIDDEN = ["BytePlus", "AtlasCloud", "EvoLink", "Bailian", "Kie.ai", "HeyGen"];
-const FORBIDDEN_RE = /byteplus|atlascloud|evolink|bailian|kie\.?ai|heygen/i;
+const FORBIDDEN = ["BytePlus", "AtlasCloud", "EvoLink", "Bailian", "Kie.ai", "HeyGen", "Jogg"];
+const FORBIDDEN_RE = /byteplus|atlascloud|evolink|bailian|kie\.?ai|heygen|jogg/i;
 
 describe("public model labels never leak provider/aggregator names", () => {
   it("ENGINE_DISPLAY_NAMES has no provider name in any value", () => {
@@ -61,5 +61,18 @@ describe("public model labels never leak provider/aggregator names", () => {
     for (const name of FORBIDDEN) {
       expect(FORBIDDEN_RE.test(name)).toBe(true);
     }
+  });
+
+  // ── Jogg (URL → Video) — provider name must never surface (T-102) ──────────
+  it("getEngineDisplayName('jogg') is the public label, not the provider", () => {
+    expect(getEngineDisplayName("jogg")).toBe("URL to Video");
+    expect(FORBIDDEN_RE.test(getEngineDisplayName("jogg"))).toBe(false);
+  });
+
+  it("cleanModelName strips 'jogg' if it ever reaches a label", () => {
+    expect(FORBIDDEN_RE.test(cleanModelName("jogg"))).toBe(false);
+    expect(FORBIDDEN_RE.test(cleanModelName("URL to Video (Jogg)"))).toBe(false);
+    // the composed path used by /jobs/[id] and /v/[id]
+    expect(FORBIDDEN_RE.test(cleanModelName(getEngineDisplayName("jogg")))).toBe(false);
   });
 });

@@ -27,10 +27,10 @@ export interface EngineLike {
 export function cleanModelName(label: string): string {
   return (label || "")
     .replace(
-      /\s*\((?:heygen|byteplus|atlascloud|atlas|evolink|kie\.?ai|bailian)\)/gi,
+      /\s*\((?:heygen|byteplus|atlascloud|atlas|evolink|kie\.?ai|bailian|jogg)\)/gi,
       "",
     )
-    .replace(/\b(?:byteplus|atlascloud|evolink|bailian|kie\.?ai|heygen)\b/gi, "")
+    .replace(/\b(?:byteplus|atlascloud|evolink|bailian|kie\.?ai|heygen|jogg)\b/gi, "")
     .replace(/\(\s*\)/g, "")
     .replace(/\s{2,}/g, " ")
     .trim();

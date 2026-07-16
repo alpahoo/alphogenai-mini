@@ -1,0 +1,5 @@
+shots/
+downloads/
+*.mp4
+*.log
+__pycache__/

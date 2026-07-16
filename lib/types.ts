@@ -250,6 +250,7 @@ export const ENGINE_DISPLAY_NAMES: Record<string, string> = {
   seedance2_fast_byteplus: "Seedance 2.0 Fast (Direct)",
   seedance2_atlas: "Seedance 2.0 (Direct)",
   seedance2_fast_atlas: "Seedance 2.0 Fast (Direct)",
+  jogg: "URL to Video",
 };
 
 export function getEngineDisplayName(engine: string | null | undefined): string {

@@ -14,17 +14,16 @@
  */
 
 import { createServiceClient } from "@/lib/supabase/service";
+import { assertCronAuth } from "@/lib/cron-auth";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
 
 export async function GET(req: Request) {
-  // Validate cron secret (Vercel injects Authorization: Bearer $CRON_SECRET)
-  const auth = req.headers.get("authorization");
-  const secret = process.env.CRON_SECRET;
-  if (secret && auth !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  // FAIL-CLOSED — refuse if CRON_SECRET is missing or incorrect, BEFORE creating
+  // the service-role client (shared policy, see lib/cron-auth.ts).
+  const denied = assertCronAuth(req);
+  if (denied) return denied;
 
   const supabase = createServiceClient();
 
