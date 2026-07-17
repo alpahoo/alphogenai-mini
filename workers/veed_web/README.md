@@ -46,6 +46,22 @@ GET  /api/admin/experiments/veed-web-jobs?id=<jobId>     # statut + métriques +
 - Si l'UI attendue change, le worker capture un screenshot de diagnostic puis s'arrête.
 - Bêta fermée : seul le format **portrait** validé est accepté.
 
+### Reprise après une erreur de persistance
+
+Si la vidéo est déjà sur R2 mais que l'écriture finale DB échoue, le worker
+conserve `final_url`/`video_url` dans l'état **`veed_output_ready`** et retente
+uniquement la promotion en `done` au passage suivant. Il ne rouvre pas VEED et
+ne relance jamais une génération payante.
+
+Si Supabase est totalement indisponible, un manifeste local
+`*_OUTPUT_READY.json` conserve l'URL R2. Le worker reprend automatiquement ce
+manifeste avant d'ouvrir Playwright, puis le supprime après promotion réussie.
+
+Test de persistance sans navigateur :
+```
+python -m unittest workers.veed_web.test_worker_persistence
+```
+
 ## Suivi des limites (enregistré par job dans `jobs.app_state`)
 `plan_before`, `credits_before`, `credits_after`, `mode_or_model`, `avatar`, `format_hint`,
 `render_seconds`, `total_seconds`, `ffprobe` (durée/résolution/codecs/taille), `captcha_or_quota`.

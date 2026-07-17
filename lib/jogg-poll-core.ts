@@ -30,6 +30,25 @@ export interface SettleDeps {
 
 export type SettleOutcome = "done" | "failed" | "pending" | "error";
 
+export interface PublicPollSummary {
+  done: number;
+  failed: number;
+  pending: number;
+  errors: number;
+}
+
+/** Keep the public cron response compatible with its historical `errors` key. */
+export function toPublicPollSummary(
+  tally: Record<SettleOutcome, number>,
+): PublicPollSummary {
+  return {
+    done: tally.done,
+    failed: tally.failed,
+    pending: tally.pending,
+    errors: tally.error,
+  };
+}
+
 function nowIso(deps: SettleDeps): string {
   return deps.now ? deps.now() : new Date().toISOString();
 }

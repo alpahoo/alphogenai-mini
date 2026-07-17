@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
-import { settleJoggJob, type SettleDeps, type JoggJobRow } from "../jogg-poll-core";
+import {
+  settleJoggJob,
+  toPublicPollSummary,
+  type SettleDeps,
+  type JoggJobRow,
+} from "../jogg-poll-core";
 
 const baseJob: JoggJobRow = { id: "job-1", external_task_id: "vd_1", app_state: { engine: "jogg" } };
 const okWrite = async () => ({ error: null });
@@ -11,6 +16,15 @@ const deps = (over: Partial<SettleDeps>): SettleDeps => ({
   updateJob: okWrite,
   now: () => "2026-07-16T00:00:00.000Z",
   ...over,
+});
+
+describe("toPublicPollSummary", () => {
+  it("preserves the historical plural `errors` response key", () => {
+    const summary = toPublicPollSummary({ done: 2, failed: 1, pending: 3, error: 4 });
+
+    expect(summary).toEqual({ done: 2, failed: 1, pending: 3, errors: 4 });
+    expect(summary).not.toHaveProperty("error");
+  });
 });
 
 describe("settleJoggJob — honest persistence", () => {

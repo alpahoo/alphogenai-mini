@@ -24,7 +24,12 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { getProductVideo } from "@/lib/jogg-client";
 import { downloadAndUploadToR2 } from "@/lib/r2";
 import { assertCronAuth } from "@/lib/cron-auth";
-import { settleJoggJob, type JoggJobRow, type SettleOutcome } from "@/lib/jogg-poll-core";
+import {
+  settleJoggJob,
+  toPublicPollSummary,
+  type JoggJobRow,
+  type SettleOutcome,
+} from "@/lib/jogg-poll-core";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
@@ -86,5 +91,8 @@ export async function GET(req: Request) {
       `${tally.pending} pending, ${tally.error} errors`,
   );
 
-  return NextResponse.json({ polled: activeJobs.length, ...tally });
+  return NextResponse.json({
+    polled: activeJobs.length,
+    ...toPublicPollSummary(tally),
+  });
 }

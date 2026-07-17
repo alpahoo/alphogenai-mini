@@ -1,3 +1,9 @@
+## 2026-07-17 - Codex - URL-to-Video/VEED review follow-up
+- Restored the historical Jogg cron response contract: write failures are again exposed as `errors`, while the internal settle outcome remains `error`. Added a regression test for the serialized shape.
+- Hardened the frozen VEED web worker after review: final `done` persistence is retried; if it still fails after a successful paid generation and R2 upload, the worker stores `veed_output_ready` with the durable R2 URL instead of marking the job failed. The next worker pass promotes that output to `done` without reopening VEED or spending again. If the database is completely unavailable, an ignored local recovery manifest preserves the output coordinates and is replayed automatically when the worker resumes.
+- Recovery promotion now runs before Playwright starts, so a durable R2 output is finalized without opening VEED again; persistent DB failures back off for 60 seconds in loop mode.
+- Validation: 954/954 Vitest tests, 6 Python persistence tests, Python compile, TypeScript, production build, and diff-check pass. No provider generation or paid call was made.
+
 ## 2026-07-13 - Codex - T-1156 60-second cache-resume production PASS
 - Resumed the existing English 60-second casual podcast (`847955bc`) that had previously stopped at 5/8 clips because of the 4.26-second presenter contract. The v2 run reused all 5 cached clips and generated only the 3 missing clips: 8 selected, 5 cached, 3 started, 0 skipped, 0 failed.
 - The three Balanced clips completed in about 4.7 minutes and the final compositing render reached `done` with 8 segments. This validates the requested one-minute upper bound and proves incremental cache reuse avoids re-spend.

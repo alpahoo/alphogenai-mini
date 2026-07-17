@@ -42,6 +42,8 @@ def log(*a): print("[veed-worker]", *a, flush=True)
 
 def load_env():
     env = {}
+    if not ENV_PATH.exists():
+        return env
     for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line: continue
@@ -81,6 +83,26 @@ def claim_next_job():
                   f"&order=created_at.asc&limit=1")
     return rows[0] if rows else None
 
+def find_output_ready_job():
+    """Return an uploaded output that only needs its final DB promotion retried."""
+    rows = sb_get(
+        f"select=*&status=eq.in_progress&current_stage=eq.veed_output_ready"
+        f"&app_state->>engine=eq.{ENGINE_TAG}&order=updated_at.asc&limit=1"
+    )
+    return rows[0] if rows else None
+
+def find_local_output_ready():
+    """Return the oldest valid local recovery manifest, if any."""
+    for path in sorted(SHOTS.glob("*_OUTPUT_READY.json"), key=lambda item: item.stat().st_mtime):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            log(f"ignoring invalid recovery manifest {path.name}: {exc}")
+            continue
+        if record.get("job_id") and record.get("r2_url"):
+            return path, record
+    return None
+
 # ----------------------------- media helpers -----------------------------
 def ffprobe(path):
     import imageio_ffmpeg
@@ -118,6 +140,7 @@ def r2_upload(path, key):
 # ----------------------------- browser helpers -----------------------------
 class NeedsLogin(Exception): pass
 class ElementMissing(Exception): pass
+class FinalPersistenceError(Exception): pass
 
 def shot(page, name):
     try: page.screenshot(path=str(SHOTS / f"{name}.png"))
@@ -276,7 +299,97 @@ def run_browser(fn):
             try: page.wait_for_timeout(800); ctx.close()
             except Exception: pass
 
+def persist_completed_job(job_id, r2_url, app_state, attempts=3, sleep_fn=None):
+    """Persist a completed output without ever triggering a paid regeneration."""
+    sleep_fn = sleep_fn or time.sleep
+    done_patch = {
+        "status": "done",
+        "current_stage": "veed_done",
+        "final_url": r2_url,
+        "video_url": r2_url,
+        "error_message": None,
+        "app_state": app_state,
+    }
+    errors = []
+
+    for attempt in range(1, attempts + 1):
+        try:
+            updated = sb_patch(job_id, done_patch)
+            if not updated:
+                raise RuntimeError("final update returned no row")
+            return updated[0]
+        except Exception as exc:
+            errors.append(str(exc))
+            if attempt < attempts:
+                sleep_fn(min(2 ** (attempt - 1), 4))
+
+    recovery_state = {
+        **app_state,
+        "status_detail": "FINAL_DB_WRITE_FAILED",
+        "recovery_r2_url": r2_url,
+        "persistence_errors": errors[-3:],
+    }
+    recovery_patch = {
+        "status": "in_progress",
+        "current_stage": "veed_output_ready",
+        "final_url": r2_url,
+        "video_url": r2_url,
+        "error_message": "FINAL_DB_WRITE_FAILED",
+        "app_state": recovery_state,
+    }
+
+    try:
+        recovered = sb_patch(job_id, recovery_patch)
+        if not recovered:
+            raise RuntimeError("recovery update returned no row")
+    except Exception as recovery_exc:
+        record = {
+            "job_id": job_id,
+            "r2_url": r2_url,
+            "app_state": recovery_state,
+            "recovery_error": str(recovery_exc),
+        }
+        (SHOTS / f"{job_id}_OUTPUT_READY.json").write_text(
+            json.dumps(record, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        raise FinalPersistenceError(
+            f"output ready at {r2_url}; DB recovery write also failed: {recovery_exc}"
+        ) from recovery_exc
+
+    raise FinalPersistenceError(
+        f"output ready at {r2_url}; completion write failed and recovery state was saved"
+    )
+
+def recover_output_ready():
+    local = find_local_output_ready()
+    local_path = None
+    if local:
+        local_path, record = local
+        jid = record["job_id"]
+        state = record.get("app_state") or {}
+        r2 = record["r2_url"]
+    else:
+        recovery = find_output_ready_job()
+        if not recovery:
+            return None
+        jid = recovery["id"]
+        state = recovery.get("app_state") or {}
+        r2 = recovery.get("final_url") or recovery.get("video_url") or state.get("recovery_r2_url")
+    if not r2:
+        raise RuntimeError(f"job {jid} is veed_output_ready but has no R2 URL")
+    try:
+        persist_completed_job(jid, r2, state)
+        if local_path:
+            local_path.unlink(missing_ok=True)
+        log(f"job {jid} RECOVERED -> {r2}")
+        return "RECOVERED"
+    except FinalPersistenceError as exc:
+        log(f"job {jid} recovery still pending: {exc}")
+        return "PERSISTENCE_FAILED"
+
 def handle_one(page):
+
     done_today = daily_done_count()
     if done_today >= DAILY_CAP:
         log(f"plafond atteint ({done_today}/{DAILY_CAP}) — rien à faire"); return "CAP_REACHED"
@@ -297,11 +410,14 @@ def handle_one(page):
         newstate = {**(job.get("app_state") or {}), **metrics, "r2_url": r2}
         newstate.pop("status_detail", None)
         newstate.pop("error", None)
-        sb_patch(jid, {"status": "done", "current_stage": "veed_done",
-                       "final_url": r2, "video_url": r2, "error_message": None,
-                       "app_state": newstate})
+        persist_completed_job(jid, r2, newstate)
         log(f"job {jid} DONE -> {r2}")
         return "DONE"
+    except FinalPersistenceError as e:
+        # The paid generation and R2 upload succeeded. Keep the job recoverable
+        # and never route this through the generic failure path.
+        log(f"job {jid} OUTPUT_READY, persistence pending: {e}")
+        return "PERSISTENCE_FAILED"
     except NeedsLogin as e:
         st = {**(job.get("app_state") or {}), "status_detail": "NEEDS_LOGIN"}
         sb_patch(jid, {"status": "pending", "current_stage": "veed_needs_login",
@@ -326,13 +442,14 @@ def main():
             print(json.dumps({"r2_url": r2, "metrics": m}, ensure_ascii=False, indent=2)); return "OK"
         print("RESULT:", run_browser(_run)); return
     if mode == "once":
-        print("RESULT:", run_browser(handle_one)); return
+        recovery = recover_output_ready()
+        print("RESULT:", recovery or run_browser(handle_one)); return
     if mode == "loop":
         while True:
-            res = run_browser(handle_one)
+            res = recover_output_ready() or run_browser(handle_one)
             if res in ("CAP_REACHED", "NEEDS_LOGIN"):
                 log(f"arrêt boucle ({res})"); break
-            if res == "IDLE":
+            if res in ("IDLE", "PERSISTENCE_FAILED"):
                 time.sleep(60)
         return
     print("usage: veed_web_worker.py [once|loop|selftest]")
