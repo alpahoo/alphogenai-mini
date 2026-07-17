@@ -34,6 +34,28 @@ class PersistCompletedJobTests(unittest.TestCase):
         self.assertEqual(update.call_count, 1)
         self.assertEqual(update.call_args.args[1]["status"], "done")
 
+    def test_promotion_clears_recovery_diagnostics(self):
+        dirty_state = {
+            "engine": "veed_web",
+            "status_detail": "FINAL_DB_WRITE_FAILED",
+            "recovery_r2_url": "https://r2/video.mp4",
+            "persistence_errors": ["db down"],
+        }
+        with patch.object(worker, "sb_patch", return_value=[{"id": "job-1"}]) as update:
+            worker.persist_completed_job(
+                "job-1",
+                "https://r2/video.mp4",
+                dirty_state,
+                sleep_fn=lambda _: None,
+            )
+
+        written = update.call_args.args[1]["app_state"]
+        self.assertNotIn("status_detail", written)
+        self.assertNotIn("recovery_r2_url", written)
+        self.assertNotIn("persistence_errors", written)
+        self.assertEqual(written["r2_url"], "https://r2/video.mp4")
+        self.assertEqual(written["engine"], "veed_web")
+
     def test_preserves_output_in_recovery_state_after_retries(self):
         calls = [RuntimeError("db down"), [], [{"id": "job-1"}]]
         with patch.object(worker, "sb_patch", side_effect=calls) as update:

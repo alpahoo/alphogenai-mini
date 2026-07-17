@@ -299,16 +299,29 @@ def run_browser(fn):
             try: page.wait_for_timeout(800); ctx.close()
             except Exception: pass
 
+# app_state keys that only make sense while a job is in recovery — they must be
+# cleared when the job is finally promoted to `done` so a successful job never
+# still surfaces a stale FINAL_DB_WRITE_FAILED diagnostic in the admin API.
+RECOVERY_STATE_KEYS = ("status_detail", "recovery_r2_url", "persistence_errors", "error")
+
+def clean_done_state(app_state):
+    """Return app_state without recovery/diagnostic keys, with a durable r2_url."""
+    clean = {k: v for k, v in (app_state or {}).items() if k not in RECOVERY_STATE_KEYS}
+    clean["r2_url"] = clean.get("r2_url") or None
+    return clean
+
 def persist_completed_job(job_id, r2_url, app_state, attempts=3, sleep_fn=None):
     """Persist a completed output without ever triggering a paid regeneration."""
     sleep_fn = sleep_fn or time.sleep
+    done_state = clean_done_state(app_state)
+    done_state["r2_url"] = r2_url
     done_patch = {
         "status": "done",
         "current_stage": "veed_done",
         "final_url": r2_url,
         "video_url": r2_url,
         "error_message": None,
-        "app_state": app_state,
+        "app_state": done_state,
     }
     errors = []
 
