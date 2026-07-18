@@ -13,7 +13,7 @@ suivant qu'une fois le précédent gelé.
 | **Product Ads** | ⏳ à venir | — |
 | **Cinematic** (ex. Runway) | ⏳ à venir | — |
 | **Avatar** (ex. HeyGen / Synthesia) | ⏳ à venir | — |
-| **Editing / Video Enhancement** | 🔬 **Benchmark fait (7 acteurs, sources off.) · finalistes 🥇 Descript + 🥇 VEED, 🥉 réserve Riverside · pas de gagnant · POC à valider** | [**Decision Book**](./editing-video-enhancement.md) · [audit Descript](./editing-enhancement-descript-audit.md) |
+| **Editing / Video Enhancement** | ✅ **DIRECTION FIGÉE** (POC lip-sync prouvé) · assemblage : **VEED forfait** (enhancement) + **Descript API** (correction précise) + **fal.ai** (lip-sync) · réserve Riverside · dev V1.1 = nouveau GO | [**Decision Book**](./editing-video-enhancement.md) · [audit Descript](./editing-enhancement-descript-audit.md) |
 | **Publication** | ⏳ **à benchmarker → Postiz** (open-source, self-hostable, API) | — |
 
 ## Légende

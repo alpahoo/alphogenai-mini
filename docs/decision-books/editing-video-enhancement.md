@@ -1,7 +1,8 @@
 # Capability Decision Book — Editing / Video Enhancement
 
-> Statut : 🔬 **BENCHMARK — finalistes sélectionnés, PAS de gagnant. Aucun code, aucun POC lancé.**
-> Date : **16 juil. 2026** · Workflow : **✂️ Editing / Video Enhancement** · Voir [README](./README.md).
+> Statut : ✅ **DIRECTION FIGÉE** (POC exécuté + coût réel vérifié, 17 juil. 2026) — assemblage complémentaire, pas de provider unique. Aucun code (dev V1.1 = nouveau GO).
+> Date : **16–17 juil. 2026** · Workflow : **✂️ Editing / Video Enhancement** · Voir [README](./README.md).
+> **La direction figée est en tête ci-dessous** ; le benchmark détaillé (7 acteurs) suit comme analyse de fond.
 > Toutes les données proviennent de **sources officielles** (docs/API/SDK/CGU). Tout ce qui n'a pas pu être vérifié sur une source officielle est marqué **À VÉRIFIER** — aucune supposition.
 
 ## Objectif
@@ -11,6 +12,40 @@ Déterminer le meilleur **moteur d'édition/enhancement vidéo IA** pour AlphoGe
 Acteurs benchmarkés (pertinents pour un SaaS) : **Descript, VEED, Adobe Premiere Pro (IA), Captions, Riverside, Kapwing, Wisecut**. Descript est déjà audité en profondeur cette session (clé testée, endpoints réels) — voir [editing-enhancement-descript-audit.md](./editing-enhancement-descript-audit.md).
 
 Prisme de décision (SaaS rentable) : **API headless intégrable > couverture de fonctions**. Priorités : simplicité, faible coût, faible maintenance, **réutilisation**, ROI, qualité. Le meilleur n'est pas celui qui a le plus de fonctions, mais celui qu'on peut **orchestrer par API** avec le moins de code.
+
+---
+
+## Direction figée — POC exécuté + coût réel vérifié (17 juil. 2026)
+**Décision produit actée : architecture COMPLÉMENTAIRE, pas un provider unique.** Le POC comparatif a montré que Descript et VEED ne jouent pas le même rôle ; la répartition ci-dessous optimise le ROI sur le forfait VEED existant + Descript pour la précision + fal.ai uniquement pour le lip-sync.
+
+### Faits vérifiés (sources officielles + compte utilisateur)
+- **Forfait VEED du compte = Pro « Legacy »** (~R$408/an ≈ ~75 $/an) : **« vidéos illimitées dans Gen-AI Studio »** + 15+ outils IA, Brand kit, Clips, **4h traductions/an**, **144h/an AI Voice**.
+- **API-only (HORS forfait → fal.ai à l'usage)** : Fabric, **Lip Sync / Lip Sync 2.0**, Subtitle API, Background Removal, Green Screen, Live Avatar.
+- **Inclus au forfait (app, illimité Studio)** : Eye Contact AI, Remove Background Noise (video/audio), Auto Subtitles/Captions, Video/Audio to Text (transcription), Video Translator / Dubbing AI, AI Voice/TTS, Video/Audio Editor.
+- **Descript** : édition d'une vidéo existante **par API** (agent Underlord) prouvée E2E ; correction de phrase par overdub voix ~**16,6 crédits/édition** ; **pas de lip-sync** (ne ré-anime pas les lèvres importées).
+- **Lip Sync API VEED (fal.ai)** : **0,40 $/min**.
+
+### POC lip-sync — prouvé E2E (17 juil. 2026)
+Pipeline **« Descript édite → VEED Lip Sync (fal.ai) re-sync les lèvres »** validé bout-en-bout sur talking-head :
+- source (erreur plantée) → **Descript** (phrase corrigée « trois kilos »→« 249 grammes » + « euh » retiré + silence réduit, mais lèvres désync) → **VEED Lip Sync 2.0** (lèvres ré-alignées — validé à l'œil par l'utilisateur).
+- Coût lip-sync mesuré : ~**0,08 $** pour 12 s. Verdict talking-head : **B (Descript seul) → A (combo)**.
+- Clips (R2) : `…/poc-editing/source.mp4`, `…/corrige.mp4`, `…/veed_lipsynced.mp4`.
+
+### Répartition figée (chaque outil sur son terrain de meilleur ROI)
+| Besoin | Moteur retenu | Modèle de coût |
+|---|---|---|
+| Enhancement courant (Eye Contact, denoise, sous-titres, transcription, dubbing, TTS) | **VEED forfait** (app, illimité Studio) | **~0 marginal** — automatisation façon worker web (pattern Podcast) |
+| Correction de phrase précise (overdub voix, édition par transcription) | **Descript API** | ~16,6 cr/édition (quand la précision le justifie) |
+| **Lip-sync** segments visage | **VEED Lip Sync API (fal.ai)** | 0,40 $/min à l'usage — **seule voie** (non incluse au forfait) |
+| Réserve (tout-en-un, meilleure qualité, mais pas d'API pilotable) | **Riverside** | — |
+
+### Garde-fous & vigilance
+- Le plan VEED **« Legacy »** est avantageux mais **peut évoluer** (déjà arrivé) → garder l'archi **swappable** (overlay + brique isolée), même logique que la clé test Jogg. On n'est « à l'abri de rien », y compris sur tout autre outil.
+- **Volume lip-sync/an = à mesurer** (ligne fal.ai à l'usage) — sans impact tant qu'il reste ponctuel ; bascule à évaluer si le volume explose.
+- **Pas de gagnant unique** : c'est un **assemblage** assumé, pas un mono-provider.
+
+### Prochaine étape (hors périmètre de ce gel)
+Dev **V1.1 Editing** = orchestrer cet assemblage (**nouveau GO requis**) : réutiliser `jobs`/R2 + worker web (VEED forfait) + `lib/descript-client` (édition API) + lip-sync fal.ai. **Aucun code écrit ici.**
 
 ---
 
