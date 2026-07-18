@@ -1,7 +1,20 @@
 # Capability Decision Book — Publication (distribution & scheduling social)
 
-> Statut : 🔬 **BENCHMARK — finalistes sélectionnés, PAS de gagnant. Aucun code, aucun POC lancé.**
+> Statut : ✅ **TRANCHÉ (option A, 17 juil. 2026)** — on garde le **scheduler maison** existant ; **Postiz = solution externe désignée, activable au besoin** (non déployée). Aucun code, aucun POC.
 > Date : **17 juil. 2026** · Workflow : **📢 Publication** · Voir [README](./README.md).
+
+## Décision actée (17 juil. 2026) — Option A
+- **Constat vérifié** : Postiz **n'est installé nulle part** (Modal : 3 apps, aucune Postiz ; VPS : aucun conteneur/image/dossier/service Postiz — le port 5000 est un app gunicorn, le `jobpilot-redis` est un autre projet). Ce qui est « déjà fonctionnel » = **notre scheduler MAISON « Postiz-*like* »** : `lib/scheduled-posts.ts` + table `scheduled_posts` + cron `publish-scheduled` + OAuth **YouTube/TikTok/Instagram**.
+- **Décision** : **on NE déploie PAS Postiz maintenant.** On **conserve la brique maison** tant que le besoin ne dépasse pas ces 3 plateformes. Principe : ne pas ajouter une dépendance prématurément.
+- **Postiz reste la solution externe DÉSIGNÉE** (choix provider acté vs Ayrshare, écarté sur le coût), **à activer quand un déclencheur apparaît** :
+  - (a) besoin d'une **plateforme non couverte** (X, LinkedIn, Threads, Pinterest, Bluesky, Reddit…), ou
+  - (b) besoin de **white-label multi-tenant** / d'offload de la maintenance OAuth par-plateforme.
+- **Voie privilégiée le jour venu** : **self-host sur le VPS** (gratuit ; **AGPL à cadrer** pour un usage SaaS) ; alternative **Postiz Cloud** (29-99 $/mo, sans AGPL, revente/white-label = Enterprise).
+- **Alternatives en réserve** : Ayrshare (API zéro-ops, si le budget le permet un jour) ; Blotato (option légère MCP + média-par-URL).
+
+> Le benchmark détaillé (5 acteurs) ci-dessous reste l'analyse de fond qui justifie ce choix.
+
+---
 > Sources **officielles uniquement** (docs/API/pricing/CGU/licences). Non vérifiable sur source officielle → **À VÉRIFIER**, aucune supposition.
 
 ## Objectif

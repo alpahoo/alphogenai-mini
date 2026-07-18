@@ -14,7 +14,7 @@ suivant qu'une fois le précédent gelé.
 | **Cinematic** (ex. Runway) | ⏳ à venir | — |
 | **Avatar** (ex. HeyGen / Synthesia) | ⏳ à venir | — |
 | **Editing / Video Enhancement** | ✅ **DIRECTION FIGÉE** (POC lip-sync prouvé) · assemblage : **VEED forfait** (enhancement) + **Descript API** (correction précise) + **fal.ai** (lip-sync) · réserve Riverside · dev V1.1 = nouveau GO | [**Decision Book**](./editing-video-enhancement.md) · [audit Descript](./editing-enhancement-descript-audit.md) |
-| **Publication** | 🔬 **Benchmark fait (5 acteurs, sources off.) · finalistes 🥇 Ayrshare (API zéro-ops, white-label) + 🥇 Postiz (OSS 31 plateformes, self-host) · 🥉 réserve Blotato · pas de gagnant · POC à valider** | [**Decision Book**](./publication.md) |
+| **Publication** | ✅ **TRANCHÉ (option A)** · scheduler **maison conservé** (YT/TikTok/IG déjà fonctionnels) · **Postiz = solution désignée activable au besoin** (non déployée ; Ayrshare écarté sur le coût) | [**Decision Book**](./publication.md) |
 
 ## Légende
 
