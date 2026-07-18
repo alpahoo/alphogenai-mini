@@ -22,6 +22,8 @@ interface Tool {
   href?: string;
   status: ToolStatus;
   featured?: boolean;
+  /** Beginner-recommended starting point — shortest path to a finished video. */
+  recommended?: boolean;
   /** Optional secondary badge, e.g. "Low cost". */
   tag?: string;
 }
@@ -49,11 +51,12 @@ const TOOLS: Tool[] = [
   {
     id: "avatar",
     title: "Avatar Video",
-    description: "Choose an avatar, edit the script, pick a voice, then generate.",
+    description: "New here? Start with this. Pick a presenter, type your message, and generate — the shortest path to a finished video.",
     badge: "Avatar",
     visual: "linear-gradient(135deg, #ffe4ee, #d9c8ff, #fff)",
     href: "/create/avatar",
     status: "live",
+    recommended: true,
   },
   {
     id: "podcast",
@@ -221,6 +224,11 @@ function CardInner({ tool }: { tool: Tool }) {
       <CardVisual tool={tool} />
       <div className="mt-4 flex flex-1 flex-col">
         <div className="mb-2 flex items-center gap-2">
+          {tool.recommended && (
+            <span className="inline-flex w-fit items-center rounded-full bg-emerald-500 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.1em] text-white">
+              Start here
+            </span>
+          )}
           <span
             className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.1em] ${
               featured ? "bg-cyan-400/15 text-cyan-200" : "bg-blue-500/10 text-blue-700"
@@ -281,7 +289,9 @@ export default function CreateHub() {
             "group flex min-h-[260px] flex-col rounded-2xl border p-5 transition-all duration-200";
           const skin = tool.featured
             ? "border-neutral-900 bg-neutral-900 shadow-xl"
-            : "border-neutral-200 bg-white shadow-sm";
+            : tool.recommended
+              ? "border-emerald-300 bg-white shadow-sm ring-2 ring-emerald-400/40"
+              : "border-neutral-200 bg-white shadow-sm";
           const interactive =
             tool.status === "live"
               ? "hover:-translate-y-1 hover:shadow-lg hover:border-blue-300"

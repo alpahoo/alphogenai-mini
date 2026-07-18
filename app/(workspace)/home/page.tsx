@@ -308,7 +308,7 @@ export default function WorkspaceHome() {
           ) : (
             <div className="px-4 py-8 text-center">
               <p className="text-sm font-semibold text-neutral-950">No projects yet</p>
-              <Link href="/create/story" className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-neutral-950">
+              <Link href="/create" className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-neutral-950">
                 Create the first one
                 <ArrowRight className="h-4 w-4" />
               </Link>
