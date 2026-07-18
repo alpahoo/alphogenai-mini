@@ -102,6 +102,10 @@ export interface CreateVideoParams {
   caption?: boolean;
   /** Public/custom avatar id. Default DEFAULT_AVATAR_ID (Autumn). */
   avatarId?: number;
+  /** 0 = public avatar, 1 = custom/photo avatar. Default 0. */
+  avatarType?: 0 | 1;
+  /** Optional voice from GET /voices. */
+  voiceId?: string;
   /** Optional background music id (from GET /musics). */
   musicId?: string;
 }
@@ -123,9 +127,13 @@ export async function createVideoFromProduct(
       length: params.length ?? "30",
       caption: params.caption ?? true,
     },
-    avatar: { id: params.avatarId ?? DEFAULT_AVATAR_ID, type: 0 },
+    avatar: {
+      id: params.avatarId ?? DEFAULT_AVATAR_ID,
+      type: params.avatarType ?? 0,
+    },
     script: { style: params.style ?? "Discovery", language: params.language ?? "french" },
   };
+  if (params.voiceId) body.voice = { id: params.voiceId };
   if (params.musicId) body.audio = { music_id: params.musicId };
 
   const res = await fetch(`${JOGG_API}/create_video_from_product`, {
@@ -201,4 +209,111 @@ export async function getProductVideo(productVideoId: string): Promise<JoggVideo
     throw new Error(`Jogg /product_video poll failed (${res.status})`);
   }
   return parseProductVideo(parseJoggEnvelope(await res.json(), "/product_video"));
+}
+
+// ---------------------------------------------------------------------------
+// Presenters (avatars) — for the Product Ad customization picker
+// ---------------------------------------------------------------------------
+
+export type JoggAvatarKind = "public" | "custom" | "photo";
+
+export interface JoggAvatar {
+  id: number;
+  name: string;
+  gender: string;
+  thumbUrl: string | null;
+  type: 0 | 1;
+  kind: JoggAvatarKind;
+}
+
+export interface JoggVoice {
+  id: string;
+  name: string;
+  language: string;
+  gender: string;
+  previewUrl: string | null;
+}
+
+async function listAvatarCollection(
+  path: string,
+  kind: JoggAvatarKind,
+  pageSize: number,
+): Promise<JoggAvatar[]> {
+  const query = new URLSearchParams({ page: "1", page_size: String(pageSize) });
+  const res = await fetch(`${JOGG_API}${path}?${query}`, {
+    headers: { "x-api-key": apiKey() },
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) throw new Error(`Avatar catalog failed (${res.status})`);
+  const data = parseJoggEnvelope(await res.json(), "avatar catalog");
+  const raw = Array.isArray(data)
+    ? data
+    : Array.isArray(data.avatars)
+      ? data.avatars
+      : Array.isArray(data.list)
+        ? data.list
+        : [];
+
+  return (raw as Record<string, unknown>[])
+    .filter((avatar) => {
+      if (kind === "public") return true;
+      const status = String(avatar.avatar_status ?? avatar.status ?? "").toLowerCase();
+      return status === "1" || status === "completed" || status === "success";
+    })
+    .map((avatar) => ({
+      id: Number(avatar.id),
+      name: String(avatar.name ?? "Presenter"),
+      gender: String(avatar.gender ?? ""),
+      thumbUrl:
+        (avatar.cover_url as string) ||
+        (avatar.image_url as string) ||
+        (avatar.video_url as string) ||
+        null,
+      type: (kind === "public" ? 0 : 1) as 0 | 1,
+      kind,
+    }))
+    .filter((avatar) => Number.isFinite(avatar.id));
+}
+
+/**
+ * List public presenters (avatars). Free read. Used by the Product Ad
+ * customization step so the user picks who presents the ad (fixes "always
+ * the same person"). Provider name is never exposed to the UI.
+ */
+export async function listPublicAvatars(): Promise<JoggAvatar[]> {
+  return listAvatarCollection("/avatars/public", "public", 16);
+}
+
+export async function listCustomAvatars(): Promise<JoggAvatar[]> {
+  return listAvatarCollection("/avatars/custom", "custom", 50);
+}
+
+export async function listPhotoAvatars(): Promise<JoggAvatar[]> {
+  return listAvatarCollection("/avatars/photo_avatars", "photo", 50);
+}
+
+export async function listVoices(): Promise<JoggVoice[]> {
+  const query = new URLSearchParams({ page: "1", page_size: "100" });
+  const res = await fetch(`${JOGG_API}/voices?${query}`, {
+    headers: { "x-api-key": apiKey() },
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) throw new Error(`Voice catalog failed (${res.status})`);
+  const data = parseJoggEnvelope(await res.json(), "voice catalog");
+  const raw = Array.isArray(data)
+    ? data
+    : Array.isArray(data.voices)
+      ? data.voices
+      : [];
+  return (raw as Record<string, unknown>[])
+    .map((voice) => ({
+      id: String(voice.voice_id ?? ""),
+      name: String(voice.name ?? "Voice"),
+      language: String(voice.language ?? ""),
+      gender: String(voice.gender ?? ""),
+      previewUrl: (voice.audio_url as string) || null,
+    }))
+    .filter((voice) => voice.id.length > 0);
 }

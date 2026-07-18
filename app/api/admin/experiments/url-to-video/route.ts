@@ -1,7 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "../../middleware";
 import { createServiceClient } from "@/lib/supabase/service";
-import { createProductFromUrl, createVideoFromProduct } from "@/lib/jogg-client";
+import {
+  createProductFromUrl,
+  createVideoFromProduct,
+  listCustomAvatars,
+  listPhotoAvatars,
+  listPublicAvatars,
+  listVoices,
+  type JoggAvatar,
+} from "@/lib/jogg-client";
+
+// Product Ad customization — allowed values (validated server-side).
+const FORMATS: Record<string, string> = { portrait: "9:16", square: "1:1", landscape: "16:9" };
+const LENGTHS = new Set(["15", "30", "60"]);
+// Script tones proven to work with the pipeline (auto-copy styles).
+const STYLES = new Set(["Discovery", "Storytime"]);
 
 /**
  * URL → VIDEO V1 — file de jobs minimale (bêta fermée, admin only). Pas d'UI publique.
@@ -41,16 +55,20 @@ export async function POST(request: NextRequest) {
 
   if (action === "submit") {
     const url = typeof body.url === "string" ? body.url.trim() : "";
-    const style = typeof body.style === "string" && body.style.trim() ? body.style.trim() : "Discovery";
-    const format = typeof body.format === "string" ? body.format : "portrait";
+    const style = STYLES.has(body.style) ? body.style : "Discovery";
+    const format = typeof body.format === "string" && FORMATS[body.format] ? body.format : "portrait";
+    const length = LENGTHS.has(String(body.length)) ? String(body.length) : "30";
+    const avatarId =
+      Number.isFinite(Number(body.avatarId)) && Number(body.avatarId) > 0
+        ? Number(body.avatarId)
+        : undefined;
+    const avatarType = body.avatarType === 1 ? 1 : 0;
+    const voiceId =
+      typeof body.voiceId === "string" && body.voiceId.trim().length <= 200
+        ? body.voiceId.trim() || undefined
+        : undefined;
     if (!/^https?:\/\/.+\..+/.test(url) || url.length > 2000) {
       return NextResponse.json({ error: "url produit valide requise (http/https)" }, { status: 400 });
-    }
-    if (format !== "portrait") {
-      return NextResponse.json(
-        { error: "format non validé pour la bêta fermée (portrait uniquement)" },
-        { status: 400 },
-      );
     }
 
     // Budget-guard maison : plafond DAILY_CAP/jour (jobs jogg créés aujourd'hui, hors failed).
@@ -73,7 +91,14 @@ export async function POST(request: NextRequest) {
     let productVideoId: string;
     try {
       const productId = await createProductFromUrl(url);
-      productVideoId = await createVideoFromProduct({ productId, style, aspectRatio: format });
+      productVideoId = await createVideoFromProduct({
+        productId,
+        style,
+        aspectRatio: format,
+        length,
+        ...(avatarId ? { avatarId, avatarType } : {}),
+        ...(voiceId ? { voiceId } : {}),
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[url-to-video] submit failed:", msg);
@@ -89,13 +114,16 @@ export async function POST(request: NextRequest) {
         engine_used: ENGINE,
         external_task_id: productVideoId,
         current_stage: "jogg_generating",
-        aspect_ratio: "9:16",
+        aspect_ratio: FORMATS[format],
         app_state: {
           engine: ENGINE,
           capability: CAPABILITY,
           url,
           style,
           format,
+          length,
+          ...(avatarId ? { avatar_id: avatarId, avatar_type: avatarType } : {}),
+          ...(voiceId ? { voice_id: voiceId } : {}),
           submitted_by: auth.user.email,
         },
       })
@@ -121,7 +149,45 @@ export async function GET(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth.response) return auth.response;
   const service = createServiceClient();
-  const id = new URL(request.url).searchParams.get("id");
+  const params = new URL(request.url).searchParams;
+
+  // Curated resources for the Product Ad customization step. This endpoint is
+  // admin-only while the workflow is in private beta, so account-owned custom
+  // avatars are never exposed to public users.
+  if (["avatars", "resources"].includes(params.get("action") ?? "")) {
+    try {
+      const [publicResult, customResult, photoResult, voiceResult] = await Promise.allSettled([
+        listPublicAvatars(),
+        listCustomAvatars(),
+        listPhotoAvatars(),
+        listVoices(),
+      ]);
+      const publicAvatars = publicResult.status === "fulfilled" ? publicResult.value.slice(0, 12) : [];
+      const ownedAvatars = [
+        ...(customResult.status === "fulfilled" ? customResult.value : []),
+        ...(photoResult.status === "fulfilled" ? photoResult.value : []),
+      ];
+      const seen = new Set<string>();
+      const avatars = [...ownedAvatars, ...publicAvatars]
+        .filter((avatar: JoggAvatar) => {
+          const key = `${avatar.type}:${avatar.id}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .slice(0, 36);
+      const voices = voiceResult.status === "fulfilled" ? voiceResult.value : [];
+      return NextResponse.json({ avatars, voices });
+    } catch (e) {
+      console.error("[url-to-video] resource catalog failed:", e);
+      return NextResponse.json(
+        { error: "Could not load customization options.", avatars: [], voices: [] },
+        { status: 502 },
+      );
+    }
+  }
+
+  const id = params.get("id");
   if (id) return statusResponse(service, id);
   const { data, error } = await service
     .from("jobs")

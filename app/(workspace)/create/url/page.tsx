@@ -4,7 +4,7 @@
 // Product pages use the validated Product Ad pipeline and open the standard job
 // result. Tutorial/news links keep the advanced Research handoff.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -23,12 +23,45 @@ import {
   ShoppingBag,
   Sparkles,
   Upload,
+  Volume2,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 type UrlMode = "product" | "tutorial" | "news";
+
+type ProductAdAvatar = {
+  id: number;
+  name: string;
+  gender: string;
+  thumbUrl: string | null;
+  type: 0 | 1;
+  kind: "public" | "custom" | "photo";
+};
+
+type ProductAdVoice = {
+  id: string;
+  name: string;
+  language: string;
+  gender: string;
+  previewUrl: string | null;
+};
+
+type ProductAdFormat = "portrait" | "square" | "landscape";
+type ProductAdStyle = "Discovery" | "Storytime";
+type ProductAdLength = "15" | "30" | "60";
+
+const PRODUCT_AD_FORMATS: { value: ProductAdFormat; label: string; ratio: string }[] = [
+  { value: "portrait", label: "Vertical", ratio: "9:16" },
+  { value: "square", label: "Square", ratio: "1:1" },
+  { value: "landscape", label: "Landscape", ratio: "16:9" },
+];
+
+const PRODUCT_AD_STYLES: { value: ProductAdStyle; label: string; description: string }[] = [
+  { value: "Discovery", label: "Product discovery", description: "Hook, benefits, call to action" },
+  { value: "Storytime", label: "Story-led", description: "A more personal narrative" },
+];
 
 // Simple intent choice. Each maps to a Research mode + a sensible auto-topic so the
 // user only has to paste a URL. Duration defaults to 30s (kept off the first screen).
@@ -160,6 +193,67 @@ export default function UrlToVideo() {
   const [loadingStep, setLoadingStep] = useState(0);
   const loadingSteps = mode === "product" ? PRODUCT_LOADING_STEPS : RESEARCH_LOADING_STEPS;
 
+  // Product Ad customization — presenter (avatar) + format + tone + length.
+  const [avatars, setAvatars] = useState<ProductAdAvatar[]>([]);
+  const [voices, setVoices] = useState<ProductAdVoice[]>([]);
+  const [avatarId, setAvatarId] = useState<number | null>(null);
+  const [avatarType, setAvatarType] = useState<0 | 1>(0);
+  const [voiceId, setVoiceId] = useState("");
+  const [resourcesLoading, setResourcesLoading] = useState(true);
+  const [previewingVoiceId, setPreviewingVoiceId] = useState<string | null>(null);
+  const voicePreviewRef = useRef<HTMLAudioElement | null>(null);
+  const [paFormat, setPaFormat] = useState<ProductAdFormat>("portrait");
+  const [paStyle, setPaStyle] = useState<ProductAdStyle>("Discovery");
+  const [paLength, setPaLength] = useState<ProductAdLength>("30");
+
+  // Load the presenter catalog once so the user can change who presents the ad.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        const res = await fetch("/api/admin/experiments/url-to-video?action=resources", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        const avatarList = Array.isArray(json.avatars) ? json.avatars : [];
+        const voiceList = Array.isArray(json.voices) ? json.voices : [];
+        if (!cancelled) {
+          setAvatars(avatarList);
+          setVoices(voiceList);
+        }
+      } catch {
+        /* presenter picker is optional — fall back to the default presenter */
+      } finally {
+        if (!cancelled) setResourcesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [supabase]);
+
+  useEffect(() => {
+    return () => voicePreviewRef.current?.pause();
+  }, []);
+
+  function selectAvatar(avatar: ProductAdAvatar | null) {
+    setAvatarId(avatar?.id ?? null);
+    setAvatarType(avatar?.type ?? 0);
+  }
+
+  function previewVoice() {
+    const voice = voices.find((item) => item.id === voiceId);
+    if (!voice?.previewUrl) return;
+    voicePreviewRef.current?.pause();
+    const audio = new Audio(voice.previewUrl);
+    voicePreviewRef.current = audio;
+    setPreviewingVoiceId(voice.id);
+    audio.onended = () => setPreviewingVoiceId(null);
+    audio.onerror = () => setPreviewingVoiceId(null);
+    void audio.play().catch(() => setPreviewingVoiceId(null));
+  }
+
   // Advance the guided loading steps while the plan is being created. The real
   // work is a single POST then a navigation, so we pace the first steps and let
   // createVideo() jump to the final "Open plan" step right before it routes.
@@ -215,8 +309,11 @@ export default function UrlToVideo() {
           body: JSON.stringify({
             action: "submit",
             url: cleanUrl,
-            style: "Discovery",
-            format: "portrait",
+            style: paStyle,
+            format: paFormat,
+            length: paLength,
+            ...(avatarId ? { avatarId, avatarType } : {}),
+            ...(voiceId ? { voiceId } : {}),
           }),
         });
         const json = await res.json().catch(() => ({}));
@@ -284,7 +381,7 @@ export default function UrlToVideo() {
         </h1>
         <p className="mx-auto mt-3 max-w-lg text-base leading-relaxed text-neutral-500">
           {mode === "product"
-            ? "Paste a product URL. AlphoGen turns it into a finished vertical video ad."
+            ? "Paste a product URL. Choose the presenter, voice, format, and tone before rendering."
             : "Paste an article or docs link. AlphoGen researches it and builds a ready-to-edit video plan."}
         </p>
       </motion.div>
@@ -319,6 +416,180 @@ export default function UrlToVideo() {
             );
           })}
         </div>
+
+        {mode === "product" && (
+          <section className="mb-4 border-y border-neutral-200 py-5 text-left" aria-label="Product ad settings">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-bold text-neutral-900">Presenter</h2>
+                <p className="mt-0.5 text-xs text-neutral-500">Choose who appears in the ad.</p>
+              </div>
+              {resourcesLoading && <Loader2 className="h-4 w-4 animate-spin text-neutral-400" />}
+            </div>
+
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
+              <button
+                type="button"
+                onClick={() => selectAvatar(null)}
+                aria-pressed={avatarId === null}
+                className={`flex w-20 shrink-0 flex-col items-center gap-1.5 rounded-lg border p-2 text-center transition ${
+                  avatarId === null
+                    ? "border-blue-500 bg-blue-50 text-blue-700"
+                    : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300"
+                }`}
+              >
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100">
+                  <Sparkles className="h-5 w-5" />
+                </span>
+                <span className="w-full truncate text-[11px] font-semibold">Automatic</span>
+              </button>
+              {avatars.map((avatar) => {
+                const selected = avatarId === avatar.id && avatarType === avatar.type;
+                return (
+                  <button
+                    key={`${avatar.type}:${avatar.id}`}
+                    type="button"
+                    onClick={() => selectAvatar(avatar)}
+                    aria-pressed={selected}
+                    title={avatar.name}
+                    className={`relative flex w-20 shrink-0 flex-col items-center gap-1.5 rounded-lg border p-2 text-center transition ${
+                      selected
+                        ? "border-blue-500 bg-blue-50 text-blue-700"
+                        : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300"
+                    }`}
+                  >
+                    {avatar.thumbUrl ? (
+                      // Remote catalog domains vary, so a native img keeps this picker provider-agnostic.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={avatar.thumbUrl}
+                        alt=""
+                        className="h-12 w-12 rounded-full bg-neutral-100 object-cover"
+                      />
+                    ) : (
+                      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-sm font-bold">
+                        {avatar.name.slice(0, 1).toUpperCase()}
+                      </span>
+                    )}
+                    <span className="w-full truncate text-[11px] font-semibold">{avatar.name}</span>
+                    {avatar.kind !== "public" && (
+                      <span className="absolute right-1 top-1 rounded bg-neutral-900 px-1 py-0.5 text-[8px] font-bold uppercase text-white">
+                        Yours
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="product-ad-voice" className="text-xs font-bold text-neutral-800">
+                  Voice
+                </label>
+                <div className="mt-1.5 flex gap-2">
+                  <select
+                    id="product-ad-voice"
+                    value={voiceId}
+                    onChange={(event) => setVoiceId(event.target.value)}
+                    className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-800 outline-none focus:border-blue-400"
+                  >
+                    <option value="">Automatic voice</option>
+                    {voices.map((voice) => (
+                      <option key={voice.id} value={voice.id}>
+                        {voice.name}{voice.language ? ` - ${voice.language}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={previewVoice}
+                    disabled={!voices.find((voice) => voice.id === voiceId)?.previewUrl}
+                    title="Preview voice"
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-neutral-200 text-neutral-600 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {previewingVoiceId === voiceId ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Volume2 className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="product-ad-style" className="text-xs font-bold text-neutral-800">
+                  Tone
+                </label>
+                <select
+                  id="product-ad-style"
+                  value={paStyle}
+                  onChange={(event) => setPaStyle(event.target.value as ProductAdStyle)}
+                  className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-800 outline-none focus:border-blue-400"
+                >
+                  {PRODUCT_AD_STYLES.map((style) => (
+                    <option key={style.value} value={style.value}>
+                      {style.label} - {style.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <fieldset>
+                <legend className="text-xs font-bold text-neutral-800">Format</legend>
+                <div className="mt-1.5 grid grid-cols-3 rounded-lg bg-neutral-100 p-1">
+                  {PRODUCT_AD_FORMATS.map((format) => (
+                    <button
+                      key={format.value}
+                      type="button"
+                      onClick={() => setPaFormat(format.value)}
+                      aria-pressed={paFormat === format.value}
+                      className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition ${
+                        paFormat === format.value
+                          ? "bg-white text-neutral-900 shadow-sm"
+                          : "text-neutral-500 hover:text-neutral-800"
+                      }`}
+                    >
+                      {format.label}
+                      <span className="ml-1 text-[9px] text-neutral-400">{format.ratio}</span>
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              <fieldset>
+                <legend className="text-xs font-bold text-neutral-800">Duration</legend>
+                <div className="mt-1.5 grid grid-cols-3 rounded-lg bg-neutral-100 p-1">
+                  {(["15", "30", "60"] as ProductAdLength[]).map((length) => (
+                    <button
+                      key={length}
+                      type="button"
+                      onClick={() => setPaLength(length)}
+                      aria-pressed={paLength === length}
+                      className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition ${
+                        paLength === length
+                          ? "bg-white text-neutral-900 shadow-sm"
+                          : "text-neutral-500 hover:text-neutral-800"
+                      }`}
+                    >
+                      {length}s
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
+
+            <p className="mt-4 text-xs text-neutral-500">
+              Need exact wording?{" "}
+              <Link href="/create/avatar" className="font-semibold text-neutral-800 underline underline-offset-2">
+                Avatar Video uses your script verbatim.
+              </Link>{" "}
+              Account presenters appear first. Adding a new face here will use a dedicated consented flow.
+            </p>
+          </section>
+        )}
 
         {/* URL field + primary CTA */}
         <div className="flex flex-col gap-2 rounded-2xl border border-neutral-200 bg-white p-2 shadow-sm sm:flex-row sm:items-center">
@@ -491,7 +762,7 @@ export default function UrlToVideo() {
             </p>
             <p className="mt-1 text-center text-xs text-neutral-500">
               {mode === "product"
-                ? "We are turning the product page into a finished vertical ad."
+                ? "We are turning the product page into a finished product ad."
                 : "This usually takes a few seconds."}
             </p>
             <ol className="mt-5 space-y-2.5">
