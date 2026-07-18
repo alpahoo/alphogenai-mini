@@ -20,6 +20,8 @@ import { triggerExtractLastFrame, triggerConcatScenes, triggerApplyVoiceover } f
 import { generateVoiceover, isTTSAvailable } from "@/lib/tts";
 import { uploadBufferToR2, downloadAndUploadToR2 } from "@/lib/r2";
 import { isJobFavorite, withJobFavorite } from "@/lib/job-favorite";
+import { getProductVideo } from "@/lib/jogg-client";
+import { settleJoggJob, type JoggJobRow } from "@/lib/jogg-poll-core";
 
 /**
  * Persist a direct-provider video output to R2. BytePlus / EvoLink / Atlas
@@ -40,9 +42,9 @@ async function persistFinalVideo(url: string, jobId: string): Promise<string> {
   }
 }
 
-// Give this route enough time to poll EvoLink, fire the next scene, and
-// trigger Modal helpers. No large file work happens here — only HTTP.
-export const maxDuration = 30;
+// Also allows the Product Ad lazy poll to persist a completed MP4 to R2 while
+// the result page is open. Scheduled cron remains the closed-tab fallback.
+export const maxDuration = 60;
 
 // If the previous scene has been done for longer than this without a
 // last_frame_url showing up, assume the extract trigger was lost and retry.
@@ -120,6 +122,28 @@ export async function GET(
     const isHeyGen = isHeyGenEngine(job.engine_used ?? "");
     const isBytePlus = isBytePlusEngine(job.engine_used ?? "");
     const isAtlas = isAtlasEngine(job.engine_used ?? "");
+    const isJogg = job.engine_used === "jogg";
+
+    // Keep an actively viewed Product Ad responsive. The scheduled cron is a
+    // closed-tab safety net and can be delayed by GitHub Actions scheduling.
+    if (isJogg && ["pending", "in_progress"].includes(String(job.status))) {
+      try {
+        await settleJoggJob(job as JoggJobRow, {
+          getProductVideo,
+          download: downloadAndUploadToR2,
+          updateJob: async (jobId, patch) => {
+            const { error } = await supabase.from("jobs").update(patch).eq("id", jobId);
+            return { error };
+          },
+        });
+      } catch (error) {
+        // Preserve the current state; the next page poll or cron retries.
+        console.warn(
+          `[jobs/status] URL-to-video lazy poll failed (job=${id}):`,
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
 
     // ── HeyGen final-lipsync stage (concat → ONE lipsync over the whole
     // video). Runs REGARDLESS of status, because Modal sets the job 'done'
