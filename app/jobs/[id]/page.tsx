@@ -622,12 +622,13 @@ export default function JobPage() {
   const isDone = job?.status === "done";
   const isAdmin = isAdminEmail(email);
   const isFailed = job?.status === "failed";
+  const isUrlToVideo = job?.engine_used === "jogg";
   const videoUrl = job ? (job.output_url_final || job.video_url) : null;
   const sceneCount = scenes.length || (job?.storyboard ? job.storyboard.length : 1);
   const failedScenes = scenes.filter((s) => s.status === "failed");
   const doneScenes = scenes.filter((s) => s.status === "done");
   const hasRetryableScenes = failedScenes.length > 0 && doneScenes.length > 0;
-  const stageOrder = buildStageOrder(sceneCount);
+  const stageOrder = isUrlToVideo ? ["jogg_generating", "done"] : buildStageOrder(sceneCount);
   const stageIdx = job?.current_stage ? stageOrder.indexOf(job.current_stage) : 0;
   const stageLabel = job?.current_stage ? getStageFriendlyLabel(job.current_stage) : "In queue...";
 
@@ -690,12 +691,15 @@ export default function JobPage() {
                     </div>
                     <h2 className="text-lg font-semibold mb-1">{stageLabel}</h2>
                     <p className="text-sm text-muted-foreground max-w-md">
-                      Your video is being generated.{" "}
-                      {sceneCount <= 1
-                        ? "This usually takes 3–5 minutes."
-                        : sceneCount <= 5
-                          ? `Generating ${sceneCount} scenes — estimated ${sceneCount * 4}–${sceneCount * 6} minutes.`
-                          : `Generating ${sceneCount} scenes — this may take ${Math.round(sceneCount * 4 / 60 * 10) / 10}–${Math.round(sceneCount * 6 / 60 * 10) / 10} hours. You can close this page and check back later.`}
+                      {isUrlToVideo
+                        ? "Your product page is being turned into a finished vertical ad. This usually takes 1–3 minutes."
+                        : <>Your video is being generated.{" "}
+                            {sceneCount <= 1
+                              ? "This usually takes 3–5 minutes."
+                              : sceneCount <= 5
+                                ? `Generating ${sceneCount} scenes — estimated ${sceneCount * 4}–${sceneCount * 6} minutes.`
+                                : `Generating ${sceneCount} scenes — this may take ${Math.round(sceneCount * 4 / 60 * 10) / 10}–${Math.round(sceneCount * 6 / 60 * 10) / 10} hours. You can close this page and check back later.`}
+                          </>}
                     </p>
                     {/* Scene progress: X/Y done */}
                     {scenes.length > 1 && (
@@ -710,7 +714,7 @@ export default function JobPage() {
                         ))}
                       </div>
                       <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
-                        <span>Step {Math.max(stageIdx + 1, 1)}/{stageOrder.length}</span>
+                        <span>{isUrlToVideo ? "Product Ad render" : `Step ${Math.max(stageIdx + 1, 1)}/${stageOrder.length}`}</span>
                         <span className="tabular-nums">{formatTime(elapsed)}</span>
                       </div>
                     </div>
@@ -925,7 +929,7 @@ export default function JobPage() {
                   <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
                     <div className="mb-3 flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center rounded-full bg-neutral-950 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
-                        Post-generation studio
+                        {isUrlToVideo ? "Product Ad result" : "Post-generation studio"}
                       </span>
                       <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
                         {job.status}
@@ -935,10 +939,10 @@ export default function JobPage() {
                       {job.prompt.length > 80 ? job.prompt.slice(0, 80) + "..." : job.prompt}
                     </h1>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-600">
-                      <span className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1"><Clock className="h-3 w-3" />{job.target_duration_seconds}s</span>
-                      <span className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1"><Layers className="h-3 w-3" />{sceneCount} scene{sceneCount > 1 ? "s" : ""}</span>
+                      <span className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1"><Clock className="h-3 w-3" />{isUrlToVideo ? "Automatic length" : `${job.target_duration_seconds}s`}</span>
+                      {!isUrlToVideo && <span className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1"><Layers className="h-3 w-3" />{sceneCount} scene{sceneCount > 1 ? "s" : ""}</span>}
                       <span className="flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1"><Cpu className="h-3 w-3" />{cleanModelName(getEngineDisplayName(job.engine_used))}</span>
-                      <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-700">{job.plan}</span>
+                      {!isUrlToVideo && <span className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-700">{job.plan}</span>}
                     </div>
                   </div>
 
@@ -1166,6 +1170,8 @@ function InfoCards({
   channelNames?: Record<string, string>;
   scenes?: JobScene[];
 }) {
+  const isUrlToVideo = job.engine_used === "jogg";
+
   return (
     <>
       {/* Status */}
@@ -1199,12 +1205,12 @@ function InfoCards({
         <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Production</h3>
         <div className="space-y-2.5 text-xs">
           <div className="flex justify-between gap-3"><span className="text-neutral-500">Model</span><span className="text-right font-medium">{cleanModelName(getEngineDisplayName(job.engine_used))}</span></div>
-          <div className="flex justify-between"><span className="text-neutral-500">Video duration</span><span className="font-medium">{job.target_duration_seconds}s</span></div>
-          <div className="flex justify-between"><span className="text-neutral-500">Scenes</span><span className="font-medium">{sceneCount}</span></div>
+          <div className="flex justify-between"><span className="text-neutral-500">Video duration</span><span className="font-medium">{isUrlToVideo ? "Automatic" : `${job.target_duration_seconds}s`}</span></div>
+          {!isUrlToVideo && <div className="flex justify-between"><span className="text-neutral-500">Scenes</span><span className="font-medium">{sceneCount}</span></div>}
           <div className="flex justify-between"><span className="text-neutral-500">Format</span><span className="font-medium">{job.aspect_ratio || "16:9"}</span></div>
-          <div className="flex justify-between"><span className="text-neutral-500">Captions</span><span className="font-medium capitalize">{job.caption_mode || "none"}</span></div>
-          <div className="flex justify-between"><span className="text-neutral-500">Plan</span><span className="font-medium capitalize">{job.plan}</span></div>
-          <div className="flex justify-between"><span className="text-neutral-500">Audio</span><span className="font-medium capitalize">{job.audio_mode || "auto"}</span></div>
+          <div className="flex justify-between"><span className="text-neutral-500">Captions</span><span className="font-medium capitalize">{isUrlToVideo ? "Automatic" : job.caption_mode || "none"}</span></div>
+          {!isUrlToVideo && <div className="flex justify-between"><span className="text-neutral-500">Plan</span><span className="font-medium capitalize">{job.plan}</span></div>}
+          <div className="flex justify-between"><span className="text-neutral-500">Audio</span><span className="font-medium capitalize">{isUrlToVideo ? "Included" : job.audio_mode || "auto"}</span></div>
           {job.voiceover_text && (
             <div className="flex justify-between">
               <span className="text-neutral-500">Voice-over</span>
@@ -1216,13 +1222,13 @@ function InfoCards({
           <div className="flex justify-between"><span className="text-neutral-500">Created</span><span className="font-medium text-[10px]">{formatDate(job.created_at)}</span></div>
         </div>
         {/* Admin-only cost tracking */}
-        {isAdmin && SHOW_COST_TRACKING_UI && (
+        {isAdmin && !isUrlToVideo && SHOW_COST_TRACKING_UI && (
           <JobCostBadge engine={job.engine_used} cost={job.estimated_cost_usd} />
         )}
       </div>
 
       {/* Admin-only: Provider credit balance */}
-      {isAdmin && adminCredits && (
+      {isAdmin && !isUrlToVideo && adminCredits && (
         <div className={`rounded-xl border p-4 ${
           adminCredits.status === "critical"
             ? "border-red-500/40 bg-red-500/5"
