@@ -73,20 +73,20 @@ export default function HomePage() {
     <main className="min-h-screen bg-[#f6f6f2] text-neutral-950">
       <section className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl items-center gap-10 px-5 py-12 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:py-20">
         <div>
-          <PremiumEyebrow icon={Sparkles}>AI video direction workspace</PremiumEyebrow>
+          <PremiumEyebrow icon={Sparkles}>Product video ads, from a URL</PremiumEyebrow>
           <h1 className="mt-7 max-w-4xl text-6xl font-semibold leading-[0.92] tracking-tight text-neutral-950 sm:text-7xl lg:text-8xl">
-            Direct AI video like a production studio.
+            Turn your product URL into a video ad.
           </h1>
           <p className="mt-6 max-w-xl text-base leading-7 text-neutral-600 sm:text-lg">
-            Plan the shots, attach the right references, generate, then turn the result
-            into social-ready outputs from one controlled workspace.
+            Paste a product link and get a ready-to-post video ad — script, visuals,
+            captions and your brand, done for you. No editing, no prompts.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
-              href="/create/story"
+              href="/create/url"
               className="inline-flex items-center gap-2 rounded-md bg-neutral-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
             >
-              Create with Director
+              Create a product ad
               <WandSparkles className="h-4 w-4" />
             </Link>
             <Link
