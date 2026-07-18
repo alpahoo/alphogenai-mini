@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
-import { createPhotoAvatarMotion, listVoices } from "@/lib/jogg-client";
+import {
+  createPhotoAvatarMotion,
+  listVoices,
+  uploadJoggAsset,
+} from "@/lib/jogg-client";
 import {
   classifyPresenterProviderError,
   signPresenterPortrait,
@@ -135,8 +139,15 @@ export async function POST(
     }
 
     try {
+      // Jogg's motion service intermittently rejects expiring third-party
+      // signed URLs with a generic 50000 error. Stage the private JPEG through
+      // its documented asset upload first, then animate the stable asset URL.
+      const providerImageUrl = await uploadJoggAsset({
+        sourceUrl: imageUrl,
+        filename: `${id}.jpg`,
+      });
       const task = await createPhotoAvatarMotion({
-        imageUrl,
+        imageUrl: providerImageUrl,
         name: row.name,
         voiceId,
         model: "2.0",

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 import { createServiceClient } from "@/lib/supabase/service";
-import { createPhotoAvatarMotion, listVoices } from "@/lib/jogg-client";
+import { createPhotoAvatarMotion, listVoices, uploadJoggAsset } from "@/lib/jogg-client";
 import {
   classifyPresenterProviderError,
   signPresenterPortrait,
@@ -14,6 +14,7 @@ vi.mock("@/lib/supabase/service", () => ({ createServiceClient: vi.fn() }));
 vi.mock("@/lib/jogg-client", () => ({
   createPhotoAvatarMotion: vi.fn(),
   listVoices: vi.fn(),
+  uploadJoggAsset: vi.fn(),
 }));
 vi.mock("@/lib/user-presenters", () => ({
   classifyPresenterProviderError: vi.fn(() => "generation_failed"),
@@ -70,6 +71,7 @@ function request(body: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   updates.length = 0;
+  vi.mocked(classifyPresenterProviderError).mockReturnValue("generation_failed");
   vi.mocked(getUserFromRequest).mockResolvedValue(USER);
   vi.mocked(signPresenterPortrait).mockResolvedValue("https://signed.example/image.jpg");
   vi.mocked(listVoices).mockResolvedValue([
@@ -80,6 +82,7 @@ beforeEach(() => {
     avatarId: "123",
     motionId: "motion-1",
   });
+  vi.mocked(uploadJoggAsset).mockResolvedValue("https://res.example/presenter.jpg");
 });
 
 describe("POST /api/presenters/[id]/generate", () => {
@@ -132,11 +135,15 @@ describe("POST /api/presenters/[id]/generate", () => {
     expect(createPhotoAvatarMotion).toHaveBeenCalledTimes(1);
     expect(createPhotoAvatarMotion).toHaveBeenCalledWith(
       expect.objectContaining({
-        imageUrl: "https://signed.example/image.jpg",
+        imageUrl: "https://res.example/presenter.jpg",
         voiceId: "voice-selected",
         model: "2.0",
       }),
     );
+    expect(uploadJoggAsset).toHaveBeenCalledWith({
+      sourceUrl: "https://signed.example/image.jpg",
+      filename: `${BASE.id}.jpg`,
+    });
     expect(updates[0]).toMatchObject({ status: "processing", external_task_id: null });
     expect(updates[1]).toMatchObject({
       status: "processing",
@@ -193,6 +200,28 @@ describe("POST /api/presenters/[id]/generate", () => {
     expect(updates.at(-1)).toMatchObject({
       status: "failed",
       error_message: "insufficient_credits",
+    });
+  });
+
+  it("does not start the paid motion task when asset staging fails", async () => {
+    const claimed = { ...BASE, status: "processing" };
+    const failed = { ...BASE, status: "failed", error_message: "generation_failed" };
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService([
+        { data: BASE, error: null },
+        { data: claimed, error: null },
+        { data: failed, error: null },
+      ]) as never,
+    );
+    vi.mocked(uploadJoggAsset).mockRejectedValue(new Error("asset transfer failed"));
+
+    const response = await POST(request(), { params: Promise.resolve({ id: BASE.id }) });
+
+    expect(response.status).toBe(502);
+    expect(createPhotoAvatarMotion).not.toHaveBeenCalled();
+    expect(updates.at(-1)).toMatchObject({
+      status: "failed",
+      error_message: "generation_failed",
     });
   });
 });

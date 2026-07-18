@@ -354,6 +354,67 @@ export interface JoggPhotoAvatarMotion {
   error?: string;
 }
 
+export interface UploadJoggAssetParams {
+  sourceUrl: string;
+  filename: string;
+  contentType?: string;
+}
+
+/**
+ * Copy one private, normalized presenter portrait into the provider's asset
+ * storage before asking the motion API to read it. The motion endpoint is
+ * unreliable with expiring third-party signed URLs; its own permanent
+ * asset_url is the documented input path.
+ */
+export async function uploadJoggAsset(
+  params: UploadJoggAssetParams,
+): Promise<string> {
+  const contentType = params.contentType ?? "image/jpeg";
+  const source = await fetch(params.sourceUrl, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!source.ok) {
+    throw new Error(`Presenter portrait download failed (${source.status})`);
+  }
+  const bytes = await source.arrayBuffer();
+  if (bytes.byteLength === 0 || bytes.byteLength > 10 * 1024 * 1024) {
+    throw new Error("Presenter portrait has an invalid file size");
+  }
+
+  const reservation = await fetch(`${JOGG_API}/upload/asset`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({
+      filename: params.filename,
+      content_type: contentType,
+      file_size: bytes.byteLength,
+    }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!reservation.ok) {
+    const body = await reservation.text().catch(() => reservation.statusText);
+    throw new Error(`Presenter asset reservation failed (${reservation.status}): ${body.slice(0, 200)}`);
+  }
+  const data = parseJoggEnvelope(await reservation.json(), "presenter asset upload");
+  const signUrl = typeof data.sign_url === "string" ? data.sign_url : "";
+  const assetUrl = typeof data.asset_url === "string" ? data.asset_url : "";
+  if (!signUrl || !assetUrl) {
+    throw new Error("Presenter asset upload returned incomplete URLs");
+  }
+
+  const upload = await fetch(signUrl, {
+    method: "PUT",
+    headers: { "Content-Type": contentType },
+    body: bytes,
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!upload.ok) {
+    throw new Error(`Presenter asset transfer failed (${upload.status})`);
+  }
+  return assetUrl;
+}
+
 /** Normalize the provider's photo-avatar status without leaking its shape. */
 export function parsePhotoAvatarMotion(
   data: Record<string, unknown>,

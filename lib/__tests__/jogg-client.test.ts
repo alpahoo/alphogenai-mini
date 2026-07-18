@@ -5,6 +5,7 @@ import {
   parseJoggEnvelope,
   parsePhotoAvatarMotion,
   parseProductVideo,
+  uploadJoggAsset,
 } from "../jogg-client";
 
 describe("product video aspect ratios", () => {
@@ -122,5 +123,71 @@ describe("parsePhotoAvatarMotion", () => {
     expect(
       parsePhotoAvatarMotion({ status: "queued", motion_id: "motion-later" }),
     ).toEqual({ status: "pending", motionId: "motion-later" });
+  });
+});
+
+describe("uploadJoggAsset", () => {
+  it("copies a private portrait through the provider's signed asset upload", async () => {
+    process.env.JOGG_API_KEY = "test-key";
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { "Content-Type": "image/jpeg" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            code: 0,
+            data: {
+              sign_url: "https://storage.example/upload",
+              asset_url: "https://res.example/presenter.jpg",
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    const assetUrl = await uploadJoggAsset({
+      sourceUrl: "https://private.example/signed.jpg",
+      filename: "presenter.jpg",
+    });
+
+    expect(assetUrl).toBe("https://res.example/presenter.jpg");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("https://api.jogg.ai/v2/upload/asset");
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      filename: "presenter.jpg",
+      content_type: "image/jpeg",
+      file_size: 3,
+    });
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("https://storage.example/upload");
+    expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({
+      method: "PUT",
+      headers: { "Content-Type": "image/jpeg" },
+    });
+    fetchMock.mockRestore();
+  });
+
+  it("refuses an incomplete provider upload reservation", async () => {
+    process.env.JOGG_API_KEY = "test-key";
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(new Uint8Array([1]), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: 0, data: { asset_url: "https://res.example/x.jpg" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+    await expect(
+      uploadJoggAsset({ sourceUrl: "https://private.example/x.jpg", filename: "x.jpg" }),
+    ).rejects.toThrow(/incomplete URLs/i);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockRestore();
   });
 });

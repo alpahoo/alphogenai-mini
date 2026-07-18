@@ -1027,7 +1027,7 @@ export default function UrlToVideo() {
                   <h2 className="text-lg font-bold text-neutral-900">Add my presenter</h2>
                 </div>
                 <p className="mt-2 text-sm text-neutral-500">
-                  Upload a clear, front-facing portrait. It stays private in your account.
+                  Upload a clear, front-facing portrait. It is used only to create presenters for your account.
                 </p>
               </div>
               <button
