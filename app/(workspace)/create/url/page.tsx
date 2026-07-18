@@ -1,11 +1,8 @@
 "use client";
 
-// T-1130c — URL to Video guided entry.
-// A clean, centered "paste a URL -> create a video" flow that hides the Research
-// complexity (no watchlists / sources / readiness / dashboard here). It reuses the
-// existing Research API: POST /api/research/jobs creates a research_job from the URL,
-// then we hand off to the existing plan workspace at /research/[id]. Research Studio
-// (/research) stays untouched and is linked discreetly for advanced users.
+// Guided URL entry.
+// Product pages use the validated Product Ad pipeline and open the standard job
+// result. Tutorial/news links keep the advanced Research handoff.
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -90,11 +87,18 @@ const EXAMPLES: { label: string; hint: string; url: string; mode: UrlMode; visua
 // Guided loading steps shown while the plan is being created. These mirror what
 // the Research API does behind the scenes (one POST /api/research/jobs, then the
 // plan opens) — purely informative so the wait feels guided, not a blank spinner.
-const LOADING_STEPS: { label: string; Icon: LucideIcon }[] = [
+const RESEARCH_LOADING_STEPS: { label: string; Icon: LucideIcon }[] = [
   { label: "Analyze URL", Icon: Search },
   { label: "Collect media", Icon: ImageIcon },
   { label: "Write script", Icon: FileText },
   { label: "Open plan", Icon: PlayCircle },
+];
+
+const PRODUCT_LOADING_STEPS: { label: string; Icon: LucideIcon }[] = [
+  { label: "Analyze product", Icon: Search },
+  { label: "Build ad", Icon: Sparkles },
+  { label: "Start video render", Icon: Film },
+  { label: "Open result", Icon: PlayCircle },
 ];
 
 // Meaningful example thumbnail (a tiny page mock per source type) over the soft
@@ -154,6 +158,7 @@ export default function UrlToVideo() {
   const [error, setError] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
+  const loadingSteps = mode === "product" ? PRODUCT_LOADING_STEPS : RESEARCH_LOADING_STEPS;
 
   // Advance the guided loading steps while the plan is being created. The real
   // work is a single POST then a navigation, so we pace the first steps and let
@@ -188,7 +193,7 @@ export default function UrlToVideo() {
     }
 
     setCreating(true);
-    setStatus("Creating your video plan…");
+    setStatus(mode === "product" ? "Creating your product ad…" : "Creating your video plan…");
     setError(null);
     let navigating = false;
     try {
@@ -197,6 +202,38 @@ export default function UrlToVideo() {
       } = await supabase.auth.getSession();
       if (!session?.access_token) {
         router.push("/login");
+        return;
+      }
+
+      if (mode === "product") {
+        const res = await fetch("/api/admin/experiments/url-to-video", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            action: "submit",
+            url: cleanUrl,
+            style: "Discovery",
+            format: "portrait",
+          }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (res.status === 403) {
+            throw new Error("Product Ad generation is currently available in the private beta.");
+          }
+          if (res.status === 429) {
+            throw new Error("The Product Ad beta reached its daily generation limit. Try again tomorrow.");
+          }
+          throw new Error("Could not start your Product Ad. Please try again.");
+        }
+
+        setStatus("Opening your video result…");
+        setLoadingStep(3);
+        navigating = true;
+        router.push(`/jobs/${json.jobId}`);
         return;
       }
 
@@ -243,11 +280,12 @@ export default function UrlToVideo() {
           URL to Video
         </span>
         <h1 className="mt-5 text-4xl font-extrabold tracking-tight text-neutral-900 sm:text-5xl">
-          Turn any link into a video
+          {mode === "product" ? "Turn a product page into an ad" : "Turn any link into a video"}
         </h1>
         <p className="mx-auto mt-3 max-w-lg text-base leading-relaxed text-neutral-500">
-          Paste a product page, article, or docs link. AlphoGen researches it and builds a
-          ready-to-edit video plan — no setup required.
+          {mode === "product"
+            ? "Paste a product URL. AlphoGen turns it into a finished vertical video ad."
+            : "Paste an article or docs link. AlphoGen researches it and builds a ready-to-edit video plan."}
         </p>
       </motion.div>
 
@@ -304,7 +342,7 @@ export default function UrlToVideo() {
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-neutral-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-wait disabled:opacity-80"
           >
             {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {creating ? "Working…" : "Create video"}
+            {creating ? "Working…" : mode === "product" ? "Create product ad" : "Create video"}
           </button>
         </div>
 
@@ -434,8 +472,7 @@ export default function UrlToVideo() {
         </div>
       )}
 
-      {/* Guided loading overlay — shows the steps the Research API runs behind the
-          scenes so the wait feels guided rather than a blank spinner. */}
+      {/* Guided loading overlay for the selected workflow. */}
       {creating && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 px-4 backdrop-blur-sm"
@@ -449,10 +486,16 @@ export default function UrlToVideo() {
             transition={{ duration: 0.25 }}
             className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl"
           >
-            <p className="text-center text-sm font-bold text-neutral-900">Building your video plan</p>
-            <p className="mt-1 text-center text-xs text-neutral-500">This usually takes a few seconds.</p>
+            <p className="text-center text-sm font-bold text-neutral-900">
+              {mode === "product" ? "Creating your product ad" : "Building your video plan"}
+            </p>
+            <p className="mt-1 text-center text-xs text-neutral-500">
+              {mode === "product"
+                ? "We are turning the product page into a finished vertical ad."
+                : "This usually takes a few seconds."}
+            </p>
             <ol className="mt-5 space-y-2.5">
-              {LOADING_STEPS.map((step, i) => {
+              {loadingSteps.map((step, i) => {
                 const done = i < loadingStep;
                 const active = i === loadingStep;
                 return (

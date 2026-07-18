@@ -78,6 +78,7 @@ const FRIENDLY_STAGES: Record<string, string> = {
   uploading: "Uploading result...",
   generating_audio: "Generating audio...",
   muxing_audio: "Mixing audio...",
+  jogg_generating: "Creating your product ad...",
   completed: "Complete",
   failed: "Failed",
 };
