@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { parseJoggEnvelope, parseProductVideo } from "../jogg-client";
+import {
+  parseJoggEnvelope,
+  parsePhotoAvatarMotion,
+  parseProductVideo,
+} from "../jogg-client";
 
 describe("parseJoggEnvelope", () => {
   it("returns data on code 0", () => {
@@ -41,5 +45,50 @@ describe("parseProductVideo", () => {
   });
   it("unknown non-terminal state → processing", () => {
     expect(parseProductVideo({ status: "rendering" }).status).toBe("processing");
+  });
+});
+
+describe("parsePhotoAvatarMotion", () => {
+  it("maps a completed presenter and keeps its reusable avatar id", () => {
+    expect(
+      parsePhotoAvatarMotion({
+        status: "success",
+        avatar_id: 1234,
+        motion_id: "motion-1",
+      }),
+    ).toEqual({
+      status: "completed",
+      avatarId: "1234",
+      motionId: "motion-1",
+    });
+  });
+
+  it("supports nested provider responses", () => {
+    expect(
+      parsePhotoAvatarMotion({
+        photo_avatar: {
+          avatar_status: "processing",
+          avatar_id: "55",
+          motion_id: "m-2",
+        },
+      }),
+    ).toEqual({
+      status: "processing",
+      avatarId: "55",
+      motionId: "m-2",
+    });
+  });
+
+  it("maps queued and failed states without exposing response internals", () => {
+    expect(parsePhotoAvatarMotion({ status: "queued" }).status).toBe("pending");
+    expect(
+      parsePhotoAvatarMotion({ status: "failed", error_message: "bad face" }),
+    ).toEqual({ status: "failed", error: "bad face" });
+  });
+
+  it("keeps a queued task before the reusable avatar id is assigned", () => {
+    expect(
+      parsePhotoAvatarMotion({ status: "queued", motion_id: "motion-later" }),
+    ).toEqual({ status: "pending", motionId: "motion-later" });
   });
 });

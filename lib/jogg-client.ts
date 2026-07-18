@@ -317,3 +317,112 @@ export async function listVoices(): Promise<JoggVoice[]> {
     }))
     .filter((voice) => voice.id.length > 0);
 }
+
+// ---------------------------------------------------------------------------
+// Account presenter creation (private likeness -> animated photo avatar)
+// ---------------------------------------------------------------------------
+
+export interface CreatePhotoAvatarMotionParams {
+  imageUrl: string;
+  name: string;
+  voiceId: string;
+  model?: "1.0" | "2.0" | "2.0-Pro" | "3.0";
+}
+
+export interface JoggPhotoAvatarMotion {
+  status: JoggStatus;
+  avatarId?: string;
+  motionId?: string;
+  error?: string;
+}
+
+/** Normalize the provider's photo-avatar status without leaking its shape. */
+export function parsePhotoAvatarMotion(
+  data: Record<string, unknown>,
+): JoggPhotoAvatarMotion {
+  const nested =
+    data.photo_avatar && typeof data.photo_avatar === "object"
+      ? (data.photo_avatar as Record<string, unknown>)
+      : data;
+  const rawStatus = String(
+    nested.status ?? nested.avatar_status ?? data.status ?? "",
+  ).toLowerCase();
+  const avatarId = nested.avatar_id ?? nested.id ?? data.avatar_id;
+  const motionId = nested.motion_id ?? data.motion_id;
+
+  if (
+    ["1", "completed", "complete", "success", "succeeded", "done", "ready"].includes(
+      rawStatus,
+    )
+  ) {
+    return {
+      status: "completed",
+      ...(avatarId !== undefined ? { avatarId: String(avatarId) } : {}),
+      ...(motionId !== undefined ? { motionId: String(motionId) } : {}),
+    };
+  }
+  if (["-1", "failed", "fail", "error", "cancelled", "canceled"].includes(rawStatus)) {
+    return {
+      status: "failed",
+      error: String(
+        nested.error_message ?? nested.message ?? data.message ?? "Presenter creation failed",
+      ),
+    };
+  }
+  return {
+    status: ["pending", "waiting", "queued", "0"].includes(rawStatus)
+      ? "pending"
+      : "processing",
+    ...(avatarId !== undefined ? { avatarId: String(avatarId) } : {}),
+    ...(motionId !== undefined ? { motionId: String(motionId) } : {}),
+  };
+}
+
+/**
+ * Animate one consented portrait. This is the only paid step in the account
+ * presenter flow (currently about two presenter-generation credits).
+ */
+export async function createPhotoAvatarMotion(
+  params: CreatePhotoAvatarMotionParams,
+): Promise<JoggPhotoAvatarMotion> {
+  const res = await fetch(`${JOGG_API}/photo_avatar/add_motion`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({
+      image_url: params.imageUrl,
+      name: params.name,
+      voice_id: params.voiceId,
+      model: params.model ?? "2.0",
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => res.statusText);
+    throw new Error(`Presenter creation failed (${res.status}): ${body.slice(0, 200)}`);
+  }
+  const result = parsePhotoAvatarMotion(
+    parseJoggEnvelope(await res.json(), "photo avatar motion"),
+  );
+  if (!result.motionId && result.status !== "completed") {
+    throw new Error("Presenter creation returned no task id");
+  }
+  // The reusable avatar id may only be assigned when the asynchronous motion
+  // task completes. Persist the task id now and let the status poll capture it.
+  return result;
+}
+
+/** Poll one photo-avatar motion task. This read does not consume credits. */
+export async function getPhotoAvatarMotion(
+  motionId: string,
+): Promise<JoggPhotoAvatarMotion> {
+  const query = new URLSearchParams({ motion_id: motionId });
+  const res = await fetch(`${JOGG_API}/photo_avatar?${query}`, {
+    headers: { "x-api-key": apiKey() },
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) throw new Error(`Presenter status failed (${res.status})`);
+  return parsePhotoAvatarMotion(
+    parseJoggEnvelope(await res.json(), "photo avatar status"),
+  );
+}

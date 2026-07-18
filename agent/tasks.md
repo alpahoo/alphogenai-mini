@@ -1,5 +1,12 @@
 # agent/tasks.md — Backlog partagé
 
+## T-1160 - Product Ad account presenters - DONE (2026-07-18, Codex)
+- Added a private, reusable account-presenter flow to `/create/url`: upload a consented portrait, normalize and deduplicate it, explicitly start one paid animation task, poll it, then select the resulting presenter for Product Ad.
+- Added `user_presenters`, private `user-presenters` storage, own-only RLS, signed image URLs, server-side ownership resolution, and provider-neutral public responses.
+- Paid-call guardrails: claim before spend, reuse ready/processing rows, persist asynchronous task ids before the final avatar id exists, and never automatically re-spend when tracking state is incomplete.
+- Migration applied to production manually in the correct AlphoGen Supabase project. No provider generation was run during QA.
+- Validation: 23/23 targeted tests, TypeScript clean, production build OK. Next optional step: one explicitly approved real portrait animation QA (about two presenter-generation credits).
+
 Format d'une tâche :
 - **[ID] Titre** — `status: todo|in_progress|blocked|done` · `owner: claude|codex|chatgpt|—`
   - Objectif :

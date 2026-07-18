@@ -1,3 +1,10 @@
+## 2026-07-18 - Codex - Product Ad account-owned presenters
+- Implemented the missing user-likeness path for Product Ad. A signed-in user can upload a JPG/PNG/WEBP portrait, provide explicit likeness consent, and create a reusable animated presenter instead of being limited to the provider catalog.
+- Portraits are magic-byte validated, require at least 512x512 pixels, normalized to private JPEG storage, SHA-256 deduplicated, and exposed only through signed URLs. The product API resolves presenter ownership server-side and never trusts a client-supplied external avatar id.
+- Presenter creation is a separate, explicit paid action. The row is claimed before the provider call, asynchronous task ids are retained even when the final avatar id arrives later, completed presenters are reused, and inconsistent processing state never triggers an automatic second spend.
+- Applied `20260718_create_user_presenters.sql` to the production AlphoGen Supabase project; the editor returned `Success. No rows returned`. No paid provider call was made.
+- Validation: 23/23 targeted Vitest tests, `npx tsc --noEmit`, and `npm run build` pass. New routes: `/api/presenters`, `/upload`, `/[id]/generate`, `/[id]/status`.
+
 ## 2026-07-17 - Codex - URL-to-Video/VEED review follow-up
 - Restored the historical Jogg cron response contract: write failures are again exposed as `errors`, while the internal settle outcome remains `error`. Added a regression test for the serialized shape.
 - Hardened the frozen VEED web worker after review: final `done` persistence is retried; if it still fails after a successful paid generation and R2 upload, the worker stores `veed_output_ready` with the durable R2 URL instead of marking the job failed. The next worker pass promotes that output to `done` without reopening VEED or spending again. If the database is completely unavailable, an ignored local recovery manifest preserves the output coordinates and is replayed automatically when the worker resumes.

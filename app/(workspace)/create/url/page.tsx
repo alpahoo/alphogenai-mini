@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
+  Camera,
   Check,
   FileText,
   Film,
@@ -21,8 +22,10 @@ import {
   PlayCircle,
   Search,
   ShoppingBag,
+  ShieldCheck,
   Sparkles,
   Upload,
+  UserPlus,
   Volume2,
   X,
 } from "lucide-react";
@@ -46,6 +49,16 @@ type ProductAdVoice = {
   language: string;
   gender: string;
   previewUrl: string | null;
+};
+
+type UserPresenter = {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  avatarId: number | null;
+  status: "uploaded" | "processing" | "ready" | "failed";
+  error: string | null;
+  createdAt: string;
 };
 
 type ProductAdFormat = "portrait" | "square" | "landscape";
@@ -195,9 +208,11 @@ export default function UrlToVideo() {
 
   // Product Ad customization — presenter (avatar) + format + tone + length.
   const [avatars, setAvatars] = useState<ProductAdAvatar[]>([]);
+  const [userPresenters, setUserPresenters] = useState<UserPresenter[]>([]);
   const [voices, setVoices] = useState<ProductAdVoice[]>([]);
   const [avatarId, setAvatarId] = useState<number | null>(null);
   const [avatarType, setAvatarType] = useState<0 | 1>(0);
+  const [presenterId, setPresenterId] = useState<string | null>(null);
   const [voiceId, setVoiceId] = useState("");
   const [resourcesLoading, setResourcesLoading] = useState(true);
   const [previewingVoiceId, setPreviewingVoiceId] = useState<string | null>(null);
@@ -205,6 +220,13 @@ export default function UrlToVideo() {
   const [paFormat, setPaFormat] = useState<ProductAdFormat>("portrait");
   const [paStyle, setPaStyle] = useState<ProductAdStyle>("Discovery");
   const [paLength, setPaLength] = useState<ProductAdLength>("30");
+  const [presenterOpen, setPresenterOpen] = useState(false);
+  const [presenterName, setPresenterName] = useState("");
+  const [presenterFile, setPresenterFile] = useState<File | null>(null);
+  const [presenterPreview, setPresenterPreview] = useState<string | null>(null);
+  const [presenterConsent, setPresenterConsent] = useState(false);
+  const [presenterCreating, setPresenterCreating] = useState(false);
+  const [presenterError, setPresenterError] = useState<string | null>(null);
 
   // Load the presenter catalog once so the user can change who presents the ad.
   useEffect(() => {
@@ -213,16 +235,26 @@ export default function UrlToVideo() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.access_token) return;
-        const res = await fetch("/api/admin/experiments/url-to-video?action=resources", {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-        if (!res.ok) return;
-        const json = await res.json();
+        const headers = { Authorization: "Bearer " + session.access_token };
+        const [resourcesResult, presentersResult] = await Promise.allSettled([
+          fetch("/api/admin/experiments/url-to-video?action=resources", { headers }),
+          fetch("/api/presenters", { headers }),
+        ]);
+        const resourcesResponse =
+          resourcesResult.status === "fulfilled" ? resourcesResult.value : null;
+        const presentersResponse =
+          presentersResult.status === "fulfilled" ? presentersResult.value : null;
+        const json = resourcesResponse?.ok ? await resourcesResponse.json() : {};
+        const presenterJson = presentersResponse?.ok ? await presentersResponse.json() : {};
         const avatarList = Array.isArray(json.avatars) ? json.avatars : [];
         const voiceList = Array.isArray(json.voices) ? json.voices : [];
+        const presenterList = Array.isArray(presenterJson.presenters)
+          ? presenterJson.presenters
+          : [];
         if (!cancelled) {
           setAvatars(avatarList);
           setVoices(voiceList);
+          setUserPresenters(presenterList);
         }
       } catch {
         /* presenter picker is optional — fall back to the default presenter */
@@ -238,8 +270,113 @@ export default function UrlToVideo() {
   }, []);
 
   function selectAvatar(avatar: ProductAdAvatar | null) {
+    setPresenterId(null);
     setAvatarId(avatar?.id ?? null);
     setAvatarType(avatar?.type ?? 0);
+  }
+
+  function selectUserPresenter(presenter: UserPresenter) {
+    if (presenter.status !== "ready" || !presenter.avatarId) return;
+    setPresenterId(presenter.id);
+    setAvatarId(presenter.avatarId);
+    setAvatarType(1);
+  }
+
+  function upsertUserPresenter(presenter: UserPresenter) {
+    setUserPresenters((current) => [
+      presenter,
+      ...current.filter((item) => item.id !== presenter.id),
+    ]);
+  }
+
+  useEffect(() => {
+    if (!presenterFile) {
+      setPresenterPreview(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(presenterFile);
+    setPresenterPreview(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [presenterFile]);
+
+  async function waitForPresenter(id: string, token: string) {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      const response = await fetch("/api/presenters/" + id + "/status", {
+        headers: { Authorization: "Bearer " + token },
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(json.error || "Could not check presenter status.");
+      const presenter = json.presenter as UserPresenter;
+      upsertUserPresenter(presenter);
+      if (presenter.status === "ready") return presenter;
+      if (presenter.status === "failed") {
+        throw new Error(presenter.error || "Presenter creation failed.");
+      }
+    }
+    throw new Error("Presenter creation is taking longer than expected. You can return later.");
+  }
+
+  function finishPresenter(presenter: UserPresenter) {
+    upsertUserPresenter(presenter);
+    selectUserPresenter(presenter);
+    setPresenterOpen(false);
+    setPresenterName("");
+    setPresenterFile(null);
+    setPresenterConsent(false);
+  }
+
+  async function createMyPresenter() {
+    if (!presenterFile || !presenterName.trim() || !presenterConsent) return;
+    setPresenterCreating(true);
+    setPresenterError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sign in to add a presenter.");
+      const token = session.access_token;
+      const form = new FormData();
+      form.set("file", presenterFile);
+      form.set("name", presenterName.trim());
+      form.set("consent", "true");
+      const uploadResponse = await fetch("/api/presenters/upload", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token },
+        body: form,
+      });
+      const uploadJson = await uploadResponse.json().catch(() => ({}));
+      if (!uploadResponse.ok) throw new Error(uploadJson.error || "Could not upload the portrait.");
+      let presenter = uploadJson.presenter as UserPresenter;
+      upsertUserPresenter(presenter);
+      if (presenter.status === "ready") {
+        finishPresenter(presenter);
+        return;
+      }
+
+      const generateResponse = await fetch("/api/presenters/" + presenter.id + "/generate", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ...(voiceId ? { voiceId } : {}) }),
+      });
+      const generateJson = await generateResponse.json().catch(() => ({}));
+      if (!generateResponse.ok) {
+        throw new Error(generateJson.error || "Could not create the animated presenter.");
+      }
+      presenter = generateJson.presenter as UserPresenter;
+      upsertUserPresenter(presenter);
+      if (presenter.status !== "ready") {
+        presenter = await waitForPresenter(presenter.id, token);
+      }
+      finishPresenter(presenter);
+    } catch (creationError) {
+      setPresenterError(
+        creationError instanceof Error ? creationError.message : "Could not create the presenter.",
+      );
+    } finally {
+      setPresenterCreating(false);
+    }
   }
 
   function previewVoice() {
@@ -313,6 +450,7 @@ export default function UrlToVideo() {
             format: paFormat,
             length: paLength,
             ...(avatarId ? { avatarId, avatarType } : {}),
+            ...(presenterId ? { presenterId } : {}),
             ...(voiceId ? { voiceId } : {}),
           }),
         });
@@ -443,8 +581,68 @@ export default function UrlToVideo() {
                 </span>
                 <span className="w-full truncate text-[11px] font-semibold">Automatic</span>
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPresenterError(null);
+                  setPresenterOpen(true);
+                }}
+                className="flex w-20 shrink-0 flex-col items-center gap-1.5 rounded-lg border border-dashed border-neutral-300 bg-white p-2 text-center text-neutral-700 transition hover:border-blue-400 hover:text-blue-700"
+              >
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-700">
+                  <UserPlus className="h-5 w-5" />
+                </span>
+                <span className="w-full text-[11px] font-semibold">Add mine</span>
+              </button>
+              {userPresenters.map((presenter) => {
+                const selected = presenterId === presenter.id;
+                const ready = presenter.status === "ready" && Boolean(presenter.avatarId);
+                return (
+                  <button
+                    key={presenter.id}
+                    type="button"
+                    onClick={() => selectUserPresenter(presenter)}
+                    disabled={!ready}
+                    aria-pressed={selected}
+                    title={ready ? presenter.name : presenter.status === "failed" ? presenter.error ?? "" : "Preparing presenter"}
+                    className={
+                      "relative flex w-20 shrink-0 flex-col items-center gap-1.5 rounded-lg border p-2 text-center transition " +
+                      (selected
+                        ? "border-blue-500 bg-blue-50 text-blue-700"
+                        : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300") +
+                      (!ready ? " cursor-wait opacity-65" : "")
+                    }
+                  >
+                    <span className="relative">
+                      {presenter.imageUrl ? (
+                        // Private signed URLs cannot be configured as a stable Next image domain.
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={presenter.imageUrl}
+                          alt=""
+                          className="h-12 w-12 rounded-full bg-neutral-100 object-cover"
+                        />
+                      ) : (
+                        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-sm font-bold">
+                          {presenter.name.slice(0, 1).toUpperCase()}
+                        </span>
+                      )}
+                      {presenter.status === "processing" && (
+                        <span className="absolute inset-0 flex items-center justify-center rounded-full bg-white/75">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        </span>
+                      )}
+                    </span>
+                    <span className="w-full truncate text-[11px] font-semibold">{presenter.name}</span>
+                    <span className="absolute right-1 top-1 rounded bg-neutral-900 px-1 py-0.5 text-[8px] font-bold uppercase text-white">
+                      Yours
+                    </span>
+                  </button>
+                );
+              })}
               {avatars.map((avatar) => {
-                const selected = avatarId === avatar.id && avatarType === avatar.type;
+                const selected =
+                  presenterId === null && avatarId === avatar.id && avatarType === avatar.type;
                 return (
                   <button
                     key={`${avatar.type}:${avatar.id}`}
@@ -691,6 +889,139 @@ export default function UrlToVideo() {
       </div>
 
       {/* Manual upload modal — routes to the existing Product / UGC studio (real media upload). */}
+      {presenterOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Add my presenter"
+          onClick={() => {
+            if (!presenterCreating) setPresenterOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-xl bg-blue-50 p-2 text-blue-700">
+                    <Camera className="h-5 w-5" />
+                  </span>
+                  <h2 className="text-lg font-bold text-neutral-900">Add my presenter</h2>
+                </div>
+                <p className="mt-2 text-sm text-neutral-500">
+                  Upload a clear, front-facing portrait. It stays private in your account.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPresenterOpen(false)}
+                disabled={presenterCreating}
+                aria-label="Close"
+                className="rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-40"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-[132px_1fr]">
+              <label className="flex aspect-square cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-50 text-neutral-500 transition hover:border-blue-400">
+                {presenterPreview ? (
+                  // Local object URL preview.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={presenterPreview} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="flex flex-col items-center gap-2 text-xs font-semibold">
+                    <Upload className="h-5 w-5" />
+                    Choose photo
+                  </span>
+                )}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="sr-only"
+                  disabled={presenterCreating}
+                  onChange={(event) => {
+                    setPresenterFile(event.target.files?.[0] ?? null);
+                    setPresenterError(null);
+                  }}
+                />
+              </label>
+              <div>
+                <label htmlFor="presenter-name" className="text-xs font-bold text-neutral-800">
+                  Presenter name
+                </label>
+                <input
+                  id="presenter-name"
+                  value={presenterName}
+                  onChange={(event) => setPresenterName(event.target.value)}
+                  disabled={presenterCreating}
+                  maxLength={120}
+                  placeholder="e.g. My presenter"
+                  className="mt-1.5 w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 disabled:bg-neutral-50"
+                />
+                <div className="mt-3 flex items-start gap-2 rounded-lg bg-neutral-50 p-3">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                  <label className="flex cursor-pointer gap-2 text-xs leading-relaxed text-neutral-600">
+                    <input
+                      type="checkbox"
+                      checked={presenterConsent}
+                      onChange={(event) => setPresenterConsent(event.target.checked)}
+                      disabled={presenterCreating}
+                      className="mt-0.5 h-4 w-4"
+                    />
+                    <span>
+                      I confirm that I own this image or have explicit permission from the person
+                      shown to create and use an AI presenter from their likeness.
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {presenterError && (
+              <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                {presenterError}
+              </p>
+            )}
+
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row-reverse">
+              <button
+                type="button"
+                onClick={createMyPresenter}
+                disabled={
+                  presenterCreating ||
+                  !presenterFile ||
+                  !presenterName.trim() ||
+                  !presenterConsent
+                }
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {presenterCreating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <UserPlus className="h-4 w-4" />
+                )}
+                {presenterCreating ? "Creating presenter..." : "Create animated presenter"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPresenterOpen(false)}
+                disabled={presenterCreating}
+                className="inline-flex flex-1 items-center justify-center rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-50 disabled:opacity-40"
+              >
+                Cancel
+              </button>
+            </div>
+            <p className="mt-3 text-center text-[11px] text-neutral-500">
+              Creating a new animated presenter uses about 2 presenter-generation credits.
+            </p>
+          </div>
+        </div>
+      )}
+
       {uploadOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"

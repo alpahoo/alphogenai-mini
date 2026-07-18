@@ -58,17 +58,54 @@ export async function POST(request: NextRequest) {
     const style = STYLES.has(body.style) ? body.style : "Discovery";
     const format = typeof body.format === "string" && FORMATS[body.format] ? body.format : "portrait";
     const length = LENGTHS.has(String(body.length)) ? String(body.length) : "30";
-    const avatarId =
+    let avatarId =
       Number.isFinite(Number(body.avatarId)) && Number(body.avatarId) > 0
         ? Number(body.avatarId)
         : undefined;
-    const avatarType = body.avatarType === 1 ? 1 : 0;
+    let avatarType: 0 | 1 = body.avatarType === 1 ? 1 : 0;
+    const rawPresenterId =
+      typeof body.presenterId === "string" && body.presenterId.length <= 100
+        ? body.presenterId.trim()
+        : "";
+    const presenterId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      rawPresenterId,
+    )
+      ? rawPresenterId
+      : "";
+    if (rawPresenterId && !presenterId) {
+      return NextResponse.json({ error: "Invalid presenter." }, { status: 400 });
+    }
     const voiceId =
       typeof body.voiceId === "string" && body.voiceId.trim().length <= 200
         ? body.voiceId.trim() || undefined
         : undefined;
     if (!/^https?:\/\/.+\..+/.test(url) || url.length > 2000) {
       return NextResponse.json({ error: "url produit valide requise (http/https)" }, { status: 400 });
+    }
+
+    // An account presenter is resolved server-side so a caller cannot submit
+    // another user's avatar id or an unfinished presenter.
+    if (presenterId) {
+      const { data: presenter, error: presenterError } = await service
+        .from("user_presenters")
+        .select("external_avatar_id, status")
+        .eq("id", presenterId)
+        .eq("user_id", auth.user.id)
+        .maybeSingle();
+      if (presenterError) {
+        return NextResponse.json({ error: "Could not validate the presenter." }, { status: 500 });
+      }
+      const resolvedId = Number(presenter?.external_avatar_id);
+      if (
+        !presenter ||
+        presenter.status !== "ready" ||
+        !Number.isFinite(resolvedId) ||
+        resolvedId <= 0
+      ) {
+        return NextResponse.json({ error: "Presenter is not ready." }, { status: 400 });
+      }
+      avatarId = resolvedId;
+      avatarType = 1;
     }
 
     // Budget-guard maison : plafond DAILY_CAP/jour (jobs jogg créés aujourd'hui, hors failed).
@@ -123,6 +160,7 @@ export async function POST(request: NextRequest) {
           format,
           length,
           ...(avatarId ? { avatar_id: avatarId, avatar_type: avatarType } : {}),
+          ...(presenterId ? { presenter_id: presenterId } : {}),
           ...(voiceId ? { voice_id: voiceId } : {}),
           submitted_by: auth.user.email,
         },
