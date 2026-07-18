@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { createPhotoAvatarMotion, listVoices } from "@/lib/jogg-client";
-import { signPresenterPortrait, toPublicPresenter } from "@/lib/user-presenters";
+import {
+  classifyPresenterProviderError,
+  signPresenterPortrait,
+  toPublicPresenter,
+} from "@/lib/user-presenters";
 import { POST } from "./route";
 
 vi.mock("@/lib/podcast/auth", () => ({ getUserFromRequest: vi.fn() }));
@@ -12,6 +16,7 @@ vi.mock("@/lib/jogg-client", () => ({
   listVoices: vi.fn(),
 }));
 vi.mock("@/lib/user-presenters", () => ({
+  classifyPresenterProviderError: vi.fn(() => "generation_failed"),
   signPresenterPortrait: vi.fn(),
   toPublicPresenter: vi.fn(async (_service, row) => ({
     id: row.id,
@@ -163,6 +168,31 @@ describe("POST /api/presenters/[id]/generate", () => {
       status: "processing",
       external_avatar_id: null,
       external_task_id: "motion-queued",
+    });
+  });
+
+  it("persists a useful failure code without exposing provider details", async () => {
+    const claimed = { ...BASE, status: "processing" };
+    const failed = { ...BASE, status: "failed", error_message: "insufficient_credits" };
+    vi.mocked(createServiceClient).mockReturnValue(
+      makeService([
+        { data: BASE, error: null },
+        { data: claimed, error: null },
+        { data: failed, error: null },
+      ]) as never,
+    );
+    vi.mocked(createPhotoAvatarMotion).mockRejectedValue(new Error("private provider error"));
+    vi.mocked(classifyPresenterProviderError).mockReturnValue("insufficient_credits");
+
+    const response = await POST(request(), { params: Promise.resolve({ id: BASE.id }) });
+    const json = await response.json();
+
+    expect(response.status).toBe(502);
+    expect(json.error).toMatch(/credits are currently unavailable/i);
+    expect(json.error).not.toMatch(/provider/i);
+    expect(updates.at(-1)).toMatchObject({
+      status: "failed",
+      error_message: "insufficient_credits",
     });
   });
 });

@@ -1,9 +1,41 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
+  createVideoFromProduct,
+  normalizeJoggAvatarAspectRatio,
   parseJoggEnvelope,
   parsePhotoAvatarMotion,
   parseProductVideo,
 } from "../jogg-client";
+
+describe("product video aspect ratios", () => {
+  it("normalizes provider aspect-ratio values", () => {
+    expect(normalizeJoggAvatarAspectRatio(0)).toBe("portrait");
+    expect(normalizeJoggAvatarAspectRatio("1")).toBe("landscape");
+    expect(normalizeJoggAvatarAspectRatio(2)).toBe("square");
+    expect(normalizeJoggAvatarAspectRatio("unknown")).toBeNull();
+  });
+
+  it.each([
+    ["portrait", 1768],
+    ["landscape", 1756],
+    ["square", 204],
+  ] as const)("uses a compatible automatic avatar for %s", async (aspectRatio, avatarId) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: 0, data: { product_video_id: "video-1" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    process.env.JOGG_API_KEY = "test-key";
+
+    await createVideoFromProduct({ productId: "product-1", aspectRatio });
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body.video_spec.aspect_ratio).toBe(aspectRatio);
+    expect(body.avatar).toEqual({ id: avatarId, type: 0 });
+    fetchMock.mockRestore();
+  });
+});
 
 describe("parseJoggEnvelope", () => {
   it("returns data on code 0", () => {

@@ -25,9 +25,6 @@
 
 const JOGG_API = "https://api.jogg.ai/v2";
 
-/** Default public avatar used in the winning POC ("Autumn"). Overridable. */
-const DEFAULT_AVATAR_ID = 1768;
-
 function apiKey(): string {
   const key = process.env.JOGG_API_KEY;
   if (!key) throw new Error("JOGG_API_KEY not configured");
@@ -100,7 +97,7 @@ export interface CreateVideoParams {
   length?: string;
   /** Burn captions. Default true. */
   caption?: boolean;
-  /** Public/custom avatar id. Default DEFAULT_AVATAR_ID (Autumn). */
+  /** Public/custom avatar id. Defaults to a public avatar matching the format. */
   avatarId?: number;
   /** 0 = public avatar, 1 = custom/photo avatar. Default 0. */
   avatarType?: 0 | 1;
@@ -108,6 +105,21 @@ export interface CreateVideoParams {
   voiceId?: string;
   /** Optional background music id (from GET /musics). */
   musicId?: string;
+}
+
+export type JoggAspectRatio = "portrait" | "landscape" | "square";
+
+const DEFAULT_AVATAR_IDS: Record<JoggAspectRatio, number> = {
+  portrait: 1768,
+  landscape: 1756,
+  square: 204,
+};
+
+export function normalizeJoggAvatarAspectRatio(value: unknown): JoggAspectRatio | null {
+  if (value === 0 || value === "0" || value === "portrait") return "portrait";
+  if (value === 1 || value === "1" || value === "landscape") return "landscape";
+  if (value === 2 || value === "2" || value === "square") return "square";
+  return null;
 }
 
 /**
@@ -120,15 +132,16 @@ export interface CreateVideoParams {
 export async function createVideoFromProduct(
   params: CreateVideoParams,
 ): Promise<string> {
+  const aspectRatio = normalizeJoggAvatarAspectRatio(params.aspectRatio) ?? "portrait";
   const body: Record<string, unknown> = {
     product_id: params.productId,
     video_spec: {
-      aspect_ratio: params.aspectRatio ?? "portrait",
+      aspect_ratio: aspectRatio,
       length: params.length ?? "30",
       caption: params.caption ?? true,
     },
     avatar: {
-      id: params.avatarId ?? DEFAULT_AVATAR_ID,
+      id: params.avatarId ?? DEFAULT_AVATAR_IDS[aspectRatio],
       type: params.avatarType ?? 0,
     },
     script: { style: params.style ?? "Discovery", language: params.language ?? "french" },
@@ -224,6 +237,7 @@ export interface JoggAvatar {
   thumbUrl: string | null;
   type: 0 | 1;
   kind: JoggAvatarKind;
+  aspectRatio: JoggAspectRatio | null;
 }
 
 export interface JoggVoice {
@@ -272,6 +286,10 @@ async function listAvatarCollection(
         null,
       type: (kind === "public" ? 0 : 1) as 0 | 1,
       kind,
+      aspectRatio:
+        kind === "public"
+          ? normalizeJoggAvatarAspectRatio(avatar.aspect_ratio)
+          : "portrait",
     }))
     .filter((avatar) => Number.isFinite(avatar.id));
 }

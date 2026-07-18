@@ -112,6 +112,23 @@ describe("POST /api/presenters/upload", () => {
     expect((await response.json()).error).toMatch(/512 x 512/);
   });
 
+  it("rejects direct uploads above the Vercel-safe request limit", async () => {
+    const response = await POST(
+      request({
+        file: {
+          type: "image/jpeg",
+          size: 4 * 1024 * 1024 + 1,
+          arrayBuffer: vi.fn(),
+        },
+        name: "My Presenter",
+        consent: "true",
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toMatch(/4 MB/);
+    expect(uploaded).toHaveLength(0);
+  });
+
   it("normalizes, privately stores, and records a consented portrait", async () => {
     const response = await POST(
       request({ file: await imageFile(), name: "My Presenter", consent: "true" }),

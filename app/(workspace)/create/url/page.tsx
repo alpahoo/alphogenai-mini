@@ -41,6 +41,7 @@ type ProductAdAvatar = {
   thumbUrl: string | null;
   type: 0 | 1;
   kind: "public" | "custom" | "photo";
+  aspectRatio: ProductAdFormat | null;
 };
 
 type ProductAdVoice = {
@@ -193,6 +194,57 @@ function isValidHttpUrl(value: string) {
   return /^https?:\/\/\S+\.\S+/.test(value.trim());
 }
 
+const PRESENTER_UPLOAD_MAX_BYTES = 3.5 * 1024 * 1024;
+
+async function preparePresenterImage(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Choose a JPG, PNG, or WEBP portrait.");
+  }
+
+  const bitmap = await createImageBitmap(file).catch(() => null);
+  if (!bitmap) {
+    throw new Error("This image format could not be read. Use JPG, PNG, or WEBP.");
+  }
+  try {
+    if (bitmap.width < 512 || bitmap.height < 512) {
+      throw new Error("Use a clear portrait of at least 512 x 512 pixels.");
+    }
+
+    // Product Ad presenter avatars are portrait assets. Normalizing in the
+    // browser keeps the request below Vercel's body limit and gives the
+    // animation provider a predictable 9:16 JPEG.
+    const width = 1080;
+    const height = 1920;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Could not prepare this portrait.");
+    context.fillStyle = "#f5f5f5";
+    context.fillRect(0, 0, width, height);
+    const scale = Math.max(width / bitmap.width, height / bitmap.height);
+    const drawWidth = bitmap.width * scale;
+    const drawHeight = bitmap.height * scale;
+    context.drawImage(
+      bitmap,
+      (width - drawWidth) / 2,
+      (height - drawHeight) / 2,
+      drawWidth,
+      drawHeight,
+    );
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.88),
+    );
+    if (!blob || blob.size > PRESENTER_UPLOAD_MAX_BYTES) {
+      throw new Error("This portrait is still too large after preparation. Try a smaller image.");
+    }
+    return new File([blob], "presenter.jpg", { type: "image/jpeg" });
+  } finally {
+    bitmap.close();
+  }
+}
+
 export default function UrlToVideo() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -226,6 +278,7 @@ export default function UrlToVideo() {
   const [presenterPreview, setPresenterPreview] = useState<string | null>(null);
   const [presenterConsent, setPresenterConsent] = useState(false);
   const [presenterCreating, setPresenterCreating] = useState(false);
+  const [retryingPresenterId, setRetryingPresenterId] = useState<string | null>(null);
   const [presenterError, setPresenterError] = useState<string | null>(null);
 
   // Load the presenter catalog once so the user can change who presents the ad.
@@ -273,6 +326,8 @@ export default function UrlToVideo() {
     setPresenterId(null);
     setAvatarId(avatar?.id ?? null);
     setAvatarType(avatar?.type ?? 0);
+    if (avatar?.aspectRatio) setPaFormat(avatar.aspectRatio);
+    setError(null);
   }
 
   function selectUserPresenter(presenter: UserPresenter) {
@@ -280,6 +335,23 @@ export default function UrlToVideo() {
     setPresenterId(presenter.id);
     setAvatarId(presenter.avatarId);
     setAvatarType(1);
+    setPaFormat("portrait");
+    setError(null);
+  }
+
+  function selectProductFormat(format: ProductAdFormat) {
+    setPaFormat(format);
+    const selectedAvatar = avatars.find(
+      (avatar) => avatar.id === avatarId && avatar.type === avatarType,
+    );
+    if (presenterId || (selectedAvatar && selectedAvatar.aspectRatio !== format)) {
+      // A user presenter is portrait, and provider avatars can also be tied to
+      // one aspect ratio. Automatic always selects a compatible default.
+      setPresenterId(null);
+      setAvatarId(null);
+      setAvatarType(0);
+    }
+    setError(null);
   }
 
   function upsertUserPresenter(presenter: UserPresenter) {
@@ -334,8 +406,9 @@ export default function UrlToVideo() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Sign in to add a presenter.");
       const token = session.access_token;
+      const preparedFile = await preparePresenterImage(presenterFile);
       const form = new FormData();
-      form.set("file", presenterFile);
+      form.set("file", preparedFile);
       form.set("name", presenterName.trim());
       form.set("consent", "true");
       const uploadResponse = await fetch("/api/presenters/upload", {
@@ -376,6 +449,35 @@ export default function UrlToVideo() {
       );
     } finally {
       setPresenterCreating(false);
+    }
+  }
+
+  async function retryUserPresenter(presenter: UserPresenter) {
+    if (presenter.status !== "failed" || retryingPresenterId) return;
+    setRetryingPresenterId(presenter.id);
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sign in to retry this presenter.");
+      const token = session.access_token;
+      const response = await fetch("/api/presenters/" + presenter.id + "/generate", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ...(voiceId ? { voiceId } : {}) }),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(json.error || "Could not retry this presenter.");
+      let updated = json.presenter as UserPresenter;
+      upsertUserPresenter(updated);
+      if (updated.status !== "ready") updated = await waitForPresenter(updated.id, token);
+      finishPresenter(updated);
+    } catch (retryError) {
+      setError(retryError instanceof Error ? retryError.message : "Could not retry this presenter.");
+    } finally {
+      setRetryingPresenterId(null);
     }
   }
 
@@ -462,7 +564,11 @@ export default function UrlToVideo() {
           if (res.status === 429) {
             throw new Error("The Product Ad beta reached its daily generation limit. Try again tomorrow.");
           }
-          throw new Error("Could not start your Product Ad. Please try again.");
+          throw new Error(
+            typeof json.error === "string"
+              ? json.error
+              : "Could not start your Product Ad. Please try again.",
+          );
         }
 
         setStatus("Opening your video result…");
@@ -597,12 +703,14 @@ export default function UrlToVideo() {
               {userPresenters.map((presenter) => {
                 const selected = presenterId === presenter.id;
                 const ready = presenter.status === "ready" && Boolean(presenter.avatarId);
+                const failed = presenter.status === "failed";
+                const retrying = retryingPresenterId === presenter.id;
                 return (
                   <button
                     key={presenter.id}
                     type="button"
-                    onClick={() => selectUserPresenter(presenter)}
-                    disabled={!ready}
+                    onClick={() => failed ? void retryUserPresenter(presenter) : selectUserPresenter(presenter)}
+                    disabled={(!ready && !failed) || retrying}
                     aria-pressed={selected}
                     title={ready ? presenter.name : presenter.status === "failed" ? presenter.error ?? "" : "Preparing presenter"}
                     className={
@@ -610,7 +718,8 @@ export default function UrlToVideo() {
                       (selected
                         ? "border-blue-500 bg-blue-50 text-blue-700"
                         : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300") +
-                      (!ready ? " cursor-wait opacity-65" : "")
+                      (!ready && !failed ? " cursor-wait opacity-65" : "") +
+                      (failed ? " border-red-200 bg-red-50/40 text-red-700 hover:border-red-300" : "")
                     }
                   >
                     <span className="relative">
@@ -632,8 +741,14 @@ export default function UrlToVideo() {
                           <Loader2 className="h-4 w-4 animate-spin" />
                         </span>
                       )}
+                      {retrying && (
+                        <span className="absolute inset-0 flex items-center justify-center rounded-full bg-white/80">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        </span>
+                      )}
                     </span>
                     <span className="w-full truncate text-[11px] font-semibold">{presenter.name}</span>
+                    {failed && <span className="text-[9px] font-bold uppercase">Retry</span>}
                     <span className="absolute right-1 top-1 rounded bg-neutral-900 px-1 py-0.5 text-[8px] font-bold uppercase text-white">
                       Yours
                     </span>
@@ -742,7 +857,7 @@ export default function UrlToVideo() {
                     <button
                       key={format.value}
                       type="button"
-                      onClick={() => setPaFormat(format.value)}
+                      onClick={() => selectProductFormat(format.value)}
                       aria-pressed={paFormat === format.value}
                       className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition ${
                         paFormat === format.value
@@ -944,7 +1059,8 @@ export default function UrlToVideo() {
                   className="sr-only"
                   disabled={presenterCreating}
                   onChange={(event) => {
-                    setPresenterFile(event.target.files?.[0] ?? null);
+                    const file = event.target.files?.[0] ?? null;
+                    setPresenterFile(file);
                     setPresenterError(null);
                   }}
                 />

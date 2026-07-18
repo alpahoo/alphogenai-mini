@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 import { createPhotoAvatarMotion, listVoices } from "@/lib/jogg-client";
 import {
+  classifyPresenterProviderError,
   signPresenterPortrait,
   toPublicPresenter,
   type UserPresenterRow,
@@ -163,12 +164,21 @@ export async function POST(
       });
     } catch (providerError) {
       console.error("[presenters/generate] provider call failed:", providerError);
+      const failureCode = classifyPresenterProviderError(providerError);
       await persistProviderState(service, id, user.id, {
         status: "failed",
-        error_message: "generation_failed",
+        error_message: failureCode,
       });
+      const publicError =
+        failureCode === "insufficient_credits"
+          ? "Animated presenter credits are currently unavailable."
+          : failureCode === "feature_unavailable"
+            ? "Animated presenter creation is not enabled for this account yet."
+            : failureCode === "invalid_portrait"
+              ? "This portrait could not be animated. Try a clear, front-facing photo."
+              : "Presenter creation could not be started. No completed presenter was saved.";
       return NextResponse.json(
-        { error: "Presenter creation could not be started. No completed presenter was saved." },
+        { error: publicError },
         { status: 502 },
       );
     }

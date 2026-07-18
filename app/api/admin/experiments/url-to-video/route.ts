@@ -139,6 +139,16 @@ export async function POST(request: NextRequest) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error("[url-to-video] submit failed:", msg);
+      if (/aspect_ratio is inconsistent/i.test(msg)) {
+        return NextResponse.json(
+          {
+            error:
+              "The selected presenter does not support this video format. Choose Automatic or a matching presenter.",
+            errorCode: "presenter_format_mismatch",
+          },
+          { status: 400 },
+        );
+      }
       return NextResponse.json({ error: msg }, { status: 502 });
     }
 

@@ -14,7 +14,10 @@ import {
 
 export const maxDuration = 30;
 
-const MAX_SIZE = 10 * 1024 * 1024;
+// Vercel rejects serverless request bodies above roughly 4.5 MB before this
+// route runs. The client normalizes photos first; this guard keeps direct API
+// callers below the platform limit too.
+const MAX_SIZE = 4 * 1024 * 1024;
 const MIN_DIMENSION = 512;
 const SELECT =
   "id, user_id, name, portrait_path, thumb_path, image_sha256, external_avatar_id, external_task_id, status, error_message, created_at, updated_at";
@@ -47,7 +50,7 @@ export async function POST(request: NextRequest) {
       );
     }
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: "Image is too large (10 MB maximum)." }, { status: 400 });
+      return NextResponse.json({ error: "Image is too large (4 MB maximum)." }, { status: 400 });
     }
 
     const input = Buffer.from(await file.arrayBuffer());
@@ -81,13 +84,17 @@ export async function POST(request: NextRequest) {
     const sha256 = createHash("sha256").update(normalized).digest("hex");
     const service = createServiceClient();
 
-    const { data: existing } = await service
+    const { data: existing, error: existingError } = await service
       .from("user_presenters")
       .select(SELECT)
       .eq("user_id", user.id)
       .eq("image_sha256", sha256)
       .neq("status", "removed")
       .maybeSingle();
+    if (existingError) {
+      console.error("[presenters/upload] duplicate lookup failed:", existingError);
+      return NextResponse.json({ error: "Could not check the portrait." }, { status: 500 });
+    }
     if (existing) {
       return NextResponse.json({
         presenter: await toPublicPresenter(service, existing as UserPresenterRow),

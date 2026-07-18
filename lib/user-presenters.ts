@@ -52,8 +52,29 @@ export async function toPublicPresenter(service: ServiceClient, row: UserPresent
     status: row.status,
     error:
       row.status === "failed"
-        ? "Presenter creation could not be completed. You can try again."
+        ? presenterFailureMessage(row.error_message)
         : null,
     createdAt: row.created_at,
   };
+}
+
+export function classifyPresenterProviderError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/18020|insufficient credit/i.test(message)) return "insufficient_credits";
+  if (/18025|no permission/i.test(message)) return "feature_unavailable";
+  if (/40000|parameter error|image|portrait|face/i.test(message)) return "invalid_portrait";
+  return "generation_failed";
+}
+
+export function presenterFailureMessage(code: string | null) {
+  if (code === "insufficient_credits") {
+    return "Animated presenter credits are currently unavailable. You can retry after the account is topped up.";
+  }
+  if (code === "feature_unavailable") {
+    return "Animated presenter creation is not enabled for this account yet.";
+  }
+  if (code === "invalid_portrait") {
+    return "This portrait could not be animated. Try a clear, front-facing photo.";
+  }
+  return "Presenter creation could not be completed. You can retry.";
 }

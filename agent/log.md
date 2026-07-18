@@ -1,3 +1,9 @@
+## 2026-07-18 - Codex - Product Ad presenter/upload regression fix
+- Diagnosed the production Product Ad submit failure from Vercel logs: provider code `18022` reported that the selected portrait presenter did not match the requested landscape aspect ratio. Automatic mode now chooses a format-compatible public presenter; selecting a catalog or account presenter synchronizes its format, and changing to an incompatible format safely falls back to Automatic.
+- Presenter photos are now decoded, validated, center-cropped to a predictable 9:16 JPEG, and compressed below Vercel's request-body ceiling in the browser before upload. The API guard and its message now correctly enforce 4 MB for direct callers.
+- Failed account presenter cards are no longer inert: they expose an explicit Retry action. New provider failures retain a product-safe reason (`insufficient_credits`, `feature_unavailable`, `invalid_portrait`, or generic) and surface useful copy without exposing provider identity.
+- Product Ad submit now displays the server's actionable format error instead of replacing every failure with a generic message. Validation: 29/29 targeted tests, `npx tsc --noEmit`, production build, and diff-check pass. No paid provider action was run.
+
 ## 2026-07-18 - Codex - Product Ad account-owned presenters
 - Implemented the missing user-likeness path for Product Ad. A signed-in user can upload a JPG/PNG/WEBP portrait, provide explicit likeness consent, and create a reusable animated presenter instead of being limited to the provider catalog.
 - Portraits are magic-byte validated, require at least 512x512 pixels, normalized to private JPEG storage, SHA-256 deduplicated, and exposed only through signed URLs. The product API resolves presenter ownership server-side and never trusts a client-supplied external avatar id.
