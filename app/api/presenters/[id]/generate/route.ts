@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 import {
-  createPhotoAvatarMotion,
+  generatePhotoAvatar,
   listVoices,
   uploadJoggAsset,
 } from "@/lib/jogg-client";
 import {
   classifyPresenterProviderError,
+  encodePresenterProviderTask,
   signPresenterPortrait,
   toPublicPresenter,
   type UserPresenterRow,
@@ -87,6 +88,7 @@ export async function POST(
     }
 
     const body = await request.json().catch(() => ({}));
+    const gender = body.gender === "Female" ? "Female" : "Male";
     let voiceId =
       typeof body.voiceId === "string" && body.voiceId.trim().length <= 200
         ? body.voiceId.trim()
@@ -146,23 +148,28 @@ export async function POST(
         sourceUrl: imageUrl,
         filename: `${id}.jpg`,
       });
-      const task = await createPhotoAvatarMotion({
+      const task = await generatePhotoAvatar({
         imageUrl: providerImageUrl,
-        name: row.name,
-        voiceId,
-        model: "2.0",
+        gender,
+        age: "Adult",
+        avatarStyle: "Professional",
+        aspectRatio: "portrait",
+        model: "modern",
       });
       const saved = await persistProviderState(service, id, user.id, {
-        status: task.status === "completed" ? "ready" : "processing",
-        external_avatar_id: task.avatarId ?? null,
-        external_task_id: task.motionId ?? null,
+        status: "processing",
+        external_avatar_id: null,
+        external_task_id: encodePresenterProviderTask({
+          kind: "photo",
+          photoId: task.photoId,
+          voiceId,
+        }),
         error_message: null,
       });
       if (!saved) {
         console.error("[presenters/generate] paid task could not be persisted", {
           presenterId: id,
-          taskId: task.motionId,
-          avatarId: task.avatarId,
+          photoId: task.photoId,
         });
         return NextResponse.json(
           { error: "Presenter creation started, but its status could not be saved. Contact support." },

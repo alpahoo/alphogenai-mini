@@ -341,6 +341,7 @@ export async function listVoices(): Promise<JoggVoice[]> {
 // ---------------------------------------------------------------------------
 
 export interface CreatePhotoAvatarMotionParams {
+  photoId: string;
   imageUrl: string;
   name: string;
   voiceId: string;
@@ -351,6 +352,22 @@ export interface JoggPhotoAvatarMotion {
   status: JoggStatus;
   avatarId?: string;
   motionId?: string;
+  error?: string;
+}
+
+export interface GeneratePhotoAvatarParams {
+  imageUrl: string;
+  gender: "Female" | "Male";
+  age?: "Teenager" | "Young adult" | "Adult" | "Elderly";
+  avatarStyle?: "Professional" | "Social";
+  model?: "classic" | "modern";
+  aspectRatio?: "portrait" | "landscape" | "square";
+}
+
+export interface JoggPhotoAvatarGeneration {
+  status: JoggStatus;
+  photoId: string;
+  imageUrls: string[];
   error?: string;
 }
 
@@ -415,6 +432,81 @@ export async function uploadJoggAsset(
   return assetUrl;
 }
 
+export function parsePhotoAvatarGeneration(
+  data: Record<string, unknown>,
+): JoggPhotoAvatarGeneration {
+  const photoId = String(data.photo_id ?? "").trim();
+  if (!photoId) throw new Error("Photo avatar generation returned no photo id");
+  const rawStatus = String(data.status ?? "").toLowerCase();
+  const imageUrls = Array.isArray(data.image_url_list)
+    ? data.image_url_list.filter((url): url is string => typeof url === "string" && url.length > 0)
+    : [];
+  if (["success", "completed", "complete", "done", "ready"].includes(rawStatus)) {
+    if (imageUrls.length === 0) {
+      throw new Error("Completed photo avatar generation returned no images");
+    }
+    return { status: "completed", photoId, imageUrls };
+  }
+  if (["failed", "fail", "error", "cancelled", "canceled"].includes(rawStatus)) {
+    return {
+      status: "failed",
+      photoId,
+      imageUrls: [],
+      error: String(data.error_message ?? data.message ?? "Photo avatar generation failed"),
+    };
+  }
+  return {
+    status: ["pending", "waiting", "queued"].includes(rawStatus) ? "pending" : "processing",
+    photoId,
+    imageUrls,
+  };
+}
+
+/** Start the documented photo-avatar workflow before adding optional motion. */
+export async function generatePhotoAvatar(
+  params: GeneratePhotoAvatarParams,
+): Promise<{ photoId: string }> {
+  const res = await fetch(`${JOGG_API}/photo_avatar/photo/generate`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({
+      age: params.age ?? "Adult",
+      avatar_style: params.avatarStyle ?? "Professional",
+      gender: params.gender,
+      model: params.model ?? "modern",
+      aspect_ratio: params.aspectRatio ?? "portrait",
+      image_url: params.imageUrl,
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => res.statusText);
+    throw new Error(`Photo avatar generation failed (${res.status}): ${body.slice(0, 200)}`);
+  }
+  const data = parseJoggEnvelope(await res.json(), "photo avatar generation");
+  const photoId = String(data.photo_id ?? "").trim();
+  if (!photoId) throw new Error("Photo avatar generation returned no photo id");
+  return { photoId };
+}
+
+export async function getPhotoAvatarGeneration(
+  photoId: string,
+): Promise<JoggPhotoAvatarGeneration> {
+  const query = new URLSearchParams({ photo_id: photoId });
+  const res = await fetch(`${JOGG_API}/photo_avatar/photo?${query}`, {
+    headers: { "x-api-key": apiKey() },
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => res.statusText);
+    throw new Error(`Photo avatar status failed (${res.status}): ${body.slice(0, 200)}`);
+  }
+  return parsePhotoAvatarGeneration(
+    parseJoggEnvelope(await res.json(), "photo avatar status"),
+  );
+}
+
 /** Normalize the provider's photo-avatar status without leaking its shape. */
 export function parsePhotoAvatarMotion(
   data: Record<string, unknown>,
@@ -468,6 +560,7 @@ export async function createPhotoAvatarMotion(
     method: "POST",
     headers: headers(),
     body: JSON.stringify({
+      photo_id: params.photoId,
       image_url: params.imageUrl,
       name: params.name,
       voice_id: params.voiceId,

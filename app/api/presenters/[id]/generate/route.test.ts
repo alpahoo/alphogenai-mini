@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 import { createServiceClient } from "@/lib/supabase/service";
-import { createPhotoAvatarMotion, listVoices, uploadJoggAsset } from "@/lib/jogg-client";
+import { generatePhotoAvatar, listVoices, uploadJoggAsset } from "@/lib/jogg-client";
 import {
   classifyPresenterProviderError,
   signPresenterPortrait,
@@ -12,12 +12,15 @@ import { POST } from "./route";
 vi.mock("@/lib/podcast/auth", () => ({ getUserFromRequest: vi.fn() }));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: vi.fn() }));
 vi.mock("@/lib/jogg-client", () => ({
-  createPhotoAvatarMotion: vi.fn(),
+  generatePhotoAvatar: vi.fn(),
   listVoices: vi.fn(),
   uploadJoggAsset: vi.fn(),
 }));
 vi.mock("@/lib/user-presenters", () => ({
   classifyPresenterProviderError: vi.fn(() => "generation_failed"),
+  encodePresenterProviderTask: vi.fn(
+    (task) => `photo:${task.photoId}:${task.voiceId}`,
+  ),
   signPresenterPortrait: vi.fn(),
   toPublicPresenter: vi.fn(async (_service, row) => ({
     id: row.id,
@@ -77,11 +80,7 @@ beforeEach(() => {
   vi.mocked(listVoices).mockResolvedValue([
     { id: "voice-fr", name: "Voice", language: "French", gender: "", previewUrl: null },
   ]);
-  vi.mocked(createPhotoAvatarMotion).mockResolvedValue({
-    status: "processing",
-    avatarId: "123",
-    motionId: "motion-1",
-  });
+  vi.mocked(generatePhotoAvatar).mockResolvedValue({ photoId: "photo-1" });
   vi.mocked(uploadJoggAsset).mockResolvedValue("https://res.example/presenter.jpg");
 });
 
@@ -90,7 +89,7 @@ describe("POST /api/presenters/[id]/generate", () => {
     vi.mocked(getUserFromRequest).mockResolvedValue(null);
     const response = await POST(request(), { params: Promise.resolve({ id: BASE.id }) });
     expect(response.status).toBe(401);
-    expect(createPhotoAvatarMotion).not.toHaveBeenCalled();
+    expect(generatePhotoAvatar).not.toHaveBeenCalled();
   });
 
   it("reuses a ready presenter without spending again", async () => {
@@ -101,7 +100,7 @@ describe("POST /api/presenters/[id]/generate", () => {
     const response = await POST(request(), { params: Promise.resolve({ id: BASE.id }) });
     expect(response.status).toBe(200);
     expect((await response.json()).reused).toBe(true);
-    expect(createPhotoAvatarMotion).not.toHaveBeenCalled();
+    expect(generatePhotoAvatar).not.toHaveBeenCalled();
   });
 
   it("does not spend again when a processing presenter lost its task id", async () => {
@@ -111,15 +110,14 @@ describe("POST /api/presenters/[id]/generate", () => {
     );
     const response = await POST(request(), { params: Promise.resolve({ id: BASE.id }) });
     expect(response.status).toBe(409);
-    expect(createPhotoAvatarMotion).not.toHaveBeenCalled();
+    expect(generatePhotoAvatar).not.toHaveBeenCalled();
   });
 
-  it("claims the row before starting one paid animation task", async () => {
+  it("claims the row before starting the documented photo stage", async () => {
     const claimed = { ...BASE, status: "processing" };
     const saved = {
       ...claimed,
-      external_avatar_id: "123",
-      external_task_id: "motion-1",
+      external_task_id: "photo:photo-1:voice-selected",
     };
     vi.mocked(createServiceClient).mockReturnValue(
       makeService([
@@ -128,16 +126,16 @@ describe("POST /api/presenters/[id]/generate", () => {
         { data: saved, error: null },
       ]) as never,
     );
-    const response = await POST(request({ voiceId: "voice-selected" }), {
+    const response = await POST(request({ voiceId: "voice-selected", gender: "Female" }), {
       params: Promise.resolve({ id: BASE.id }),
     });
     expect(response.status).toBe(200);
-    expect(createPhotoAvatarMotion).toHaveBeenCalledTimes(1);
-    expect(createPhotoAvatarMotion).toHaveBeenCalledWith(
+    expect(generatePhotoAvatar).toHaveBeenCalledTimes(1);
+    expect(generatePhotoAvatar).toHaveBeenCalledWith(
       expect.objectContaining({
         imageUrl: "https://res.example/presenter.jpg",
-        voiceId: "voice-selected",
-        model: "2.0",
+        gender: "Female",
+        model: "modern",
       }),
     );
     expect(uploadJoggAsset).toHaveBeenCalledWith({
@@ -147,19 +145,15 @@ describe("POST /api/presenters/[id]/generate", () => {
     expect(updates[0]).toMatchObject({ status: "processing", external_task_id: null });
     expect(updates[1]).toMatchObject({
       status: "processing",
-      external_avatar_id: "123",
-      external_task_id: "motion-1",
+      external_avatar_id: null,
+      external_task_id: "photo:photo-1:voice-selected",
     });
     expect(toPublicPresenter).toHaveBeenCalled();
   });
 
-  it("persists a queued task before the final avatar id exists", async () => {
+  it("persists the photo stage before the final avatar id exists", async () => {
     const claimed = { ...BASE, status: "processing" };
-    const saved = { ...claimed, external_task_id: "motion-queued" };
-    vi.mocked(createPhotoAvatarMotion).mockResolvedValue({
-      status: "pending",
-      motionId: "motion-queued",
-    });
+    const saved = { ...claimed, external_task_id: "photo:photo-1:voice-selected" };
     vi.mocked(createServiceClient).mockReturnValue(
       makeService([
         { data: BASE, error: null },
@@ -174,7 +168,7 @@ describe("POST /api/presenters/[id]/generate", () => {
     expect(updates[1]).toMatchObject({
       status: "processing",
       external_avatar_id: null,
-      external_task_id: "motion-queued",
+      external_task_id: "photo:photo-1:voice-selected",
     });
   });
 
@@ -188,7 +182,7 @@ describe("POST /api/presenters/[id]/generate", () => {
         { data: failed, error: null },
       ]) as never,
     );
-    vi.mocked(createPhotoAvatarMotion).mockRejectedValue(new Error("private provider error"));
+    vi.mocked(generatePhotoAvatar).mockRejectedValue(new Error("private provider error"));
     vi.mocked(classifyPresenterProviderError).mockReturnValue("insufficient_credits");
 
     const response = await POST(request(), { params: Promise.resolve({ id: BASE.id }) });
@@ -218,7 +212,7 @@ describe("POST /api/presenters/[id]/generate", () => {
     const response = await POST(request(), { params: Promise.resolve({ id: BASE.id }) });
 
     expect(response.status).toBe(502);
-    expect(createPhotoAvatarMotion).not.toHaveBeenCalled();
+    expect(generatePhotoAvatar).not.toHaveBeenCalled();
     expect(updates.at(-1)).toMatchObject({
       status: "failed",
       error_message: "generation_failed",

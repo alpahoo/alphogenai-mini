@@ -1,11 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
-import { getPhotoAvatarMotion } from "@/lib/jogg-client";
-import { toPublicPresenter, type UserPresenterRow } from "@/lib/user-presenters";
+import {
+  createPhotoAvatarMotion,
+  getPhotoAvatarGeneration,
+  getPhotoAvatarMotion,
+} from "@/lib/jogg-client";
+import {
+  decodePresenterProviderTask,
+  encodePresenterProviderTask,
+  isPresenterStageTimedOut,
+  toPublicPresenter,
+  type UserPresenterRow,
+} from "@/lib/user-presenters";
 
 const SELECT =
   "id, user_id, name, portrait_path, thumb_path, image_sha256, external_avatar_id, external_task_id, status, error_message, created_at, updated_at";
+
+async function updatePresenter(
+  service: ReturnType<typeof createServiceClient>,
+  id: string,
+  userId: string,
+  values: Record<string, unknown>,
+) {
+  const { data, error } = await service
+    .from("user_presenters")
+    .update(values)
+    .eq("id", id)
+    .eq("user_id", userId)
+    .select(SELECT)
+    .single();
+  if (error || !data) throw new Error("Could not save presenter state");
+  return data as UserPresenterRow;
+}
 
 export async function GET(
   request: NextRequest,
@@ -29,42 +56,75 @@ export async function GET(
     if (!data) return NextResponse.json({ error: "Presenter not found." }, { status: 404 });
     let row = data as UserPresenterRow;
 
-    if (row.status === "processing" && row.external_task_id) {
+    if (row.status === "processing" && isPresenterStageTimedOut(row.updated_at)) {
+      row = await updatePresenter(service, id, user.id, {
+        status: "failed",
+        error_message: "generation_timeout",
+      });
+    } else if (row.status === "processing" && row.external_task_id) {
       try {
-        const result = await getPhotoAvatarMotion(row.external_task_id);
-        if (result.status === "completed") {
-          const avatarId = result.avatarId ?? row.external_avatar_id;
-          if (!avatarId) throw new Error("Completed presenter has no avatar id");
-          const { data: updated, error: updateError } = await service
-            .from("user_presenters")
-            .update({
+        const task = decodePresenterProviderTask(row.external_task_id);
+        if (!task) {
+          row = await updatePresenter(service, id, user.id, {
+            status: "failed",
+            error_message: "generation_failed",
+          });
+        } else if (task.kind === "photo") {
+          const photo = await getPhotoAvatarGeneration(task.photoId);
+          if (photo.status === "completed") {
+            const motion = await createPhotoAvatarMotion({
+              photoId: photo.photoId,
+              imageUrl: photo.imageUrls[0],
+              name: row.name,
+              voiceId: task.voiceId,
+              model: "2.0",
+            });
+            const avatarId = motion.avatarId ?? null;
+            if (motion.status === "completed") {
+              if (!avatarId) throw new Error("Completed presenter has no avatar id");
+              row = await updatePresenter(service, id, user.id, {
+                status: "ready",
+                external_avatar_id: avatarId,
+                external_task_id: motion.motionId
+                  ? encodePresenterProviderTask({ kind: "motion", motionId: motion.motionId })
+                  : row.external_task_id,
+                error_message: null,
+              });
+            } else {
+              if (!motion.motionId) throw new Error("Presenter motion returned no task id");
+              row = await updatePresenter(service, id, user.id, {
+                status: "processing",
+                external_avatar_id: avatarId,
+                external_task_id: encodePresenterProviderTask({
+                  kind: "motion",
+                  motionId: motion.motionId,
+                }),
+                error_message: null,
+              });
+            }
+          } else if (photo.status === "failed") {
+            row = await updatePresenter(service, id, user.id, {
+              status: "failed",
+              error_message: "generation_failed",
+            });
+          }
+        } else {
+          const result = await getPhotoAvatarMotion(task.motionId);
+          if (result.status === "completed") {
+            const avatarId = result.avatarId ?? row.external_avatar_id;
+            if (!avatarId) throw new Error("Completed presenter has no avatar id");
+            row = await updatePresenter(service, id, user.id, {
               status: "ready",
               external_avatar_id: avatarId,
               error_message: null,
-            })
-            .eq("id", id)
-            .eq("user_id", user.id)
-            .select(SELECT)
-            .single();
-          if (updateError || !updated) {
-            console.error("[presenters/status] completion update failed:", updateError);
-            return NextResponse.json({ error: "Could not save presenter completion." }, { status: 500 });
+            });
+          } else if (result.status === "failed") {
+            console.error("[presenters/status] generation failed:", result.error);
+            row = await updatePresenter(service, id, user.id, {
+              status: "failed",
+              error_message: "generation_failed",
+            });
           }
-          row = updated as UserPresenterRow;
-        } else if (result.status === "failed") {
-          console.error("[presenters/status] generation failed:", result.error);
-          const { data: updated, error: updateError } = await service
-            .from("user_presenters")
-            .update({ status: "failed", error_message: "generation_failed" })
-            .eq("id", id)
-            .eq("user_id", user.id)
-            .select(SELECT)
-            .single();
-          if (updateError || !updated) {
-            console.error("[presenters/status] failure update failed:", updateError);
-            return NextResponse.json({ error: "Could not save presenter failure." }, { status: 500 });
-          }
-          row = updated as UserPresenterRow;
         }
       } catch (providerError) {
         console.error("[presenters/status] poll failed:", providerError);

@@ -1,9 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+  createPhotoAvatarMotion,
   createVideoFromProduct,
+  generatePhotoAvatar,
   normalizeJoggAvatarAspectRatio,
   parseJoggEnvelope,
   parsePhotoAvatarMotion,
+  parsePhotoAvatarGeneration,
   parseProductVideo,
   uploadJoggAsset,
 } from "../jogg-client";
@@ -34,6 +37,27 @@ describe("product video aspect ratios", () => {
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
     expect(body.video_spec.aspect_ratio).toBe(aspectRatio);
     expect(body.avatar).toEqual({ id: avatarId, type: 0 });
+    fetchMock.mockRestore();
+  });
+
+  it("sends an existing account avatar such as 445593 as custom type 1", async () => {
+    process.env.JOGG_API_KEY = "test-key";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: 0, data: { product_video_id: "video-1" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await createVideoFromProduct({
+      productId: "product-1",
+      avatarId: 445593,
+      avatarType: 1,
+      aspectRatio: "portrait",
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)).avatar).toEqual({
+      id: 445593,
+      type: 1,
+    });
     fetchMock.mockRestore();
   });
 });
@@ -123,6 +147,70 @@ describe("parsePhotoAvatarMotion", () => {
     expect(
       parsePhotoAvatarMotion({ status: "queued", motion_id: "motion-later" }),
     ).toEqual({ status: "pending", motionId: "motion-later" });
+  });
+});
+
+describe("documented photo avatar workflow", () => {
+  it("maps generated photo completion and requires provider images", () => {
+    expect(parsePhotoAvatarGeneration({
+      photo_id: "photo-1",
+      status: "success",
+      image_url_list: ["https://res.example/generated.png"],
+    })).toEqual({
+      status: "completed",
+      photoId: "photo-1",
+      imageUrls: ["https://res.example/generated.png"],
+    });
+    expect(() => parsePhotoAvatarGeneration({
+      photo_id: "photo-1",
+      status: "success",
+      image_url_list: [],
+    })).toThrow(/no images/i);
+  });
+
+  it("starts photo generation with every required provider field", async () => {
+    process.env.JOGG_API_KEY = "test-key";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: 0, data: { photo_id: "photo-1" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await expect(generatePhotoAvatar({
+      imageUrl: "https://res.example/source.jpg",
+      gender: "Female",
+    })).resolves.toEqual({ photoId: "photo-1" });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      age: "Adult",
+      avatar_style: "Professional",
+      gender: "Female",
+      model: "modern",
+      aspect_ratio: "portrait",
+      image_url: "https://res.example/source.jpg",
+    });
+    fetchMock.mockRestore();
+  });
+
+  it("adds motion only with the generated photo id and selected image", async () => {
+    process.env.JOGG_API_KEY = "test-key";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        code: 0,
+        data: { status: "processing", avatar_id: 445593, motion_id: "motion-1" },
+      }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+    await createPhotoAvatarMotion({
+      photoId: "photo-1",
+      imageUrl: "https://res.example/generated.png",
+      name: "My presenter",
+      voiceId: "voice-1",
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      photo_id: "photo-1",
+      image_url: "https://res.example/generated.png",
+      voice_id: "voice-1",
+    });
+    fetchMock.mockRestore();
   });
 });
 

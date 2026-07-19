@@ -65,6 +65,7 @@ type UserPresenter = {
 type ProductAdFormat = "portrait" | "square" | "landscape";
 type ProductAdStyle = "Discovery" | "Storytime";
 type ProductAdLength = "15" | "30" | "60";
+type PresenterGender = "Female" | "Male";
 
 const PRODUCT_AD_FORMATS: { value: ProductAdFormat; label: string; ratio: string }[] = [
   { value: "portrait", label: "Vertical", ratio: "9:16" },
@@ -277,9 +278,18 @@ export default function UrlToVideo() {
   const [presenterFile, setPresenterFile] = useState<File | null>(null);
   const [presenterPreview, setPresenterPreview] = useState<string | null>(null);
   const [presenterConsent, setPresenterConsent] = useState(false);
+  const [presenterGender, setPresenterGender] = useState<PresenterGender>("Male");
   const [presenterCreating, setPresenterCreating] = useState(false);
   const [retryingPresenterId, setRetryingPresenterId] = useState<string | null>(null);
   const [presenterError, setPresenterError] = useState<string | null>(null);
+  const processingPresenterIds = useMemo(
+    () => userPresenters
+      .filter((presenter) => presenter.status === "processing")
+      .map((presenter) => presenter.id)
+      .sort()
+      .join(","),
+    [userPresenters],
+  );
 
   // Load the presenter catalog once so the user can change who presents the ad.
   useEffect(() => {
@@ -317,6 +327,33 @@ export default function UrlToVideo() {
     })();
     return () => { cancelled = true; };
   }, [supabase]);
+
+  // Resume provider polling after a reload. The status route owns the hard
+  // timeout, so stale rows transition to Retry instead of spinning forever.
+  useEffect(() => {
+    if (!processingPresenterIds || presenterCreating) return;
+    let cancelled = false;
+    const ids = processingPresenterIds.split(",");
+    const poll = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token || cancelled) return;
+      await Promise.all(ids.map(async (id) => {
+        const response = await fetch(`/api/presenters/${id}/status`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const json = await response.json().catch(() => ({}));
+        if (!cancelled && response.ok && json.presenter) {
+          upsertUserPresenter(json.presenter as UserPresenter);
+        }
+      }));
+    };
+    void poll();
+    const interval = window.setInterval(() => void poll(), 6000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [presenterCreating, processingPresenterIds, supabase]);
 
   useEffect(() => {
     return () => voicePreviewRef.current?.pause();
@@ -372,7 +409,7 @@ export default function UrlToVideo() {
   }, [presenterFile]);
 
   async function waitForPresenter(id: string, token: string) {
-    for (let attempt = 0; attempt < 60; attempt += 1) {
+    for (let attempt = 0; attempt < 120; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 5000));
       const response = await fetch("/api/presenters/" + id + "/status", {
         headers: { Authorization: "Bearer " + token },
@@ -396,6 +433,7 @@ export default function UrlToVideo() {
     setPresenterName("");
     setPresenterFile(null);
     setPresenterConsent(false);
+    setPresenterGender("Male");
   }
 
   async function createMyPresenter() {
@@ -431,7 +469,10 @@ export default function UrlToVideo() {
           Authorization: "Bearer " + token,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ ...(voiceId ? { voiceId } : {}) }),
+        body: JSON.stringify({
+          gender: presenterGender,
+          ...(voiceId ? { voiceId } : {}),
+        }),
       });
       const generateJson = await generateResponse.json().catch(() => ({}));
       if (!generateResponse.ok) {
@@ -466,7 +507,7 @@ export default function UrlToVideo() {
           Authorization: "Bearer " + token,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ ...(voiceId ? { voiceId } : {}) }),
+        body: JSON.stringify({ gender: "Male", ...(voiceId ? { voiceId } : {}) }),
       });
       const json = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(json.error || "Could not retry this presenter.");
@@ -1078,6 +1119,27 @@ export default function UrlToVideo() {
                   placeholder="e.g. My presenter"
                   className="mt-1.5 w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 disabled:bg-neutral-50"
                 />
+                <fieldset className="mt-3">
+                  <legend className="text-xs font-bold text-neutral-800">Avatar presentation</legend>
+                  <div className="mt-1.5 grid grid-cols-2 gap-2">
+                    {(["Female", "Male"] as const).map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setPresenterGender(value)}
+                        disabled={presenterCreating}
+                        aria-pressed={presenterGender === value}
+                        className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                          presenterGender === value
+                            ? "border-blue-500 bg-blue-50 text-blue-700"
+                            : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300"
+                        }`}
+                      >
+                        {value === "Female" ? "Woman" : "Man"}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
                 <div className="mt-3 flex items-start gap-2 rounded-lg bg-neutral-50 p-3">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
                   <label className="flex cursor-pointer gap-2 text-xs leading-relaxed text-neutral-600">

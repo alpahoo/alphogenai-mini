@@ -1,3 +1,9 @@
+## 2026-07-19 - Codex - Product Ad presenter workflow correction
+- Re-read the official provider contracts after production account-presenter cards remained in `processing`. The prior implementation incorrectly called motion directly on an uploaded portrait; the documented photo flow is now staged as portrait upload -> photo generation -> photo status -> motion -> motion status.
+- Provider stage state is persisted in the existing task column, including the selected voice. No migration is required. A ten-minute per-stage server timeout and bounded client polling prevent permanent spinners, while background polling resumes recent work after a page reload.
+- Existing dashboard-created custom video avatars remain a separate supported path. Account avatar `445593` is sent as custom `avatar_type: 1`; it does not pass through the photo-generation workflow.
+- Added the provider-required Woman/Man presentation choice to the upload modal. Validation: 986/986 Vitest tests, `npx tsc --noEmit`, production build, and focused tests for photo/motion transitions, timeout, legacy task compatibility, and custom avatar `445593`.
+
 ## 2026-07-18 - Codex - Product Ad presenter/upload regression fix
 - Diagnosed the production Product Ad submit failure from Vercel logs: provider code `18022` reported that the selected portrait presenter did not match the requested landscape aspect ratio. Automatic mode now chooses a format-compatible public presenter; selecting a catalog or account presenter synchronizes its format, and changing to an incompatible format safely falls back to Automatic.
 - Presenter photos are now decoded, validated, center-cropped to a predictable 9:16 JPEG, and compressed below Vercel's request-body ceiling in the browser before upload. The API guard and its message now correctly enforce 4 MB for direct callers.
