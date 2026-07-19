@@ -1,10 +1,10 @@
 # agent/tasks.md — Backlog partagé
 
-## T-1161 - High-fidelity Video Presenter bridge - IN PROGRESS (2026-07-19, Codex)
+## T-1161 - High-fidelity Video Presenter bridge - DEPLOYED / CALIBRATION PENDING (2026-07-19, Codex)
 - Added a provider-neutral `user_video_presenter_requests` queue and private 200 MB video bucket. Source footage and consent footage upload directly to Supabase through short-lived signed upload tokens, avoiding Vercel body limits.
 - Added a white-label Video Presenter option to Product Ad. Users see upload/training/review state; provider names and external ids never cross the public API.
 - Added a one-at-a-time Playwright worker with a persistent account-owned browser profile, strict semantic selectors, API catalog completion detection, durable publication into `user_presenters`, and private-footage deletion after completion.
-- Current gate: migration is written but not yet applied; Vercel code is not pushed; worker selectors require one `login` + `inspect` calibration against the live account before any real submission. No provider task or spend was started.
+- Production state: migration applied and verified on AlphoGen Supabase (`user_video_presenter_requests`, private bucket, 4 queue RLS policies, 3 storage policies); commit `a6b403c` pushed and the protected `/api/presenters/video` route is live. Worker selectors still require one `login` + `inspect` calibration against the live account before any real submission. No provider task or spend was started.
 - Validation: 22 focused tests, TypeScript, Python compile, production build, and diff-check pass.
 
 ## T-1160 - Product Ad account presenters - DONE (2026-07-18, Codex)
