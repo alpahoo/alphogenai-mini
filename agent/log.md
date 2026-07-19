@@ -1,3 +1,8 @@
+## 2026-07-19 - Codex - Product Ad bilingual custom voice
+- Added the account custom-voice catalog to Product Ad through Jogg's private `/v2/voices/custom` endpoint. Duplicate clones are collapsed by normalized name with the newest provider entry retained, so `gvnahid292` is resolved dynamically instead of hardcoding a transient API voice id.
+- Added an explicit Product Ad language selector for French (France) and English. Custom voices with no provider language metadata are treated as multilingual and remain selectable in both languages; public voices are filtered to the chosen language.
+- Kept avatar, voice, and script language as independent provider inputs. The same custom voice can therefore be paired with a completed custom video avatar, completed photo avatar, or compatible public avatar. Validation: 38/38 focused tests, `npx tsc --noEmit`, production build, and diff-check pass. No paid generation was run.
+
 ## 2026-07-19 - Codex - Product Ad avatar fidelity and format contract
 - Confirmed from the provider contract that Photo Avatar deliberately generates AI portrait variants before motion; it is an inspired likeness, not an identity-preserving animation of the uploaded pixels. Product copy now distinguishes these `AI look` portraits from recorded `Video` presenters, which offer the closest likeness.
 - Fixed the account-avatar format contract: custom and photo avatars now retain the provider-declared aspect ratio instead of being forced to portrait. Missing ratios remain unknown so users are not incorrectly blocked from square or landscape output; changing format only deselects a presenter when a known ratio is incompatible.

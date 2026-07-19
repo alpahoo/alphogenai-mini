@@ -50,6 +50,7 @@ type ProductAdVoice = {
   language: string;
   gender: string;
   previewUrl: string | null;
+  kind: "public" | "custom";
 };
 
 type UserPresenter = {
@@ -65,7 +66,13 @@ type UserPresenter = {
 type ProductAdFormat = "portrait" | "square" | "landscape";
 type ProductAdStyle = "Discovery" | "Storytime";
 type ProductAdLength = "15" | "30" | "60";
+type ProductAdLanguage = "french" | "english";
 type PresenterGender = "Female" | "Male";
+
+const PRODUCT_AD_LANGUAGES: { value: ProductAdLanguage; label: string }[] = [
+  { value: "french", label: "French (France)" },
+  { value: "english", label: "English" },
+];
 
 const PRODUCT_AD_FORMATS: { value: ProductAdFormat; label: string; ratio: string }[] = [
   { value: "portrait", label: "Vertical", ratio: "9:16" },
@@ -273,6 +280,7 @@ export default function UrlToVideo() {
   const [paFormat, setPaFormat] = useState<ProductAdFormat>("portrait");
   const [paStyle, setPaStyle] = useState<ProductAdStyle>("Discovery");
   const [paLength, setPaLength] = useState<ProductAdLength>("30");
+  const [paLanguage, setPaLanguage] = useState<ProductAdLanguage>("french");
   const [presenterOpen, setPresenterOpen] = useState(false);
   const [presenterName, setPresenterName] = useState("");
   const [presenterFile, setPresenterFile] = useState<File | null>(null);
@@ -290,6 +298,15 @@ export default function UrlToVideo() {
       .join(","),
     [userPresenters],
   );
+  const availableVoices = useMemo(() => {
+    return voices.filter((voice) => {
+      if (voice.kind === "custom" || voice.language === "multilingual") return true;
+      const language = voice.language.toLowerCase();
+      return paLanguage === "french"
+        ? language === "fr" || language.includes("french")
+        : language === "en" || language.startsWith("en-") || language.includes("english");
+    });
+  }, [paLanguage, voices]);
 
   // Load the presenter catalog once so the user can change who presents the ad.
   useEffect(() => {
@@ -537,6 +554,19 @@ export default function UrlToVideo() {
     void audio.play().catch(() => setPreviewingVoiceId(null));
   }
 
+  function selectProductLanguage(language: ProductAdLanguage) {
+    setPaLanguage(language);
+    const selectedVoice = voices.find((voice) => voice.id === voiceId);
+    if (!selectedVoice || selectedVoice.kind === "custom" || selectedVoice.language === "multilingual") {
+      return;
+    }
+    const normalized = selectedVoice.language.toLowerCase();
+    const compatible = language === "french"
+      ? normalized === "fr" || normalized.includes("french")
+      : normalized === "en" || normalized.startsWith("en-") || normalized.includes("english");
+    if (!compatible) setVoiceId("");
+  }
+
   // Advance the guided loading steps while the plan is being created. The real
   // work is a single POST then a navigation, so we pace the first steps and let
   // createVideo() jump to the final "Open plan" step right before it routes.
@@ -595,6 +625,7 @@ export default function UrlToVideo() {
             style: paStyle,
             format: paFormat,
             length: paLength,
+            language: paLanguage,
             ...(avatarId ? { avatarId, avatarType } : {}),
             ...(presenterId ? { presenterId } : {}),
             ...(voiceId ? { voiceId } : {}),
@@ -839,7 +870,23 @@ export default function UrlToVideo() {
               })}
             </div>
 
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+              <div>
+                <label htmlFor="product-ad-language" className="text-xs font-bold text-neutral-800">
+                  Language
+                </label>
+                <select
+                  id="product-ad-language"
+                  value={paLanguage}
+                  onChange={(event) => selectProductLanguage(event.target.value as ProductAdLanguage)}
+                  className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-800 outline-none focus:border-blue-400"
+                >
+                  {PRODUCT_AD_LANGUAGES.map((language) => (
+                    <option key={language.value} value={language.value}>{language.label}</option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label htmlFor="product-ad-voice" className="text-xs font-bold text-neutral-800">
                   Voice
@@ -852,9 +899,9 @@ export default function UrlToVideo() {
                     className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-800 outline-none focus:border-blue-400"
                   >
                     <option value="">Automatic voice</option>
-                    {voices.map((voice) => (
+                    {availableVoices.map((voice) => (
                       <option key={voice.id} value={voice.id}>
-                        {voice.name}{voice.language ? ` - ${voice.language}` : ""}
+                        {voice.kind === "custom" ? `${voice.name} - My voice` : voice.name}
                       </option>
                     ))}
                   </select>

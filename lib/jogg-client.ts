@@ -246,6 +246,7 @@ export interface JoggVoice {
   language: string;
   gender: string;
   previewUrl: string | null;
+  kind: "public" | "custom";
 }
 
 async function listAvatarCollection(
@@ -312,9 +313,11 @@ export async function listPhotoAvatars(): Promise<JoggAvatar[]> {
   return listAvatarCollection("/avatars/photo_avatars", "photo", 50);
 }
 
-export async function listVoices(): Promise<JoggVoice[]> {
-  const query = new URLSearchParams({ page: "1", page_size: "100" });
-  const res = await fetch(`${JOGG_API}/voices?${query}`, {
+async function listVoiceCollection(
+  path: string,
+  kind: JoggVoice["kind"],
+): Promise<JoggVoice[]> {
+  const res = await fetch(`${JOGG_API}${path}`, {
     headers: { "x-api-key": apiKey() },
     cache: "no-store",
     signal: AbortSignal.timeout(20_000),
@@ -330,11 +333,21 @@ export async function listVoices(): Promise<JoggVoice[]> {
     .map((voice) => ({
       id: String(voice.voice_id ?? ""),
       name: String(voice.name ?? "Voice"),
-      language: String(voice.language ?? ""),
+      language: String(voice.language ?? "") || (kind === "custom" ? "multilingual" : ""),
       gender: String(voice.gender ?? ""),
       previewUrl: (voice.audio_url as string) || null,
+      kind,
     }))
     .filter((voice) => voice.id.length > 0);
+}
+
+export async function listVoices(): Promise<JoggVoice[]> {
+  const query = new URLSearchParams({ page: "1", page_size: "100" });
+  return listVoiceCollection(`/voices?${query}`, "public");
+}
+
+export async function listCustomVoices(): Promise<JoggVoice[]> {
+  return listVoiceCollection("/voices/custom", "custom");
 }
 
 // ---------------------------------------------------------------------------

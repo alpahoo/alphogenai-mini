@@ -78,7 +78,7 @@ beforeEach(() => {
   vi.mocked(getUserFromRequest).mockResolvedValue(USER);
   vi.mocked(signPresenterPortrait).mockResolvedValue("https://signed.example/image.jpg");
   vi.mocked(listVoices).mockResolvedValue([
-    { id: "voice-fr", name: "Voice", language: "French", gender: "", previewUrl: null },
+    { id: "voice-fr", name: "Voice", language: "French", gender: "", previewUrl: null, kind: "public" },
   ]);
   vi.mocked(generatePhotoAvatar).mockResolvedValue({ photoId: "photo-1" });
   vi.mocked(uploadJoggAsset).mockResolvedValue("https://res.example/presenter.jpg");

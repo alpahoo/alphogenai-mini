@@ -4,6 +4,7 @@ import {
   createVideoFromProduct,
   generatePhotoAvatar,
   listCustomAvatars,
+  listCustomVoices,
   normalizeJoggAvatarAspectRatio,
   parseJoggEnvelope,
   parsePhotoAvatarMotion,
@@ -62,6 +63,27 @@ describe("product video aspect ratios", () => {
     fetchMock.mockRestore();
   });
 
+  it("sends a custom voice with the selected French or English script language", async () => {
+    process.env.JOGG_API_KEY = "test-key";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: 0, data: { product_video_id: "video-1" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await createVideoFromProduct({
+      productId: "product-1",
+      avatarId: 445593,
+      avatarType: 1,
+      voiceId: "tb_custom_voice",
+      language: "english",
+    });
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body.voice).toEqual({ id: "tb_custom_voice" });
+    expect(body.script.language).toBe("english");
+    fetchMock.mockRestore();
+  });
+
   it("keeps the declared format of an account video avatar", async () => {
     process.env.JOGG_API_KEY = "test-key";
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
@@ -104,6 +126,36 @@ describe("product video aspect ratios", () => {
     await expect(listCustomAvatars()).resolves.toEqual([
       expect.objectContaining({ id: 445593, aspectRatio: null }),
     ]);
+    fetchMock.mockRestore();
+  });
+});
+
+describe("custom voice catalog", () => {
+  it("loads account voices and marks an unspecified-language clone as multilingual", async () => {
+    process.env.JOGG_API_KEY = "test-key";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        code: 0,
+        data: {
+          voices: [{
+            voice_id: "tb_61ddbcd5cebf4387bbb9459d917ca9bc",
+            name: "gvnahid292",
+            language: "",
+            audio_url: "https://res.example/gvnahid292.wav",
+          }],
+        },
+      }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+
+    await expect(listCustomVoices()).resolves.toEqual([{
+      id: "tb_61ddbcd5cebf4387bbb9459d917ca9bc",
+      name: "gvnahid292",
+      language: "multilingual",
+      gender: "",
+      previewUrl: "https://res.example/gvnahid292.wav",
+      kind: "custom",
+    }]);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.jogg.ai/v2/voices/custom");
     fetchMock.mockRestore();
   });
 });

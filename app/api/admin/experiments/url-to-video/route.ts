@@ -5,6 +5,7 @@ import {
   createProductFromUrl,
   createVideoFromProduct,
   listCustomAvatars,
+  listCustomVoices,
   listPhotoAvatars,
   listPublicAvatars,
   listVoices,
@@ -16,6 +17,7 @@ const FORMATS: Record<string, string> = { portrait: "9:16", square: "1:1", lands
 const LENGTHS = new Set(["15", "30", "60"]);
 // Script tones proven to work with the pipeline (auto-copy styles).
 const STYLES = new Set(["Discovery", "Storytime"]);
+const LANGUAGES = new Set(["french", "english"]);
 
 /**
  * URL → VIDEO V1 — file de jobs minimale (bêta fermée, admin only). Pas d'UI publique.
@@ -58,6 +60,7 @@ export async function POST(request: NextRequest) {
     const style = STYLES.has(body.style) ? body.style : "Discovery";
     const format = typeof body.format === "string" && FORMATS[body.format] ? body.format : "portrait";
     const length = LENGTHS.has(String(body.length)) ? String(body.length) : "30";
+    const language = LANGUAGES.has(body.language) ? body.language : "french";
     let avatarId =
       Number.isFinite(Number(body.avatarId)) && Number(body.avatarId) > 0
         ? Number(body.avatarId)
@@ -133,6 +136,7 @@ export async function POST(request: NextRequest) {
         style,
         aspectRatio: format,
         length,
+        language,
         ...(avatarId ? { avatarId, avatarType } : {}),
         ...(voiceId ? { voiceId } : {}),
       });
@@ -169,6 +173,7 @@ export async function POST(request: NextRequest) {
           style,
           format,
           length,
+          language,
           ...(avatarId ? { avatar_id: avatarId, avatar_type: avatarType } : {}),
           ...(presenterId ? { presenter_id: presenterId } : {}),
           ...(voiceId ? { voice_id: voiceId } : {}),
@@ -204,10 +209,11 @@ export async function GET(request: NextRequest) {
   // avatars are never exposed to public users.
   if (["avatars", "resources"].includes(params.get("action") ?? "")) {
     try {
-      const [publicResult, customResult, photoResult, voiceResult] = await Promise.allSettled([
+      const [publicResult, customResult, photoResult, customVoiceResult, voiceResult] = await Promise.allSettled([
         listPublicAvatars(),
         listCustomAvatars(),
         listPhotoAvatars(),
+        listCustomVoices(),
         listVoices(),
       ]);
       const publicAvatars = publicResult.status === "fulfilled" ? publicResult.value.slice(0, 12) : [];
@@ -224,7 +230,19 @@ export async function GET(request: NextRequest) {
           return true;
         })
         .slice(0, 36);
-      const voices = voiceResult.status === "fulfilled" ? voiceResult.value : [];
+      const customVoices = customVoiceResult.status === "fulfilled" ? customVoiceResult.value : [];
+      const publicVoices = voiceResult.status === "fulfilled" ? voiceResult.value : [];
+      const seenVoiceIds = new Set<string>();
+      const seenCustomNames = new Set<string>();
+      const voices = [...customVoices, ...publicVoices].filter((voice) => {
+        if (seenVoiceIds.has(voice.id)) return false;
+        seenVoiceIds.add(voice.id);
+        if (voice.kind !== "custom") return true;
+        const name = voice.name.trim().toLocaleLowerCase();
+        if (seenCustomNames.has(name)) return false;
+        seenCustomNames.add(name);
+        return true;
+      });
       return NextResponse.json({ avatars, voices });
     } catch (e) {
       console.error("[url-to-video] resource catalog failed:", e);
