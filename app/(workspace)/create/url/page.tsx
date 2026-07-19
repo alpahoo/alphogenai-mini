@@ -31,6 +31,10 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  VideoPresenterForm,
+  type PublicVideoPresenterRequest,
+} from "@/components/create/video-presenter-form";
 
 type UrlMode = "product" | "tutorial" | "news";
 
@@ -282,6 +286,7 @@ export default function UrlToVideo() {
   const [paLength, setPaLength] = useState<ProductAdLength>("30");
   const [paLanguage, setPaLanguage] = useState<ProductAdLanguage>("french");
   const [presenterOpen, setPresenterOpen] = useState(false);
+  const [presenterMode, setPresenterMode] = useState<"photo" | "video">("video");
   const [presenterName, setPresenterName] = useState("");
   const [presenterFile, setPresenterFile] = useState<File | null>(null);
   const [presenterPreview, setPresenterPreview] = useState<string | null>(null);
@@ -290,6 +295,7 @@ export default function UrlToVideo() {
   const [presenterCreating, setPresenterCreating] = useState(false);
   const [retryingPresenterId, setRetryingPresenterId] = useState<string | null>(null);
   const [presenterError, setPresenterError] = useState<string | null>(null);
+  const [videoPresenterRequests, setVideoPresenterRequests] = useState<PublicVideoPresenterRequest[]>([]);
   const processingPresenterIds = useMemo(
     () => userPresenters
       .filter((presenter) => presenter.status === "processing")
@@ -297,6 +303,14 @@ export default function UrlToVideo() {
       .sort()
       .join(","),
     [userPresenters],
+  );
+  const activeVideoPresenterRequestIds = useMemo(
+    () => videoPresenterRequests
+      .filter((request) => !["ready", "failed", "needs_review", "removed"].includes(request.status))
+      .map((request) => request.id)
+      .sort()
+      .join(","),
+    [videoPresenterRequests],
   );
   const availableVoices = useMemo(() => {
     return voices.filter((voice) => {
@@ -316,16 +330,20 @@ export default function UrlToVideo() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.access_token) return;
         const headers = { Authorization: "Bearer " + session.access_token };
-        const [resourcesResult, presentersResult] = await Promise.allSettled([
+        const [resourcesResult, presentersResult, videoRequestsResult] = await Promise.allSettled([
           fetch("/api/admin/experiments/url-to-video?action=resources", { headers }),
           fetch("/api/presenters", { headers }),
+          fetch("/api/presenters/video", { headers }),
         ]);
         const resourcesResponse =
           resourcesResult.status === "fulfilled" ? resourcesResult.value : null;
         const presentersResponse =
           presentersResult.status === "fulfilled" ? presentersResult.value : null;
+        const videoRequestsResponse =
+          videoRequestsResult.status === "fulfilled" ? videoRequestsResult.value : null;
         const json = resourcesResponse?.ok ? await resourcesResponse.json() : {};
         const presenterJson = presentersResponse?.ok ? await presentersResponse.json() : {};
+        const videoRequestJson = videoRequestsResponse?.ok ? await videoRequestsResponse.json() : {};
         const avatarList = Array.isArray(json.avatars) ? json.avatars : [];
         const voiceList = Array.isArray(json.voices) ? json.voices : [];
         const presenterList = Array.isArray(presenterJson.presenters)
@@ -335,6 +353,9 @@ export default function UrlToVideo() {
           setAvatars(avatarList);
           setVoices(voiceList);
           setUserPresenters(presenterList);
+          setVideoPresenterRequests(
+            Array.isArray(videoRequestJson.requests) ? videoRequestJson.requests : [],
+          );
         }
       } catch {
         /* presenter picker is optional — fall back to the default presenter */
@@ -371,6 +392,37 @@ export default function UrlToVideo() {
       window.clearInterval(interval);
     };
   }, [presenterCreating, processingPresenterIds, supabase]);
+
+  // The high-fidelity video workflow is completed by a private asynchronous
+  // worker. Poll only public, provider-neutral request state and refresh the
+  // presenter catalog once the finished avatar has been published.
+  useEffect(() => {
+    if (!activeVideoPresenterRequestIds) return;
+    let cancelled = false;
+    const poll = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token || cancelled) return;
+      const headers = { Authorization: `Bearer ${session.access_token}` };
+      const response = await fetch("/api/presenters/video", { headers });
+      const json = await response.json().catch(() => ({}));
+      if (cancelled || !response.ok || !Array.isArray(json.requests)) return;
+      const requests = json.requests as PublicVideoPresenterRequest[];
+      setVideoPresenterRequests(requests);
+      if (requests.some((request) => request.status === "ready" && request.presenterId)) {
+        const presentersResponse = await fetch("/api/presenters", { headers });
+        const presenterJson = await presentersResponse.json().catch(() => ({}));
+        if (!cancelled && presentersResponse.ok && Array.isArray(presenterJson.presenters)) {
+          setUserPresenters(presenterJson.presenters);
+        }
+      }
+    };
+    void poll();
+    const interval = window.setInterval(() => void poll(), 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [activeVideoPresenterRequestIds, supabase]);
 
   useEffect(() => {
     return () => voicePreviewRef.current?.pause();
@@ -766,6 +818,7 @@ export default function UrlToVideo() {
                 type="button"
                 onClick={() => {
                   setPresenterError(null);
+                  setPresenterMode("video");
                   setPresenterOpen(true);
                 }}
                 className="flex w-20 shrink-0 flex-col items-center gap-1.5 rounded-lg border border-dashed border-neutral-300 bg-white p-2 text-center text-neutral-700 transition hover:border-blue-400 hover:text-blue-700"
@@ -773,8 +826,35 @@ export default function UrlToVideo() {
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-700">
                   <UserPlus className="h-5 w-5" />
                 </span>
-                <span className="w-full text-[11px] font-semibold">AI portrait</span>
+                <span className="w-full text-[11px] font-semibold">Add mine</span>
               </button>
+              {videoPresenterRequests
+                .filter((request) => request.status !== "ready" && request.status !== "removed")
+                .map((request) => {
+                  const failed = request.status === "failed" || request.status === "needs_review";
+                  return (
+                    <div
+                      key={request.id}
+                      title={request.error ?? "Your video presenter is being prepared"}
+                      className={`relative flex w-20 shrink-0 flex-col items-center gap-1.5 rounded-lg border p-2 text-center ${
+                        failed
+                          ? "border-red-200 bg-red-50 text-red-700"
+                          : "border-blue-200 bg-blue-50/60 text-blue-700"
+                      }`}
+                    >
+                      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/80">
+                        {failed ? <X className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />}
+                      </span>
+                      <span className="w-full truncate text-[11px] font-semibold">{request.name}</span>
+                      <span className="text-[8px] font-bold uppercase">
+                        {failed ? "Review" : "Training"}
+                      </span>
+                      <span className="absolute right-1 top-1 rounded bg-neutral-900 px-1 py-0.5 text-[8px] font-bold uppercase text-white">
+                        Video
+                      </span>
+                    </div>
+                  );
+                })}
               {userPresenters.map((presenter) => {
                 const selected = presenterId === presenter.id;
                 const ready = presenter.status === "ready" && Boolean(presenter.avatarId);
@@ -1118,7 +1198,7 @@ export default function UrlToVideo() {
                   <h2 className="text-lg font-bold text-neutral-900">Add my presenter</h2>
                 </div>
                 <p className="mt-2 text-sm text-neutral-500">
-                  Upload a clear, front-facing portrait. An AI variation will be generated from it; the closest likeness requires a recorded video presenter.
+                  Choose a faithful recorded presenter or a faster AI portrait variation.
                 </p>
               </div>
               <button
@@ -1132,6 +1212,31 @@ export default function UrlToVideo() {
               </button>
             </div>
 
+            <div className="mt-5 grid grid-cols-2 rounded-lg bg-neutral-100 p-1">
+              <button
+                type="button"
+                onClick={() => setPresenterMode("video")}
+                disabled={presenterCreating}
+                className={`rounded-md px-3 py-2 text-xs font-bold transition ${
+                  presenterMode === "video" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500"
+                }`}
+              >
+                Video presenter
+              </button>
+              <button
+                type="button"
+                onClick={() => setPresenterMode("photo")}
+                disabled={presenterCreating}
+                className={`rounded-md px-3 py-2 text-xs font-bold transition ${
+                  presenterMode === "photo" ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500"
+                }`}
+              >
+                AI portrait
+              </button>
+            </div>
+
+            {presenterMode === "photo" ? (
+              <>
             <div className="mt-5 grid gap-4 sm:grid-cols-[132px_1fr]">
               <label className="flex aspect-square cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-neutral-50 text-neutral-500 transition hover:border-blue-400">
                 {presenterPreview ? (
@@ -1246,6 +1351,21 @@ export default function UrlToVideo() {
             <p className="mt-3 text-center text-[11px] text-neutral-500">
               Creating a new animated presenter uses about 2 presenter-generation credits.
             </p>
+              </>
+            ) : (
+              <VideoPresenterForm
+                onCancel={() => setPresenterOpen(false)}
+                onQueued={(request) => {
+                  setVideoPresenterRequests((current) => [
+                    request,
+                    ...current.filter((item) => item.id !== request.id),
+                  ]);
+                  setPresenterOpen(false);
+                  setStatus("Video presenter submitted. It will appear here when ready.");
+                  setError(null);
+                }}
+              />
+            )}
           </div>
         </div>
       )}

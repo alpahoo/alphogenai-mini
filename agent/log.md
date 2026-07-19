@@ -1,3 +1,9 @@
+## 2026-07-19 - Codex - High-fidelity Video Presenter bridge (implementation gate)
+- Implemented the agreed white-label alternative to the unaffordable Enterprise API: AlphoGen collects named performance footage, a separate consent clip, and an explicit likeness authorization; both videos upload directly to a private Supabase bucket with signed tokens.
+- Added a provider-neutral asynchronous request API and Product Ad UI. Pending video presenters appear as Training/Review cards and completed presenters are refreshed into the existing reusable account catalog automatically. The existing AI portrait path remains available and unchanged.
+- Added a private one-at-a-time Playwright worker. It uses only the normal provider web UI with a persistent user-owned session, never bypasses captcha or uses private endpoints, stops on UI drift with screenshots, detects completion through the documented custom-avatar catalog, creates a ready `user_presenters` row, and deletes sensitive source/consent footage after successful publication.
+- Gate status: code is local only. `20260719_create_user_video_presenter_requests.sql` must be applied before deployment; then run worker `login` and `inspect` once to calibrate the real Custom Avatar UI. No provider submission or paid generation was run. Validation: 22 focused tests, tsc, Python compile, production build, diff-check.
+
 ## 2026-07-19 - Codex - Product Ad bilingual custom voice
 - Added the account custom-voice catalog to Product Ad through Jogg's private `/v2/voices/custom` endpoint. Duplicate clones are collapsed by normalized name with the newest provider entry retained, so `gvnahid292` is resolved dynamically instead of hardcoding a transient API voice id.
 - Added an explicit Product Ad language selector for French (France) and English. Custom voices with no provider language metadata are treated as multilingual and remain selectable in both languages; public voices are filtered to the chosen language.
