@@ -1,3 +1,8 @@
+## 2026-07-19 - Codex - Product Ad avatar fidelity and format contract
+- Confirmed from the provider contract that Photo Avatar deliberately generates AI portrait variants before motion; it is an inspired likeness, not an identity-preserving animation of the uploaded pixels. Product copy now distinguishes these `AI look` portraits from recorded `Video` presenters, which offer the closest likeness.
+- Fixed the account-avatar format contract: custom and photo avatars now retain the provider-declared aspect ratio instead of being forced to portrait. Missing ratios remain unknown so users are not incorrectly blocked from square or landscape output; changing format only deselects a presenter when a known ratio is incompatible.
+- Added regression coverage for dashboard-created custom video avatar `445593` (`aspect_ratio: 1` -> landscape) and unknown ratios. Validation: 26/26 focused tests, `npx tsc --noEmit`, and production build pass. No provider generation or paid call was run.
+
 ## 2026-07-19 - Codex - Product Ad presenter workflow correction
 - Re-read the official provider contracts after production account-presenter cards remained in `processing`. The prior implementation incorrectly called motion directly on an uploaded portrait; the documented photo flow is now staged as portrait upload -> photo generation -> photo status -> motion -> motion status.
 - Provider stage state is persisted in the existing task column, including the selected voice. No migration is required. A ten-minute per-stage server timeout and bounded client polling prevent permanent spinners, while background polling resumes recent work after a page reload.

@@ -3,6 +3,7 @@ import {
   createPhotoAvatarMotion,
   createVideoFromProduct,
   generatePhotoAvatar,
+  listCustomAvatars,
   normalizeJoggAvatarAspectRatio,
   parseJoggEnvelope,
   parsePhotoAvatarMotion,
@@ -58,6 +59,51 @@ describe("product video aspect ratios", () => {
       id: 445593,
       type: 1,
     });
+    fetchMock.mockRestore();
+  });
+
+  it("keeps the declared format of an account video avatar", async () => {
+    process.env.JOGG_API_KEY = "test-key";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        code: 0,
+        data: {
+          avatars: [{
+            id: 445593,
+            name: "gvnahid292",
+            avatar_status: "completed",
+            aspect_ratio: 1,
+            cover_url: "https://res.example/445593.jpg",
+          }],
+        },
+      }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+
+    await expect(listCustomAvatars()).resolves.toEqual([
+      expect.objectContaining({
+        id: 445593,
+        kind: "custom",
+        type: 1,
+        aspectRatio: "landscape",
+      }),
+    ]);
+    fetchMock.mockRestore();
+  });
+
+  it("does not invent a portrait constraint when an account avatar omits its format", async () => {
+    process.env.JOGG_API_KEY = "test-key";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        code: 0,
+        data: {
+          avatars: [{ id: 445593, name: "gvnahid292", avatar_status: "completed" }],
+        },
+      }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+
+    await expect(listCustomAvatars()).resolves.toEqual([
+      expect.objectContaining({ id: 445593, aspectRatio: null }),
+    ]);
     fetchMock.mockRestore();
   });
 });

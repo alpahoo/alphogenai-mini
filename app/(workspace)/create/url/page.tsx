@@ -381,7 +381,10 @@ export default function UrlToVideo() {
     const selectedAvatar = avatars.find(
       (avatar) => avatar.id === avatarId && avatar.type === avatarType,
     );
-    if (presenterId || (selectedAvatar && selectedAvatar.aspectRatio !== format)) {
+    if (
+      presenterId ||
+      (selectedAvatar && selectedAvatar.aspectRatio && selectedAvatar.aspectRatio !== format)
+    ) {
       // A user presenter is portrait, and provider avatars can also be tied to
       // one aspect ratio. Automatic always selects a compatible default.
       setPresenterId(null);
@@ -739,7 +742,7 @@ export default function UrlToVideo() {
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-700">
                   <UserPlus className="h-5 w-5" />
                 </span>
-                <span className="w-full text-[11px] font-semibold">Add mine</span>
+                <span className="w-full text-[11px] font-semibold">AI portrait</span>
               </button>
               {userPresenters.map((presenter) => {
                 const selected = presenterId === presenter.id;
@@ -828,7 +831,7 @@ export default function UrlToVideo() {
                     <span className="w-full truncate text-[11px] font-semibold">{avatar.name}</span>
                     {avatar.kind !== "public" && (
                       <span className="absolute right-1 top-1 rounded bg-neutral-900 px-1 py-0.5 text-[8px] font-bold uppercase text-white">
-                        Yours
+                        {avatar.kind === "custom" ? "Video" : "AI look"}
                       </span>
                     )}
                   </button>
@@ -940,7 +943,7 @@ export default function UrlToVideo() {
               <Link href="/create/avatar" className="font-semibold text-neutral-800 underline underline-offset-2">
                 Avatar Video uses your script verbatim.
               </Link>{" "}
-              Account presenters appear first. Adding a new face here will use a dedicated consented flow.
+              Video presenters offer the closest likeness from a recorded performance. AI portraits create a new look inspired by the uploaded photo.
             </p>
           </section>
         )}
@@ -1068,7 +1071,7 @@ export default function UrlToVideo() {
                   <h2 className="text-lg font-bold text-neutral-900">Add my presenter</h2>
                 </div>
                 <p className="mt-2 text-sm text-neutral-500">
-                  Upload a clear, front-facing portrait. It is used only to create presenters for your account.
+                  Upload a clear, front-facing portrait. An AI variation will be generated from it; the closest likeness requires a recorded video presenter.
                 </p>
               </div>
               <button
@@ -1182,7 +1185,7 @@ export default function UrlToVideo() {
                 ) : (
                   <UserPlus className="h-4 w-4" />
                 )}
-                {presenterCreating ? "Creating presenter..." : "Create animated presenter"}
+                {presenterCreating ? "Creating AI portrait..." : "Create AI portrait"}
               </button>
               <button
                 type="button"

@@ -286,10 +286,11 @@ async function listAvatarCollection(
         null,
       type: (kind === "public" ? 0 : 1) as 0 | 1,
       kind,
-      aspectRatio:
-        kind === "public"
-          ? normalizeJoggAvatarAspectRatio(avatar.aspect_ratio)
-          : "portrait",
+      // Custom video avatars can be landscape or square too. Preserve the
+      // provider-declared ratio instead of forcing every owned avatar to
+      // portrait. A missing ratio stays unknown so the UI can let the
+      // provider validate the requested format at submit time.
+      aspectRatio: normalizeJoggAvatarAspectRatio(avatar.aspect_ratio),
     }))
     .filter((avatar) => Number.isFinite(avatar.id));
 }
