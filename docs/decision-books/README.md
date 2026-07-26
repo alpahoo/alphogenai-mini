@@ -10,7 +10,7 @@ suivant qu'une fois le précédent gelé.
 |---|---|---|
 | **Podcast Premium** | ✅ **GELÉ** (V1 validée 15 juil. 2026) | [podcast-premium-v1.md](./podcast-premium-v1.md) |
 | **URL → Video** | ✅ **GELÉ après hardening** (V1 validée en prod 16 juil. 2026 · Jogg, POC 80/100, job `75c17c27…` done · quick-wins P1 corrigés) | [**Decision Book V1**](./url-to-video-v1.md) · [benchmark](./url-to-video.md) · [POC/audit](./url-to-video-poc.md) · [intégration](./url-to-video-v1-integration.md) |
-| **Product Ads** | ⏳ à venir | — |
+| **Product Ads** | 🔄 **BETA HARDENING** · création Video Presenter en calibration live avant gel | [**Decision Book V1**](./product-ads-v1.md) |
 | **Cinematic** (ex. Runway) | ⏳ à venir | — |
 | **Avatar** (ex. HeyGen / Synthesia) | ⏳ à venir | — |
 | **Editing / Video Enhancement** | ✅ **DIRECTION FIGÉE** (POC lip-sync prouvé) · assemblage : **VEED forfait** (enhancement) + **Descript API** (correction précise) + **fal.ai** (lip-sync) · réserve Riverside · dev V1.1 = nouveau GO | [**Decision Book**](./editing-video-enhancement.md) · [audit Descript](./editing-enhancement-descript-audit.md) |

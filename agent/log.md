@@ -1,3 +1,10 @@
+## 2026-07-26 - Codex - T-1162 Product Ad operational hardening
+- Added an admin-only Video Presenter queue with status filtering, attempts, media sizes, neutral error codes and recovery guidance.
+- Added a pure retry policy and server enforcement: no retry of active claims, 30-minute stale-claim threshold, six-hour ambiguous-submission lock, three-attempt ceiling, and explicit confirmation for operations that may spend.
+- Added safe private-footage cleanup and request removal. Active provider operations cannot be removed; raw provider details and storage paths never leave the admin API.
+- Added the Product Ads V1 Decision Book and Hostinger VPS operations guide. The workflow is not falsely marked frozen: one live form calibration and one capped end-to-end request remain.
+- Validation: 18 focused tests, TypeScript, production build and diff-check pass. No migration, provider call or credit spend. The existing uncommitted calibration changes in `workers/jogg_avatar/jogg_avatar_worker.py` and `login.py` were preserved.
+
 ## 2026-07-19 - Codex - High-fidelity Video Presenter bridge deployed
 - Implemented the agreed white-label alternative to the unaffordable Enterprise API: AlphoGen collects named performance footage, a separate consent clip, and an explicit likeness authorization; both videos upload directly to a private Supabase bucket with signed tokens.
 - Added a provider-neutral asynchronous request API and Product Ad UI. Pending video presenters appear as Training/Review cards and completed presenters are refreshed into the existing reusable account catalog automatically. The existing AI portrait path remains available and unchanged.

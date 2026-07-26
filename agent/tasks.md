@@ -1,11 +1,19 @@
 # agent/tasks.md — Backlog partagé
 
+## T-1162 - Product Ad V1 operational hardening - DONE (2026-07-26, Codex)
+- Added the admin-only `/admin/video-presenters` operations surface and `/api/admin/video-presenters` route. It lists provider-neutral queue state, user, attempts, private media sizes and recovery policy without exposing provider ids, storage paths or raw provider errors.
+- Added controlled recovery rules: active claims cannot be retried; claims become releasable after 30 minutes; recent ambiguous submissions are locked for six hours; invalid footage/consent requires a new request; retries stop after three attempts; any retry that may spend requires explicit confirmation.
+- Added idempotent private-footage cleanup and inactive-request removal. Active submitted/processing operations cannot be removed.
+- Added `docs/decision-books/product-ads-v1.md` and a Hostinger VPS runbook. Product Ads remains BETA HARDENING until one live Custom Avatar form calibration and one capped end-to-end Video Presenter request pass.
+- Validation: 18 focused tests, TypeScript and production build pass; final scope and provider-leak review pass. No provider call or spend.
+
 ## T-1161 - High-fidelity Video Presenter bridge - DEPLOYED / CALIBRATION PENDING (2026-07-19, Codex)
 - Added a provider-neutral `user_video_presenter_requests` queue and private 200 MB video bucket. Source footage and consent footage upload directly to Supabase through short-lived signed upload tokens, avoiding Vercel body limits.
 - Added a white-label Video Presenter option to Product Ad. Users see upload/training/review state; provider names and external ids never cross the public API.
 - Added a one-at-a-time Playwright worker with a persistent account-owned browser profile, strict semantic selectors, API catalog completion detection, durable publication into `user_presenters`, and private-footage deletion after completion.
 - Production state: migration applied and verified on AlphoGen Supabase (`user_video_presenter_requests`, private bucket, 4 queue RLS policies, 3 storage policies); commit `a6b403c` pushed and the protected `/api/presenters/video` route is live. Worker selectors still require one `login` + `inspect` calibration against the live account before any real submission. No provider task or spend was started.
 - Validation: 22 focused tests, TypeScript, Python compile, production build, and diff-check pass.
+- Interactive Custom Avatar form calibration has been delegated to Claude. Local calibration helpers remain uncommitted and must not be overwritten by T-1162.
 
 ## T-1160 - Product Ad account presenters - DONE (2026-07-18, Codex)
 - Added a private, reusable account-presenter flow to `/create/url`: upload a consented portrait, normalize and deduplicate it, explicitly start one paid animation task, poll it, then select the resulting presenter for Product Ad.
