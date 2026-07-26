@@ -43,12 +43,15 @@ Product Ads uses two distinct presenter paths:
    - Source footage plus explicit consent footage.
    - Closest available likeness and motion quality.
    - White-label AlphoGen upload, queue and catalog.
-   - An operator-owned worker uses the normal provider web interface until a
-     commercially viable creation API is available.
+   - An authorized operator completes the account workflow, then support links
+     the completed catalog ID from the AlphoGen admin queue.
+   - The completed ID is verified server-side before the reusable account
+     presenter is published.
 
-The browser bridge is a controlled beta constraint, not the long-term provider
-abstraction. The public API, data model and UI remain provider-neutral so the
-implementation can later move to another API without changing the product
+The manual-assisted bridge is a controlled beta constraint, not the long-term
+provider abstraction. Browser automation remains experimental only. The public
+API, data model and UI remain provider-neutral so the implementation can later
+move to another API or the native LatentSync track without changing the product
 contract.
 
 ## Queue contract
@@ -82,6 +85,8 @@ Admin surface: `/admin/video-presenters`
 The admin can:
 
 - filter and monitor all requests;
+- link a completed account presenter ID after verifying it in the account
+  catalog;
 - identify stale worker claims;
 - resume a paused authenticated session;
 - explicitly confirm a retry that may spend;
@@ -114,13 +119,16 @@ not returned by the admin API.
 
 ## Remaining freeze gates
 
-1. Calibrate the current `Avatars -> Custom Avatar` form read-only.
-2. Confirm semantic selectors for source footage, consent footage and submit.
-3. Run one approved, capped, real Video Presenter request.
-4. Verify request `ready`, reusable `user_presenters` row and private-footage
+1. Run one approved manual-assisted Video Presenter request.
+2. Verify the completed catalog ID through the admin linking action.
+3. Verify request `ready`, reusable `user_presenters` row and private-footage
    cleanup.
-5. Install and supervise the worker on the Hostinger VPS.
-6. Update this status to **FROZEN** with the production request evidence.
+4. Confirm the presenter can generate a Product Ad in every compatible format.
+5. Update this status to **FROZEN** with the production request evidence.
+
+The optional Playwright worker and Hostinger deployment are no longer freeze
+gates. They may continue as experiments, but Cloudflare interaction is not a
+production dependency.
 
 ## Rollback
 
@@ -128,4 +136,3 @@ Disable the Video Presenter option in Product Ad and stop the private worker.
 Existing public presenters, account Photo Presenters and finished Video
 Presenters remain usable. No Product Ad generation or shared job state needs to
 change.
-

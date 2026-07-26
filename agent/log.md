@@ -1,3 +1,10 @@
+## 2026-07-26 - Codex - T-1163a manual-assisted Video Presenter publication
+- Replaced browser calibration as the immediate production dependency with an admin-assisted, provider-neutral linking path.
+- `/admin/video-presenters` now accepts a completed account presenter ID only for stopped/review states. The server verifies that it exists in the completed account catalog before publishing it for the request owner.
+- Publication is idempotent by user + external avatar ID, stores a private normalized cover, preserves timestamped consent, uses an optimistic request-status update, and only then removes source/consent footage. Cleanup failure remains independently recoverable.
+- Updated the High-fidelity Video Presenter spec and Product Ads Decision Book. The native LatentSync path is explicitly separate because it needs retention consent and an AlphoGen-owned Product Ad compositor; existing one-time footage is not retained implicitly.
+- Validation: 16 focused tests and TypeScript pass. No provider generation, paid call or schema change.
+
 ## 2026-07-26 - Codex - T-1162 Product Ad operational hardening
 - Added an admin-only Video Presenter queue with status filtering, attempts, media sizes, neutral error codes and recovery guidance.
 - Added a pure retry policy and server enforcement: no retry of active claims, 30-minute stale-claim threshold, six-hour ambiguous-submission lock, three-attempt ceiling, and explicit confirmation for operations that may spend.

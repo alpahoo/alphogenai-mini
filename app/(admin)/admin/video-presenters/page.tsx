@@ -4,11 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
+  Link2,
   Loader2,
   RefreshCw,
   RotateCcw,
   ShieldAlert,
   Trash2,
+  X,
 } from "lucide-react";
 
 interface RetryPolicy {
@@ -33,6 +35,7 @@ interface PresenterRequest {
   createdAt: string;
   updatedAt: string;
   retry: RetryPolicy;
+  canLinkExisting: boolean;
   canCleanup: boolean;
   canRemove: boolean;
 }
@@ -97,6 +100,8 @@ export default function AdminVideoPresentersPage() {
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [linkingRequest, setLinkingRequest] = useState<PresenterRequest | null>(null);
+  const [avatarId, setAvatarId] = useState("");
 
   const load = useCallback(async (page = 1) => {
     setLoading(true);
@@ -156,6 +161,43 @@ export default function AdminVideoPresentersPage() {
       await load(pagination.page);
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "The action could not be completed.");
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const linkExistingPresenter = async () => {
+    if (!linkingRequest || !avatarId.trim()) return;
+    setActingId(linkingRequest.id);
+    setError(null);
+    try {
+      const response = await fetch("/api/admin/video-presenters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "link_existing",
+          requestId: linkingRequest.id,
+          avatarId: avatarId.trim(),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error ?? "The completed presenter could not be linked.");
+      }
+      if (payload.cleanupPending) {
+        setError(
+          "The presenter is ready, but its private-footage cleanup still needs attention.",
+        );
+      }
+      setLinkingRequest(null);
+      setAvatarId("");
+      await load(pagination.page);
+    } catch (linkError) {
+      setError(
+        linkError instanceof Error
+          ? linkError.message
+          : "The completed presenter could not be linked.",
+      );
     } finally {
       setActingId(null);
     }
@@ -261,6 +303,21 @@ export default function AdminVideoPresentersPage() {
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex justify-end gap-1.5">
+                        {item.canLinkExisting ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLinkingRequest(item);
+                              setAvatarId("");
+                              setError(null);
+                            }}
+                            disabled={acting}
+                            title="Link a completed presenter"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground transition hover:text-foreground disabled:opacity-40"
+                          >
+                            <Link2 className="h-4 w-4" />
+                          </button>
+                        ) : null}
                         {item.retry.allowed ? (
                           <button
                             type="button"
@@ -335,6 +392,79 @@ export default function AdminVideoPresentersPage() {
               Next
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
+          </div>
+        </div>
+      ) : null}
+
+      {linkingRequest ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="link-presenter-title"
+        >
+          <div className="w-full max-w-md rounded-md border border-border bg-background p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="link-presenter-title" className="text-base font-semibold">
+                  Link completed presenter
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Verify the completed presenter in the account catalog, then enter its ID.
+                  AlphoGen will publish it to {linkingRequest.userEmail}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLinkingRequest(null)}
+                disabled={actingId === linkingRequest.id}
+                title="Close"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground disabled:opacity-40"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <label className="mt-5 block text-sm font-medium" htmlFor="completed-presenter-id">
+              Completed presenter ID
+            </label>
+            <input
+              id="completed-presenter-id"
+              value={avatarId}
+              onChange={(event) => setAvatarId(event.target.value.replace(/[^\d]/g, ""))}
+              inputMode="numeric"
+              autoFocus
+              placeholder="445593"
+              className="mt-2 h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-foreground"
+            />
+            <p className="mt-2 text-xs text-muted-foreground">
+              The ID is verified against the completed account catalog before anything is saved.
+              Private source and consent footage are deleted only after the link succeeds.
+            </p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setLinkingRequest(null)}
+                disabled={actingId === linkingRequest.id}
+                className="h-9 rounded-md border border-border px-4 text-sm font-medium disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void linkExistingPresenter()}
+                disabled={!avatarId.trim() || actingId === linkingRequest.id}
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-foreground px-4 text-sm font-medium text-background disabled:opacity-40"
+              >
+                {actingId === linkingRequest.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Link2 className="h-4 w-4" />
+                )}
+                Link presenter
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

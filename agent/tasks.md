@@ -1,5 +1,17 @@
 # agent/tasks.md — Backlog partagé
 
+## T-1163a - Manual-assisted Video Presenter publication - DONE (2026-07-26, Codex)
+- Added a provider-neutral admin action that links a completed account presenter ID to a waiting AlphoGen Video Presenter request.
+- The server verifies the ID against the completed custom-avatar catalog, publishes or reuses the private `user_presenters` row, marks the request ready with an optimistic status guard, then deletes source and consent footage.
+- Linking is restricted to unclaimed `pending`, `needs_login`, `needs_review` and `failed`; active worker requests cannot race with the manual path. The action is idempotent and a cleanup failure does not lose the completed presenter.
+- Updated the Product Ads Decision Book: manual-assisted delivery is the immediate production bridge; Playwright is experimental, not a freeze gate.
+
+## T-1163b - Native Video Presenter independence track - PLANNED
+- Goal: retain a consented performance clip as a separate private reusable asset, animate it through the provider-neutral lip-sync adapter (LatentSync first), and compose Product Ads inside AlphoGen.
+- This is not a provider-ID swap. It requires a distinct retention consent, private base-clip lifecycle, voice/script timeline, product-media compositor and deletion controls.
+- Current one-time source and consent footage must continue to be deleted after manual publication; it cannot be silently retained for the native track.
+- First implementation slice requires an additive schema/storage migration in the AlphoGen Supabase project and a separate production GO.
+
 ## T-1162 - Product Ad V1 operational hardening - DONE (2026-07-26, Codex)
 - Added the admin-only `/admin/video-presenters` operations surface and `/api/admin/video-presenters` route. It lists provider-neutral queue state, user, attempts, private media sizes and recovery policy without exposing provider ids, storage paths or raw provider errors.
 - Added controlled recovery rules: active claims cannot be retried; claims become releasable after 30 minutes; recent ambiguous submissions are locked for six hours; invalid footage/consent requires a new request; retries stop after three attempts; any retry that may spend requires explicit confirmation.

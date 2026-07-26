@@ -2,10 +2,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "../middleware";
 import { createServiceClient } from "@/lib/supabase/service";
+import {
+  linkExistingVideoPresenter,
+  ManualVideoPresenterLinkError,
+} from "@/lib/video-presenter-manual-link";
 import { GET, POST } from "./route";
 
 vi.mock("../middleware", () => ({ requireAdmin: vi.fn() }));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: vi.fn() }));
+vi.mock("@/lib/video-presenter-manual-link", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/video-presenter-manual-link")>(
+    "@/lib/video-presenter-manual-link",
+  );
+  return {
+    ...actual,
+    linkExistingVideoPresenter: vi.fn(),
+  };
+});
 
 const ADMIN = { id: "admin-1", email: "admin@alphogen.com" };
 const NOW = "2026-07-26T12:00:00.000Z";
@@ -30,12 +43,15 @@ function presenterRow(overrides: Record<string, unknown> = {}) {
     source_size_bytes: 1_000_000,
     consent_size_bytes: 500_000,
     status: "needs_login",
+    external_avatar_id: null,
     presenter_id: null,
     error_code: "needs_login",
     attempts: 1,
     claimed_at: null,
     submitted_at: null,
     ready_at: null,
+    consent_confirmed_at: NOW,
+    consent_statement_version: "v1",
     created_at: NOW,
     updated_at: NOW,
     ...overrides,
@@ -93,6 +109,11 @@ function mockService(options: {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(requireAdmin).mockResolvedValue({ user: ADMIN } as never);
+  vi.mocked(linkExistingVideoPresenter).mockResolvedValue({
+    presenterId: "presenter-1",
+    reused: false,
+    cleanupPending: false,
+  });
 });
 
 describe("admin video presenter requests", () => {
@@ -185,5 +206,54 @@ describe("admin video presenter requests", () => {
     );
     expect(response.status).toBe(409);
     expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("links a completed presenter without exposing provider details", async () => {
+    mockService({ row: presenterRow() });
+    const response = await POST(
+      request("http://localhost/api/admin/video-presenters", {
+        action: "link_existing",
+        requestId: "request-1",
+        avatarId: "445593",
+      }),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      ok: true,
+      presenterId: "presenter-1",
+      reused: false,
+      cleanupPending: false,
+    });
+    expect(linkExistingVideoPresenter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "request-1",
+        userId: "user-1",
+        status: "needs_login",
+      }),
+      "445593",
+      expect.any(Object),
+    );
+    expect(JSON.stringify(payload).toLowerCase()).not.toContain("jogg");
+  });
+
+  it("returns a safe validation error when the presenter id is invalid", async () => {
+    vi.mocked(linkExistingVideoPresenter).mockRejectedValue(
+      new ManualVideoPresenterLinkError("Enter a valid completed presenter ID.", 400),
+    );
+    mockService({ row: presenterRow() });
+    const response = await POST(
+      request("http://localhost/api/admin/video-presenters", {
+        action: "link_existing",
+        requestId: "request-1",
+        avatarId: "invalid",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Enter a valid completed presenter ID.",
+    });
   });
 });

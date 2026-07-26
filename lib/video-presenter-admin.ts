@@ -108,3 +108,7 @@ export function canCleanupVideoPresenterFootage(status: VideoPresenterStatus) {
 export function canRemoveVideoPresenterRequest(status: VideoPresenterStatus) {
   return !["claimed", "submitted", "processing"].includes(status);
 }
+
+export function canLinkExistingVideoPresenter(status: VideoPresenterStatus) {
+  return ["pending", "failed", "needs_login", "needs_review"].includes(status);
+}
