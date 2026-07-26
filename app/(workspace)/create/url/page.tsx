@@ -24,6 +24,7 @@ import {
   ShoppingBag,
   ShieldCheck,
   Sparkles,
+  Trash2,
   Upload,
   UserPlus,
   Volume2,
@@ -296,6 +297,7 @@ export default function UrlToVideo() {
   const [retryingPresenterId, setRetryingPresenterId] = useState<string | null>(null);
   const [presenterError, setPresenterError] = useState<string | null>(null);
   const [videoPresenterRequests, setVideoPresenterRequests] = useState<PublicVideoPresenterRequest[]>([]);
+  const [deletingNativeBaseId, setDeletingNativeBaseId] = useState<string | null>(null);
   const processingPresenterIds = useMemo(
     () => userPresenters
       .filter((presenter) => presenter.status === "processing")
@@ -468,6 +470,48 @@ export default function UrlToVideo() {
       presenter,
       ...current.filter((item) => item.id !== presenter.id),
     ]);
+  }
+
+  async function deleteNativePresenterBase(request: PublicVideoPresenterRequest) {
+    if (!request.nativeBase || deletingNativeBaseId) return;
+    if (!window.confirm("Delete the reusable performance clip? The current presenter request will continue.")) {
+      return;
+    }
+    setDeletingNativeBaseId(request.id);
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sign in to delete retained footage.");
+      const response = await fetch("/api/presenters/video", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "delete_native_base",
+          requestId: request.id,
+        }),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(json.error || "Could not delete the reusable performance clip.");
+      }
+      setVideoPresenterRequests((current) =>
+        current.map((item) =>
+          item.id === request.id ? { ...item, nativeBase: null } : item,
+        ),
+      );
+      setStatus("Reusable performance clip deleted. The presenter request will continue.");
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Could not delete the reusable performance clip.",
+      );
+    } finally {
+      setDeletingNativeBaseId(null);
+    }
   }
 
   useEffect(() => {
@@ -949,6 +993,43 @@ export default function UrlToVideo() {
                 );
               })}
             </div>
+
+            {videoPresenterRequests.some((request) => request.nativeBase) && (
+              <div className="mt-2 border-t border-neutral-100 pt-3">
+                <p className="text-[11px] font-bold uppercase text-neutral-500">
+                  Reusable performance clips
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {videoPresenterRequests
+                    .filter((request) => request.nativeBase)
+                    .map((request) => (
+                      <div
+                        key={`native-${request.id}`}
+                        className="inline-flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-blue-950"
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5 text-blue-700" />
+                        <span className="max-w-40 truncate font-semibold">{request.name}</span>
+                        <span className="text-[10px] text-blue-700">
+                          private · expires{" "}
+                          {new Date(request.nativeBase!.retentionUntil).toLocaleDateString()}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void deleteNativePresenterBase(request)}
+                          disabled={deletingNativeBaseId === request.id}
+                          title="Delete reusable performance clip"
+                          aria-label={`Delete reusable performance clip for ${request.name}`}
+                          className="rounded p-1 text-blue-700 transition hover:bg-white hover:text-red-600 disabled:opacity-50"
+                        >
+                          {deletingNativeBaseId === request.id
+                            ? <Loader2 className="h-3 w-3 animate-spin" />
+                            : <Trash2 className="h-3 w-3" />}
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
 
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
               <div>

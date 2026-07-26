@@ -31,7 +31,7 @@ const SECTIONS = [
   },
   {
     title: "6. Data location and retention",
-    body: "We retain account and generation history while your account remains active, unless deletion is requested or required by law. Retention periods may vary for security logs, billing records, and backups.",
+    body: "We retain account and generation history while your account remains active, unless deletion is requested or required by law. One-time video-presenter source and consent footage is deleted after publication. If you separately opt in to an AlphoGen-native reusable presenter, its private performance clip is retained for no more than one year and can be deleted earlier from your account.",
   },
   {
     title: "7. Your rights",
@@ -70,7 +70,7 @@ export default function PrivacyPage() {
               Privacy Policy
             </h1>
             <p className="mt-5 text-sm leading-7 text-white/65">
-              Last updated: June 2026. This page explains how private creative
+              Last updated: July 2026. This page explains how private creative
               data is handled inside AlphoGen.
             </p>
           </div>

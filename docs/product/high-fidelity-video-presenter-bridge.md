@@ -87,6 +87,23 @@ The native track therefore proceeds in four bounded slices:
 Current source and consent footage must continue to be deleted after manual
 publication. It must never be retained implicitly for the native track.
 
+### Native slice 1: durable private base (T-1163b)
+
+The first native slice is implemented behind an explicit optional consent in
+the existing upload form:
+
+- the one-time source and consent clips keep their current lifecycle;
+- opting in uploads a second private copy to
+  `user-presenter-native-bases`, recorded in
+  `user_presenter_native_bases`;
+- the native copy has its own consent version, one-year expiry, daily
+  fail-closed cleanup, and an immediate user deletion action;
+- no GPU/model job is started by this slice.
+
+The duplicate direct-to-storage upload is intentional. It avoids moving up to
+200 MB through Vercel and makes the retained asset independent from manual
+publication cleanup.
+
 The official product steps used for this contract are: upload/record footage,
 submit a consent clip, animate, then save/create. See the official guide:
 https://www.jogg.ai/academy/how-to-create-custom-avatar/

@@ -1,3 +1,10 @@
+## 2026-07-26 - Codex - T-1163b native Video Presenter base lifecycle
+- Added an optional retention consent separate from the current one-time presenter-processing authorization. The default remains no retention.
+- Opt-in uploads a second copy of the performance footage directly to a dedicated private bucket, avoiding Vercel body limits and keeping manual cleanup independent from the native asset.
+- Added `user_presenter_native_bases` with own-only RLS, one-year retention, explicit removal state, a user deletion action and a daily fail-closed retention cron. No GPU/model/provider call is started.
+- Updated the privacy policy and native-track specification. Migration is intentionally required before deployment because `/api/presenters/video` reads the new table.
+- Validation: 1030/1030 tests, production build and TypeScript pass. No paid call.
+
 ## 2026-07-26 - Codex - T-1163a manual-assisted Video Presenter publication
 - Replaced browser calibration as the immediate production dependency with an admin-assisted, provider-neutral linking path.
 - `/admin/video-presenters` now accepts a completed account presenter ID only for stopped/review states. The server verifies that it exists in the completed account catalog before publishing it for the request owner.

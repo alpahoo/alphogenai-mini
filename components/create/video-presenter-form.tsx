@@ -8,6 +8,9 @@ import {
   VIDEO_PRESENTER_CONSENT,
   validateVideoUpload,
 } from "@/lib/video-presenters";
+import {
+  NATIVE_PRESENTER_RETENTION_CONSENT,
+} from "@/lib/video-presenter-native";
 
 export type PublicVideoPresenterRequest = {
   id: string;
@@ -17,9 +20,14 @@ export type PublicVideoPresenterRequest = {
   error: string | null;
   createdAt: string;
   updatedAt: string;
+  nativeBase?: {
+    id: string;
+    status: string;
+    retentionUntil: string;
+  } | null;
 };
 
-type PreparedUpload = { path: string; token: string };
+type PreparedUpload = { path: string; token: string; bucket?: string };
 
 export function VideoPresenterForm({
   onQueued,
@@ -32,6 +40,7 @@ export function VideoPresenterForm({
   const [source, setSource] = useState<File | null>(null);
   const [consentFile, setConsentFile] = useState<File | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [nativeRetentionConfirmed, setNativeRetentionConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +48,7 @@ export function VideoPresenterForm({
   async function uploadSigned(file: File, upload: PreparedUpload) {
     const supabase = createClient();
     const result = await supabase.storage
-      .from(VIDEO_PRESENTER_BUCKET)
+      .from(upload.bucket ?? VIDEO_PRESENTER_BUCKET)
       .uploadToSignedUrl(upload.path, upload.token, file, {
         contentType: file.type,
         upsert: false,
@@ -76,6 +85,8 @@ export function VideoPresenterForm({
           action: "prepare",
           name: name.trim(),
           consent: true,
+          retainForNative: nativeRetentionConfirmed,
+          nativeRetentionConsent: nativeRetentionConfirmed,
           source: { type: source.type, size: source.size },
           consentFile: { type: consentFile.type, size: consentFile.size },
         }),
@@ -85,9 +96,13 @@ export function VideoPresenterForm({
       preparedRequestId = prepared.request.id as string;
       setProgress(15);
       await uploadSigned(source, prepared.uploads.source as PreparedUpload);
-      setProgress(65);
+      setProgress(50);
       await uploadSigned(consentFile, prepared.uploads.consent as PreparedUpload);
-      setProgress(90);
+      setProgress(nativeRetentionConfirmed ? 70 : 90);
+      if (prepared.uploads.nativeBase) {
+        await uploadSigned(source, prepared.uploads.nativeBase as PreparedUpload);
+        setProgress(90);
+      }
       const submitResponse = await fetch("/api/presenters/video", {
         method: "POST",
         headers,
@@ -172,6 +187,25 @@ export function VideoPresenterForm({
         </label>
       </div>
 
+      <div className="mt-3 flex items-start gap-2 rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" />
+        <label className="flex cursor-pointer gap-2 text-xs leading-relaxed text-blue-950">
+          <input
+            type="checkbox"
+            checked={nativeRetentionConfirmed}
+            onChange={(event) => setNativeRetentionConfirmed(event.target.checked)}
+            disabled={busy}
+            className="mt-0.5 h-4 w-4"
+          />
+          <span>
+            <strong className="block">Keep a reusable AlphoGen-native performance clip</strong>
+            <span className="mt-1 block text-blue-800">
+              {NATIVE_PRESENTER_RETENTION_CONSENT}
+            </span>
+          </span>
+        </label>
+      </div>
+
       {busy && (
         <div className="mt-4">
           <div className="h-1.5 overflow-hidden rounded-full bg-neutral-100">
@@ -203,6 +237,9 @@ export function VideoPresenterForm({
       </div>
       <p className="mt-3 text-center text-[11px] text-neutral-500">
         Private beta: processing may require several minutes. Your files are not public.
+        {nativeRetentionConfirmed
+          ? " A separate private copy will be uploaded for the native presenter track."
+          : ""}
       </p>
     </div>
   );

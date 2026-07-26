@@ -6,11 +6,13 @@
 - Linking is restricted to unclaimed `pending`, `needs_login`, `needs_review` and `failed`; active worker requests cannot race with the manual path. The action is idempotent and a cleanup failure does not lose the completed presenter.
 - Updated the Product Ads Decision Book: manual-assisted delivery is the immediate production bridge; Playwright is experimental, not a freeze gate.
 
-## T-1163b - Native Video Presenter independence track - PLANNED
+## T-1163b - Native Video Presenter independence track - SLICE 1 READY (migration pending)
 - Goal: retain a consented performance clip as a separate private reusable asset, animate it through the provider-neutral lip-sync adapter (LatentSync first), and compose Product Ads inside AlphoGen.
 - This is not a provider-ID swap. It requires a distinct retention consent, private base-clip lifecycle, voice/script timeline, product-media compositor and deletion controls.
 - Current one-time source and consent footage must continue to be deleted after manual publication; it cannot be silently retained for the native track.
-- First implementation slice requires an additive schema/storage migration in the AlphoGen Supabase project and a separate production GO.
+- Slice 1 implemented locally: optional retention consent, separate direct private upload, one-year expiry, daily fail-closed cleanup, and immediate deletion. No GPU/model call.
+- Migration `20260726_create_user_presenter_native_bases.sql` must be applied before the code can be pushed because the existing list route reads the new table.
+- Next slice after production migration/QA: normalize the retained base and connect it to the provider-neutral LatentSync adapter.
 
 ## T-1162 - Product Ad V1 operational hardening - DONE (2026-07-26, Codex)
 - Added the admin-only `/admin/video-presenters` operations surface and `/api/admin/video-presenters` route. It lists provider-neutral queue state, user, attempts, private media sizes and recovery policy without exposing provider ids, storage paths or raw provider errors.
