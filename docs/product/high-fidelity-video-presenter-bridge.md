@@ -107,3 +107,26 @@ publication cleanup.
 The official product steps used for this contract are: upload/record footage,
 submit a consent clip, animate, then save/create. See the official guide:
 https://www.jogg.ai/academy/how-to-create-custom-avatar/
+
+### Native slice 2: private normalization (T-1163c)
+
+The retained performance clip is normalized asynchronously on Modal CPU before
+any speech-animation model is allowed to consume it:
+
+- Next.js claims an `uploaded` or `failed` base before triggering Modal, and
+  retries reuse `normalizing` or `ready` state instead of spawning duplicates;
+- Modal reads the source from the private Supabase bucket using the service
+  role and writes a separate private `normalized-v1.mp4`;
+- the deterministic contract is 720x720, center-cropped, 25 fps,
+  H.264/yuv420p, silent stereo AAC, and at most 30 seconds;
+- ffprobe validates the model-ready asset before the database can become
+  `ready`;
+- failures expose only a product-safe state and can be retried explicitly;
+- source and normalized files are deleted together on user deletion or
+  retention expiry;
+- recent normalization jobs are protected from cleanup, while jobs stale for
+  more than two hours no longer block retention deletion indefinitely.
+
+This slice is CPU preprocessing only. It starts no GPU, provider, voice or
+paid generation. The next slice connects the ready private base to the
+provider-neutral speech-animation adapter.

@@ -3148,6 +3148,243 @@ def trim_base_clip_for_lipsync(
         shutil.rmtree(workdir, ignore_errors=True)
 
 
+@app.function(
+    image=overlay_image,
+    secrets=[secrets],
+    timeout=600,
+    retries=0,
+)
+def normalize_native_presenter_base(base_id: str) -> dict:
+    """Create a private, model-ready performance clip without GPU inference.
+
+    Contract: square 720p, 25 fps, H.264/yuv420p, silent stereo AAC, max 30 s.
+    The original private upload is preserved. The normalized copy stays in the
+    same private Supabase bucket and is never exposed through a public URL.
+    """
+    import json
+    import shutil
+    import subprocess
+    import tempfile
+    from datetime import datetime, timezone
+    from pathlib import Path
+    from urllib.parse import quote
+
+    import httpx
+
+    table = "user_presenter_native_bases"
+    bucket = "user-presenter-native-bases"
+    version = "square-720p25-silent-v1"
+    sb = get_supabase_client()
+    workdir = Path(tempfile.mkdtemp(prefix="native-presenter-"))
+    now_iso = lambda: datetime.now(timezone.utc).isoformat()
+
+    def update_state(**fields):
+        return (
+            sb.table(table)
+            .update(fields)
+            .eq("id", base_id)
+            .neq("status", "removed")
+            .execute()
+        )
+
+    try:
+        response = (
+            sb.table(table)
+            .select(
+                "id,user_id,video_path,status,normalized_video_path,"
+                "normalization_version"
+            )
+            .eq("id", base_id)
+            .single()
+            .execute()
+        )
+        row = response.data
+        if not row:
+            raise ValueError("native_base_not_found")
+        if row.get("status") == "removed":
+            raise ValueError("native_base_removed")
+        if (
+            row.get("status") == "ready"
+            and row.get("normalized_video_path")
+            and row.get("normalization_version") == version
+        ):
+            return {
+                "base_id": base_id,
+                "status": "ready",
+                "reused": True,
+            }
+
+        source_path = str(row.get("video_path") or "")
+        user_id = str(row.get("user_id") or "")
+        if not source_path or not user_id:
+            raise ValueError("native_base_source_missing")
+        normalized_path = f"{user_id}/{base_id}/normalized-v1.mp4"
+
+        update_state(
+            status="normalizing",
+            error_code=None,
+            normalization_started_at=now_iso(),
+        )
+
+        supabase_url = (
+            os.environ.get("SUPABASE_URL")
+            or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+        ).rstrip("/")
+        service_key = (
+            os.environ.get("SUPABASE_SERVICE_KEY")
+            or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        )
+        if not supabase_url or not service_key:
+            raise RuntimeError("supabase_storage_not_configured")
+        headers = {
+            "Authorization": f"Bearer {service_key}",
+            "apikey": service_key,
+        }
+
+        source_file = workdir / "source"
+        output_file = workdir / "normalized.mp4"
+        source_url = (
+            f"{supabase_url}/storage/v1/object/{bucket}/"
+            f"{quote(source_path, safe='/')}"
+        )
+        with httpx.stream(
+            "GET",
+            source_url,
+            headers=headers,
+            timeout=180,
+            follow_redirects=True,
+        ) as download:
+            download.raise_for_status()
+            with source_file.open("wb") as handle:
+                for chunk in download.iter_bytes():
+                    handle.write(chunk)
+
+        normalize_cmd = [
+            "ffmpeg", "-y",
+            "-i", str(source_file),
+            "-f", "lavfi",
+            "-i", "anullsrc=channel_layout=stereo:sample_rate=48000",
+            "-map", "0:v:0",
+            "-map", "1:a:0",
+            "-t", "30",
+            "-vf",
+            (
+                "scale=720:720:force_original_aspect_ratio=increase,"
+                "crop=720:720,"
+                "fps=25,setsar=1"
+            ),
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "18",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-b:a", "96k",
+            "-shortest",
+            "-movflags", "+faststart",
+            str(output_file),
+        ]
+        normalized = subprocess.run(
+            normalize_cmd,
+            capture_output=True,
+            text=True,
+            timeout=420,
+        )
+        if normalized.returncode != 0 or not output_file.exists():
+            raise RuntimeError(
+                f"normalization_failed: {(normalized.stderr or '')[-800:]}"
+            )
+
+        probe = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-print_format", "json",
+                "-show_format", "-show_streams",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=True,
+        )
+        metadata = json.loads(probe.stdout or "{}")
+        streams = metadata.get("streams", [])
+        video_stream = next(
+            (stream for stream in streams if stream.get("codec_type") == "video"),
+            None,
+        )
+        has_audio = any(
+            stream.get("codec_type") == "audio" for stream in streams
+        )
+        duration = float(metadata.get("format", {}).get("duration") or 0)
+        if (
+            not video_stream
+            or not has_audio
+            or int(video_stream.get("width") or 0) != 720
+            or int(video_stream.get("height") or 0) != 720
+            or duration < 0.5
+            or duration > 30.5
+        ):
+            raise RuntimeError("normalized_output_invalid")
+
+        fps_raw = str(
+            video_stream.get("avg_frame_rate")
+            or video_stream.get("r_frame_rate")
+            or "25/1"
+        )
+        numerator, _, denominator = fps_raw.partition("/")
+        fps = float(numerator) / max(float(denominator or 1), 1)
+
+        upload_url = (
+            f"{supabase_url}/storage/v1/object/{bucket}/"
+            f"{quote(normalized_path, safe='/')}"
+        )
+        upload_headers = {
+            **headers,
+            "Content-Type": "video/mp4",
+            "x-upsert": "true",
+        }
+        upload = httpx.post(
+            upload_url,
+            headers=upload_headers,
+            content=output_file.read_bytes(),
+            timeout=180,
+        )
+        upload.raise_for_status()
+
+        update_state(
+            status="ready",
+            error_code=None,
+            normalized_video_path=normalized_path,
+            normalized_duration_seconds=round(duration, 3),
+            normalized_width=720,
+            normalized_height=720,
+            normalized_fps=round(fps, 3),
+            normalization_version=version,
+            normalized_at=now_iso(),
+        )
+        return {
+            "base_id": base_id,
+            "status": "ready",
+            "reused": False,
+            "duration_seconds": round(duration, 3),
+            "width": 720,
+            "height": 720,
+            "fps": round(fps, 3),
+        }
+    except Exception as exc:
+        print(f"[native-presenter:{base_id}] normalization failed: {exc}")
+        try:
+            update_state(status="failed", error_code="normalization_failed")
+        except Exception as update_exc:
+            print(
+                f"[native-presenter:{base_id}] failure state update failed: "
+                f"{update_exc}"
+            )
+        raise
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
 # ===========================================================================
 # Webhook (FastAPI)
 # ===========================================================================
@@ -3194,6 +3431,9 @@ def webhook():
         base_url: str
         duration_seconds: float
         cache_key: str
+
+    class NormalizeNativePresenterBaseRequest(BaseModel):
+        base_id: str
 
     @web.post("/webhook")
     async def trigger(req: JobRequest, x_webhook_secret: str = Header(None)):
@@ -3319,6 +3559,25 @@ def webhook():
             print(f"[webhook /trim-base-clip] failed: {e}")
             raise HTTPException(status_code=500, detail=str(e)[:200])
         return {"success": True, "url": url}
+
+    @web.post("/normalize-native-presenter-base")
+    async def normalize_native_presenter_base_ep(
+        req: NormalizeNativePresenterBaseRequest,
+        x_webhook_secret: str = Header(None),
+    ):
+        """Spawn private CPU normalization for one retained performance clip."""
+        expected = os.environ.get("MODAL_WEBHOOK_SECRET")
+        if not expected or x_webhook_secret != expected:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        try:
+            await normalize_native_presenter_base.spawn.aio(req.base_id)
+        except Exception as e:
+            print(
+                "[webhook /normalize-native-presenter-base] spawn failed: "
+                f"{e}"
+            )
+            raise HTTPException(status_code=500, detail=str(e)[:200])
+        return {"success": True, "base_id": req.base_id}
 
     @web.post("/apply-voiceover")
     async def apply_voiceover(req: ConcatRequest, x_webhook_secret: str = Header(None)):

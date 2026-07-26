@@ -270,3 +270,32 @@ export async function trimLipsyncBaseClip(input: {
   if (!outUrl) throw new Error("Modal /trim-base-clip returned no url");
   return outUrl;
 }
+
+/**
+ * Normalize a retained private performance clip for the native presenter
+ * pipeline. Modal reads the private source and writes the private normalized
+ * output server-side, then updates user_presenter_native_bases. The webhook
+ * only receives the opaque base id and returns immediately after spawning.
+ */
+export async function triggerNormalizeNativePresenterBase(baseId: string): Promise<void> {
+  const webhookSecret = secret();
+  if (!webhookSecret) {
+    throw new Error("MODAL_WEBHOOK_SECRET not configured");
+  }
+  const url = `${modalBase()}/normalize-native-presenter-base`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-webhook-secret": webhookSecret,
+    },
+    body: JSON.stringify({ base_id: baseId }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(
+      `Modal /normalize-native-presenter-base ${res.status}: ${detail.slice(0, 200)}`,
+    );
+  }
+}

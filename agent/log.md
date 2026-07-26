@@ -1,3 +1,11 @@
+## 2026-07-26 - Codex - T-1163c native Video Presenter private normalization
+- Added an asynchronous, idempotent CPU normalization stage for retained performance footage. Next.js claims the private base only after the manual presenter request is queued, then triggers a secret-protected Modal webhook; retry reuses `normalizing`/`ready` state.
+- Modal downloads the source from private Supabase Storage, center-crops to 720x720 at 25 fps, strips the original sound, adds silent stereo AAC, caps at 30 seconds, validates with ffprobe, and writes a separate private normalized asset before marking the base ready.
+- No storage path, provider name, raw error or signed URL crosses the public presenter API. The UI exposes only preparing/ready/retry product states.
+- Source and normalized copies are removed together. Retention protects recent normalization jobs but treats jobs stale for more than two hours as removable so failed infrastructure cannot retain footage indefinitely.
+- The new webhook and Next client fail closed when `MODAL_WEBHOOK_SECRET` is absent. No GPU/model/provider call or paid generation is part of this slice.
+- Validation: 17 focused tests, 1036/1036 full tests, TypeScript, Python AST parse and production build pass. Migration `20260726_native_presenter_normalization.sql` remains required before deployment.
+
 ## 2026-07-26 - Codex - T-1163b native Video Presenter base lifecycle
 - Added an optional retention consent separate from the current one-time presenter-processing authorization. The default remains no retention.
 - Opt-in uploads a second copy of the performance footage directly to a dedicated private bucket, avoiding Vercel body limits and keeping manual cleanup independent from the native asset.

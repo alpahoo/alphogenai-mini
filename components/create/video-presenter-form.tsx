@@ -24,6 +24,7 @@ export type PublicVideoPresenterRequest = {
     id: string;
     status: string;
     retentionUntil: string;
+    normalizedAt: string | null;
   } | null;
 };
 

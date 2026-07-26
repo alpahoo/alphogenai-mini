@@ -6,13 +6,21 @@
 - Linking is restricted to unclaimed `pending`, `needs_login`, `needs_review` and `failed`; active worker requests cannot race with the manual path. The action is idempotent and a cleanup failure does not lose the completed presenter.
 - Updated the Product Ads Decision Book: manual-assisted delivery is the immediate production bridge; Playwright is experimental, not a freeze gate.
 
-## T-1163b - Native Video Presenter independence track - SLICE 1 READY (migration pending)
+## T-1163c - Native Video Presenter private normalization - CODE READY (migration pending)
+- Added asynchronous, idempotent CPU normalization for retained performance clips. Next.js claims the row, Modal reads/writes private Supabase objects server-side, and the UI polls provider-neutral state with explicit retry.
+- Normalization contract: center-cropped 720x720, 25 fps, H.264/yuv420p, silent stereo AAC, max 30 seconds, validated by ffprobe before `ready`.
+- Privacy hardening: webhook secret is fail-closed; source and normalized copies are deleted together; recent work is protected while a normalization stale for more than two hours cannot block retention cleanup forever.
+- No GPU/model/provider call and no paid generation. Migration `20260726_native_presenter_normalization.sql` must be applied before push/deployment.
+- Validation: 17 focused tests, 1036/1036 full tests, TypeScript, Python AST parse and production build pass.
+- Next slice after migration/deploy/one private normalization QA: provider-neutral speech animation adapter (LatentSync first).
+
+## T-1163b - Native Video Presenter independence track - SLICE 1 DONE (2026-07-26, Codex)
 - Goal: retain a consented performance clip as a separate private reusable asset, animate it through the provider-neutral lip-sync adapter (LatentSync first), and compose Product Ads inside AlphoGen.
 - This is not a provider-ID swap. It requires a distinct retention consent, private base-clip lifecycle, voice/script timeline, product-media compositor and deletion controls.
 - Current one-time source and consent footage must continue to be deleted after manual publication; it cannot be silently retained for the native track.
-- Slice 1 implemented locally: optional retention consent, separate direct private upload, one-year expiry, daily fail-closed cleanup, and immediate deletion. No GPU/model call.
-- Migration `20260726_create_user_presenter_native_bases.sql` must be applied before the code can be pushed because the existing list route reads the new table.
-- Next slice after production migration/QA: normalize the retained base and connect it to the provider-neutral LatentSync adapter.
+- Slice 1 deployed: optional retention consent, separate direct private upload, one-year expiry, daily fail-closed cleanup, and immediate deletion. No GPU/model call.
+- Migration `20260726_create_user_presenter_native_bases.sql` was applied to AlphoGen production before deployment.
+- Slice 2 private normalization is tracked separately as T-1163c.
 
 ## T-1162 - Product Ad V1 operational hardening - DONE (2026-07-26, Codex)
 - Added the admin-only `/admin/video-presenters` operations surface and `/api/admin/video-presenters` route. It lists provider-neutral queue state, user, attempts, private media sizes and recovery policy without exposing provider ids, storage paths or raw provider errors.

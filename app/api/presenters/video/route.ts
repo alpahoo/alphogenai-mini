@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 import { screenPersonaName } from "@/lib/content-policy";
+import { triggerNormalizeNativePresenterBase } from "@/lib/modal-client";
 import {
   VIDEO_PRESENTER_BUCKET,
   VIDEO_PRESENTER_CONSENT_VERSION,
@@ -14,7 +15,9 @@ import {
 import {
   NATIVE_PRESENTER_BASE_BUCKET,
   NATIVE_PRESENTER_RETENTION_CONSENT_VERSION,
+  canStartNativePresenterNormalization,
   type NativePresenterBaseRow,
+  toPublicNativePresenterBase,
   wantsNativePresenterBase,
 } from "@/lib/video-presenter-native";
 
@@ -22,10 +25,63 @@ export const maxDuration = 30;
 
 const SELECT =
   "id, user_id, name, provider_name, source_video_path, consent_video_path, source_mime, consent_mime, source_size_bytes, consent_size_bytes, status, external_avatar_id, presenter_id, error_code, created_at, updated_at";
+const NATIVE_SELECT =
+  "id, user_id, request_id, name, video_path, video_mime, video_size_bytes, normalized_video_path, normalized_duration_seconds, normalized_width, normalized_height, normalized_fps, normalization_version, normalization_started_at, normalized_at, status, error_code, consent_confirmed_at, consent_statement_version, retention_until, deleted_at, created_at, updated_at";
 
 function providerSafeName(id: string, name: string) {
   const clean = name.replace(/[^a-zA-Z0-9 _-]/g, "").replace(/\s+/g, " ").trim();
   return `AG-${id.slice(0, 8)}-${clean || "Presenter"}`.slice(0, 150);
+}
+
+async function claimNativeNormalization(
+  service: ReturnType<typeof createServiceClient>,
+  userId: string,
+  row: NativePresenterBaseRow,
+) {
+  if (row.status === "ready" || row.status === "normalizing") {
+    return { row, reused: true };
+  }
+  if (!canStartNativePresenterNormalization(row.status)) {
+    throw new Error("native_base_not_ready");
+  }
+
+  const startedAt = new Date().toISOString();
+  const { data: claimed, error: claimError } = await service
+    .from("user_presenter_native_bases")
+    .update({
+      status: "normalizing",
+      error_code: null,
+      normalization_started_at: startedAt,
+    })
+    .eq("id", row.id)
+    .eq("user_id", userId)
+    .in("status", ["uploaded", "failed"])
+    .select(NATIVE_SELECT)
+    .maybeSingle();
+  if (claimError) throw new Error("native_base_claim_failed");
+  if (!claimed) return { row: { ...row, status: "normalizing" as const }, reused: true };
+
+  try {
+    await triggerNormalizeNativePresenterBase(row.id);
+  } catch (error) {
+    console.error("[video-presenters] native normalization trigger failed:", {
+      baseId: row.id,
+      error,
+    });
+    await service
+      .from("user_presenter_native_bases")
+      .update({
+        status: "uploaded",
+        error_code: "normalization_trigger_failed",
+        normalization_started_at: null,
+      })
+      .eq("id", row.id)
+      .eq("user_id", userId)
+      .eq("status", "normalizing");
+    throw new Error("native_base_trigger_failed");
+  }
+
+  return { row: claimed as NativePresenterBaseRow, reused: false };
 }
 
 export async function GET(request: NextRequest) {
@@ -45,7 +101,7 @@ export async function GET(request: NextRequest) {
     }
     const { data: nativeBases, error: nativeError } = await service
       .from("user_presenter_native_bases")
-      .select("id, request_id, status, retention_until")
+      .select("id, request_id, status, retention_until, normalized_at")
       .eq("user_id", user.id)
       .neq("status", "removed");
     if (nativeError) {
@@ -55,7 +111,7 @@ export async function GET(request: NextRequest) {
     const nativeByRequest = new Map(
       ((nativeBases ?? []) as Pick<
         NativePresenterBaseRow,
-        "id" | "request_id" | "status" | "retention_until"
+        "id" | "request_id" | "status" | "retention_until" | "normalized_at"
       >[])
         .filter((base) => base.request_id)
         .map((base) => [base.request_id as string, base]),
@@ -66,11 +122,7 @@ export async function GET(request: NextRequest) {
         return {
           ...toPublicVideoPresenterRequest(row),
           nativeBase: nativeBase
-            ? {
-                id: nativeBase.id,
-                status: nativeBase.status,
-                retentionUntil: nativeBase.retention_until,
-              }
+            ? toPublicNativePresenterBase(nativeBase)
             : null,
         };
       }),
@@ -262,7 +314,7 @@ export async function POST(request: NextRequest) {
       }
       const { data: nativeBase, error: nativeReadError } = await service
         .from("user_presenter_native_bases")
-        .select("id, video_path, status, retention_until")
+        .select(NATIVE_SELECT)
         .eq("request_id", id)
         .eq("user_id", user.id)
         .neq("status", "removed")
@@ -273,6 +325,9 @@ export async function POST(request: NextRequest) {
           { status: 500 },
         );
       }
+      let publicNativeBase = nativeBase
+        ? toPublicNativePresenterBase(nativeBase as NativePresenterBaseRow)
+        : null;
       if (nativeBase) {
         const nativeFolder = String(nativeBase.video_path).slice(
           0,
@@ -319,16 +374,33 @@ export async function POST(request: NextRequest) {
       if (updateError || !queued) {
         return NextResponse.json({ error: "Could not queue the presenter." }, { status: 500 });
       }
+      if (nativeBase) {
+        const normalizationRow = {
+          ...(nativeBase as NativePresenterBaseRow),
+          status: nativeBase.status === "uploading" ? "uploaded" as const : nativeBase.status,
+        };
+        try {
+          const normalization = await claimNativeNormalization(
+            service,
+            user.id,
+            normalizationRow,
+          );
+          publicNativeBase = toPublicNativePresenterBase(normalization.row);
+        } catch (normalizationError) {
+          console.error(
+            "[video-presenters] native normalization deferred:",
+            normalizationError,
+          );
+          publicNativeBase = {
+            ...toPublicNativePresenterBase(normalizationRow),
+            status: "uploaded",
+          };
+        }
+      }
       return NextResponse.json({
         request: {
           ...toPublicVideoPresenterRequest(queued as VideoPresenterRequestRow),
-          nativeBase: nativeBase
-            ? {
-                id: nativeBase.id,
-                status: nativeBase.status === "uploading" ? "uploaded" : nativeBase.status,
-                retentionUntil: nativeBase.retention_until,
-              }
-            : null,
+          nativeBase: publicNativeBase,
         },
         reused: false,
       });
@@ -401,7 +473,7 @@ export async function POST(request: NextRequest) {
       }
       const { data: nativeBase, error: nativeReadError } = await service
         .from("user_presenter_native_bases")
-        .select("id, video_path, status")
+        .select("id, video_path, normalized_video_path, status")
         .eq("request_id", id)
         .eq("user_id", user.id)
         .neq("status", "removed")
@@ -421,7 +493,10 @@ export async function POST(request: NextRequest) {
       }
       const { error: storageError } = await service.storage
         .from(NATIVE_PRESENTER_BASE_BUCKET)
-        .remove([String(nativeBase.video_path)]);
+        .remove(
+          [nativeBase.video_path, nativeBase.normalized_video_path]
+            .filter((path): path is string => typeof path === "string" && path.length > 0),
+        );
       if (storageError) {
         console.error("[video-presenters] native base deletion failed:", storageError);
         return NextResponse.json(
@@ -447,6 +522,53 @@ export async function POST(request: NextRequest) {
         );
       }
       return NextResponse.json({ ok: true, reused: false });
+    }
+
+    if (action === "normalize_native_base") {
+      const id = typeof body.requestId === "string" ? body.requestId : "";
+      if (!id) return NextResponse.json({ error: "Missing presenter request." }, { status: 400 });
+      const { data: nativeBase, error: nativeReadError } = await service
+        .from("user_presenter_native_bases")
+        .select(NATIVE_SELECT)
+        .eq("request_id", id)
+        .eq("user_id", user.id)
+        .neq("status", "removed")
+        .maybeSingle();
+      if (nativeReadError) {
+        return NextResponse.json(
+          { error: "Could not load the reusable presenter footage." },
+          { status: 500 },
+        );
+      }
+      if (!nativeBase) {
+        return NextResponse.json(
+          { error: "Reusable presenter footage not found." },
+          { status: 404 },
+        );
+      }
+      if (nativeBase.status === "uploading") {
+        return NextResponse.json(
+          { error: "The private upload must finish before processing." },
+          { status: 409 },
+        );
+      }
+      try {
+        const normalization = await claimNativeNormalization(
+          service,
+          user.id,
+          nativeBase as NativePresenterBaseRow,
+        );
+        return NextResponse.json({
+          nativeBase: toPublicNativePresenterBase(normalization.row),
+          reused: normalization.reused,
+        });
+      } catch (normalizationError) {
+        console.error("[video-presenters] native normalization start failed:", normalizationError);
+        return NextResponse.json(
+          { error: "Could not start private presenter preparation. Please retry." },
+          { status: 502 },
+        );
+      }
     }
 
     return NextResponse.json({ error: "Unsupported action." }, { status: 400 });

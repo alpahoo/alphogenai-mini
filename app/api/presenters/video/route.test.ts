@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserFromRequest } from "@/lib/podcast/auth";
 import { createServiceClient } from "@/lib/supabase/service";
+import { triggerNormalizeNativePresenterBase } from "@/lib/modal-client";
 import { POST } from "./route";
 import { NATIVE_PRESENTER_BASE_BUCKET } from "@/lib/video-presenter-native";
 
 vi.mock("@/lib/podcast/auth", () => ({ getUserFromRequest: vi.fn() }));
 vi.mock("@/lib/supabase/service", () => ({ createServiceClient: vi.fn() }));
+vi.mock("@/lib/modal-client", () => ({
+  triggerNormalizeNativePresenterBase: vi.fn(),
+}));
 
 function request(body: Record<string, unknown>) {
   return { json: async () => body } as never;
@@ -15,6 +19,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getUserFromRequest).mockResolvedValue({ id: "user-1" });
   vi.mocked(createServiceClient).mockReturnValue({} as never);
+  vi.mocked(triggerNormalizeNativePresenterBase).mockResolvedValue();
 });
 
 describe("POST /api/presenters/video", () => {
@@ -123,5 +128,97 @@ describe("POST /api/presenters/video", () => {
       path: expect.stringMatching(/^user-1\/.+\/base\.mp4$/),
       token: expect.stringMatching(/^token:/),
     }));
+  });
+
+  it("claims an uploaded native base before starting private normalization", async () => {
+    const nativeBase = {
+      id: "base-1",
+      user_id: "user-1",
+      request_id: "request-1",
+      name: "Maya",
+      video_path: "user-1/base-1/base.mp4",
+      video_mime: "video/mp4",
+      video_size_bytes: 2_000_000,
+      normalized_video_path: null,
+      normalized_duration_seconds: null,
+      normalized_width: null,
+      normalized_height: null,
+      normalized_fps: null,
+      normalization_version: null,
+      normalization_started_at: null,
+      normalized_at: null,
+      status: "uploaded",
+      error_code: null,
+      consent_confirmed_at: "2026-07-26T12:00:00.000Z",
+      consent_statement_version: "v1-2026-07-26",
+      retention_until: "2027-07-26T12:00:00.000Z",
+      deleted_at: null,
+      created_at: "2026-07-26T12:00:00.000Z",
+      updated_at: "2026-07-26T12:00:00.000Z",
+    };
+    const readQuery = {
+      eq: vi.fn().mockReturnThis(),
+      neq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn(async () => ({ data: nativeBase, error: null })),
+    };
+    const claimQuery = {
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn(async () => ({
+        data: { ...nativeBase, status: "normalizing" },
+        error: null,
+      })),
+    };
+    vi.mocked(createServiceClient).mockReturnValue({
+      from: vi.fn(() => ({
+        select: vi.fn(() => readQuery),
+        update: vi.fn(() => claimQuery),
+      })),
+    } as never);
+
+    const response = await POST(request({
+      action: "normalize_native_base",
+      requestId: "request-1",
+    }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(triggerNormalizeNativePresenterBase).toHaveBeenCalledWith("base-1");
+    expect(json.nativeBase).toEqual(expect.objectContaining({
+      id: "base-1",
+      status: "normalizing",
+    }));
+  });
+
+  it("reuses an already-ready native base without starting another job", async () => {
+    const readQuery = {
+      eq: vi.fn().mockReturnThis(),
+      neq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn(async () => ({
+        data: {
+          id: "base-1",
+          status: "ready",
+          retention_until: "2027-07-26T12:00:00.000Z",
+          normalized_at: "2026-07-26T12:05:00.000Z",
+        },
+        error: null,
+      })),
+    };
+    vi.mocked(createServiceClient).mockReturnValue({
+      from: vi.fn(() => ({
+        select: vi.fn(() => readQuery),
+      })),
+    } as never);
+
+    const response = await POST(request({
+      action: "normalize_native_base",
+      requestId: "request-1",
+    }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.reused).toBe(true);
+    expect(triggerNormalizeNativePresenterBase).not.toHaveBeenCalled();
   });
 });

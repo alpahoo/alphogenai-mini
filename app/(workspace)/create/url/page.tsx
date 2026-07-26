@@ -298,6 +298,7 @@ export default function UrlToVideo() {
   const [presenterError, setPresenterError] = useState<string | null>(null);
   const [videoPresenterRequests, setVideoPresenterRequests] = useState<PublicVideoPresenterRequest[]>([]);
   const [deletingNativeBaseId, setDeletingNativeBaseId] = useState<string | null>(null);
+  const [normalizingNativeBaseId, setNormalizingNativeBaseId] = useState<string | null>(null);
   const processingPresenterIds = useMemo(
     () => userPresenters
       .filter((presenter) => presenter.status === "processing")
@@ -308,7 +309,10 @@ export default function UrlToVideo() {
   );
   const activeVideoPresenterRequestIds = useMemo(
     () => videoPresenterRequests
-      .filter((request) => !["ready", "failed", "needs_review", "removed"].includes(request.status))
+      .filter((request) =>
+        !["ready", "failed", "needs_review", "removed"].includes(request.status)
+        || request.nativeBase?.status === "normalizing"
+      )
       .map((request) => request.id)
       .sort()
       .join(","),
@@ -511,6 +515,54 @@ export default function UrlToVideo() {
       );
     } finally {
       setDeletingNativeBaseId(null);
+    }
+  }
+
+  async function normalizeNativePresenterBase(request: PublicVideoPresenterRequest) {
+    if (!request.nativeBase || normalizingNativeBaseId) return;
+    setNormalizingNativeBaseId(request.id);
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sign in to prepare retained footage.");
+      const response = await fetch("/api/presenters/video", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "normalize_native_base",
+          requestId: request.id,
+        }),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(json.error || "Could not start private presenter preparation.");
+      }
+      setVideoPresenterRequests((current) =>
+        current.map((item) =>
+          item.id === request.id
+            ? {
+                ...item,
+                nativeBase: json.nativeBase as PublicVideoPresenterRequest["nativeBase"],
+              }
+            : item,
+        ),
+      );
+      setStatus(
+        json.reused
+          ? "Reusable performance clip is already being prepared."
+          : "Preparing the reusable performance clip privately.",
+      );
+    } catch (normalizeError) {
+      setError(
+        normalizeError instanceof Error
+          ? normalizeError.message
+          : "Could not start private presenter preparation.",
+      );
+    } finally {
+      setNormalizingNativeBaseId(null);
     }
   }
 
@@ -1010,14 +1062,40 @@ export default function UrlToVideo() {
                         <ShieldCheck className="h-3.5 w-3.5 text-blue-700" />
                         <span className="max-w-40 truncate font-semibold">{request.name}</span>
                         <span className="text-[10px] text-blue-700">
-                          private · expires{" "}
-                          {new Date(request.nativeBase!.retentionUntil).toLocaleDateString()}
+                          {request.nativeBase!.status === "ready"
+                            ? "ready for native animation"
+                            : request.nativeBase!.status === "normalizing"
+                              ? "preparing privately"
+                              : request.nativeBase!.status === "failed"
+                                ? "preparation needs retry"
+                                : "private upload saved"}
+                        </span>
+                        {["uploaded", "failed"].includes(request.nativeBase!.status) && (
+                          <button
+                            type="button"
+                            onClick={() => void normalizeNativePresenterBase(request)}
+                            disabled={normalizingNativeBaseId === request.id}
+                            title="Prepare reusable performance clip"
+                            className="rounded border border-blue-200 bg-white px-2 py-1 text-[10px] font-semibold text-blue-700 transition hover:border-blue-300 disabled:opacity-50"
+                          >
+                            {normalizingNativeBaseId === request.id ? "Starting..." : "Prepare"}
+                          </button>
+                        )}
+                        <span className="text-[10px] text-blue-600">
+                          expires {new Date(request.nativeBase!.retentionUntil).toLocaleDateString()}
                         </span>
                         <button
                           type="button"
                           onClick={() => void deleteNativePresenterBase(request)}
-                          disabled={deletingNativeBaseId === request.id}
-                          title="Delete reusable performance clip"
+                          disabled={
+                            deletingNativeBaseId === request.id
+                            || request.nativeBase!.status === "normalizing"
+                          }
+                          title={
+                            request.nativeBase!.status === "normalizing"
+                              ? "Deletion becomes available when private preparation finishes"
+                              : "Delete reusable performance clip"
+                          }
                           aria-label={`Delete reusable performance clip for ${request.name}`}
                           className="rounded p-1 text-blue-700 transition hover:bg-white hover:text-red-600 disabled:opacity-50"
                         >
