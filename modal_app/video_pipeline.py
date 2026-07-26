@@ -1910,6 +1910,374 @@ def render_explainer(job_id: str, storyboard: dict, brand: Optional[dict] = None
 
 
 # ===========================================================================
+# Native Product Ad (private presenter + product media + deterministic edit)
+# ===========================================================================
+@app.function(image=overlay_image, secrets=[secrets], timeout=900, retries=0)
+def render_native_product_ad(job_id: str) -> str:
+    """Compose an AlphoGen-owned short Product Ad.
+
+    All media is resolved server-side from private storage. A completed native
+    animation is preferred; if it is unavailable, the normalized performance
+    clip is used with the same generated speech track so the job still ships.
+    """
+    import json
+    import re
+    import subprocess
+    import tempfile
+    from io import BytesIO
+    from pathlib import Path
+    from urllib.parse import urljoin
+
+    import httpx
+    from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+
+    def storage_bytes(sb, bucket: str, path: str) -> bytes:
+        data = sb.storage.from_(bucket).download(path)
+        if not data or len(data) < 100:
+            raise RuntimeError("private media unavailable")
+        return bytes(data)
+
+    def cover(image: Image.Image, size: tuple[int, int]) -> Image.Image:
+        src = image.convert("RGB")
+        scale = max(size[0] / src.width, size[1] / src.height)
+        resized = src.resize(
+            (max(1, int(src.width * scale)), max(1, int(src.height * scale))),
+            Image.Resampling.LANCZOS,
+        )
+        left = max(0, (resized.width - size[0]) // 2)
+        top = max(0, (resized.height - size[1]) // 2)
+        return resized.crop((left, top, left + size[0], top + size[1]))
+
+    def fetch_product_image(state: dict) -> Optional[Image.Image]:
+        product = state.get("product") if isinstance(state.get("product"), dict) else {}
+        image_url = product.get("imageUrl")
+        page_url = str(state.get("url") or "")
+        with httpx.Client(timeout=18, follow_redirects=True) as client:
+            if not image_url and page_url.startswith(("http://", "https://")):
+                try:
+                    html = client.get(
+                        page_url,
+                        headers={"User-Agent": "AlphoGenProductRenderer/1.0"},
+                    ).text[:1_500_000]
+                    match = re.search(
+                        r'<meta[^>]+(?:property|name)=["\'](?:og:image|twitter:image)["\'][^>]+content=["\']([^"\']+)',
+                        html,
+                        re.I,
+                    )
+                    if not match:
+                        match = re.search(
+                            r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name)=["\'](?:og:image|twitter:image)["\']',
+                            html,
+                            re.I,
+                        )
+                    if match:
+                        image_url = urljoin(page_url, match.group(1))
+                except Exception:
+                    image_url = None
+            if image_url and str(image_url).startswith(("http://", "https://")):
+                try:
+                    response = client.get(str(image_url))
+                    response.raise_for_status()
+                    return Image.open(BytesIO(response.content)).convert("RGB")
+                except Exception:
+                    return None
+        return None
+
+    def wrap(draw, text: str, font, max_width: int, max_lines: int) -> list[str]:
+        words = str(text or "").split()
+        lines: list[str] = []
+        current = ""
+        for word in words:
+            candidate = f"{current} {word}".strip()
+            if draw.textlength(candidate, font=font) <= max_width:
+                current = candidate
+            else:
+                if current:
+                    lines.append(current)
+                current = word
+                if len(lines) >= max_lines:
+                    break
+        if current and len(lines) < max_lines:
+            lines.append(current)
+        return lines or [""]
+
+    try:
+        update_job(job_id, status="in_progress", current_stage="native_rendering")
+        sb = get_supabase_client()
+        job_res = (
+            sb.table("jobs")
+            .select("id,user_id,engine_used,app_state")
+            .eq("id", job_id)
+            .single()
+            .execute()
+        )
+        job = job_res.data or {}
+        if job.get("engine_used") != "native_product_ad":
+            raise RuntimeError("invalid native Product Ad job")
+        state = job.get("app_state") or {}
+        if not isinstance(state, dict):
+            state = json.loads(state)
+        animation_id = str(state.get("animation_id") or "")
+        if not animation_id:
+            raise RuntimeError("native animation missing")
+
+        animation_res = (
+            sb.table("user_presenter_native_animations")
+            .select(
+                "id,user_id,native_base_id,audio_path,output_video_path,"
+                "output_duration_seconds,status"
+            )
+            .eq("id", animation_id)
+            .eq("user_id", job.get("user_id"))
+            .single()
+            .execute()
+        )
+        animation = animation_res.data or {}
+        base_res = (
+            sb.table("user_presenter_native_bases")
+            .select("id,user_id,status,normalized_video_path")
+            .eq("id", animation.get("native_base_id"))
+            .eq("user_id", job.get("user_id"))
+            .single()
+            .execute()
+        )
+        native_base = base_res.data or {}
+        if native_base.get("status") != "ready" or not native_base.get("normalized_video_path"):
+            raise RuntimeError("normalized presenter unavailable")
+
+        fallback_used = animation.get("status") != "ready"
+        presenter_bytes = None
+        if not fallback_used and animation.get("output_video_path"):
+            try:
+                presenter_bytes = storage_bytes(
+                    sb,
+                    "user-presenter-native-animations",
+                    animation["output_video_path"],
+                )
+            except Exception:
+                fallback_used = True
+        if presenter_bytes is None:
+            presenter_bytes = storage_bytes(
+                sb,
+                "user-presenter-native-bases",
+                native_base["normalized_video_path"],
+            )
+        audio_bytes = storage_bytes(
+            sb,
+            "user-presenter-native-animations",
+            animation["audio_path"],
+        )
+
+        fmt = str(state.get("format") or "portrait")
+        dimensions = {
+            "portrait": (720, 1280),
+            "square": (900, 900),
+            "landscape": (1280, 720),
+        }
+        width, height = dimensions.get(fmt, dimensions["portrait"])
+        script = str(state.get("script") or "")
+        product = state.get("product") if isinstance(state.get("product"), dict) else {}
+        product_title = str(product.get("title") or "Featured product")[:90]
+        product_host = str(product.get("hostname") or "Product ad")[:60]
+        product_image = fetch_product_image(state)
+
+        with tempfile.TemporaryDirectory() as work:
+            root = Path(work)
+            presenter_path = root / "presenter.mp4"
+            audio_path = root / "speech.mp3"
+            bg_path = root / "background.png"
+            overlay_path = root / "overlay.png"
+            output_path = root / "product-ad.mp4"
+            presenter_path.write_bytes(presenter_bytes)
+            audio_path.write_bytes(audio_bytes)
+
+            if product_image:
+                background = cover(product_image, (width, height))
+                background = background.filter(ImageFilter.GaussianBlur(max(10, width // 45)))
+                background = ImageEnhance.Brightness(background).enhance(0.42)
+            else:
+                background = Image.new("RGB", (width, height), (19, 25, 39))
+                px = background.load()
+                for y in range(height):
+                    mix = y / max(1, height - 1)
+                    color = (
+                        int(24 + 20 * mix),
+                        int(32 + 12 * mix),
+                        int(52 + 30 * mix),
+                    )
+                    for x in range(width):
+                        px[x, y] = color
+            background.save(bg_path)
+
+            overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(overlay)
+            bold_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+            regular_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+            title_font = ImageFont.truetype(bold_path, max(25, int(height * 0.037)))
+            caption_font = ImageFont.truetype(bold_path, max(23, int(height * 0.031)))
+            small_font = ImageFont.truetype(regular_path, max(16, int(height * 0.021)))
+
+            if fmt == "portrait":
+                panel = (38, int(height * 0.30), width - 38, int(height * 0.84))
+                product_card = (38, 42, width - 38, int(height * 0.255))
+                caption_y = int(height * 0.865)
+            elif fmt == "square":
+                panel = (int(width * 0.48), 50, width - 40, int(height * 0.79))
+                product_card = (40, 50, int(width * 0.43), int(height * 0.56))
+                caption_y = int(height * 0.82)
+            else:
+                panel = (int(width * 0.54), 44, width - 44, int(height * 0.82))
+                product_card = (44, 44, int(width * 0.49), int(height * 0.56))
+                caption_y = int(height * 0.80)
+
+            draw.rounded_rectangle(product_card, radius=28, fill=(255, 255, 255, 235))
+            if product_image:
+                inner = (
+                    product_card[0] + 14,
+                    product_card[1] + 14,
+                    product_card[2] - 14,
+                    product_card[3] - 72,
+                )
+                if inner[3] > inner[1]:
+                    card_image = cover(
+                        product_image,
+                        (inner[2] - inner[0], inner[3] - inner[1]),
+                    )
+                    mask = Image.new("L", card_image.size, 0)
+                    ImageDraw.Draw(mask).rounded_rectangle(
+                        (0, 0, card_image.width, card_image.height),
+                        radius=18,
+                        fill=255,
+                    )
+                    overlay.paste(card_image.convert("RGBA"), inner[:2], mask)
+            title_lines = wrap(
+                draw,
+                product_title,
+                title_font,
+                product_card[2] - product_card[0] - 36,
+                2,
+            )
+            title_y = max(product_card[1] + 22, product_card[3] - 62)
+            for line in title_lines:
+                draw.text(
+                    (product_card[0] + 20, title_y),
+                    line,
+                    font=title_font,
+                    fill=(17, 24, 39, 255),
+                )
+                title_y += int(title_font.size * 1.08)
+
+            draw.rounded_rectangle(
+                (panel[0] - 5, panel[1] - 5, panel[2] + 5, panel[3] + 5),
+                radius=32,
+                outline=(255, 255, 255, 235),
+                width=5,
+            )
+            caption_lines = wrap(draw, script, caption_font, width - 104, 2)
+            cap_h = len(caption_lines) * int(caption_font.size * 1.16) + 42
+            draw.rounded_rectangle(
+                (34, caption_y, width - 34, min(height - 28, caption_y + cap_h)),
+                radius=24,
+                fill=(9, 13, 23, 225),
+            )
+            cy = caption_y + 20
+            for line in caption_lines:
+                line_w = draw.textlength(line, font=caption_font)
+                draw.text(
+                    ((width - line_w) / 2, cy),
+                    line,
+                    font=caption_font,
+                    fill=(255, 255, 255, 255),
+                )
+                cy += int(caption_font.size * 1.16)
+            draw.text(
+                (40, height - 28),
+                f"AlphoGen Product Ad  |  {product_host}",
+                font=small_font,
+                fill=(230, 235, 245, 220),
+                anchor="ls",
+            )
+            overlay.save(overlay_path)
+
+            probe = subprocess.run(
+                [
+                    "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1", str(audio_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            duration = min(8.0, max(0.6, float(probe.stdout.strip())))
+            panel_w = panel[2] - panel[0]
+            panel_h = panel[3] - panel[1]
+            filter_graph = (
+                f"[1:v]scale={panel_w}:{panel_h}:force_original_aspect_ratio=increase,"
+                f"crop={panel_w}:{panel_h},setsar=1[p];"
+                f"[0:v][p]overlay={panel[0]}:{panel[1]}:shortest=1[base];"
+                "[base][3:v]overlay=0:0:format=auto[v]"
+            )
+            command = [
+                "ffmpeg", "-y",
+                "-loop", "1", "-framerate", "25", "-i", str(bg_path),
+                "-stream_loop", "-1", "-i", str(presenter_path),
+                "-i", str(audio_path),
+                "-loop", "1", "-framerate", "25", "-i", str(overlay_path),
+                "-filter_complex", filter_graph,
+                "-map", "[v]", "-map", "2:a:0",
+                "-t", f"{duration:.3f}",
+                "-r", "25", "-c:v", "libx264", "-preset", "medium", "-crf", "19",
+                "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+                "-movflags", "+faststart", "-shortest", str(output_path),
+            ]
+            rendered = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+            if rendered.returncode != 0:
+                raise RuntimeError(f"ffmpeg native Product Ad failed: {rendered.stderr[-500:]}")
+            video_bytes = output_path.read_bytes()
+
+        url = upload_to_r2(video_bytes, job_id, suffix="_native_product_ad")
+        final_state = dict(state)
+        final_state["native_fallback"] = bool(fallback_used)
+        final_state["render"] = {
+            "duration_seconds": round(duration, 3),
+            "format": fmt,
+            "product_media": bool(product_image),
+        }
+        update_job(
+            job_id,
+            status="done",
+            current_stage="completed",
+            video_url=url,
+            output_url_final=url,
+            error_message=None,
+            app_state=final_state,
+        )
+        log(
+            job_id,
+            f"[native-product-ad] DONE fallback={fallback_used} media={bool(product_image)} -> {url}",
+        )
+        return url
+    except Exception as e:
+        import traceback
+        log(job_id, f"[native-product-ad] FAILED:\n{traceback.format_exc()}")
+        update_job(
+            job_id,
+            status="failed",
+            current_stage="failed",
+            error_message="Native Product Ad rendering could not be completed.",
+        )
+        _report_sentry(e, job_id=job_id)
+        raise
+
+
+# ===========================================================================
 # Orchestrator (no GPU â€” just coordinates)
 # ===========================================================================
 
@@ -3435,6 +3803,9 @@ def webhook():
     class NormalizeNativePresenterBaseRequest(BaseModel):
         base_id: str
 
+    class RenderNativeProductAdRequest(BaseModel):
+        job_id: str
+
     @web.post("/webhook")
     async def trigger(req: JobRequest, x_webhook_secret: str = Header(None)):
         expected = os.environ.get("MODAL_WEBHOOK_SECRET")
@@ -3578,6 +3949,22 @@ def webhook():
             )
             raise HTTPException(status_code=500, detail=str(e)[:200])
         return {"success": True, "base_id": req.base_id}
+
+    @web.post("/render-native-product-ad")
+    async def render_native_product_ad_ep(
+        req: RenderNativeProductAdRequest,
+        x_webhook_secret: str = Header(None),
+    ):
+        """Spawn the provider-neutral native Product Ad compositor."""
+        expected = os.environ.get("MODAL_WEBHOOK_SECRET")
+        if not expected or x_webhook_secret != expected:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        try:
+            await render_native_product_ad.spawn.aio(req.job_id)
+        except Exception as e:
+            print(f"[webhook /render-native-product-ad] spawn failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e)[:200])
+        return {"success": True, "job_id": req.job_id}
 
     @web.post("/apply-voiceover")
     async def apply_voiceover(req: ConcatRequest, x_webhook_secret: str = Header(None)):

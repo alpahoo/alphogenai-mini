@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash, randomUUID } from "crypto";
 import { requireAdmin } from "../../middleware";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
@@ -11,6 +12,23 @@ import {
   listVoices,
   type JoggAvatar,
 } from "@/lib/jogg-client";
+import { generateVoiceover, isTTSAvailable } from "@/lib/tts";
+import {
+  NATIVE_PRODUCT_AD_ENGINE,
+  NATIVE_PRODUCT_AD_SECONDS,
+  readProductPageBrief,
+  writeNativeProductAdScript,
+  type NativeProductAdFormat,
+  type NativeProductAdLanguage,
+  type NativeProductAdStyle,
+} from "@/lib/native-product-ad";
+import {
+  NATIVE_PRESENTER_ANIMATION_BUCKET,
+  NATIVE_PRESENTER_ANIMATION_VERSION,
+} from "@/lib/video-presenter-native-animation";
+import { NATIVE_PRESENTER_BASE_BUCKET } from "@/lib/video-presenter-native";
+import { startNativePresenterAnimation } from "@/lib/video-presenter-native-animation-provider";
+import { triggerRenderNativeProductAd } from "@/lib/modal-client";
 
 // Product Ad customization — allowed values (validated server-side).
 const FORMATS: Record<string, string> = { portrait: "9:16", square: "1:1", landscape: "16:9" };
@@ -47,6 +65,267 @@ export const maxDuration = 60; // l'analyse URL Jogg peut prendre ~10-30s
 const ENGINE = "jogg";
 const CAPABILITY = "url_to_video";
 const DAILY_CAP = 20;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function submitNativeProductAd(
+  service: ReturnType<typeof createServiceClient>,
+  user: { id: string; email?: string | null },
+  body: Record<string, unknown>,
+) {
+  const url = typeof body.url === "string" ? body.url.trim() : "";
+  const nativeBaseId =
+    typeof body.nativeBaseId === "string" && UUID_RE.test(body.nativeBaseId)
+      ? body.nativeBaseId
+      : "";
+  const format: NativeProductAdFormat =
+    typeof body.format === "string" && FORMATS[body.format]
+      ? body.format as NativeProductAdFormat
+      : "portrait";
+  const style: NativeProductAdStyle =
+    typeof body.style === "string" && STYLES.has(body.style)
+      ? body.style as NativeProductAdStyle
+      : "Discovery";
+  const language: NativeProductAdLanguage =
+    typeof body.language === "string" && LANGUAGES.has(body.language)
+      ? body.language as NativeProductAdLanguage
+      : "french";
+
+  if (!/^https?:\/\/.+\..+/.test(url) || url.length > 2000) {
+    return NextResponse.json({ error: "A valid product URL is required." }, { status: 400 });
+  }
+  if (!nativeBaseId) {
+    return NextResponse.json(
+      { error: "Choose a ready reusable performance clip." },
+      { status: 400 },
+    );
+  }
+  if (!isTTSAvailable()) {
+    return NextResponse.json(
+      { error: "Native Product Ad voice generation is not configured." },
+      { status: 503 },
+    );
+  }
+
+  const { data: nativeBase, error: baseError } = await service
+    .from("user_presenter_native_bases")
+    .select("id,user_id,status,normalized_video_path")
+    .eq("id", nativeBaseId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (baseError) {
+    return NextResponse.json({ error: "Could not load the presenter." }, { status: 500 });
+  }
+  if (!nativeBase || nativeBase.status !== "ready" || !nativeBase.normalized_video_path) {
+    return NextResponse.json(
+      { error: "The reusable performance clip is still being prepared." },
+      { status: 409 },
+    );
+  }
+
+  // Reserve the product job before any paid/network generation so every
+  // attempt remains observable and recoverable.
+  const initialState = {
+    engine: NATIVE_PRODUCT_AD_ENGINE,
+    capability: "native_product_ad",
+    url,
+    style,
+    format,
+    language,
+    native_base_id: nativeBaseId,
+    duration_seconds: NATIVE_PRODUCT_AD_SECONDS,
+    submitted_by: user.email ?? null,
+  };
+  const { data: job, error: jobError } = await service
+    .from("jobs")
+    .insert({
+      user_id: user.id,
+      prompt: url,
+      status: "in_progress",
+      engine_used: NATIVE_PRODUCT_AD_ENGINE,
+      current_stage: "native_scripting",
+      aspect_ratio: FORMATS[format],
+      target_duration_seconds: NATIVE_PRODUCT_AD_SECONDS,
+      app_state: initialState,
+    })
+    .select("id,status,created_at")
+    .single();
+  if (jobError || !job) {
+    return NextResponse.json({ error: "Could not reserve the Product Ad." }, { status: 500 });
+  }
+
+  const fail = async (stage: string, error: unknown) => {
+    console.error(`[native-product-ad] ${stage} failed (job=${job.id}):`, error);
+    await service
+      .from("jobs")
+      .update({
+        status: "failed",
+        current_stage: "failed",
+        error_message: "Native Product Ad creation could not be completed. You can retry.",
+      })
+      .eq("id", job.id);
+  };
+
+  try {
+    const brief = await readProductPageBrief(url);
+    const script = await writeNativeProductAdScript({ brief, language, style });
+    await service
+      .from("jobs")
+      .update({
+        current_stage: "native_speech",
+        voiceover_text: script,
+        app_state: {
+          ...initialState,
+          script,
+          product: brief,
+        },
+      })
+      .eq("id", job.id);
+
+    const tts = await generateVoiceover({ text: script, format: "mp3" });
+    const audioBytes = Buffer.from(tts.audio);
+    const audioSha256 = createHash("sha256").update(audioBytes).digest("hex");
+
+    const { data: existing, error: existingError } = await service
+      .from("user_presenter_native_animations")
+      .select(
+        "id,status,audio_path,output_video_path,provider_task_id,output_duration_seconds",
+      )
+      .eq("user_id", user.id)
+      .eq("native_base_id", nativeBaseId)
+      .eq("audio_sha256", audioSha256)
+      .eq("animation_version", NATIVE_PRESENTER_ANIMATION_VERSION)
+      .neq("status", "removed")
+      .maybeSingle();
+    if (existingError) throw new Error("animation_cache_read_failed");
+
+    let animation = existing;
+    if (!animation) {
+      const animationId = randomUUID();
+      const audioPath = `${user.id}/${animationId}/speech.mp3`;
+      const outputPath = `${user.id}/${animationId}/animated.mp4`;
+      const { data: inserted, error: insertError } = await service
+        .from("user_presenter_native_animations")
+        .insert({
+          id: animationId,
+          user_id: user.id,
+          native_base_id: nativeBaseId,
+          audio_path: audioPath,
+          audio_mime: "audio/mpeg",
+          audio_size_bytes: audioBytes.byteLength,
+          audio_sha256: audioSha256,
+          output_video_path: outputPath,
+          status: "uploaded",
+          animation_version: NATIVE_PRESENTER_ANIMATION_VERSION,
+        })
+        .select(
+          "id,status,audio_path,output_video_path,provider_task_id,output_duration_seconds",
+        )
+        .single();
+      if (insertError || !inserted) throw new Error("animation_insert_failed");
+      animation = inserted;
+    }
+
+    const stateWithAnimation = {
+      ...initialState,
+      script,
+      product: brief,
+      animation_id: animation.id,
+    };
+    if (animation.status === "ready") {
+      await service
+        .from("jobs")
+        .update({
+          current_stage: "native_rendering",
+          app_state: stateWithAnimation,
+        })
+        .eq("id", job.id);
+      await triggerRenderNativeProductAd(job.id);
+      return NextResponse.json({
+        jobId: job.id,
+        status: "in_progress",
+        stage: "native_rendering",
+        reusedAnimation: true,
+      });
+    }
+
+    if (animation.status !== "processing" || !animation.provider_task_id) {
+      // Repair interrupted retries as well as fresh rows. An earlier attempt
+      // may have reserved the cache row before its private audio upload
+      // completed, so always make the current deterministic audio available
+      // before signing it for the animation provider.
+      const { error: audioRepairError } = await service.storage
+        .from(NATIVE_PRESENTER_ANIMATION_BUCKET)
+        .upload(animation.audio_path, audioBytes, {
+          contentType: "audio/mpeg",
+          upsert: true,
+        });
+      if (audioRepairError) throw new Error("animation_audio_upload_failed");
+
+      const [videoSigned, audioSigned] = await Promise.all([
+        service.storage
+          .from(NATIVE_PRESENTER_BASE_BUCKET)
+          .createSignedUrl(nativeBase.normalized_video_path, 15 * 60),
+        service.storage
+          .from(NATIVE_PRESENTER_ANIMATION_BUCKET)
+          .createSignedUrl(animation.audio_path, 15 * 60),
+      ]);
+      if (
+        videoSigned.error
+        || audioSigned.error
+        || !videoSigned.data?.signedUrl
+        || !audioSigned.data?.signedUrl
+      ) {
+        throw new Error("private_media_sign_failed");
+      }
+      const { error: claimError } = await service
+        .from("user_presenter_native_animations")
+        .update({
+          status: "processing",
+          provider_task_id: null,
+          error_code: null,
+          started_at: new Date().toISOString(),
+        })
+        .eq("id", animation.id)
+        .eq("user_id", user.id);
+      if (claimError) throw new Error("animation_claim_failed");
+      const taskId = await startNativePresenterAnimation({
+        videoUrl: videoSigned.data.signedUrl,
+        audioUrl: audioSigned.data.signedUrl,
+        outputPath: animation.output_video_path!,
+      });
+      const { error: taskSaveError } = await service
+        .from("user_presenter_native_animations")
+        .update({ status: "processing", provider_task_id: taskId, error_code: null })
+        .eq("id", animation.id)
+        .eq("user_id", user.id);
+      if (taskSaveError) throw new Error("animation_task_save_failed");
+    }
+
+    await service
+      .from("jobs")
+      .update({
+        current_stage: "native_animating",
+        app_state: stateWithAnimation,
+      })
+      .eq("id", job.id);
+    return NextResponse.json({
+      jobId: job.id,
+      status: "in_progress",
+      stage: "native_animating",
+      reusedAnimation: Boolean(existing),
+    });
+  } catch (error) {
+    await fail("submit", error);
+    return NextResponse.json(
+      {
+        jobId: job.id,
+        error: "Native Product Ad creation could not be started. The job was saved for retry.",
+      },
+      { status: 502 },
+    );
+  }
+}
 
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request);
@@ -54,6 +333,14 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const action = body.action;
   const service = createServiceClient();
+
+  if (action === "submit_native") {
+    return submitNativeProductAd(
+      service,
+      { id: auth.user.id, email: auth.user.email },
+      body as Record<string, unknown>,
+    );
+  }
 
   if (action === "submit") {
     const url = typeof body.url === "string" ? body.url.trim() : "";
@@ -195,7 +482,10 @@ export async function POST(request: NextRequest) {
   if (action === "status") {
     return statusResponse(service, body.jobId);
   }
-  return NextResponse.json({ error: "action inconnue (submit|status)" }, { status: 400 });
+  return NextResponse.json(
+    { error: "action inconnue (submit|submit_native|status)" },
+    { status: 400 },
+  );
 }
 
 export async function GET(request: NextRequest) {

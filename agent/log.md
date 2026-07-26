@@ -1,3 +1,10 @@
+## 2026-07-27 - Codex - T-1163e native Product Ad compositor code-ready
+- Connected the validated private native presenter primitive to the real Product Ad workflow without replacing the existing path. A ready reusable performance clip now selects a distinct `native_product_ad` job route and an honest eight-second beta contract.
+- Jobs are reserved before TTS or GPU work. Product-page metadata and one bounded spoken line are persisted, audio is deduplicated through the own-only animation cache, interrupted private audio uploads are repaired, and result-page polling advances animation state idempotently.
+- Added a provider-neutral Modal CPU compositor that resolves private media server-side, prefers the completed native animation, falls back to the normalized performance clip, and produces product media, captions, branding and portrait/square/landscape output.
+- UI and public engine labels expose only AlphoGen product concepts. No provider/model/task id, signed input or storage path is returned. The existing Product Ad provider path is untouched.
+- No new migration is required; the owner already applied the T-1163d animation schema. TypeScript, focused tests, Python syntax and production build pass. Deployment and one authenticated eight-second production acceptance remain.
+
 ## 2026-07-27 - Codex - T-1163d production deployment and private GPU QA PASS
 - The owner applied migration `20260727_create_native_presenter_animations.sql` to AlphoGen production.
 - Fixed the Modal deployment workflow after the isolated LatentSync app failed to import `pydantic`; commit `544e3ff` installs the required deployment dependency and makes workflow changes trigger deployment.

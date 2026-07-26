@@ -299,3 +299,31 @@ export async function triggerNormalizeNativePresenterBase(baseId: string): Promi
     );
   }
 }
+
+/**
+ * Compose one completed private native presenter animation into a short
+ * Product Ad. Modal reads every media path and product setting server-side
+ * from the job; the request carries only the opaque job id.
+ */
+export async function triggerRenderNativeProductAd(jobId: string): Promise<void> {
+  const webhookSecret = secret();
+  if (!webhookSecret) {
+    throw new Error("MODAL_WEBHOOK_SECRET not configured");
+  }
+  const url = `${modalBase()}/render-native-product-ad`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-webhook-secret": webhookSecret,
+    },
+    body: JSON.stringify({ job_id: jobId }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(
+      `Modal /render-native-product-ad ${res.status}: ${detail.slice(0, 200)}`,
+    );
+  }
+}

@@ -278,6 +278,7 @@ export default function UrlToVideo() {
   const [avatarId, setAvatarId] = useState<number | null>(null);
   const [avatarType, setAvatarType] = useState<0 | 1>(0);
   const [presenterId, setPresenterId] = useState<string | null>(null);
+  const [nativeBaseId, setNativeBaseId] = useState<string | null>(null);
   const [voiceId, setVoiceId] = useState("");
   const [resourcesLoading, setResourcesLoading] = useState(true);
   const [previewingVoiceId, setPreviewingVoiceId] = useState<string | null>(null);
@@ -435,6 +436,7 @@ export default function UrlToVideo() {
   }, []);
 
   function selectAvatar(avatar: ProductAdAvatar | null) {
+    setNativeBaseId(null);
     setPresenterId(null);
     setAvatarId(avatar?.id ?? null);
     setAvatarType(avatar?.type ?? 0);
@@ -444,11 +446,23 @@ export default function UrlToVideo() {
 
   function selectUserPresenter(presenter: UserPresenter) {
     if (presenter.status !== "ready" || !presenter.avatarId) return;
+    setNativeBaseId(null);
     setPresenterId(presenter.id);
     setAvatarId(presenter.avatarId);
     setAvatarType(1);
     setPaFormat("portrait");
     setError(null);
+  }
+
+  function selectNativePresenterBase(request: PublicVideoPresenterRequest) {
+    if (request.nativeBase?.status !== "ready") return;
+    setNativeBaseId(request.nativeBase.id);
+    setPresenterId(null);
+    setAvatarId(null);
+    setAvatarType(0);
+    setVoiceId("");
+    setError(null);
+    setStatus("Native presenter selected. This beta renders one 8-second Product Ad.");
   }
 
   function selectProductFormat(format: ProductAdFormat) {
@@ -506,6 +520,7 @@ export default function UrlToVideo() {
           item.id === request.id ? { ...item, nativeBase: null } : item,
         ),
       );
+      if (nativeBaseId === request.nativeBase.id) setNativeBaseId(null);
       setStatus("Reusable performance clip deleted. The presenter request will continue.");
     } catch (deleteError) {
       setError(
@@ -768,15 +783,16 @@ export default function UrlToVideo() {
             Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
-            action: "submit",
+            action: nativeBaseId ? "submit_native" : "submit",
             url: cleanUrl,
             style: paStyle,
             format: paFormat,
-            length: paLength,
+            length: nativeBaseId ? "8" : paLength,
             language: paLanguage,
-            ...(avatarId ? { avatarId, avatarType } : {}),
-            ...(presenterId ? { presenterId } : {}),
-            ...(voiceId ? { voiceId } : {}),
+            ...(nativeBaseId ? { nativeBaseId } : {}),
+            ...(!nativeBaseId && avatarId ? { avatarId, avatarType } : {}),
+            ...(!nativeBaseId && presenterId ? { presenterId } : {}),
+            ...(!nativeBaseId && voiceId ? { voiceId } : {}),
           }),
         });
         const json = await res.json().catch(() => ({}));
@@ -898,9 +914,9 @@ export default function UrlToVideo() {
               <button
                 type="button"
                 onClick={() => selectAvatar(null)}
-                aria-pressed={avatarId === null}
+                aria-pressed={avatarId === null && nativeBaseId === null}
                 className={`flex w-20 shrink-0 flex-col items-center gap-1.5 rounded-lg border p-2 text-center transition ${
-                  avatarId === null
+                  avatarId === null && nativeBaseId === null
                     ? "border-blue-500 bg-blue-50 text-blue-700"
                     : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300"
                 }`}
@@ -1054,13 +1070,29 @@ export default function UrlToVideo() {
                 <div className="mt-2 flex flex-wrap gap-2">
                   {videoPresenterRequests
                     .filter((request) => request.nativeBase)
-                    .map((request) => (
+                    .map((request) => {
+                      const selected = request.nativeBase!.id === nativeBaseId;
+                      const ready = request.nativeBase!.status === "ready";
+                      return (
                       <div
                         key={`native-${request.id}`}
-                        className="inline-flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2 text-xs text-blue-950"
+                        className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
+                          selected
+                            ? "border-blue-500 bg-blue-50 text-blue-950"
+                            : "border-blue-100 bg-blue-50/50 text-blue-950"
+                        }`}
                       >
                         <ShieldCheck className="h-3.5 w-3.5 text-blue-700" />
-                        <span className="max-w-40 truncate font-semibold">{request.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => selectNativePresenterBase(request)}
+                          disabled={!ready}
+                          aria-pressed={selected}
+                          className="max-w-40 truncate font-semibold disabled:cursor-wait disabled:opacity-60"
+                          title={ready ? "Use this private performance clip" : "Prepare this clip first"}
+                        >
+                          {request.name}
+                        </button>
                         <span className="text-[10px] text-blue-700">
                           {request.nativeBase!.status === "ready"
                             ? "ready for native animation"
@@ -1104,7 +1136,8 @@ export default function UrlToVideo() {
                             : <Trash2 className="h-3 w-3" />}
                         </button>
                       </div>
-                    ))}
+                      );
+                    })}
                 </div>
               </div>
             )}
@@ -1133,11 +1166,14 @@ export default function UrlToVideo() {
                 <div className="mt-1.5 flex gap-2">
                   <select
                     id="product-ad-voice"
-                    value={voiceId}
+                    value={nativeBaseId ? "" : voiceId}
                     onChange={(event) => setVoiceId(event.target.value)}
+                    disabled={Boolean(nativeBaseId)}
                     className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-800 outline-none focus:border-blue-400"
                   >
-                    <option value="">Automatic voice</option>
+                    <option value="">
+                      {nativeBaseId ? "Automatic native voice" : "Automatic voice"}
+                    </option>
                     {availableVoices.map((voice) => (
                       <option key={voice.id} value={voice.id}>
                         {voice.kind === "custom" ? `${voice.name} - My voice` : voice.name}
@@ -1204,23 +1240,36 @@ export default function UrlToVideo() {
 
               <fieldset>
                 <legend className="text-xs font-bold text-neutral-800">Duration</legend>
-                <div className="mt-1.5 grid grid-cols-3 rounded-lg bg-neutral-100 p-1">
-                  {(["15", "30", "60"] as ProductAdLength[]).map((length) => (
+                <div
+                  className={`mt-1.5 grid rounded-lg bg-neutral-100 p-1 ${
+                    nativeBaseId ? "grid-cols-1" : "grid-cols-3"
+                  }`}
+                >
+                  {(nativeBaseId ? ["8"] : ["15", "30", "60"]).map((length) => (
                     <button
                       key={length}
                       type="button"
-                      onClick={() => setPaLength(length)}
-                      aria-pressed={paLength === length}
+                      onClick={() => {
+                        if (length !== "8") setPaLength(length as ProductAdLength);
+                      }}
+                      aria-pressed={nativeBaseId ? length === "8" : paLength === length}
+                      disabled={Boolean(nativeBaseId)}
                       className={`rounded-md px-2 py-1.5 text-[11px] font-semibold transition ${
-                        paLength === length
+                        (nativeBaseId ? length === "8" : paLength === length)
                           ? "bg-white text-neutral-900 shadow-sm"
                           : "text-neutral-500 hover:text-neutral-800"
                       }`}
                     >
-                      {length}s
+                      {length}s{length === "8" ? " native" : ""}
                     </button>
                   ))}
                 </div>
+                {nativeBaseId && (
+                  <p className="mt-2 text-[11px] leading-4 text-neutral-500">
+                    Native beta uses your private performance clip to create one
+                    8-second Product Ad with product media, speech, and captions.
+                  </p>
+                )}
               </fieldset>
             </div>
 

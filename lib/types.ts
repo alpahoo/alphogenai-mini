@@ -251,6 +251,7 @@ export const ENGINE_DISPLAY_NAMES: Record<string, string> = {
   seedance2_atlas: "Seedance 2.0 (Direct)",
   seedance2_fast_atlas: "Seedance 2.0 Fast (Direct)",
   jogg: "URL to Video",
+  native_product_ad: "Product Ad",
 };
 
 export function getEngineDisplayName(engine: string | null | undefined): string {

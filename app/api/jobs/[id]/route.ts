@@ -16,12 +16,19 @@ import {
   createLipsync,
   getLipsyncTask,
 } from "@/lib/heygen-client";
-import { triggerExtractLastFrame, triggerConcatScenes, triggerApplyVoiceover } from "@/lib/modal-client";
+import {
+  triggerExtractLastFrame,
+  triggerConcatScenes,
+  triggerApplyVoiceover,
+  triggerRenderNativeProductAd,
+} from "@/lib/modal-client";
 import { generateVoiceover, isTTSAvailable } from "@/lib/tts";
 import { uploadBufferToR2, downloadAndUploadToR2 } from "@/lib/r2";
 import { isJobFavorite, withJobFavorite } from "@/lib/job-favorite";
 import { getProductVideo } from "@/lib/jogg-client";
 import { settleJoggJob, type JoggJobRow } from "@/lib/jogg-poll-core";
+import { NATIVE_PRODUCT_AD_ENGINE } from "@/lib/native-product-ad";
+import { pollNativePresenterAnimation } from "@/lib/video-presenter-native-animation-provider";
 
 /**
  * Persist a direct-provider video output to R2. BytePlus / EvoLink / Atlas
@@ -123,6 +130,7 @@ export async function GET(
     const isBytePlus = isBytePlusEngine(job.engine_used ?? "");
     const isAtlas = isAtlasEngine(job.engine_used ?? "");
     const isJogg = job.engine_used === "jogg";
+    const isNativeProductAd = job.engine_used === NATIVE_PRODUCT_AD_ENGINE;
 
     // Keep an actively viewed Product Ad responsive. The scheduled cron is a
     // closed-tab safety net and can be delayed by GitHub Actions scheduling.
@@ -140,6 +148,19 @@ export async function GET(
         // Preserve the current state; the next page poll or cron retries.
         console.warn(
           `[jobs/status] URL-to-video lazy poll failed (job=${id}):`,
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
+
+    if (isNativeProductAd && job.status === "in_progress") {
+      try {
+        await advanceNativeProductAd(supabase, job);
+      } catch (error) {
+        // Preserve the recoverable state. The next result-page poll retries
+        // animation polling or compositor dispatch.
+        console.warn(
+          `[jobs/status] native Product Ad advance failed (job=${id}):`,
           error instanceof Error ? error.message : error,
         );
       }
@@ -275,6 +296,128 @@ export async function GET(
     console.error("Error in GET /api/jobs/[id]:", error);
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+async function advanceNativeProductAd(
+  supabase: ReturnType<typeof createServiceClient>,
+  job: Record<string, unknown>,
+) {
+  const jobId = String(job.id);
+  const stage = String(job.current_stage ?? "");
+  const appState =
+    job.app_state && typeof job.app_state === "object"
+      ? job.app_state as Record<string, unknown>
+      : {};
+  const animationId =
+    typeof appState.animation_id === "string" ? appState.animation_id : "";
+
+  if (stage === "native_rendering") {
+    const updatedAt = new Date(String(job.updated_at ?? 0)).getTime();
+    if (Number.isFinite(updatedAt) && Date.now() - updatedAt > 5 * 60_000) {
+      await triggerRenderNativeProductAd(jobId);
+      await supabase
+        .from("jobs")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", jobId)
+        .eq("current_stage", "native_rendering");
+    }
+    return;
+  }
+  if (stage !== "native_animating") return;
+  if (!animationId) {
+    await supabase
+      .from("jobs")
+      .update({
+        status: "failed",
+        current_stage: "failed",
+        error_message: "The private presenter animation could not be found.",
+      })
+      .eq("id", jobId)
+      .eq("current_stage", "native_animating");
+    return;
+  }
+
+  const { data: animation, error: animationError } = await supabase
+    .from("user_presenter_native_animations")
+    .select(
+      "id,user_id,status,provider_task_id,output_video_path,output_duration_seconds,error_code",
+    )
+    .eq("id", animationId)
+    .eq("user_id", String(job.user_id))
+    .maybeSingle();
+  if (animationError || !animation) {
+    throw new Error("native_animation_read_failed");
+  }
+
+  let animationStatus = String(animation.status);
+  if (animationStatus === "processing" && animation.provider_task_id) {
+    const result = await pollNativePresenterAnimation(String(animation.provider_task_id));
+    if (result.status === "processing") return;
+    if (result.status === "completed") {
+      if (result.outputPath !== animation.output_video_path) {
+        animationStatus = "needs_review";
+        await supabase
+          .from("user_presenter_native_animations")
+          .update({ status: "needs_review", error_code: "output_path_mismatch" })
+          .eq("id", animationId)
+          .eq("status", "processing");
+      } else {
+        animationStatus = "ready";
+        await supabase
+          .from("user_presenter_native_animations")
+          .update({
+            status: "ready",
+            error_code: null,
+            output_duration_seconds: result.durationSeconds,
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", animationId)
+          .eq("status", "processing");
+      }
+    } else {
+      // A failed animation remains deliverable: Modal falls back to the
+      // normalized performance clip plus the same generated speech track.
+      animationStatus = "failed";
+      await supabase
+        .from("user_presenter_native_animations")
+        .update({ status: "failed", error_code: "animation_failed" })
+        .eq("id", animationId)
+        .eq("status", "processing");
+    }
+  }
+
+  if (!["ready", "failed", "needs_review"].includes(animationStatus)) return;
+  const { data: claimed, error: claimError } = await supabase
+    .from("jobs")
+    .update({
+      current_stage: "native_rendering",
+      app_state: {
+        ...appState,
+        native_fallback: animationStatus !== "ready",
+      },
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", jobId)
+    .eq("status", "in_progress")
+    .eq("current_stage", "native_animating")
+    .select("id")
+    .maybeSingle();
+  if (claimError) throw new Error("native_render_claim_failed");
+  if (!claimed) return;
+
+  try {
+    await triggerRenderNativeProductAd(jobId);
+  } catch (error) {
+    await supabase
+      .from("jobs")
+      .update({
+        current_stage: "native_animating",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", jobId)
+      .eq("current_stage", "native_rendering");
+    throw error;
   }
 }
 

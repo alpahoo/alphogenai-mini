@@ -1,5 +1,13 @@
 # agent/tasks.md — Backlog partagé
 
+## T-1163e - Native Product Ad compositor integration - CODE READY (2026-07-27, Codex)
+- Added an explicit native-beta path to Product Ad: one ready private reusable performance clip plus one product URL produces a provider-neutral eight-second ad.
+- The server reserves the job before network generation, extracts product metadata, writes a bounded short script, generates speech, and reuses or starts the private native-animation cache from T-1163d.
+- The existing job status endpoint advances animation state and dispatches a new CPU Modal compositor. Animation failure is deliverable through a normalized-performance fallback with the same speech.
+- Modal resolves all private media server-side and composes product imagery, animated presenter, deterministic captions, branding and 9:16, 1:1 or 16:9 output. No storage path, model name or task id is public.
+- Product Ad UI makes the native path selectable only for ready private performance clips, fixes the beta duration at eight seconds and explains the scope. The existing external Product Ad path remains unchanged.
+- No migration is required beyond the already-applied T-1163d schema. Deployment and one capped authenticated production acceptance remain.
+
 ## T-1163a - Manual-assisted Video Presenter publication - DONE (2026-07-26, Codex)
 - Added a provider-neutral admin action that links a completed account presenter ID to a waiting AlphoGen Video Presenter request.
 - The server verifies the ID against the completed custom-avatar catalog, publishes or reuses the private `user_presenters` row, marks the request ready with an optimistic status guard, then deletes source and consent footage.
