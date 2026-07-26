@@ -6,7 +6,7 @@
 - Ran one capped private A10G acceptance using a temporary normalized base and an existing owned 3.192-second podcast speech segment. Final successful GPU elapsed time was 113.29 seconds.
 - Output validation passed: private 3.24-second MP4, 512x512 H.264 video plus AAC audio. A three-frame visual sample showed distinct mouth positions while identity, body and studio remained stable.
 - The first harness attempt started no GPU because the pulled production URL was redacted. One subsequent call failed before inference because the temporary QA harness reconstructed a raw Supabase signed URL without `/storage/v1`; the production SDK path was not affected. The final corrected call completed.
-- Temporary database rows and private Storage objects were deleted. Sensitive local environment and harness files are scheduled for immediate cleanup; the final local video is retained for owner review.
+- Temporary database rows and private Storage objects were deleted. Sensitive local environment, harness and temporary ffmpeg files were also removed; only the final local video and visual QA captures are retained for owner review.
 - T-1163d is complete. T-1163e is the next slice: integrate the native animated presenter into the AlphoGen-owned Product Ad compositor with provider-neutral routing and fallback.
 
 ## 2026-07-27 - Codex - T-1163d native speech animation adapter code-ready
