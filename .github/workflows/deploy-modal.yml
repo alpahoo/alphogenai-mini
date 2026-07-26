@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "modal_app/**"
+      - ".github/workflows/deploy-modal.yml"
     branches:
       - main
       - "claude/**"
@@ -19,7 +20,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Modal
-        run: pip install modal
+        run: pip install modal pydantic
 
       - name: Deploy main Modal pipeline
         env:
