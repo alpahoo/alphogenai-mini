@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import time
 import uuid
@@ -28,6 +29,10 @@ class LatentSyncStartRequest(BaseModel):
     audio_url: str
     max_seconds: float = 8.0
 
+
+class NativeLatentSyncStartRequest(LatentSyncStartRequest):
+    output_path: str
+
 # Keep this separate from the production Modal image. LatentSync pins a CUDA
 # PyTorch stack and diffusion/video dependencies that should not touch render_podcast.
 LATENTSYNC_COMMIT = "a229c3948406bc2cf6eaf4873e662e70c6a04746"
@@ -46,6 +51,16 @@ latentsync_image = (
 
 WORK_ROOT = Path("/tmp/alphogen-latentsync")
 MODEL_ROOT = Path("/models/latentsync")
+NATIVE_OUTPUT_PATH_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/"
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/"
+    r"animated\.mp4$",
+    re.IGNORECASE,
+)
+
+
+def _valid_native_output_path(object_path: str) -> bool:
+    return bool(NATIVE_OUTPUT_PATH_RE.fullmatch(object_path))
 
 
 def _run(cmd: list[str], cwd: str | None = None, timeout: int = 900) -> subprocess.CompletedProcess[str]:
@@ -122,6 +137,46 @@ def _upload_to_r2(file_bytes: bytes, key: str, content_type: str = "video/mp4") 
     s3.put_object(Bucket=bucket, Key=key, Body=file_bytes, ContentType=content_type)
     public_url = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")
     return f"{public_url}/{key}"
+
+
+def _upload_to_private_supabase(
+    file_bytes: bytes,
+    object_path: str,
+    content_type: str = "video/mp4",
+) -> str:
+    import requests
+    from urllib.parse import quote
+
+    if not _valid_native_output_path(object_path):
+        raise ValueError("invalid_private_output_path")
+    supabase_url = (
+        os.environ.get("SUPABASE_URL")
+        or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+    ).rstrip("/")
+    service_key = (
+        os.environ.get("SUPABASE_SERVICE_KEY")
+        or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    )
+    if not supabase_url or not service_key:
+        raise RuntimeError("supabase_storage_not_configured")
+    bucket = "user-presenter-native-animations"
+    url = (
+        f"{supabase_url}/storage/v1/object/{bucket}/"
+        f"{quote(object_path, safe='/')}"
+    )
+    response = requests.post(
+        url,
+        headers={
+            "Authorization": f"Bearer {service_key}",
+            "apikey": service_key,
+            "Content-Type": content_type,
+            "x-upsert": "true",
+        },
+        data=file_bytes,
+        timeout=180,
+    )
+    response.raise_for_status()
+    return object_path
 
 
 def _ensure_latentsync_weights() -> None:
@@ -228,7 +283,12 @@ def _prepare_inputs(video_url: str, audio_url: str, max_seconds: float, workdir:
     retries=0,
     max_containers=LATENTSYNC_MAX_CONTAINERS,
 )
-def run_latentsync_clip(video_url: str, audio_url: str, max_seconds: float = 8.0) -> dict[str, Any]:
+def run_latentsync_clip(
+    video_url: str,
+    audio_url: str,
+    max_seconds: float = 8.0,
+    private_output_path: str = "",
+) -> dict[str, Any]:
     if max_seconds <= 0 or max_seconds > 8:
         raise ValueError("max_seconds must be between 0 and 8")
 
@@ -238,8 +298,8 @@ def run_latentsync_clip(video_url: str, audio_url: str, max_seconds: float = 8.0
     output_path = workdir / "latentsync_output.mp4"
     workdir.mkdir(parents=True, exist_ok=True)
 
-    _ensure_latentsync_weights()
     input_video, input_audio = _prepare_inputs(video_url, audio_url, max_seconds, workdir)
+    _ensure_latentsync_weights()
 
     repo = Path("/opt/LatentSync")
     env = os.environ.copy()
@@ -279,8 +339,17 @@ def run_latentsync_clip(video_url: str, audio_url: str, max_seconds: float = 8.0
         raise RuntimeError(f"LatentSync produced no output at {output_path}")
 
     probe = _probe(output_path)
-    key = f"podcast/lipsync/providers/latentsync/{run_id}.mp4"
-    output_url = _upload_to_r2(output_path.read_bytes(), key)
+    output_bytes = output_path.read_bytes()
+    if private_output_path:
+        saved_output_path = _upload_to_private_supabase(
+            output_bytes,
+            private_output_path,
+        )
+        output_url = None
+    else:
+        key = f"podcast/lipsync/providers/latentsync/{run_id}.mp4"
+        output_url = _upload_to_r2(output_bytes, key)
+        saved_output_path = None
 
     return {
         "provider": "latentsync_modal",
@@ -291,6 +360,7 @@ def run_latentsync_clip(video_url: str, audio_url: str, max_seconds: float = 8.0
         "input_audio_probe": _probe(input_audio),
         "output_probe": probe,
         "output_url": output_url,
+        "output_path": saved_output_path,
     }
 
 
@@ -320,6 +390,26 @@ def _create_latentsync_web():
         call = await run_latentsync_clip.spawn.aio(req.video_url, req.audio_url, req.max_seconds)
         return {"call_id": call.object_id, "status": "processing"}
 
+    @web.post("/native/start")
+    async def native_start(
+        req: NativeLatentSyncStartRequest,
+        x_webhook_secret: str | None = Header(None),
+    ):
+        authorize(x_webhook_secret)
+        if not req.video_url.startswith("https://") or not req.audio_url.startswith("https://"):
+            raise HTTPException(status_code=400, detail="HTTPS media URLs are required")
+        if req.max_seconds <= 0 or req.max_seconds > 8:
+            raise HTTPException(status_code=400, detail="max_seconds must be between 0 and 8")
+        if not _valid_native_output_path(req.output_path):
+            raise HTTPException(status_code=400, detail="Invalid private output path")
+        call = await run_latentsync_clip.spawn.aio(
+            req.video_url,
+            req.audio_url,
+            req.max_seconds,
+            req.output_path,
+        )
+        return {"call_id": call.object_id, "status": "processing"}
+
     @web.get("/status")
     async def status(
         call_id: str = Query(min_length=3, max_length=200),
@@ -339,6 +429,33 @@ def _create_latentsync_web():
         return {
             "status": "completed",
             "output_url": output_url,
+            "elapsed_seconds": result.get("elapsed_seconds"),
+            "output_probe": result.get("output_probe"),
+            "gpu": "A10G",
+        }
+
+    @web.get("/native/status")
+    async def native_status(
+        call_id: str = Query(min_length=3, max_length=200),
+        x_webhook_secret: str | None = Header(None),
+    ):
+        authorize(x_webhook_secret)
+        call = modal.FunctionCall.from_id(call_id)
+        try:
+            result = await call.get.aio(timeout=0)
+        except TimeoutError:
+            return JSONResponse({"status": "processing"}, status_code=202)
+        except Exception as exc:
+            return {"status": "failed", "error": str(exc)[:500]}
+        output_path = result.get("output_path") if isinstance(result, dict) else None
+        if not isinstance(output_path, str) or not output_path:
+            return {
+                "status": "failed",
+                "error": "Native animation returned no private output",
+            }
+        return {
+            "status": "completed",
+            "output_path": output_path,
             "elapsed_seconds": result.get("elapsed_seconds"),
             "output_probe": result.get("output_probe"),
             "gpu": "A10G",

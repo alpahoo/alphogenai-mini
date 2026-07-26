@@ -130,3 +130,29 @@ any speech-animation model is allowed to consume it:
 This slice is CPU preprocessing only. It starts no GPU, provider, voice or
 paid generation. The next slice connects the ready private base to the
 provider-neutral speech-animation adapter.
+
+### Native slice 3: private speech animation adapter (T-1163d)
+
+The code-ready third slice adds an explicit, provider-neutral animation job
+around a ready normalized base and one owned speech file:
+
+- the user prepares a private audio upload with an SHA-256 cache identity;
+- Next.js verifies ownership and readiness, then atomically claims the job
+  before any GPU work can start;
+- short-lived signed input URLs are consumed immediately inside the ephemeral
+  Modal container;
+- LatentSync is the first internal adapter, capped at eight seconds and two
+  concurrent A10G containers;
+- the generated MP4 is written directly to a private Supabase bucket, never to
+  a public CDN;
+- task tracking failure moves the job to `needs_review` and explicitly forbids
+  automatic retry or deletion while an untracked GPU task may still finish;
+- completed output is accepted only when its private path and duration match
+  the reserved contract;
+- the product API returns neutral state only; a ready result receives a
+  ten-minute signed download URL through an explicit action.
+
+This slice does not yet replace the Product Ad renderer. It proves the private
+`base + speech -> animated presenter` primitive required by the future
+AlphoGen-owned compositor. The database migration and Modal deployment must be
+applied together before any capped private GPU acceptance run.

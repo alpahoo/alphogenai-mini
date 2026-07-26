@@ -21,8 +21,14 @@ jobs:
       - name: Install Modal
         run: pip install modal
 
-      - name: Deploy to Modal
+      - name: Deploy main Modal pipeline
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         run: modal deploy modal_app/video_pipeline.py
+
+      - name: Deploy LatentSync adapter
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: modal deploy modal_app/latentsync_lipsync.py

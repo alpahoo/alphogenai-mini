@@ -1,3 +1,11 @@
+## 2026-07-27 - Codex - T-1163d native speech animation adapter code-ready
+- Added the private, provider-neutral `base + speech -> animated presenter` primitive. The schema reserves own-only audio/output storage and an idempotent cache keyed by user, normalized base, audio SHA-256 and adapter version.
+- Added authenticated prepare/upload/submit/poll/download/remove operations. Work is claimed before GPU launch; processing rows are reused; a launched task whose id cannot be saved becomes `needs_review` and cannot be retried or deleted blindly.
+- Extended the isolated LatentSync Modal app with private native endpoints. Signed inputs are downloaded before model bootstrap, output paths must match `{user_uuid}/{animation_uuid}/animated.mp4`, and generated video writes directly to private Supabase Storage.
+- Output path and duration are verified before `ready`. Public API state contains no model/provider/task id, private path, signed input or raw infrastructure error; download URLs are explicit and expire after ten minutes.
+- Validation: 16 focused tests, 1052/1052 full Vitest tests, TypeScript, Python syntax and production build pass. The local Python runtime lacks pytest/modal, so the extended Python HTTP/path contract test remains for CI.
+- Migration `20260727_create_native_presenter_animations.sql`, Modal deployment and one capped private GPU QA remain explicit gates. No GPU, provider or paid generation was started.
+
 ## 2026-07-27 - Codex - T-1163c private normalization production PASS
 - With no retained native base available in production, created one temporary private QA base under the admin account using a small local MP4. No provider, model or GPU generation was invoked.
 - Ran the deployed Modal CPU normalizer once. Supabase moved the base to `ready` with no error: 6.443 seconds, 720x720, 25 fps, `square-720p25-silent-v1`.
