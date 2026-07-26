@@ -364,7 +364,10 @@ def run_latentsync_clip(
     }
 
 
-web_image = modal.Image.debian_slim(python_version="3.11").pip_install("fastapi[standard]")
+web_image = modal.Image.debian_slim(python_version="3.11").pip_install(
+    "fastapi[standard]",
+    "requests",
+)
 
 
 def _create_latentsync_web():
