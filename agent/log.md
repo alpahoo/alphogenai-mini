@@ -1,3 +1,10 @@
+## 2026-07-27 - Codex - T-1163c private normalization production PASS
+- With no retained native base available in production, created one temporary private QA base under the admin account using a small local MP4. No provider, model or GPU generation was invoked.
+- Ran the deployed Modal CPU normalizer once. Supabase moved the base to `ready` with no error: 6.443 seconds, 720x720, 25 fps, `square-720p25-silent-v1`.
+- Downloaded the normalized object through authenticated private Storage access and confirmed a valid MP4 signature and 1,353,084-byte payload. Public APIs continued to expose no storage path.
+- Removed both private Storage objects, the temporary database row and the local QA copy. Verification found zero remaining rows for the QA base.
+- T-1163c is complete. Next slice is T-1163d, the provider-neutral native speech-animation adapter with LatentSync first.
+
 ## 2026-07-27 - Codex - T-1163c production deployment
 - Production migration `20260726_native_presenter_normalization.sql` was applied by the owner.
 - Commit `f033fab` was pushed to `origin/main`; the Modal deployment workflow completed successfully and Vercel reported `success`.
