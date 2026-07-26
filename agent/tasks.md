@@ -6,13 +6,14 @@
 - Linking is restricted to unclaimed `pending`, `needs_login`, `needs_review` and `failed`; active worker requests cannot race with the manual path. The action is idempotent and a cleanup failure does not lose the completed presenter.
 - Updated the Product Ads Decision Book: manual-assisted delivery is the immediate production bridge; Playwright is experimental, not a freeze gate.
 
-## T-1163c - Native Video Presenter private normalization - CODE READY (migration pending)
+## T-1163c - Native Video Presenter private normalization - DEPLOYED (2026-07-27, Codex)
 - Added asynchronous, idempotent CPU normalization for retained performance clips. Next.js claims the row, Modal reads/writes private Supabase objects server-side, and the UI polls provider-neutral state with explicit retry.
 - Normalization contract: center-cropped 720x720, 25 fps, H.264/yuv420p, silent stereo AAC, max 30 seconds, validated by ffprobe before `ready`.
 - Privacy hardening: webhook secret is fail-closed; source and normalized copies are deleted together; recent work is protected while a normalization stale for more than two hours cannot block retention cleanup forever.
-- No GPU/model/provider call and no paid generation. Migration `20260726_native_presenter_normalization.sql` must be applied before push/deployment.
+- No GPU/model/provider call and no paid generation. Migration `20260726_native_presenter_normalization.sql` is applied in AlphoGen production.
 - Validation: 17 focused tests, 1036/1036 full tests, TypeScript, Python AST parse and production build pass.
-- Next slice after migration/deploy/one private normalization QA: provider-neutral speech animation adapter (LatentSync first).
+- Commit `f033fab` is on `origin/main`; Vercel and the Modal workflow deployed successfully. The public presenter route and retention cron both fail closed with `401` when called without authorization.
+- Remaining acceptance check: run one private retained-clip normalization through the authenticated product flow, then proceed to the provider-neutral speech animation adapter (LatentSync first).
 
 ## T-1163b - Native Video Presenter independence track - SLICE 1 DONE (2026-07-26, Codex)
 - Goal: retain a consented performance clip as a separate private reusable asset, animate it through the provider-neutral lip-sync adapter (LatentSync first), and compose Product Ads inside AlphoGen.
