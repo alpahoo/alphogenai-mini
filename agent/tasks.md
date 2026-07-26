@@ -16,14 +16,16 @@
 - Production acceptance passed on one temporary private retained clip: `uploaded -> normalizing -> ready`, 720x720, 25 fps, 6.443 seconds, silent AAC contract, valid private MP4. Source, normalized object, database row and local QA copy were deleted after verification.
 - Next slice: T-1163d provider-neutral speech animation adapter (LatentSync first).
 
-## T-1163d - Native Video Presenter speech animation adapter - CODE READY / DEPLOYMENT GATED (2026-07-27, Codex)
-- Added an own-only animation cache and private media bucket contract for one ready native base plus one verified speech file. Migration `20260727_create_native_presenter_animations.sql` is written but must be applied before deployment.
+## T-1163d - Native Video Presenter speech animation adapter - DONE (2026-07-27, Codex)
+- Added an own-only animation cache and private media bucket contract for one ready native base plus one verified speech file. Migration `20260727_create_native_presenter_animations.sql` is applied in AlphoGen production.
 - Added a provider-neutral Next.js prepare/upload/submit/poll/download/remove API. It claims before GPU launch, deduplicates by base + audio SHA-256 + adapter version, blocks automatic re-spend, and quarantines incomplete task tracking.
 - Extended the isolated LatentSync Modal app with private native start/status endpoints. Inputs are captured before model bootstrap, output paths are UUID-scoped, and completed MP4s write directly to private Supabase Storage.
 - Public responses expose no model/provider/task id, signed input, storage path or raw infrastructure error. Ready downloads use a ten-minute signed URL.
 - Validation: 16 focused Vitest tests, 1052/1052 full tests, TypeScript, Python syntax and production build pass. Python pytest is unavailable in the local runtime; the extended Python contract test is committed for CI.
-- No migration application, Modal deploy, GPU/model call, Product Ad switch or paid generation has been performed in this slice.
-- Next gate: apply the migration, deploy Modal and Vercel, then run exactly one private <=8-second animation acceptance QA before T-1163e compositor work.
+- Deployment hardening: the Modal workflow now installs `pydantic`; the lightweight polling image also installs `requests` so remote network failures remain serializable and observable.
+- Production acceptance passed with one private 3.192-second speech clip and one normalized 6.443-second base. The A10G animation completed in 113.29 seconds and produced a private 512x512 H.264 + AAC MP4 of 3.24 seconds. Sampled frames show mouth motion while identity, body and studio remain stable.
+- Temporary database rows and private Storage objects were removed after verification. No Product Ad renderer switch was made.
+- Next slice: T-1163e provider-neutral Product Ad compositor integration, fallback and product UX.
 
 ## T-1163b - Native Video Presenter independence track - SLICE 1 DONE (2026-07-26, Codex)
 - Goal: retain a consented performance clip as a separate private reusable asset, animate it through the provider-neutral lip-sync adapter (LatentSync first), and compose Product Ads inside AlphoGen.

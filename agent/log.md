@@ -1,3 +1,14 @@
+## 2026-07-27 - Codex - T-1163d production deployment and private GPU QA PASS
+- The owner applied migration `20260727_create_native_presenter_animations.sql` to AlphoGen production.
+- Fixed the Modal deployment workflow after the isolated LatentSync app failed to import `pydantic`; commit `544e3ff` installs the required deployment dependency and makes workflow changes trigger deployment.
+- Both Modal apps deployed successfully. The LatentSync health endpoint returned `provider-neutral ok` state, and its private native start endpoint rejected missing authorization with `401`.
+- Hardened the polling web image with `requests` in commit `5f20c6b`, so remote download failures can be serialized and returned through the status endpoint instead of breaking polling.
+- Ran one capped private A10G acceptance using a temporary normalized base and an existing owned 3.192-second podcast speech segment. Final successful GPU elapsed time was 113.29 seconds.
+- Output validation passed: private 3.24-second MP4, 512x512 H.264 video plus AAC audio. A three-frame visual sample showed distinct mouth positions while identity, body and studio remained stable.
+- The first harness attempt started no GPU because the pulled production URL was redacted. One subsequent call failed before inference because the temporary QA harness reconstructed a raw Supabase signed URL without `/storage/v1`; the production SDK path was not affected. The final corrected call completed.
+- Temporary database rows and private Storage objects were deleted. Sensitive local environment and harness files are scheduled for immediate cleanup; the final local video is retained for owner review.
+- T-1163d is complete. T-1163e is the next slice: integrate the native animated presenter into the AlphoGen-owned Product Ad compositor with provider-neutral routing and fallback.
+
 ## 2026-07-27 - Codex - T-1163d native speech animation adapter code-ready
 - Added the private, provider-neutral `base + speech -> animated presenter` primitive. The schema reserves own-only audio/output storage and an idempotent cache keyed by user, normalized base, audio SHA-256 and adapter version.
 - Added authenticated prepare/upload/submit/poll/download/remove operations. Work is claimed before GPU launch; processing rows are reused; a launched task whose id cannot be saved becomes `needs_review` and cannot be retried or deleted blindly.

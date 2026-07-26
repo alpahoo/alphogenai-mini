@@ -131,7 +131,7 @@ This slice is CPU preprocessing only. It starts no GPU, provider, voice or
 paid generation. The next slice connects the ready private base to the
 provider-neutral speech-animation adapter.
 
-### Native slice 3: private speech animation adapter (T-1163d)
+### Native slice 3: private speech animation adapter (T-1163d) - complete
 
 The code-ready third slice adds an explicit, provider-neutral animation job
 around a ready normalized base and one owned speech file:
@@ -154,5 +154,20 @@ around a ready normalized base and one owned speech file:
 
 This slice does not yet replace the Product Ad renderer. It proves the private
 `base + speech -> animated presenter` primitive required by the future
-AlphoGen-owned compositor. The database migration and Modal deployment must be
-applied together before any capped private GPU acceptance run.
+AlphoGen-owned compositor.
+
+Production acceptance completed on 2026-07-27:
+
+- migration `20260727_create_native_presenter_animations.sql` was applied;
+- Vercel and both Modal applications deployed successfully;
+- unauthenticated product and Modal surfaces failed closed;
+- one private 3.192-second speech sample animated one normalized 6.443-second
+  retained base on A10G in 113.29 seconds;
+- the private output was a valid 3.24-second 512x512 H.264 + AAC MP4;
+- sampled frames confirmed mouth movement while identity, body and studio
+  remained stable;
+- temporary database and private Storage QA artifacts were removed.
+
+The remaining product step is T-1163e: feed this private animated clip into the
+provider-neutral Product Ad compositor, preserve fallback behavior, and expose
+the workflow without leaking infrastructure or adapter names.
