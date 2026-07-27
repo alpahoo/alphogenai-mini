@@ -1,4 +1,11 @@
-## 2026-07-27 - Codex - T-1163e production Product Ad PASS + title containment polish
+## 2026-07-27 - Codex - T-1163e V2 editorial rebuild after production QA FAIL
+- The owner rejected production job `7306087a-85f8-47d4-a0fb-7e8913d6e0d1` on product quality. The file was technically valid, but it was a voice-over on a boxed presenter, with a generic voice, one awkward product card and a full static sentence. The earlier PASS label below was incorrect; the result is now recorded as a product QA FAIL.
+- V2 replaces that poster with a deterministic three-shot edit: preserved product hero, dominant animated presenter with a restrained product picture-in-picture and two timed caption beats, then a product CTA close.
+- Product extraction now collects up to four deduplicated images from Open Graph, Product JSON-LD and bounded page images instead of relying on one `og:image`.
+- The native path now exposes four curated product voice profiles. The selected allow-listed voice is used by multilingual TTS instead of being ignored; only its product label is persisted.
+- Validation is intentionally bounded: four focused tests, TypeScript, Python AST, production build and one local synthetic ffmpeg graph smoke pass. No provider/GPU call or paid generation was started.
+
+## 2026-07-27 - Codex - T-1163e production technical completion + rejected visual
 - Production job `7306087a-85f8-47d4-a0fb-7e8913d6e0d1` completed through `native_product_ad` with a permanent R2 output, no public error and no new provider generation during inspection.
 - Downloaded and probed the exact output: 720x1280 portrait H.264 plus mono AAC, 6.52 seconds. Three-frame inspection confirmed the retained private presenter is animated inside an AlphoGen-composed product ad with Powerbeats media, spoken audio, captions and branding.
 - Found one visual defect in the first production output: a two-line product title could overflow the white product card and overlap the presenter panel. The compositor now reserves title height before sizing the product image, keeping every title line inside the card.

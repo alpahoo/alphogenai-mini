@@ -1,6 +1,13 @@
 # agent/tasks.md — Backlog partagé
 
-## T-1163e - Native Product Ad compositor integration - CODE READY (2026-07-27, Codex)
+## T-1163e V2 - Native Product Ad editorial rebuild - CODE READY (2026-07-27, Codex)
+- The first production render proved the private presenter pipeline but failed product acceptance: generic voice, one static poster layout, oversized copy and weak product placement. It is not considered a Product Ad PASS.
+- V2 extracts up to four useful product images (Open Graph, Product JSON-LD and bounded page images) and renders a deterministic three-shot edit: product hook, presenter-led middle shot with timed caption halves, and product CTA close.
+- Native voice is now an explicit curated choice and is validated and passed to multilingual TTS. The provider remains private.
+- The compositor retains private-media resolution, animation fallback and portrait/square/landscape support. No provider generation or paid QA was launched for this rebuild.
+- Focused tests, TypeScript, Python syntax, production build and a synthetic ffmpeg filter-graph smoke test pass. Deployment and one capped authenticated acceptance remain.
+
+## T-1163e - Native Product Ad compositor integration - SUPERSEDED BY V2
 - Added an explicit native-beta path to Product Ad: one ready private reusable performance clip plus one product URL produces a provider-neutral eight-second ad.
 - The server reserves the job before network generation, extracts product metadata, writes a bounded short script, generates speech, and reuses or starts the private native-animation cache from T-1163d.
 - The existing job status endpoint advances animation state and dispatches a new CPU Modal compositor. Animation failure is deliverable through a normalized-performance fallback with the same speech.

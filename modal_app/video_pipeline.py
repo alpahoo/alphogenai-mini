@@ -1948,12 +1948,17 @@ def render_native_product_ad(job_id: str) -> str:
         top = max(0, (resized.height - size[1]) // 2)
         return resized.crop((left, top, left + size[0], top + size[1]))
 
-    def fetch_product_image(state: dict) -> Optional[Image.Image]:
+    def fetch_product_images(state: dict, limit: int = 3) -> list[Image.Image]:
         product = state.get("product") if isinstance(state.get("product"), dict) else {}
-        image_url = product.get("imageUrl")
+        image_urls = product.get("imageUrls")
+        if not isinstance(image_urls, list):
+            image_urls = []
+        legacy_url = product.get("imageUrl")
+        if legacy_url:
+            image_urls = [legacy_url, *image_urls]
         page_url = str(state.get("url") or "")
         with httpx.Client(timeout=18, follow_redirects=True) as client:
-            if not image_url and page_url.startswith(("http://", "https://")):
+            if not image_urls and page_url.startswith(("http://", "https://")):
                 try:
                     html = client.get(
                         page_url,
@@ -1969,19 +1974,32 @@ def render_native_product_ad(job_id: str) -> str:
                             r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name)=["\'](?:og:image|twitter:image)["\']',
                             html,
                             re.I,
-                        )
+                    )
                     if match:
-                        image_url = urljoin(page_url, match.group(1))
+                        image_urls = [urljoin(page_url, match.group(1))]
                 except Exception:
-                    image_url = None
-            if image_url and str(image_url).startswith(("http://", "https://")):
+                    image_urls = []
+            images: list[Image.Image] = []
+            seen: set[str] = set()
+            for image_url in image_urls:
+                value = str(image_url or "")
+                if (
+                    not value.startswith(("http://", "https://"))
+                    or value in seen
+                ):
+                    continue
+                seen.add(value)
                 try:
-                    response = client.get(str(image_url))
+                    response = client.get(value)
                     response.raise_for_status()
-                    return Image.open(BytesIO(response.content)).convert("RGB")
+                    image = Image.open(BytesIO(response.content)).convert("RGB")
+                    if image.width >= 240 and image.height >= 240:
+                        images.append(image)
+                    if len(images) >= limit:
+                        break
                 except Exception:
-                    return None
-        return None
+                    continue
+            return images
 
     def wrap(draw, text: str, font, max_width: int, max_lines: int) -> list[str]:
         words = str(text or "").split()
@@ -2079,130 +2097,26 @@ def render_native_product_ad(job_id: str) -> str:
         product = state.get("product") if isinstance(state.get("product"), dict) else {}
         product_title = str(product.get("title") or "Featured product")[:90]
         product_host = str(product.get("hostname") or "Product ad")[:60]
-        product_image = fetch_product_image(state)
+        product_images = fetch_product_images(state)
 
         with tempfile.TemporaryDirectory() as work:
             root = Path(work)
             presenter_path = root / "presenter.mp4"
             audio_path = root / "speech.mp3"
-            bg_path = root / "background.png"
-            overlay_path = root / "overlay.png"
+            hook_path = root / "hook.png"
+            middle_bg_path = root / "middle-background.png"
+            middle_overlay_a_path = root / "middle-overlay-a.png"
+            middle_overlay_b_path = root / "middle-overlay-b.png"
+            outro_path = root / "outro.png"
             output_path = root / "product-ad.mp4"
             presenter_path.write_bytes(presenter_bytes)
             audio_path.write_bytes(audio_bytes)
 
-            if product_image:
-                background = cover(product_image, (width, height))
-                background = background.filter(ImageFilter.GaussianBlur(max(10, width // 45)))
-                background = ImageEnhance.Brightness(background).enhance(0.42)
-            else:
-                background = Image.new("RGB", (width, height), (19, 25, 39))
-                px = background.load()
-                for y in range(height):
-                    mix = y / max(1, height - 1)
-                    color = (
-                        int(24 + 20 * mix),
-                        int(32 + 12 * mix),
-                        int(52 + 30 * mix),
-                    )
-                    for x in range(width):
-                        px[x, y] = color
-            background.save(bg_path)
-
-            overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-            draw = ImageDraw.Draw(overlay)
             bold_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
             regular_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-            title_font = ImageFont.truetype(bold_path, max(25, int(height * 0.037)))
-            caption_font = ImageFont.truetype(bold_path, max(23, int(height * 0.031)))
+            title_font = ImageFont.truetype(bold_path, max(29, int(height * 0.052)))
+            caption_font = ImageFont.truetype(bold_path, max(22, int(height * 0.030)))
             small_font = ImageFont.truetype(regular_path, max(16, int(height * 0.021)))
-
-            if fmt == "portrait":
-                panel = (38, int(height * 0.30), width - 38, int(height * 0.84))
-                product_card = (38, 42, width - 38, int(height * 0.255))
-                caption_y = int(height * 0.865)
-            elif fmt == "square":
-                panel = (int(width * 0.48), 50, width - 40, int(height * 0.79))
-                product_card = (40, 50, int(width * 0.43), int(height * 0.56))
-                caption_y = int(height * 0.82)
-            else:
-                panel = (int(width * 0.54), 44, width - 44, int(height * 0.82))
-                product_card = (44, 44, int(width * 0.49), int(height * 0.56))
-                caption_y = int(height * 0.80)
-
-            draw.rounded_rectangle(product_card, radius=28, fill=(255, 255, 255, 235))
-            title_lines = wrap(
-                draw,
-                product_title,
-                title_font,
-                product_card[2] - product_card[0] - 36,
-                2,
-            )
-            title_line_height = int(title_font.size * 1.08)
-            title_block_height = len(title_lines) * title_line_height
-            title_y = max(
-                product_card[1] + 22,
-                product_card[3] - title_block_height - 18,
-            )
-            if product_image:
-                inner = (
-                    product_card[0] + 14,
-                    product_card[1] + 14,
-                    product_card[2] - 14,
-                    title_y - 12,
-                )
-                if inner[3] > inner[1]:
-                    card_image = cover(
-                        product_image,
-                        (inner[2] - inner[0], inner[3] - inner[1]),
-                    )
-                    mask = Image.new("L", card_image.size, 0)
-                    ImageDraw.Draw(mask).rounded_rectangle(
-                        (0, 0, card_image.width, card_image.height),
-                        radius=18,
-                        fill=255,
-                    )
-                    overlay.paste(card_image.convert("RGBA"), inner[:2], mask)
-            for line in title_lines:
-                draw.text(
-                    (product_card[0] + 20, title_y),
-                    line,
-                    font=title_font,
-                    fill=(17, 24, 39, 255),
-                )
-                title_y += title_line_height
-
-            draw.rounded_rectangle(
-                (panel[0] - 5, panel[1] - 5, panel[2] + 5, panel[3] + 5),
-                radius=32,
-                outline=(255, 255, 255, 235),
-                width=5,
-            )
-            caption_lines = wrap(draw, script, caption_font, width - 104, 2)
-            cap_h = len(caption_lines) * int(caption_font.size * 1.16) + 42
-            draw.rounded_rectangle(
-                (34, caption_y, width - 34, min(height - 28, caption_y + cap_h)),
-                radius=24,
-                fill=(9, 13, 23, 225),
-            )
-            cy = caption_y + 20
-            for line in caption_lines:
-                line_w = draw.textlength(line, font=caption_font)
-                draw.text(
-                    ((width - line_w) / 2, cy),
-                    line,
-                    font=caption_font,
-                    fill=(255, 255, 255, 255),
-                )
-                cy += int(caption_font.size * 1.16)
-            draw.text(
-                (40, height - 28),
-                f"AlphoGen Product Ad  |  {product_host}",
-                font=small_font,
-                fill=(230, 235, 245, 220),
-                anchor="ls",
-            )
-            overlay.save(overlay_path)
 
             probe = subprocess.run(
                 [
@@ -2215,20 +2129,274 @@ def render_native_product_ad(job_id: str) -> str:
                 timeout=30,
             )
             duration = min(8.0, max(0.6, float(probe.stdout.strip())))
-            panel_w = panel[2] - panel[0]
-            panel_h = panel[3] - panel[1]
+            edge_duration = min(1.15, max(0.55, duration * 0.18))
+            if duration < 2.2:
+                edge_duration = max(0.15, duration * 0.22)
+            edge_duration = min(
+                edge_duration,
+                max(0.1, (duration - 0.3) / 2),
+            )
+            middle_duration = max(0.4, duration - (edge_duration * 2))
+
+            def dark_studio(image: Optional[Image.Image] = None) -> Image.Image:
+                if image:
+                    result = cover(image, (width, height))
+                    result = result.filter(ImageFilter.GaussianBlur(max(12, width // 38)))
+                    return ImageEnhance.Brightness(result).enhance(0.34)
+                result = Image.new("RGB", (width, height), (16, 23, 37))
+                pixels = result.load()
+                for y in range(height):
+                    mix = y / max(1, height - 1)
+                    color = (int(15 + 24 * mix), int(23 + 17 * mix), int(38 + 28 * mix))
+                    for x in range(width):
+                        pixels[x, y] = color
+                return result
+
+            def add_bottom_scrim(image: Image.Image, strength: int = 210) -> Image.Image:
+                layer = image.convert("RGBA")
+                shade = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+                shade_draw = ImageDraw.Draw(shade)
+                start = int(height * 0.48)
+                for y in range(start, height):
+                    alpha = int(strength * ((y - start) / max(1, height - start)))
+                    shade_draw.line((0, y, width, y), fill=(5, 9, 16, alpha))
+                return Image.alpha_composite(layer, shade)
+
+            def product_hero(image: Optional[Image.Image]) -> Image.Image:
+                if not image:
+                    return dark_studio()
+                canvas = dark_studio(image).convert("RGBA")
+                max_w = int(width * (0.88 if fmt != "landscape" else 0.68))
+                max_h = int(height * (0.55 if fmt == "portrait" else 0.66))
+                scale = min(max_w / image.width, max_h / image.height)
+                fitted = image.convert("RGB").resize(
+                    (
+                        max(1, int(image.width * scale)),
+                        max(1, int(image.height * scale)),
+                    ),
+                    Image.Resampling.LANCZOS,
+                ).convert("RGBA")
+                mask = Image.new("L", fitted.size, 0)
+                ImageDraw.Draw(mask).rounded_rectangle(
+                    (0, 0, fitted.width, fitted.height),
+                    radius=max(18, width // 32),
+                    fill=255,
+                )
+                x = (width - fitted.width) // 2
+                y = max(78, int(height * 0.09))
+                canvas.paste(fitted, (x, y), mask)
+                return canvas
+
+            def paste_rounded(
+                canvas: Image.Image,
+                image: Image.Image,
+                box: tuple[int, int, int, int],
+                radius: int,
+            ) -> None:
+                fitted = cover(image, (box[2] - box[0], box[3] - box[1])).convert("RGBA")
+                mask = Image.new("L", fitted.size, 0)
+                ImageDraw.Draw(mask).rounded_rectangle(
+                    (0, 0, fitted.width, fitted.height),
+                    radius=radius,
+                    fill=255,
+                )
+                canvas.paste(fitted, box[:2], mask)
+
+            def draw_centered(
+                draw: ImageDraw.ImageDraw,
+                text: str,
+                font,
+                y: int,
+                max_width: int,
+                max_lines: int,
+                fill: tuple[int, int, int, int],
+            ) -> int:
+                line_height = int(font.size * 1.13)
+                for line in wrap(draw, text, font, max_width, max_lines):
+                    line_width = draw.textlength(line, font=font)
+                    draw.text(((width - line_width) / 2, y), line, font=font, fill=fill)
+                    y += line_height
+                return y
+
+            hero_image = product_images[0] if product_images else None
+            detail_image = product_images[1] if len(product_images) > 1 else hero_image
+            pip_image = product_images[2] if len(product_images) > 2 else hero_image
+
+            hook = add_bottom_scrim(
+                product_hero(hero_image),
+                225,
+            )
+            hook_draw = ImageDraw.Draw(hook)
+            hook_draw.rounded_rectangle(
+                (28, 26, 230, 68),
+                radius=21,
+                fill=(8, 13, 23, 210),
+            )
+            hook_draw.text(
+                (46, 46),
+                "ALPHOGEN PRODUCT",
+                font=small_font,
+                fill=(255, 255, 255, 242),
+                anchor="lm",
+            )
+            hook_title_y = int(height * 0.66)
+            draw_centered(
+                hook_draw,
+                product_title,
+                title_font,
+                hook_title_y,
+                width - 88,
+                3,
+                (255, 255, 255, 255),
+            )
+            hook.save(hook_path)
+
+            middle_background = dark_studio(hero_image)
+            middle_draw = ImageDraw.Draw(middle_background)
+            middle_draw.rectangle(
+                (0, 0, width, int(height * 0.12)),
+                fill=(6, 10, 18, 185),
+            )
+            middle_draw.text(
+                (30, int(height * 0.06)),
+                "AlphoGen Product Ad",
+                font=small_font,
+                fill=(245, 247, 252, 238),
+                anchor="lm",
+            )
+            middle_background.save(middle_bg_path)
+
+            if fmt == "portrait":
+                presenter_box = (0, int(height * 0.12), width, int(height * 0.12) + width)
+                pip_box = (width - 212, 92, width - 28, 276)
+                caption_box = (28, int(height * 0.77), width - 28, int(height * 0.94))
+            elif fmt == "square":
+                presenter_box = (0, 0, width, height)
+                pip_box = (width - 238, 34, width - 34, 238)
+                caption_box = (34, int(height * 0.72), width - 34, int(height * 0.94))
+            else:
+                presenter_box = (0, 0, height, height)
+                pip_box = (int(width * 0.69), int(height * 0.17), width - 44, int(height * 0.63))
+                caption_box = (int(width * 0.55), int(height * 0.69), width - 44, int(height * 0.92))
+
+            script_words = script.split()
+            split_at = max(1, (len(script_words) + 1) // 2)
+            caption_parts = [
+                " ".join(script_words[:split_at]),
+                " ".join(script_words[split_at:]) or " ".join(script_words[:split_at]),
+            ]
+
+            def middle_overlay(caption: str) -> Image.Image:
+                overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(overlay)
+                if pip_image:
+                    draw.rounded_rectangle(
+                        (pip_box[0] - 5, pip_box[1] - 5, pip_box[2] + 5, pip_box[3] + 5),
+                        radius=25,
+                        fill=(255, 255, 255, 238),
+                    )
+                    paste_rounded(overlay, pip_image, pip_box, 20)
+                draw.rounded_rectangle(
+                    caption_box,
+                    radius=24,
+                    fill=(7, 11, 20, 226),
+                    outline=(255, 255, 255, 42),
+                    width=2,
+                )
+                lines = wrap(
+                    draw,
+                    caption,
+                    caption_font,
+                    caption_box[2] - caption_box[0] - 42,
+                    2,
+                )
+                line_height = int(caption_font.size * 1.16)
+                text_y = caption_box[1] + (
+                    (caption_box[3] - caption_box[1] - len(lines) * line_height) // 2
+                )
+                for line in lines:
+                    line_width = draw.textlength(line, font=caption_font)
+                    draw.text(
+                        ((width - line_width) / 2, text_y),
+                        line,
+                        font=caption_font,
+                        fill=(255, 255, 255, 255),
+                    )
+                    text_y += line_height
+                return overlay
+
+            middle_overlay(caption_parts[0]).save(middle_overlay_a_path)
+            middle_overlay(caption_parts[1]).save(middle_overlay_b_path)
+
+            outro = add_bottom_scrim(
+                product_hero(detail_image),
+                230,
+            )
+            outro_draw = ImageDraw.Draw(outro)
+            cta = "Découvrir le produit" if state.get("language") == "french" else "Discover the product"
+            outro_y = int(height * 0.63)
+            outro_y = draw_centered(
+                outro_draw,
+                product_title,
+                title_font,
+                outro_y,
+                width - 88,
+                2,
+                (255, 255, 255, 255),
+            )
+            cta_width = outro_draw.textlength(cta, font=small_font)
+            cta_box = (
+                int((width - cta_width) / 2) - 26,
+                outro_y + 18,
+                int((width + cta_width) / 2) + 26,
+                outro_y + 66,
+            )
+            outro_draw.rounded_rectangle(cta_box, radius=24, fill=(255, 255, 255, 242))
+            outro_draw.text(
+                (width / 2, outro_y + 42),
+                cta,
+                font=small_font,
+                fill=(10, 16, 28, 255),
+                anchor="mm",
+            )
+            outro_draw.text(
+                (width / 2, height - 34),
+                product_host,
+                font=small_font,
+                fill=(235, 239, 247, 225),
+                anchor="ms",
+            )
+            outro.save(outro_path)
+
+            panel_w = presenter_box[2] - presenter_box[0]
+            panel_h = presenter_box[3] - presenter_box[1]
+            caption_switch = middle_duration / 2
             filter_graph = (
-                f"[1:v]scale={panel_w}:{panel_h}:force_original_aspect_ratio=increase,"
-                f"crop={panel_w}:{panel_h},setsar=1[p];"
-                f"[0:v][p]overlay={panel[0]}:{panel[1]}:shortest=1[base];"
-                "[base][3:v]overlay=0:0:format=auto[v]"
+                f"[0:v]trim=duration={edge_duration:.3f},setpts=PTS-STARTPTS,"
+                f"scale={width}:{height},setsar=1[hook];"
+                f"[3:v]trim=duration={middle_duration:.3f},setpts=PTS-STARTPTS,"
+                f"scale={width}:{height},setsar=1[midbg];"
+                f"[1:v]trim=start={edge_duration:.3f}:end={duration - edge_duration:.3f},"
+                f"setpts=PTS-STARTPTS,scale={panel_w}:{panel_h}:force_original_aspect_ratio=increase,"
+                f"crop={panel_w}:{panel_h},setsar=1[presenter];"
+                f"[midbg][presenter]overlay={presenter_box[0]}:{presenter_box[1]}:shortest=1[mid0];"
+                f"[mid0][4:v]overlay=0:0:shortest=1:"
+                f"enable='between(t,0,{caption_switch:.3f})'[mid1];"
+                f"[mid1][5:v]overlay=0:0:shortest=1:"
+                f"enable='gte(t,{caption_switch:.3f})'[middle];"
+                f"[6:v]trim=duration={edge_duration:.3f},setpts=PTS-STARTPTS,"
+                f"scale={width}:{height},setsar=1[outro];"
+                "[hook][middle][outro]concat=n=3:v=1:a=0[v]"
             )
             command = [
                 "ffmpeg", "-y",
-                "-loop", "1", "-framerate", "25", "-i", str(bg_path),
+                "-loop", "1", "-framerate", "25", "-i", str(hook_path),
                 "-stream_loop", "-1", "-i", str(presenter_path),
                 "-i", str(audio_path),
-                "-loop", "1", "-framerate", "25", "-i", str(overlay_path),
+                "-loop", "1", "-framerate", "25", "-i", str(middle_bg_path),
+                "-loop", "1", "-framerate", "25", "-i", str(middle_overlay_a_path),
+                "-loop", "1", "-framerate", "25", "-i", str(middle_overlay_b_path),
+                "-loop", "1", "-framerate", "25", "-i", str(outro_path),
                 "-filter_complex", filter_graph,
                 "-map", "[v]", "-map", "2:a:0",
                 "-t", f"{duration:.3f}",
@@ -2253,7 +2421,9 @@ def render_native_product_ad(job_id: str) -> str:
         final_state["render"] = {
             "duration_seconds": round(duration, 3),
             "format": fmt,
-            "product_media": bool(product_image),
+            "product_media": bool(product_images),
+            "product_media_count": len(product_images),
+            "edit_version": "three-shot-v2",
         }
         update_job(
             job_id,
@@ -2266,7 +2436,7 @@ def render_native_product_ad(job_id: str) -> str:
         )
         log(
             job_id,
-            f"[native-product-ad] DONE fallback={fallback_used} media={bool(product_image)} -> {url}",
+            f"[native-product-ad] DONE fallback={fallback_used} media={len(product_images)} -> {url}",
         )
         return url
     except Exception as e:

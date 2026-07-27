@@ -23,6 +23,11 @@ import {
   type NativeProductAdStyle,
 } from "@/lib/native-product-ad";
 import {
+  DEFAULT_NATIVE_PRODUCT_AD_VOICE,
+  NATIVE_PRODUCT_AD_VOICES,
+  isNativeProductAdVoice,
+} from "@/lib/native-product-ad-voices";
+import {
   NATIVE_PRESENTER_ANIMATION_BUCKET,
   NATIVE_PRESENTER_ANIMATION_VERSION,
 } from "@/lib/video-presenter-native-animation";
@@ -90,6 +95,15 @@ async function submitNativeProductAd(
     typeof body.language === "string" && LANGUAGES.has(body.language)
       ? body.language as NativeProductAdLanguage
       : "french";
+  if (body.voiceId !== undefined && !isNativeProductAdVoice(body.voiceId)) {
+    return NextResponse.json({ error: "Choose an available native voice." }, { status: 400 });
+  }
+  const voiceId = isNativeProductAdVoice(body.voiceId)
+    ? body.voiceId
+    : DEFAULT_NATIVE_PRODUCT_AD_VOICE;
+  const voiceProfile =
+    NATIVE_PRODUCT_AD_VOICES.find((voice) => voice.id === voiceId)?.label
+    ?? "Native presenter";
 
   if (!/^https?:\/\/.+\..+/.test(url) || url.length > 2000) {
     return NextResponse.json({ error: "A valid product URL is required." }, { status: 400 });
@@ -133,6 +147,7 @@ async function submitNativeProductAd(
     format,
     language,
     native_base_id: nativeBaseId,
+    voice_profile: voiceProfile,
     duration_seconds: NATIVE_PRODUCT_AD_SECONDS,
     submitted_by: user.email ?? null,
   };
@@ -182,7 +197,11 @@ async function submitNativeProductAd(
       })
       .eq("id", job.id);
 
-    const tts = await generateVoiceover({ text: script, format: "mp3" });
+    const tts = await generateVoiceover({
+      text: script,
+      voice: voiceId,
+      format: "mp3",
+    });
     const audioBytes = Buffer.from(tts.audio);
     const audioSha256 = createHash("sha256").update(audioBytes).digest("hex");
 

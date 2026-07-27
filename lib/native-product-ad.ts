@@ -12,6 +12,7 @@ export interface ProductPageBrief {
   title: string;
   description: string;
   imageUrl: string | null;
+  imageUrls: string[];
   hostname: string;
 }
 
@@ -43,6 +44,80 @@ function metaContent(html: string, key: string) {
     if (match?.[1]) return decodeHtml(match[1]);
   }
   return "";
+}
+
+function productJsonLdImages(html: string) {
+  const images: string[] = [];
+  const scripts = html.matchAll(
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
+  );
+
+  const visit = (value: unknown, inProduct = false): void => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item, inProduct));
+      return;
+    }
+    const record = value as Record<string, unknown>;
+    const rawType = record["@type"];
+    const types = Array.isArray(rawType) ? rawType : [rawType];
+    const isProduct =
+      inProduct
+      || types.some((type) => typeof type === "string" && type.toLowerCase() === "product");
+    if (isProduct) {
+      const rawImages = Array.isArray(record.image) ? record.image : [record.image];
+      rawImages.forEach((image) => {
+        if (typeof image === "string") images.push(decodeHtml(image));
+        else if (image && typeof image === "object") {
+          const imageUrl = (image as Record<string, unknown>).url;
+          if (typeof imageUrl === "string") images.push(decodeHtml(imageUrl));
+        }
+      });
+    }
+    Object.values(record).forEach((child) => visit(child, isProduct));
+  };
+
+  for (const match of scripts) {
+    try {
+      visit(JSON.parse(match[1]));
+    } catch {
+      // Malformed analytics or JSON-LD blocks do not make the page unusable.
+    }
+  }
+  return images;
+}
+
+function productHtmlImages(html: string) {
+  const images: string[] = [];
+  for (const tag of html.match(/<img\b[^>]*>/gi) ?? []) {
+    const src =
+      tag.match(/\bsrc=["']([^"']+)["']/i)?.[1]
+      || tag.match(/\bdata-src=["']([^"']+)["']/i)?.[1];
+    if (!src || src.startsWith("data:")) continue;
+    const lower = `${src} ${tag}`.toLowerCase();
+    if (/(logo|icon|sprite|avatar|tracking|pixel)/.test(lower)) continue;
+    const width = Number(tag.match(/\bwidth=["']?(\d+)/i)?.[1] ?? 0);
+    const height = Number(tag.match(/\bheight=["']?(\d+)/i)?.[1] ?? 0);
+    const hasUsefulAlt = /\balt=["'][^"']{4,}["']/i.test(tag);
+    if ((width >= 300 && height >= 300) || hasUsefulAlt) images.push(decodeHtml(src));
+  }
+  return images;
+}
+
+function resolveProductImages(candidates: string[], baseUrl: string, limit = 4) {
+  const resolved: string[] = [];
+  for (const candidate of candidates) {
+    try {
+      const url = new URL(candidate, baseUrl);
+      if (!["http:", "https:"].includes(url.protocol)) continue;
+      const value = url.toString();
+      if (!resolved.includes(value)) resolved.push(value);
+      if (resolved.length >= limit) break;
+    } catch {
+      // Ignore invalid image candidates.
+    }
+  }
+  return resolved;
 }
 
 export function normalizeNativeProductAdScript(
@@ -89,19 +164,21 @@ export async function readProductPageBrief(url: string): Promise<ProductPageBrie
       metaContent(html, "og:description")
       || metaContent(html, "description")
       || "";
-    const rawImage = metaContent(html, "og:image") || metaContent(html, "twitter:image");
-    let imageUrl: string | null = null;
-    if (rawImage) {
-      try {
-        imageUrl = new URL(rawImage, response.url || url).toString();
-      } catch {
-        imageUrl = null;
-      }
-    }
+    const imageUrls = resolveProductImages(
+      [
+        metaContent(html, "og:image"),
+        metaContent(html, "og:image:secure_url"),
+        metaContent(html, "twitter:image"),
+        ...productJsonLdImages(html),
+        ...productHtmlImages(html),
+      ].filter(Boolean),
+      response.url || url,
+    );
     return {
       title: title.slice(0, 160),
       description: description.slice(0, 500),
-      imageUrl,
+      imageUrl: imageUrls[0] ?? null,
+      imageUrls,
       hostname: parsed.hostname.replace(/^www\./, ""),
     };
   } catch {
@@ -109,6 +186,7 @@ export async function readProductPageBrief(url: string): Promise<ProductPageBrie
       title: fallbackTitle,
       description: "",
       imageUrl: null,
+      imageUrls: [],
       hostname: parsed.hostname.replace(/^www\./, ""),
     };
   }

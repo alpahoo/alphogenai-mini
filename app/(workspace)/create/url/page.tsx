@@ -36,6 +36,11 @@ import {
   VideoPresenterForm,
   type PublicVideoPresenterRequest,
 } from "@/components/create/video-presenter-form";
+import {
+  DEFAULT_NATIVE_PRODUCT_AD_VOICE,
+  NATIVE_PRODUCT_AD_VOICES,
+  type NativeProductAdVoiceId,
+} from "@/lib/native-product-ad-voices";
 
 type UrlMode = "product" | "tutorial" | "news";
 
@@ -280,6 +285,9 @@ export default function UrlToVideo() {
   const [presenterId, setPresenterId] = useState<string | null>(null);
   const [nativeBaseId, setNativeBaseId] = useState<string | null>(null);
   const [voiceId, setVoiceId] = useState("");
+  const [nativeVoiceId, setNativeVoiceId] = useState<NativeProductAdVoiceId>(
+    DEFAULT_NATIVE_PRODUCT_AD_VOICE,
+  );
   const [resourcesLoading, setResourcesLoading] = useState(true);
   const [previewingVoiceId, setPreviewingVoiceId] = useState<string | null>(null);
   const voicePreviewRef = useRef<HTMLAudioElement | null>(null);
@@ -460,9 +468,8 @@ export default function UrlToVideo() {
     setPresenterId(null);
     setAvatarId(null);
     setAvatarType(0);
-    setVoiceId("");
     setError(null);
-    setStatus("Native presenter selected. This beta renders one 8-second Product Ad.");
+    setStatus("Native presenter selected. Choose a voice, then create the short Product Ad.");
   }
 
   function selectProductFormat(format: ProductAdFormat) {
@@ -790,6 +797,7 @@ export default function UrlToVideo() {
             length: nativeBaseId ? "8" : paLength,
             language: paLanguage,
             ...(nativeBaseId ? { nativeBaseId } : {}),
+            ...(nativeBaseId ? { voiceId: nativeVoiceId } : {}),
             ...(!nativeBaseId && avatarId ? { avatarId, avatarType } : {}),
             ...(!nativeBaseId && presenterId ? { presenterId } : {}),
             ...(!nativeBaseId && voiceId ? { voiceId } : {}),
@@ -1166,25 +1174,43 @@ export default function UrlToVideo() {
                 <div className="mt-1.5 flex gap-2">
                   <select
                     id="product-ad-voice"
-                    value={nativeBaseId ? "" : voiceId}
-                    onChange={(event) => setVoiceId(event.target.value)}
-                    disabled={Boolean(nativeBaseId)}
+                    value={nativeBaseId ? nativeVoiceId : voiceId}
+                    onChange={(event) => {
+                      if (nativeBaseId) {
+                        setNativeVoiceId(
+                          event.target.value as NativeProductAdVoiceId,
+                        );
+                      } else {
+                        setVoiceId(event.target.value);
+                      }
+                    }}
                     className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-800 outline-none focus:border-blue-400"
                   >
-                    <option value="">
-                      {nativeBaseId ? "Automatic native voice" : "Automatic voice"}
-                    </option>
-                    {availableVoices.map((voice) => (
-                      <option key={voice.id} value={voice.id}>
-                        {voice.kind === "custom" ? `${voice.name} - My voice` : voice.name}
-                      </option>
-                    ))}
+                    {nativeBaseId ? (
+                      NATIVE_PRODUCT_AD_VOICES.map((voice) => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.label} - {voice.description}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="">Automatic voice</option>
+                        {availableVoices.map((voice) => (
+                          <option key={voice.id} value={voice.id}>
+                            {voice.kind === "custom" ? `${voice.name} - My voice` : voice.name}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                   <button
                     type="button"
                     onClick={previewVoice}
-                    disabled={!voices.find((voice) => voice.id === voiceId)?.previewUrl}
-                    title="Preview voice"
+                    disabled={
+                      Boolean(nativeBaseId)
+                      || !voices.find((voice) => voice.id === voiceId)?.previewUrl
+                    }
+                    title={nativeBaseId ? "Native voice preview is coming next" : "Preview voice"}
                     className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-neutral-200 text-neutral-600 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {previewingVoiceId === voiceId ? (
