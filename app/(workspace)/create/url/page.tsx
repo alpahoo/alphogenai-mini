@@ -1260,14 +1260,15 @@ export default function UrlToVideo() {
                           : "text-neutral-500 hover:text-neutral-800"
                       }`}
                     >
-                      {length}s{length === "8" ? " native" : ""}
+                      {length === "8" ? `Up to ${length}s native` : `${length}s`}
                     </button>
                   ))}
                 </div>
                 {nativeBaseId && (
                   <p className="mt-2 text-[11px] leading-4 text-neutral-500">
                     Native beta uses your private performance clip to create one
-                    8-second Product Ad with product media, speech, and captions.
+                    Product Ad of up to 8 seconds, based on the generated speech,
+                    with product media and captions.
                   </p>
                 )}
               </fieldset>

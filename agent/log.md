@@ -1,3 +1,10 @@
+## 2026-07-27 - Codex - T-1163e production Product Ad PASS + title containment polish
+- Production job `7306087a-85f8-47d4-a0fb-7e8913d6e0d1` completed through `native_product_ad` with a permanent R2 output, no public error and no new provider generation during inspection.
+- Downloaded and probed the exact output: 720x1280 portrait H.264 plus mono AAC, 6.52 seconds. Three-frame inspection confirmed the retained private presenter is animated inside an AlphoGen-composed product ad with Powerbeats media, spoken audio, captions and branding.
+- Found one visual defect in the first production output: a two-line product title could overflow the white product card and overlap the presenter panel. The compositor now reserves title height before sizing the product image, keeping every title line inside the card.
+- The native duration control now says `Up to 8s native` and explains that output length follows generated speech, matching the real 6.52-second result instead of promising an exact 8.00 seconds.
+- Python syntax, TypeScript, diff-check and production build pass. The polish requires the normal Vercel + Modal deploy but no migration and no paid generation.
+
 ## 2026-07-27 - Codex - T-1163e native Product Ad compositor code-ready
 - Connected the validated private native presenter primitive to the real Product Ad workflow without replacing the existing path. A ready reusable performance clip now selects a distinct `native_product_ad` job route and an honest eight-second beta contract.
 - Jobs are reserved before TTS or GPU work. Product-page metadata and one bounded spoken line are persisted, audio is deduplicated through the own-only animation cache, interrupted private audio uploads are repaired, and result-page polling advances animation state idempotently.

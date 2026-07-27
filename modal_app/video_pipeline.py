@@ -2131,12 +2131,25 @@ def render_native_product_ad(job_id: str) -> str:
                 caption_y = int(height * 0.80)
 
             draw.rounded_rectangle(product_card, radius=28, fill=(255, 255, 255, 235))
+            title_lines = wrap(
+                draw,
+                product_title,
+                title_font,
+                product_card[2] - product_card[0] - 36,
+                2,
+            )
+            title_line_height = int(title_font.size * 1.08)
+            title_block_height = len(title_lines) * title_line_height
+            title_y = max(
+                product_card[1] + 22,
+                product_card[3] - title_block_height - 18,
+            )
             if product_image:
                 inner = (
                     product_card[0] + 14,
                     product_card[1] + 14,
                     product_card[2] - 14,
-                    product_card[3] - 72,
+                    title_y - 12,
                 )
                 if inner[3] > inner[1]:
                     card_image = cover(
@@ -2150,14 +2163,6 @@ def render_native_product_ad(job_id: str) -> str:
                         fill=255,
                     )
                     overlay.paste(card_image.convert("RGBA"), inner[:2], mask)
-            title_lines = wrap(
-                draw,
-                product_title,
-                title_font,
-                product_card[2] - product_card[0] - 36,
-                2,
-            )
-            title_y = max(product_card[1] + 22, product_card[3] - 62)
             for line in title_lines:
                 draw.text(
                     (product_card[0] + 20, title_y),
@@ -2165,7 +2170,7 @@ def render_native_product_ad(job_id: str) -> str:
                     font=title_font,
                     fill=(17, 24, 39, 255),
                 )
-                title_y += int(title_font.size * 1.08)
+                title_y += title_line_height
 
             draw.rounded_rectangle(
                 (panel[0] - 5, panel[1] - 5, panel[2] + 5, panel[3] + 5),
