@@ -16,6 +16,8 @@ import type {
 
 export const DEFAULT_UGC_BYTEPLUS_ENGINE = "seedance2_fast_byteplus";
 export const DEFAULT_UGC_NATIVE_BYTEPLUS_ENGINE = "seedance2_byteplus";
+export const DEFAULT_UGC_VISUAL_PREVIEW_BYTEPLUS_ENGINE =
+  "seedance10pro_fast_byteplus";
 
 export function buildBytePlusUGCShotRequest(
   spec: UGCShotSpec,
@@ -86,6 +88,25 @@ export function buildBytePlusUGCNativeAdRequest(
   };
 }
 
+export function buildBytePlusUGCVisualPreviewRequest(
+  spec: UGCNativeAdSpec,
+  engineKey = DEFAULT_UGC_VISUAL_PREVIEW_BYTEPLUS_ENGINE
+): CreateBytePlusParams {
+  const firstFrameUrl = spec.references.images?.[0]?.url;
+  if (!firstFrameUrl) {
+    throw new Error("A product first frame is required for the visual preview.");
+  }
+
+  return {
+    engineKey,
+    prompt: spec.prompt,
+    duration: Math.min(spec.durationSeconds, 10),
+    aspectRatio: spec.aspectRatio,
+    imageUrl: firstFrameUrl,
+    generateAudio: false,
+  };
+}
+
 export class BytePlusUGCNativeAdProvider implements UGCNativeAdProvider {
   readonly id = "seedance";
   readonly capabilities = {
@@ -100,6 +121,48 @@ export class BytePlusUGCNativeAdProvider implements UGCNativeAdProvider {
   async start(spec: UGCNativeAdSpec): Promise<UGCNativeAdTask> {
     const providerTaskId = await createBytePlusTask(
       buildBytePlusUGCNativeAdRequest(spec, this.engineKey)
+    );
+    return { adId: spec.id, providerTaskId, status: "processing" };
+  }
+
+  async poll(task: UGCNativeAdTask): Promise<UGCNativeAdPollResult> {
+    const result = await getBytePlusTask(task.providerTaskId);
+    if (result.status === "completed") {
+      return {
+        adId: task.adId,
+        status: "ready",
+        videoUrl: result.videoUrl,
+        usageUnits: result.tokens,
+      };
+    }
+    if (result.status === "failed") {
+      return {
+        adId: task.adId,
+        status: "failed",
+        errorCode: result.error || "generation_failed",
+        usageUnits: result.tokens,
+      };
+    }
+    return { adId: task.adId, status: "processing", usageUnits: result.tokens };
+  }
+}
+
+export class BytePlusUGCVisualPreviewProvider implements UGCNativeAdProvider {
+  readonly id = "seedance";
+  readonly capabilities = {
+    nativeMultiShot: true,
+    multipleImageReferences: false,
+    videoReferences: false,
+    nativeAudio: false,
+  };
+
+  constructor(
+    private readonly engineKey = DEFAULT_UGC_VISUAL_PREVIEW_BYTEPLUS_ENGINE
+  ) {}
+
+  async start(spec: UGCNativeAdSpec): Promise<UGCNativeAdTask> {
+    const providerTaskId = await createBytePlusTask(
+      buildBytePlusUGCVisualPreviewRequest(spec, this.engineKey)
     );
     return { adId: spec.id, providerTaskId, status: "processing" };
   }

@@ -33,6 +33,9 @@ export default function NativeUGCExperimentPage() {
   const [nativeBaseId, setNativeBaseId] = useState("");
   const [loadingPresenters, setLoadingPresenters] = useState(true);
   const [running, setRunning] = useState(false);
+  const [runningMode, setRunningMode] = useState<"visual_preview" | "native" | null>(
+    null
+  );
   const [result, setResult] = useState<ExperimentResult | null>(null);
   const readyPresenters = useMemo(
     () => presenters.filter((item) => item.nativeBase?.status === "ready"),
@@ -93,8 +96,9 @@ export default function NativeUGCExperimentPage() {
     throw new Error("Native UGC generation is still running. Open the job later.");
   };
 
-  const start = async () => {
+  const start = async (mode: "visual_preview" | "native") => {
     setRunning(true);
+    setRunningMode(mode);
     setResult(null);
     try {
       const {
@@ -109,8 +113,9 @@ export default function NativeUGCExperimentPage() {
         },
         body: JSON.stringify({
           action: "start",
+          mode,
           url,
-          nativeBaseId: nativeBaseId || undefined,
+          nativeBaseId: mode === "native" ? nativeBaseId || undefined : undefined,
           aspectRatio: "9:16",
           language: "French (France)",
         }),
@@ -129,6 +134,7 @@ export default function NativeUGCExperimentPage() {
       }));
     } finally {
       setRunning(false);
+      setRunningMode(null);
     }
   };
 
@@ -138,8 +144,8 @@ export default function NativeUGCExperimentPage() {
         <p className="text-xs font-semibold uppercase text-blue-600">Admin experiment</p>
         <h1 className="mt-1 text-2xl font-bold">Native multi-shot product ad</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          One 15-second generation with a coherent hook, demonstration and CTA. Run a
-          single capped validation before routing this mode into Product Ad.
+          Start with the free 10-second visual preview. Use the full 15-second native
+          validation only after the product motion and pacing look convincing.
         </p>
       </div>
 
@@ -170,25 +176,49 @@ export default function NativeUGCExperimentPage() {
           </select>
         </label>
 
-        <div className="flex items-center justify-between gap-4 border-t border-border pt-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
+          <div className="text-sm text-muted-foreground">
+            Free visual preview: 9:16 · 10 seconds · no presenter · no audio
+          </div>
+          <button
+            type="button"
+            onClick={() => start("visual_preview")}
+            disabled={running || !url.trim()}
+            className="inline-flex h-10 items-center gap-2 bg-foreground px-4 text-sm font-semibold text-background disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {runningMode === "visual_preview" ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Generating preview
+              </>
+            ) : (
+              <>
+                <Play className="h-4 w-4" />
+                Run free visual preview
+              </>
+            )}
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm text-muted-foreground">
             9:16 · 15 seconds · French · one generation
           </div>
           <button
             type="button"
-            onClick={start}
+            onClick={() => start("native")}
             disabled={running || !url.trim() || loadingPresenters}
             className="inline-flex h-10 items-center gap-2 bg-foreground px-4 text-sm font-semibold text-background disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {running ? (
+            {runningMode === "native" ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Generating
+                Generating validation
               </>
             ) : (
               <>
                 <Play className="h-4 w-4" />
-                Run one validation
+                Run full native validation
               </>
             )}
           </button>

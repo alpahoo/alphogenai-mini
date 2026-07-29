@@ -4,8 +4,14 @@ import { requireAdmin } from "../../middleware";
 import { createServiceClient } from "@/lib/supabase/service";
 import { readProductPageBrief } from "@/lib/native-product-ad";
 import { NATIVE_PRESENTER_BASE_BUCKET } from "@/lib/video-presenter-native";
-import { buildUGCNativeAdSpec } from "@/lib/ugc-native-ad";
-import { BytePlusUGCNativeAdProvider } from "@/lib/providers/byteplus-ugc-shot-provider";
+import {
+  buildUGCNativeAdSpec,
+  buildUGCVisualPreviewSpec,
+} from "@/lib/ugc-native-ad";
+import {
+  BytePlusUGCNativeAdProvider,
+  BytePlusUGCVisualPreviewProvider,
+} from "@/lib/providers/byteplus-ugc-shot-provider";
 import {
   UGC_NATIVE_AD_VERSION,
   type UGCNativeAdTask,
@@ -20,6 +26,7 @@ const UUID_RE =
 interface UGCNativeAdState {
   capability: "ugc_native_ad";
   version: string;
+  mode: "native" | "visual_preview";
   url: string;
   product: {
     title: string;
@@ -87,6 +94,7 @@ async function startNativeAd(
         .filter(Boolean)
         .slice(0, 2)
     : [];
+  const mode = body.mode === "visual_preview" ? "visual_preview" : "native";
 
   if (!/^https?:\/\/.+\..+/.test(url) || url.length > 2000) {
     return NextResponse.json({ error: "A valid product URL is required." }, { status: 400 });
@@ -94,7 +102,7 @@ async function startNativeAd(
 
   const service = createServiceClient();
   let presenterVideoUrl: string | null = null;
-  if (nativeBaseId) {
+  if (mode === "native" && nativeBaseId) {
     try {
       presenterVideoUrl = await signPresenterVideo(service, user.id, nativeBaseId);
     } catch (error) {
@@ -114,22 +122,26 @@ async function startNativeAd(
     );
   }
 
-  const spec = buildUGCNativeAdSpec({
-    brief,
-    aspectRatio,
-    language,
-    verifiedAssetIds,
-    presenterVideo: presenterVideoUrl
-      ? { role: "character_face", url: presenterVideoUrl, mime_type: "video/mp4" }
-      : null,
-  });
+  const spec =
+    mode === "visual_preview"
+      ? buildUGCVisualPreviewSpec({ brief, aspectRatio })
+      : buildUGCNativeAdSpec({
+          brief,
+          aspectRatio,
+          language,
+          verifiedAssetIds,
+          presenterVideo: presenterVideoUrl
+            ? { role: "character_face", url: presenterVideoUrl, mime_type: "video/mp4" }
+            : null,
+        });
   const initialState: UGCNativeAdState = {
     capability: "ugc_native_ad",
     version: UGC_NATIVE_AD_VERSION,
+    mode,
     url,
     product: brief,
     prompt: spec.prompt,
-    nativeBaseId: nativeBaseId || null,
+    nativeBaseId: mode === "native" ? nativeBaseId || null : null,
     task: null,
     output: null,
   };
@@ -141,7 +153,10 @@ async function startNativeAd(
       prompt: url,
       status: "in_progress",
       engine_used: "native_product_ad",
-      current_stage: "ugc_native_generating",
+      current_stage:
+        mode === "visual_preview"
+          ? "ugc_visual_preview_generating"
+          : "ugc_native_generating",
       aspect_ratio: aspectRatio,
       target_duration_seconds: spec.durationSeconds,
       app_state: initialState,
@@ -152,7 +167,10 @@ async function startNativeAd(
     return NextResponse.json({ error: "Could not reserve the native UGC ad." }, { status: 500 });
   }
 
-  const provider = new BytePlusUGCNativeAdProvider();
+  const provider =
+    mode === "visual_preview"
+      ? new BytePlusUGCVisualPreviewProvider()
+      : new BytePlusUGCNativeAdProvider();
   try {
     const task = await provider.start(spec);
     const nextState: UGCNativeAdState = {
@@ -220,7 +238,10 @@ async function pollNativeAd(user: { id: string }, body: Record<string, unknown>)
     providerTaskId: state.task.providerTaskId,
     status: "processing",
   };
-  const provider = new BytePlusUGCNativeAdProvider();
+  const provider =
+    state.mode === "visual_preview"
+      ? new BytePlusUGCVisualPreviewProvider()
+      : new BytePlusUGCNativeAdProvider();
   const result = await provider.poll(task);
   if (result.status === "processing") {
     return NextResponse.json({

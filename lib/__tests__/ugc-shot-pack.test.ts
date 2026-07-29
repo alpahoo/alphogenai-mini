@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { buildUGCShotPack } from "@/lib/ugc-shot-pack";
-import { buildUGCNativeAdSpec } from "@/lib/ugc-native-ad";
+import {
+  buildUGCNativeAdSpec,
+  buildUGCVisualPreviewSpec,
+} from "@/lib/ugc-native-ad";
 import {
   buildBytePlusUGCNativeAdRequest,
   buildBytePlusUGCShotRequest,
+  buildBytePlusUGCVisualPreviewRequest,
 } from "@/lib/providers/byteplus-ugc-shot-provider";
 import { validateUGCShotPack } from "@/lib/ugc-shot-provider";
 import { buildRevideoProductAdManifest } from "@/lib/revideo-product-ad";
@@ -121,5 +125,19 @@ describe("buildUGCNativeAdSpec", () => {
     expect(() => buildUGCNativeAdSpec({ brief: { ...brief, imageUrls: [] } })).toThrow(
       "At least one product image"
     );
+  });
+
+  it("builds a 10-second silent first-frame preview for Seedance 1.0 Fast", () => {
+    const spec = buildUGCVisualPreviewSpec({ brief });
+    const request = buildBytePlusUGCVisualPreviewRequest(spec);
+
+    expect(spec.durationSeconds).toBe(10);
+    expect(spec.generateAudio).toBe(false);
+    expect(spec.references.images).toHaveLength(1);
+    expect(spec.references.videos).toBeUndefined();
+    expect(request.engineKey).toBe("seedance10pro_fast_byteplus");
+    expect(request.imageUrl).toBe(brief.imageUrls[0]);
+    expect(request.references).toBeUndefined();
+    expect(request.generateAudio).toBe(false);
   });
 });
