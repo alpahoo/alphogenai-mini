@@ -1,0 +1,22 @@
+{
+  "name": "@alphogen/revideo-product-ad-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "render": "tsx src/render.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@revideo/2d": "0.11.0",
+    "@revideo/cli": "^0.11.0",
+    "@revideo/core": "0.11.0",
+    "@revideo/renderer": "0.11.0",
+    "@revideo/ui": "^0.11.0",
+    "@revideo/vite-plugin": "^0.11.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

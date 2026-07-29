@@ -1,0 +1,317 @@
+import { randomUUID } from "crypto";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "../../middleware";
+import { createServiceClient } from "@/lib/supabase/service";
+import { readProductPageBrief } from "@/lib/native-product-ad";
+import { NATIVE_PRESENTER_BASE_BUCKET } from "@/lib/video-presenter-native";
+import { buildUGCShotPack } from "@/lib/ugc-shot-pack";
+import { BytePlusUGCShotProvider } from "@/lib/providers/byteplus-ugc-shot-provider";
+import {
+  UGC_SHOT_PACK_SIZE,
+  UGC_SHOT_PACK_VERSION,
+  type UGCShotTask,
+} from "@/lib/ugc-shot-provider";
+import { downloadAndUploadToR2 } from "@/lib/r2";
+import { buildRevideoProductAdManifest } from "@/lib/revideo-product-ad";
+
+export const maxDuration = 60;
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+interface StoredShotTask {
+  shotId: string;
+  role: string;
+  providerTaskId: string;
+}
+
+interface StoredShotOutput {
+  status: "ready" | "failed";
+  videoUrl?: string;
+  errorCode?: string;
+  usageUnits?: number;
+}
+
+interface UGCShotPackState {
+  capability: "ugc_shot_pack";
+  version: string;
+  url: string;
+  product: {
+    title: string;
+    description: string;
+    imageUrl: string | null;
+    imageUrls: string[];
+    hostname: string;
+  };
+  shots: Array<{
+    id: string;
+    role: string;
+    prompt: string;
+    durationSeconds: number;
+  }>;
+  tasks: StoredShotTask[];
+  outputs: Record<string, StoredShotOutput>;
+  nativeBaseId: string | null;
+}
+
+async function signPresenterVideo(
+  service: ReturnType<typeof createServiceClient>,
+  userId: string,
+  nativeBaseId: string
+) {
+  const { data: base, error } = await service
+    .from("user_presenter_native_bases")
+    .select("id,status,normalized_video_path")
+    .eq("id", nativeBaseId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new Error("presenter_lookup_failed");
+  if (!base || base.status !== "ready" || !base.normalized_video_path) {
+    throw new Error("presenter_not_ready");
+  }
+
+  const { data: signed, error: signedError } = await service.storage
+    .from(NATIVE_PRESENTER_BASE_BUCKET)
+    .createSignedUrl(base.normalized_video_path, 900);
+  if (signedError || !signed?.signedUrl) throw new Error("presenter_sign_failed");
+  return signed.signedUrl;
+}
+
+async function startPack(
+  user: { id: string; email: string },
+  body: Record<string, unknown>
+) {
+  const url = typeof body.url === "string" ? body.url.trim() : "";
+  const nativeBaseId =
+    typeof body.nativeBaseId === "string" && UUID_RE.test(body.nativeBaseId)
+      ? body.nativeBaseId
+      : "";
+  const aspectRatio =
+    body.aspectRatio === "1:1" || body.aspectRatio === "16:9" ? body.aspectRatio : "9:16";
+  const language =
+    typeof body.language === "string" && body.language.trim()
+      ? body.language.trim().slice(0, 80)
+      : "French (France)";
+  const verifiedAssetIds = Array.isArray(body.verifiedAssetIds)
+    ? body.verifiedAssetIds
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .slice(0, 2)
+    : [];
+
+  if (!/^https?:\/\/.+\..+/.test(url) || url.length > 2000) {
+    return NextResponse.json({ error: "A valid product URL is required." }, { status: 400 });
+  }
+
+  const service = createServiceClient();
+  let presenterVideoUrl: string | null = null;
+  if (nativeBaseId) {
+    try {
+      presenterVideoUrl = await signPresenterVideo(service, user.id, nativeBaseId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "presenter_not_ready";
+      const status = message === "presenter_not_ready" ? 409 : 500;
+      return NextResponse.json({ error: "The reusable presenter clip is not ready." }, { status });
+    }
+  }
+
+  const brief = await readProductPageBrief(url);
+  if (!brief.imageUrls.length) {
+    return NextResponse.json(
+      { error: "No usable product image was found on this page." },
+      { status: 422 }
+    );
+  }
+
+  const shots = buildUGCShotPack({
+    brief,
+    aspectRatio,
+    language,
+    verifiedAssetIds,
+    presenterVideo: presenterVideoUrl
+      ? { role: "character_face", url: presenterVideoUrl, mime_type: "video/mp4" }
+      : null,
+  });
+  const initialState: UGCShotPackState = {
+    capability: "ugc_shot_pack",
+    version: UGC_SHOT_PACK_VERSION,
+    url,
+    product: brief,
+    shots: shots.map(({ id, role, prompt, durationSeconds }) => ({
+      id,
+      role,
+      prompt,
+      durationSeconds,
+    })),
+    tasks: [],
+    outputs: {},
+    nativeBaseId: nativeBaseId || null,
+  };
+
+  const { data: job, error: jobError } = await service
+    .from("jobs")
+    .insert({
+      user_id: user.id,
+      prompt: url,
+      status: "in_progress",
+      engine_used: "native_product_ad",
+      current_stage: "ugc_shots_generating",
+      aspect_ratio: aspectRatio,
+      target_duration_seconds: shots.reduce((sum, shot) => sum + shot.durationSeconds, 0),
+      app_state: initialState,
+    })
+    .select("id")
+    .single();
+  if (jobError || !job) {
+    return NextResponse.json({ error: "Could not reserve the UGC shot pack." }, { status: 500 });
+  }
+
+  const provider = new BytePlusUGCShotProvider();
+  const tasks: StoredShotTask[] = [];
+  try {
+    for (const shot of shots) {
+      const task = await provider.start(shot);
+      tasks.push({ shotId: shot.id, role: shot.role, providerTaskId: task.providerTaskId });
+      const { error: saveError } = await service
+        .from("jobs")
+        .update({ app_state: { ...initialState, tasks } })
+        .eq("id", job.id);
+      if (saveError) throw new Error("task_state_save_failed");
+    }
+  } catch (error) {
+    console.error(`[ugc-shot-pack] start failed job=${job.id}`, error);
+    await service
+      .from("jobs")
+      .update({
+        status: tasks.length ? "in_progress" : "failed",
+        current_stage: tasks.length ? "ugc_shots_partial" : "failed",
+        error_message: "The UGC shot pack could not be started completely.",
+        app_state: { ...initialState, tasks },
+      })
+      .eq("id", job.id);
+    return NextResponse.json(
+      {
+        error: "The UGC shot pack could not be started completely.",
+        jobId: job.id,
+        started: tasks.length,
+      },
+      { status: 502 }
+    );
+  }
+
+  return NextResponse.json(
+    { success: true, jobId: job.id, status: "processing", shots: tasks.length },
+    { status: 202 }
+  );
+}
+
+async function pollPack(
+  user: { id: string },
+  body: Record<string, unknown>
+) {
+  const jobId = typeof body.jobId === "string" ? body.jobId : "";
+  if (!UUID_RE.test(jobId)) {
+    return NextResponse.json({ error: "A valid job id is required." }, { status: 400 });
+  }
+
+  const service = createServiceClient();
+  const { data: job, error } = await service
+    .from("jobs")
+    .select("id,status,app_state")
+    .eq("id", jobId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (error || !job) return NextResponse.json({ error: "Job not found." }, { status: 404 });
+
+  const state = job.app_state as UGCShotPackState | null;
+  if (state?.capability !== "ugc_shot_pack" || !Array.isArray(state.tasks)) {
+    return NextResponse.json({ error: "This is not a UGC shot-pack job." }, { status: 400 });
+  }
+
+  const provider = new BytePlusUGCShotProvider();
+  const outputs = { ...(state.outputs ?? {}) };
+  for (const stored of state.tasks) {
+    if (outputs[stored.shotId]?.status === "ready") continue;
+    const task: UGCShotTask = {
+      shotId: stored.shotId,
+      providerTaskId: stored.providerTaskId,
+      status: "processing",
+    };
+    const result = await provider.poll(task);
+    if (result.status === "ready" && result.videoUrl) {
+      const permanentUrl = await downloadAndUploadToR2(
+        result.videoUrl,
+        `videos/ugc-shot-pack/${job.id}/${stored.shotId}-${randomUUID()}.mp4`
+      );
+      outputs[stored.shotId] = {
+        status: "ready",
+        videoUrl: permanentUrl,
+        usageUnits: result.usageUnits,
+      };
+    } else if (result.status === "failed") {
+      outputs[stored.shotId] = {
+        status: "failed",
+        errorCode: result.errorCode,
+        usageUnits: result.usageUnits,
+      };
+    }
+  }
+
+  const ready = Object.values(outputs).filter((output) => output.status === "ready").length;
+  const failed = Object.values(outputs).filter((output) => output.status === "failed").length;
+  const processing = Math.max(0, state.tasks.length - ready - failed);
+  const missing = Math.max(0, UGC_SHOT_PACK_SIZE - state.tasks.length);
+  const finished = processing === 0;
+  const completePack =
+    finished && failed === 0 && missing === 0 && ready === UGC_SHOT_PACK_SIZE;
+  const finalStatus = completePack ? "done" : finished ? "failed" : "in_progress";
+  const editManifest = completePack
+    ? buildRevideoProductAdManifest({
+        productTitle: state.product.title,
+        productDescription: state.product.description,
+        shots: state.shots.map((shot) => ({
+          id: shot.id,
+          role: shot.role as "creator_hook" | "product_demo" | "lifestyle_cta",
+          durationSeconds: shot.durationSeconds,
+          videoUrl: outputs[shot.id]?.videoUrl ?? "",
+        })),
+      })
+    : null;
+  const { error: updateError } = await service
+    .from("jobs")
+    .update({
+      status: finalStatus,
+      current_stage: finalStatus === "done" ? "ugc_shots_ready" : finalStatus === "failed" ? "failed" : "ugc_shots_generating",
+      error_message:
+        failed || missing
+          ? `${failed + missing} UGC shot(s) unavailable.`
+          : null,
+      app_state: { ...state, outputs },
+    })
+    .eq("id", job.id);
+  if (updateError) {
+    return NextResponse.json({ error: "Could not save UGC shot progress." }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    success: true,
+    jobId: job.id,
+    status: finalStatus,
+    ready,
+    failed,
+    processing,
+    missing,
+    outputs,
+    editManifest,
+  });
+}
+
+export async function POST(request: NextRequest) {
+  const auth = await requireAdmin(request);
+  if (auth.response) return auth.response;
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  if (body.action === "start") return startPack(auth.user, body);
+  if (body.action === "poll") return pollPack(auth.user, body);
+  return NextResponse.json({ error: "Unsupported action." }, { status: 400 });
+}

@@ -1,0 +1,25 @@
+{
+  "shots": [
+    {
+      "videoUrl": "https://revideo-example-assets.s3.amazonaws.com/stars.mp4",
+      "durationSeconds": 4,
+      "eyebrow": "PRODUCT DISCOVERY",
+      "headline": "A better way to move."
+    },
+    {
+      "videoUrl": "https://revideo-example-assets.s3.amazonaws.com/stars.mp4",
+      "durationSeconds": 4,
+      "eyebrow": "DESIGNED FOR REAL LIFE",
+      "headline": "See the detail. Feel the difference."
+    },
+    {
+      "videoUrl": "https://revideo-example-assets.s3.amazonaws.com/stars.mp4",
+      "durationSeconds": 4,
+      "eyebrow": "AVAILABLE NOW",
+      "headline": "Ready when you are.",
+      "cta": "Discover"
+    }
+  ],
+  "brand": "AlphoGen",
+  "accentColor": "#36d399"
+}

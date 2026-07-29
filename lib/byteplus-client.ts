@@ -16,6 +16,8 @@ const ARK_BASE =
 const TASKS_URL = `${ARK_BASE}/api/v3/contents/generations/tasks`;
 
 const MAX_REFERENCE_IMAGES = 9;
+const MAX_REFERENCE_VIDEOS = 3;
+const MAX_REFERENCE_AUDIO = 3;
 
 export interface BytePlusEngineConfig {
   /** ModelArk model id sent in the request body. */
@@ -110,6 +112,19 @@ async function resolveRefUrl(item: {
   return null;
 }
 
+async function resolveReferenceItems<T extends { url?: string; storage_path?: string }>(
+  items: T[] | undefined,
+  limit: number
+): Promise<Array<{ item: T; url: string }>> {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const selected = items.slice(0, limit);
+  const urls = await Promise.all(selected.map((item) => resolveRefUrl(item)));
+  return selected.flatMap((item, index) => {
+    const url = urls[index];
+    return url ? [{ item, url }] : [];
+  });
+}
+
 export interface CreateBytePlusParams {
   engineKey: string;
   prompt: string;
@@ -141,15 +156,19 @@ export async function createBytePlusTask(params: CreateBytePlusParams): Promise<
     { type: "text", text: params.prompt.slice(0, 5000) },
   ];
 
-  // Resolve reference images first.
-  const refImages = params.references?.images;
-  const refUrls: string[] = [];
-  if (Array.isArray(refImages) && refImages.length > 0) {
-    const resolved = await Promise.all(
-      refImages.slice(0, MAX_REFERENCE_IMAGES).map((r) => resolveRefUrl(r))
-    );
-    for (const url of resolved) if (url) refUrls.push(url);
-  }
+  const refImages = await resolveReferenceItems(
+    params.references?.images,
+    MAX_REFERENCE_IMAGES
+  );
+  const refVideos = await resolveReferenceItems(
+    params.references?.videos,
+    MAX_REFERENCE_VIDEOS
+  );
+  const refAudio = await resolveReferenceItems(
+    params.references?.audio,
+    MAX_REFERENCE_AUDIO
+  );
+  const refUrls = refImages.map(({ url }) => url);
   const firstFrame =
     params.imageUrl && params.imageUrl.startsWith("http") ? params.imageUrl : undefined;
 
@@ -175,6 +194,11 @@ export async function createBytePlusTask(params: CreateBytePlusParams): Promise<
       for (const uri of assetUris) {
         content.push({ type: "image_url", image_url: { url: uri }, role: "reference_image" });
       }
+      for (const { item, url } of refImages) {
+        if (item.role !== "character_face") {
+          content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
+        }
+      }
       if (firstFrame || refUrls.length > 0) {
         console.warn(
           `[byteplus] verified asset(s) present → dropping ${refUrls.length} raw ref(s)` +
@@ -190,6 +214,12 @@ export async function createBytePlusTask(params: CreateBytePlusParams): Promise<
       for (const url of refUrls) {
         content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
       }
+    }
+    for (const { url } of refVideos) {
+      content.push({ type: "video_url", video_url: { url }, role: "reference_video" });
+    }
+    for (const { url } of refAudio) {
+      content.push({ type: "audio_url", audio_url: { url }, role: "reference_audio" });
     }
   } else {
     // 1.5 Pro (no r2v): image-to-video from an explicit start frame only.

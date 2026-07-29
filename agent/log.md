@@ -1,3 +1,11 @@
+## 2026-07-29 - Codex - T-1164a provider-neutral UGC shot pipeline
+- Stopped further investment in the rejected `three-shot-v2` poster compositor and audited Open-AI-UGC for reusable architecture. Retained only the asynchronous provider-routing concept; no auth, Stripe, Prisma, MUAPI or application shell was imported.
+- Added the `UGCShotProvider` contract, a Seedance/BytePlus adapter and a strict three-shot storyboard for creator hook, product demo and lifestyle CTA. Prompts prohibit collage, floating cutouts and generated copy while preserving product references.
+- Fixed the existing BytePlus multimodal request path so verified face assets no longer discard safe product references, and video/audio references are forwarded.
+- Added an admin-only DB-first experiment route that persists every paid task immediately and promotes completed clips to permanent R2 objects.
+- Added an isolated Revideo worker and Linux Docker target for Hostinger orchestration. It edits three full-screen clips and contains no provider credentials.
+- Validation: six focused tests, root TypeScript, worker TypeScript and production build pass. The local Windows Revideo runtime timed out and is not claimed as a render PASS; the Node 22 Linux/Hostinger smoke plus one capped Beats acceptance remain.
+
 ## 2026-07-27 - Codex - T-1163e V2 editorial rebuild after production QA FAIL
 - The owner rejected production job `7306087a-85f8-47d4-a0fb-7e8913d6e0d1` on product quality. The file was technically valid, but it was a voice-over on a boxed presenter, with a generic voice, one awkward product card and a full static sentence. The earlier PASS label below was incorrect; the result is now recorded as a product QA FAIL.
 - V2 replaces that poster with a deterministic three-shot edit: preserved product hero, dominant animated presenter with a restrained product picture-in-picture and two timed caption beats, then a product CTA close.

@@ -1,5 +1,15 @@
 # agent/tasks.md — Backlog partagé
 
+## T-1164a - Provider-neutral UGC shot pipeline - CODE READY (2026-07-29, Codex)
+- Freeze `three-shot-v2` as a rejected product renderer. It remains historical fallback code only; no additional visual investment is planned.
+- Added a provider-neutral `UGCShotProvider` contract and a Seedance adapter over the existing BytePlus client.
+- Added a coherent three-shot storyboard (`creator_hook`, `product_demo`, `lifestyle_cta`) with explicit anti-collage and product-fidelity constraints.
+- Extended BytePlus multimodal references to preserve safe product refs alongside verified face assets and to pass video/audio references.
+- Added an admin-only DB-first experimental start/poll route that copies completed outputs to permanent R2 URLs.
+- Added an isolated Revideo Node 22/Linux worker for deterministic three-shot assembly. Worker typecheck, root TypeScript, focused tests and production build pass. Local Windows rendering timed out; the first Docker/Hostinger render remains a gate.
+- Decision and acceptance plan: `docs/product/product-ad-ugc-shot-pipeline.md`.
+- Next: deploy the private Revideo worker, then run exactly one capped Beats Powerbeats Pro 2 generation and review the final assembled ad.
+
 ## T-1163e V2 - Native Product Ad editorial rebuild - CODE READY (2026-07-27, Codex)
 - The first production render proved the private presenter pipeline but failed product acceptance: generic voice, one static poster layout, oversized copy and weak product placement. It is not considered a Product Ad PASS.
 - V2 extracts up to four useful product images (Open Graph, Product JSON-LD and bounded page images) and renders a deterministic three-shot edit: product hook, presenter-led middle shot with timed caption halves, and product CTA close.
