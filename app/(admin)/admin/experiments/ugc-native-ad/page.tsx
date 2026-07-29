@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, Film, Loader2, Play, RefreshCw } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 const DEFAULT_PRODUCT_URL =
   "https://www.beatsbydre.com/fr/earbuds/powerbeats-pro-2";
@@ -26,6 +27,7 @@ interface ExperimentResult {
 }
 
 export default function NativeUGCExperimentPage() {
+  const supabase = useMemo(() => createClient(), []);
   const [url, setUrl] = useState(DEFAULT_PRODUCT_URL);
   const [presenters, setPresenters] = useState<PresenterRequest[]>([]);
   const [nativeBaseId, setNativeBaseId] = useState("");
@@ -38,35 +40,47 @@ export default function NativeUGCExperimentPage() {
   );
 
   useEffect(() => {
-    fetch("/api/presenters/video")
-      .then(async (response) => {
+    (async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.access_token) throw new Error("Unauthorized");
+        const response = await fetch("/api/presenters/video", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
         const json = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(json.error || "Could not load presenters.");
-        return json;
-      })
-      .then((json) => {
         const requests = Array.isArray(json.requests) ? json.requests : [];
         setPresenters(requests);
         const firstReady = requests.find(
           (item: PresenterRequest) => item.nativeBase?.status === "ready",
         );
         if (firstReady?.nativeBase?.id) setNativeBaseId(firstReady.nativeBase.id);
-      })
-      .catch((error) => {
+      } catch (error) {
         setResult({
           status: "failed",
           error: error instanceof Error ? error.message : "Could not load presenters.",
         });
-      })
-      .finally(() => setLoadingPresenters(false));
-  }, []);
+      } finally {
+        setLoadingPresenters(false);
+      }
+    })();
+  }, [supabase]);
 
   const poll = async (jobId: string) => {
     for (let attempt = 0; attempt < 60; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 20_000));
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Unauthorized");
       const response = await fetch("/api/admin/experiments/ugc-native-ad", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ action: "poll", jobId }),
       });
       const json = (await response.json().catch(() => ({}))) as ExperimentResult;
@@ -83,9 +97,16 @@ export default function NativeUGCExperimentPage() {
     setRunning(true);
     setResult(null);
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Unauthorized");
       const response = await fetch("/api/admin/experiments/ugc-native-ad", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           action: "start",
           url,
