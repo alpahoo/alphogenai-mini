@@ -2,6 +2,7 @@ import type { ReferencePayload } from "@/lib/types";
 
 export const UGC_SHOT_PACK_VERSION = "ugc-shot-pack-v1";
 export const UGC_SHOT_PACK_SIZE = 3;
+export const UGC_NATIVE_AD_VERSION = "ugc-native-ad-v1";
 
 export type UGCShotRole = "creator_hook" | "product_demo" | "lifestyle_cta";
 export type UGCShotStatus = "processing" | "ready" | "failed";
@@ -40,6 +41,42 @@ export interface UGCShotProvider {
   };
   start(spec: UGCShotSpec): Promise<UGCShotTask>;
   poll(task: UGCShotTask): Promise<UGCShotPollResult>;
+}
+
+export interface UGCNativeAdSpec {
+  id: string;
+  prompt: string;
+  durationSeconds: number;
+  aspectRatio: "9:16" | "1:1" | "16:9";
+  references: ReferencePayload;
+  verifiedAssetIds?: string[];
+  generateAudio: boolean;
+}
+
+export interface UGCNativeAdTask {
+  adId: string;
+  providerTaskId: string;
+  status: "processing";
+}
+
+export interface UGCNativeAdPollResult {
+  adId: string;
+  status: UGCShotStatus;
+  videoUrl?: string;
+  errorCode?: string;
+  usageUnits?: number;
+}
+
+export interface UGCNativeAdProvider {
+  readonly id: string;
+  readonly capabilities: {
+    nativeMultiShot: boolean;
+    multipleImageReferences: boolean;
+    videoReferences: boolean;
+    nativeAudio: boolean;
+  };
+  start(spec: UGCNativeAdSpec): Promise<UGCNativeAdTask>;
+  poll(task: UGCNativeAdTask): Promise<UGCNativeAdPollResult>;
 }
 
 export function validateUGCShotPack(shots: UGCShotSpec[]): void {

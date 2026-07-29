@@ -1,5 +1,14 @@
 # agent/tasks.md — Backlog partagé
 
+## T-1164b - Native multi-shot Product Ad path - CODE READY (2026-07-29, Codex)
+- Added a provider-neutral `UGCNativeAdProvider` contract alongside the existing three-shot contract.
+- Added one high-quality Seedance/BytePlus adapter task for a complete 15-second native ad with timed hook, product demo and lifestyle CTA beats.
+- The native task accepts the same product and presenter references, enables synchronized native audio, persists DB-first and copies the finished result to permanent R2 storage.
+- Added an admin-only start/poll route. The public Product Ad workflow remains untouched until one capped Beats acceptance passes.
+- `directed_edit` and the Revideo worker remain available for exact copy, voice, timing and branding; ComfyUI is not an immediate dependency.
+- Validation: 9 focused tests, TypeScript and production build pass. No provider call or spend.
+- Next: deploy the branch and run exactly one Beats `native_multishot` acceptance. Invoke Revideo only if the native output misses the product bar.
+
 ## T-1164a - Provider-neutral UGC shot pipeline - CODE READY (2026-07-29, Codex)
 - Freeze `three-shot-v2` as a rejected product renderer. It remains historical fallback code only; no additional visual investment is planned.
 - Added a provider-neutral `UGCShotProvider` contract and a Seedance adapter over the existing BytePlus client.

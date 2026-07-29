@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildUGCShotPack } from "@/lib/ugc-shot-pack";
-import { buildBytePlusUGCShotRequest } from "@/lib/providers/byteplus-ugc-shot-provider";
+import { buildUGCNativeAdSpec } from "@/lib/ugc-native-ad";
+import {
+  buildBytePlusUGCNativeAdRequest,
+  buildBytePlusUGCShotRequest,
+} from "@/lib/providers/byteplus-ugc-shot-provider";
 import { validateUGCShotPack } from "@/lib/ugc-shot-provider";
 import { buildRevideoProductAdManifest } from "@/lib/revideo-product-ad";
 
@@ -77,5 +81,45 @@ describe("buildUGCShotPack", () => {
       "https://cdn.example.com/lifestyle_cta.mp4",
     ]);
     expect(manifest.shots[2].cta).toBe("Discover");
+  });
+});
+
+describe("buildUGCNativeAdSpec", () => {
+  it("builds one 15-second native multi-shot ad with synchronized audio", () => {
+    const spec = buildUGCNativeAdSpec({ brief, language: "French (France)" });
+
+    expect(spec.durationSeconds).toBe(15);
+    expect(spec.aspectRatio).toBe("9:16");
+    expect(spec.generateAudio).toBe(true);
+    expect(spec.prompt).toContain("[0-4s]");
+    expect(spec.prompt).toContain("[4-10s]");
+    expect(spec.prompt).toContain("[10-15s]");
+    expect(spec.prompt).toContain("French (France)");
+    expect(spec.prompt).toContain("No subtitles");
+  });
+
+  it("passes product and presenter references through one provider task", () => {
+    const presenter = {
+      role: "character_face" as const,
+      url: "https://cdn.example.com/presenter.mp4",
+    };
+    const spec = buildUGCNativeAdSpec({
+      brief,
+      presenterVideo: presenter,
+      verifiedAssetIds: ["asset-presenter"],
+    });
+    const request = buildBytePlusUGCNativeAdRequest(spec);
+
+    expect(request.engineKey).toBe("seedance2_byteplus");
+    expect(request.references?.images).toHaveLength(2);
+    expect(request.references?.videos).toEqual([presenter]);
+    expect(request.assetIds).toEqual(["asset-presenter"]);
+    expect(request.generateAudio).toBe(true);
+  });
+
+  it("requires a real product reference", () => {
+    expect(() => buildUGCNativeAdSpec({ brief: { ...brief, imageUrls: [] } })).toThrow(
+      "At least one product image"
+    );
   });
 });

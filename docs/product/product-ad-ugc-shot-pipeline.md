@@ -1,6 +1,6 @@
 # Product Ad UGC Shot Pipeline
 
-Status: **CODE READY / CAPPED PRODUCT VALIDATION PENDING**
+Status: **DUAL-MODE CODE READY / CAPPED PRODUCT VALIDATION PENDING**
 
 Last reviewed: **29 July 2026**
 
@@ -10,15 +10,21 @@ Stop investing in the deterministic `three-shot-v2` compositor as a product
 renderer. It proved orchestration, private presenter animation and delivery, but
 its poster-like composition is not an acceptable UGC ad.
 
-The replacement is a two-stage pipeline:
+The product now exposes two provider-neutral execution paths:
 
-1. a provider-neutral `UGCShotProvider` generates exactly three coherent,
-   full-frame video shots;
-2. an isolated Revideo worker assembles those shots with restrained captions,
-   voice-over and branding.
+1. `native_multishot`: one `UGCNativeAdProvider` task asks Seedance to generate
+   a complete 15-second three-beat ad with native synchronized audio;
+2. `directed_edit`: `UGCShotProvider` generates exactly three coherent,
+   full-frame video shots and an isolated Revideo worker assembles them with
+   restrained captions, voice-over and branding.
 
-The first provider adapter is Seedance through the existing BytePlus client.
-ComfyUI remains a valid future local/GPU adapter, not the editorial layer.
+The native path is the fastest and least complex option. The directed path is
+reserved for cases requiring deterministic copy, voice, timing and branding.
+The first adapters use Seedance through the existing BytePlus client. ComfyUI
+remains a future local/GPU provider adapter, not an immediate dependency.
+
+Framer Motion remains an interface-animation dependency only. It does not
+assemble generated clips or export the final MP4.
 
 ## What was retained from Open-AI-UGC
 
@@ -44,6 +50,22 @@ The following are deliberately not imported:
 - Provider tasks are reserved and persisted before the next paid task starts.
 - Completed provider outputs are copied to permanent R2 URLs.
 - Public product surfaces never expose provider names or task IDs.
+
+### Native multi-shot
+
+- One 15-second provider task.
+- Explicit timed beats: creator hook, product demo, lifestyle CTA.
+- Native synchronized speech and ambient audio.
+- No generated captions, text, watermark, poster layout or floating cutouts.
+- Finished provider output is copied to permanent R2 storage and exposed through
+  the normal AlphoGen job result.
+
+### Directed edit
+
+- Exactly three separate shots: `creator_hook`, `product_demo`,
+  `lifestyle_cta`.
+- Revideo is used only after all three permanent shot outputs are ready.
+- This path owns exact voice-over, captions, branding and edit timing.
 
 ## Runtime placement
 
@@ -77,11 +99,13 @@ gate.
 Run one meaningful, capped Beats Powerbeats Pro 2 validation:
 
 1. extract product references from the supplied product page;
-2. generate the three coherent shots through the provider-neutral route;
-3. verify product fidelity and absence of collage/sticker composition;
-4. assemble the three permanent shots in the Linux Revideo worker;
-5. review one final ad, then either accept the architecture or change the shot
-   provider without rewriting the editor.
+2. run `native_multishot` once and review the complete provider output;
+3. if the native output meets the product bar, accept it as Fast / Best Value
+   without invoking Revideo;
+4. otherwise reuse the same brief and references in `directed_edit`, generate
+   three shots, then assemble them in the Linux Revideo worker;
+5. choose the default path from product fidelity, coherence, cost and edit
+   control without changing the public Product Ad contract.
 
 Do not run repeated cosmetic generations. One failed gate should produce a
 specific provider, storyboard or edit correction.

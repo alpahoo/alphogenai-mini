@@ -4,6 +4,10 @@ import {
   type CreateBytePlusParams,
 } from "@/lib/byteplus-client";
 import type {
+  UGCNativeAdPollResult,
+  UGCNativeAdProvider,
+  UGCNativeAdSpec,
+  UGCNativeAdTask,
   UGCShotPollResult,
   UGCShotProvider,
   UGCShotSpec,
@@ -11,6 +15,7 @@ import type {
 } from "@/lib/ugc-shot-provider";
 
 export const DEFAULT_UGC_BYTEPLUS_ENGINE = "seedance2_fast_byteplus";
+export const DEFAULT_UGC_NATIVE_BYTEPLUS_ENGINE = "seedance2_byteplus";
 
 export function buildBytePlusUGCShotRequest(
   spec: UGCShotSpec,
@@ -63,5 +68,60 @@ export class BytePlusUGCShotProvider implements UGCShotProvider {
       };
     }
     return { shotId: task.shotId, status: "processing", usageUnits: result.tokens };
+  }
+}
+
+export function buildBytePlusUGCNativeAdRequest(
+  spec: UGCNativeAdSpec,
+  engineKey = DEFAULT_UGC_NATIVE_BYTEPLUS_ENGINE
+): CreateBytePlusParams {
+  return {
+    engineKey,
+    prompt: spec.prompt,
+    duration: spec.durationSeconds,
+    aspectRatio: spec.aspectRatio,
+    references: spec.references,
+    assetIds: spec.verifiedAssetIds,
+    generateAudio: spec.generateAudio,
+  };
+}
+
+export class BytePlusUGCNativeAdProvider implements UGCNativeAdProvider {
+  readonly id = "seedance";
+  readonly capabilities = {
+    nativeMultiShot: true,
+    multipleImageReferences: true,
+    videoReferences: true,
+    nativeAudio: true,
+  };
+
+  constructor(private readonly engineKey = DEFAULT_UGC_NATIVE_BYTEPLUS_ENGINE) {}
+
+  async start(spec: UGCNativeAdSpec): Promise<UGCNativeAdTask> {
+    const providerTaskId = await createBytePlusTask(
+      buildBytePlusUGCNativeAdRequest(spec, this.engineKey)
+    );
+    return { adId: spec.id, providerTaskId, status: "processing" };
+  }
+
+  async poll(task: UGCNativeAdTask): Promise<UGCNativeAdPollResult> {
+    const result = await getBytePlusTask(task.providerTaskId);
+    if (result.status === "completed") {
+      return {
+        adId: task.adId,
+        status: "ready",
+        videoUrl: result.videoUrl,
+        usageUnits: result.tokens,
+      };
+    }
+    if (result.status === "failed") {
+      return {
+        adId: task.adId,
+        status: "failed",
+        errorCode: result.error || "generation_failed",
+        usageUnits: result.tokens,
+      };
+    }
+    return { adId: task.adId, status: "processing", usageUnits: result.tokens };
   }
 }

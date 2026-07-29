@@ -1,3 +1,10 @@
+## 2026-07-29 - Codex - T-1164b native multi-shot Product Ad path
+- Corrected the architecture after reviewing Open-AI-UGC more closely: Framer Motion animates the studio interface but does not edit or export video. A provider-native complete ad therefore does not need Revideo when its output already meets the product bar.
+- Added a separate provider-neutral `UGCNativeAdProvider` contract and a Seedance/BytePlus implementation using one 15-second task, explicit timed three-beat direction, product/presenter references and synchronized native audio.
+- Added an admin-only DB-first start/poll route. Completed output is copied to permanent R2 and written to the normal AlphoGen job result; provider names and task ids are not returned.
+- Kept the existing `directed_edit` three-shot/Revideo path unchanged for deterministic voice, captions, branding and timing. ComfyUI remains deferred.
+- Validation: 9 focused tests, TypeScript and production build pass. No provider call, GPU work or paid generation was started.
+
 ## 2026-07-29 - Codex - T-1164a provider-neutral UGC shot pipeline
 - Stopped further investment in the rejected `three-shot-v2` poster compositor and audited Open-AI-UGC for reusable architecture. Retained only the asynchronous provider-routing concept; no auth, Stripe, Prisma, MUAPI or application shell was imported.
 - Added the `UGCShotProvider` contract, a Seedance/BytePlus adapter and a strict three-shot storyboard for creator hook, product demo and lifestyle CTA. Prompts prohibit collage, floating cutouts and generated copy while preserving product references.
