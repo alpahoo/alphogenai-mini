@@ -70,7 +70,7 @@ function finishDisplaySentence(value: string, fallback: string): string {
 
 function displayCopy(value: string | undefined, fallback: string, max = 44): string {
   const normalized = (value ?? "").replace(/\s+/g, " ").trim() || fallback;
-  if (normalized.length <= max) return normalized;
+  if (normalized.length <= max) return finishDisplaySentence(normalized, fallback);
 
   const beforeSeparator = normalized.split(/\s(?:[-–—|])\s/, 1)[0]?.trim();
   if (beforeSeparator && beforeSeparator.length >= 12 && beforeSeparator.length <= max) {

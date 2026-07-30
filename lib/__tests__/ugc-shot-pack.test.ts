@@ -204,6 +204,28 @@ describe("buildUGCShotPack", () => {
     );
   });
 
+  it("cleans a dangling connector from already compacted stored copy", () => {
+    const shots = buildUGCShotPack({ brief });
+    const manifest = buildRevideoProductAdManifest({
+      productTitle: "Powerbeats Pro 2",
+      captions: [
+        "Voici Powerbeats Pro 2.",
+        "D\u00e9couvrez la nouvelle g\u00e9n\u00e9ration d",
+        "D\u00e9couvrez Powerbeats Pro 2.",
+      ],
+      shots: shots.map((shot) => ({
+        id: shot.id,
+        role: shot.role,
+        durationSeconds: shot.durationSeconds,
+        videoUrl: `https://cdn.example.com/${shot.role}.mp4`,
+      })),
+    });
+
+    expect(manifest.shots[1].caption).toBe(
+      "D\u00e9couvrez la nouvelle g\u00e9n\u00e9ration."
+    );
+  });
+
   it("builds one deterministic French narration for the three-shot edit", () => {
     const copy = buildDirectedProductAdCopy(brief, "French (France)");
     expect(copy.captions).toHaveLength(3);
