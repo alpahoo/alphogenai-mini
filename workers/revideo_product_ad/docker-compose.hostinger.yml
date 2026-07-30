@@ -1,0 +1,42 @@
+services:
+  revideo-product-ad:
+    build:
+      context: https://github.com/alpahoo/alphogenai-mini.git#main:workers/revideo_product_ad
+    container_name: revideo-product-ad
+    restart: unless-stopped
+    environment:
+      - PORT=4000
+      - REVIDEO_WORKER_SECRET=${REVIDEO_WORKER_SECRET}
+      - R2_ENDPOINT=${R2_ENDPOINT}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - R2_PUBLIC_URL=${R2_PUBLIC_URL}
+    expose:
+      - "4000"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.revideo-product-ad.rule=Host(`revideo.srv859722.hstgr.cloud`)
+      - traefik.http.routers.revideo-product-ad.tls=true
+      - traefik.http.routers.revideo-product-ad.entrypoints=websecure
+      - traefik.http.routers.revideo-product-ad.tls.certresolver=mytlschallenge
+      - traefik.http.services.revideo-product-ad.loadbalancer.server.port=4000
+    networks:
+      - root_default
+    mem_limit: 3g
+    cpus: "1.5"
+    shm_size: "1g"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:4000/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+networks:
+  root_default:
+    external: true

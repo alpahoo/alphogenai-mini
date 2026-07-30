@@ -26,5 +26,15 @@ Required environment variables are `REVIDEO_WORKER_SECRET`, `R2_ENDPOINT`,
 `R2_PUBLIC_URL`. GPU generation remains on BytePlus, Modal GPU, or another
 provider implementing `UGCShotProvider`.
 
+`docker-compose.hostinger.yml` builds the worker directly from the `main`
+subdirectory, attaches it to the existing `root_default` Traefik network and
+publishes `https://revideo.srv859722.hstgr.cloud`. The matching Vercel
+configuration is:
+
+```text
+REVIDEO_WORKER_URL=https://revideo.srv859722.hstgr.cloud
+REVIDEO_WORKER_SECRET=<same random secret as Hostinger>
+```
+
 Never expose the raw Revideo render endpoint publicly without authentication and
 per-user quotas.
