@@ -159,6 +159,30 @@ describe("buildUGCShotPack", () => {
     expect(manifest.shots.every((shot) => !shot.caption.includes("..."))).toBe(true);
   });
 
+  it("removes a dangling French connector when compacting overlay copy", () => {
+    const shots = buildUGCShotPack({ brief });
+    const manifest = buildRevideoProductAdManifest({
+      productTitle: "Powerbeats Pro 2",
+      productDescription:
+        "Découvrez la nouvelle génération d écouteurs conçus pour accompagner chaque mouvement.",
+      captions: [
+        "Voici Powerbeats Pro 2.",
+        "Découvrez la nouvelle génération d écouteurs conçus pour accompagner chaque mouvement.",
+        "Découvrez Powerbeats Pro 2.",
+      ],
+      shots: shots.map((shot) => ({
+        id: shot.id,
+        role: shot.role,
+        durationSeconds: shot.durationSeconds,
+        videoUrl: `https://cdn.example.com/${shot.role}.mp4`,
+      })),
+    });
+
+    expect(manifest.shots[1].caption).toBe(
+      "Découvrez la nouvelle génération."
+    );
+  });
+
   it("builds one deterministic French narration for the three-shot edit", () => {
     const copy = buildDirectedProductAdCopy(brief, "French (France)");
     expect(copy.captions).toHaveLength(3);

@@ -31,13 +31,49 @@ function boundedCopy(value: string, fallback: string, max = 72): string {
     : `${normalized.slice(0, max - 3).trimEnd()}...`;
 }
 
+const DANGLING_END_WORDS = new Set([
+  "a",
+  "avec",
+  "and",
+  "d",
+  "de",
+  "des",
+  "du",
+  "et",
+  "for",
+  "l",
+  "la",
+  "le",
+  "les",
+  "of",
+  "or",
+  "ou",
+  "pour",
+  "sans",
+  "the",
+  "to",
+  "with",
+  "à",
+]);
+
+function finishDisplaySentence(value: string, fallback: string): string {
+  const words = value.replace(/[.,;:!?]+$/, "").trim().split(/\s+/);
+  while (
+    words.length > 1 &&
+    DANGLING_END_WORDS.has(words[words.length - 1].toLocaleLowerCase("fr"))
+  ) {
+    words.pop();
+  }
+  return `${words.join(" ") || fallback.replace(/[.,;:!?]+$/, "")}.`;
+}
+
 function displayCopy(value: string | undefined, fallback: string, max = 44): string {
   const normalized = (value ?? "").replace(/\s+/g, " ").trim() || fallback;
   if (normalized.length <= max) return normalized;
 
   const beforeSeparator = normalized.split(/\s(?:[-–—|])\s/, 1)[0]?.trim();
   if (beforeSeparator && beforeSeparator.length >= 12 && beforeSeparator.length <= max) {
-    return `${beforeSeparator.replace(/[.,;:!?]+$/, "")}.`;
+    return finishDisplaySentence(beforeSeparator, fallback);
   }
 
   const words = normalized.split(" ");
@@ -47,7 +83,7 @@ function displayCopy(value: string | undefined, fallback: string, max = 44): str
     if (candidate.length > max - 1) break;
     compact = candidate;
   }
-  return `${(compact || fallback.slice(0, max - 1)).replace(/[.,;:!?]+$/, "")}.`;
+  return finishDisplaySentence(compact || fallback.slice(0, max - 1), fallback);
 }
 
 export function buildRevideoProductAdManifest(input: {
