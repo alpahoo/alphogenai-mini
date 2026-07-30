@@ -68,6 +68,24 @@ interface UGCShotPackState {
   editVideoUrl?: string;
 }
 
+function buildCachedEditManifest(state: UGCShotPackState) {
+  const fallbackCopy = buildDirectedProductAdCopy(state.product, "French (France)");
+  return buildRevideoProductAdManifest({
+    productTitle: state.product.title,
+    productDescription: state.product.description,
+    productImageUrl: state.product.imageUrl ?? undefined,
+    voiceoverUrl: state.voiceoverUrl || undefined,
+    captions: state.copy?.captions ?? fallbackCopy.captions,
+    cta: state.copy?.cta ?? fallbackCopy.cta,
+    shots: state.shots.map((shot) => ({
+      id: shot.id,
+      role: shot.role as "creator_hook" | "product_demo" | "lifestyle_cta",
+      durationSeconds: shot.durationSeconds,
+      videoUrl: state.outputs?.[shot.id]?.videoUrl ?? "",
+    })),
+  });
+}
+
 async function signPresenterVideo(
   service: ReturnType<typeof createServiceClient>,
   userId: string,
@@ -266,7 +284,7 @@ async function pollPack(
   const service = createServiceClient();
   const { data: job, error } = await service
     .from("jobs")
-    .select("id,status,app_state")
+    .select("id,status,app_state,updated_at")
     .eq("id", jobId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -314,22 +332,8 @@ async function pollPack(
   const completePack =
     finished && failed === 0 && missing === 0 && ready === UGC_SHOT_PACK_SIZE;
   let finalStatus = completePack ? "done" : finished ? "failed" : "in_progress";
-  const fallbackCopy = buildDirectedProductAdCopy(state.product, "French (France)");
   const editManifest = completePack
-    ? buildRevideoProductAdManifest({
-        productTitle: state.product.title,
-        productDescription: state.product.description,
-        productImageUrl: state.product.imageUrl ?? undefined,
-        voiceoverUrl: state.voiceoverUrl || undefined,
-        captions: state.copy?.captions ?? fallbackCopy.captions,
-        cta: state.copy?.cta ?? fallbackCopy.cta,
-        shots: state.shots.map((shot) => ({
-          id: shot.id,
-          role: shot.role as "creator_hook" | "product_demo" | "lifestyle_cta",
-          durationSeconds: shot.durationSeconds,
-          videoUrl: outputs[shot.id]?.videoUrl ?? "",
-        })),
-      })
+    ? buildCachedEditManifest({ ...state, outputs })
     : null;
   let nextState: UGCShotPackState = { ...state, outputs };
   let finalVideoUrl = state.editVideoUrl;
@@ -375,7 +379,7 @@ async function pollPack(
       }
     }
   }
-  const { error: updateError } = await service
+  const { data: updatedJob, error: updateError } = await service
     .from("jobs")
     .update({
       status: finalStatus,
@@ -396,9 +400,18 @@ async function pollPack(
           : null,
       app_state: nextState,
     })
-    .eq("id", job.id);
+    .eq("id", job.id)
+    .eq("updated_at", job.updated_at)
+    .select("id")
+    .maybeSingle();
   if (updateError) {
     return NextResponse.json({ error: "Could not save UGC shot progress." }, { status: 500 });
+  }
+  if (!updatedJob) {
+    return NextResponse.json(
+      { error: "UGC shot progress changed concurrently. Poll again." },
+      { status: 409 }
+    );
   }
 
   return NextResponse.json({
@@ -427,7 +440,7 @@ async function retryEdit(
   const service = createServiceClient();
   const { data: job, error } = await service
     .from("jobs")
-    .select("id,app_state")
+    .select("id,app_state,updated_at")
     .eq("id", jobId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -447,10 +460,24 @@ async function retryEdit(
     );
   }
 
-  const nextState = { ...state };
-  delete nextState.editTaskId;
+  if (!isRevideoWorkerConfigured()) {
+    return NextResponse.json({ error: "The assembly worker is not configured." }, { status: 503 });
+  }
+
+  let started;
+  try {
+    started = await startRevideoProductAd(job.id, buildCachedEditManifest(state));
+  } catch (error) {
+    console.error(`[ugc-shot-pack] cached edit restart failed job=${job.id}`, error);
+    return NextResponse.json({ error: "Could not start the cached assembly." }, { status: 502 });
+  }
+
+  const nextState = {
+    ...state,
+    editTaskId: started.requestId,
+  };
   delete nextState.editVideoUrl;
-  const { error: updateError } = await service
+  const { data: updatedJob, error: updateError } = await service
     .from("jobs")
     .update({
       status: "in_progress",
@@ -459,11 +486,19 @@ async function retryEdit(
       error_message: null,
       app_state: nextState,
     })
-    .eq("id", job.id);
-  if (updateError) {
+    .eq("id", job.id)
+    .eq("updated_at", job.updated_at)
+    .select("id")
+    .maybeSingle();
+  if (updateError || !updatedJob) {
     return NextResponse.json({ error: "Could not restart the cached assembly." }, { status: 500 });
   }
-  return NextResponse.json({ success: true, jobId: job.id, status: "processing" });
+  return NextResponse.json({
+    success: true,
+    jobId: job.id,
+    status: "processing",
+    requestId: started.requestId,
+  });
 }
 
 export async function POST(request: NextRequest) {
