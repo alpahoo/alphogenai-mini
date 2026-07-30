@@ -1,3 +1,10 @@
+## 2026-07-30 - Codex - T-1164b capped Seedance 2.0 native Product Ad QA
+- Deployed verified-identity routing for the native Product Ad experiment. The admin UI now selects one owned BytePlus verified creator identity and the server rejects unowned IDs; stale clients fall back to the latest owned verified identity instead of sending a raw real-person clip.
+- Ran exactly one approved Seedance 2.0 native Product Ad task for Powerbeats Pro 2 with `Moi_5`, French, 9:16 and 15 seconds. Production job `ce13f059-408d-4a51-875d-fa097ea6a9f7` completed in 5m17s and was copied to permanent R2.
+- Technical acceptance PASS: valid 1080x1920, 15.07-second deliverable; verified-identity path works; the creator is photorealistic; one worn-product close-up is coherent; no collage or poster-card renderer is present.
+- Product acceptance FAIL: the model changes the Powerbeats product geometry and colors, the early face close-up is awkward, and the closing lineup has no benefit, price, offer or CTA. This is a useful native concept render, not yet a faithful shippable product ad.
+- Decision: do not spend on repeated cosmetic native generations. Advance to the already-defined `directed_edit` path: three separately generated full-frame shots with stronger product-reference constraints, then deterministic Revideo assembly. Seedance 1.0 remains preview-only; Seedance 2.0 native remains a fast concept option until it passes the product-fidelity bar.
+
 ## 2026-07-30 - Codex - T-1164b Seedance 1.0 Pro Fast visual-preview QA
 - Added and deployed an explicit free visual-preview mode using BytePlus `seedance-1-0-pro-fast-251015`, separate from the full Seedance 2.0 Product Ad contract. The preview uses one product image, 10 seconds, 9:16 and no presenter or audio.
 - Production job `bef1bc1f-13bd-492e-90e9-87e360f4dd72` completed successfully and was copied to permanent R2. The MP4 is valid H.264, 704x1248, 24 fps, 10.04 seconds and intentionally has no audio.

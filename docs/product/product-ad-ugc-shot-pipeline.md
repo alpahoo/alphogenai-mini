@@ -109,3 +109,20 @@ Run one meaningful, capped Beats Powerbeats Pro 2 validation:
 
 Do not run repeated cosmetic generations. One failed gate should produce a
 specific provider, storyboard or edit correction.
+
+## Acceptance result - 2026-07-30
+
+The capped `native_multishot` validation completed as production job
+`ce13f059-408d-4a51-875d-fa097ea6a9f7`.
+
+- Technical gate: PASS. The verified creator identity path produced a valid
+  1080x1920, 15.07-second native video with a photoreal creator and one coherent
+  worn-product close-up.
+- Product gate: FAIL. The provider altered product geometry and colors, used an
+  awkward face close-up, and ended on a generic product lineup without benefit,
+  offer or CTA.
+
+The native path remains useful for Fast/concept output, but it is not the
+default faithful Product Ad renderer. Per the gate above, the next validation
+uses `directed_edit`: three separately generated full-frame shots with stronger
+product-reference constraints, followed by one deterministic Revideo assembly.
