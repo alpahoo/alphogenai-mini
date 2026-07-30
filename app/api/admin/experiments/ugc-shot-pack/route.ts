@@ -369,7 +369,7 @@ async function pollPack(
           error.message === "revideo_worker_request_not_found"
         ) {
           try {
-            const restarted = await startRevideoProductAd(job.id, editManifest);
+            const restarted = await startRevideoProductAd(randomUUID(), editManifest);
             nextState = { ...nextState, editTaskId: restarted.requestId };
           } catch (restartError) {
             console.error(`[ugc-shot-pack] edit restart failed job=${job.id}`, restartError);
@@ -466,7 +466,9 @@ async function retryEdit(
 
   let started;
   try {
-    started = await startRevideoProductAd(job.id, buildCachedEditManifest(state));
+    // The worker deduplicates by this UUID for 24 hours. A rebuild must use a
+    // fresh execution key while the AlphoGen job id remains unchanged in DB.
+    started = await startRevideoProductAd(randomUUID(), buildCachedEditManifest(state));
   } catch (error) {
     console.error(`[ugc-shot-pack] cached edit restart failed job=${job.id}`, error);
     return NextResponse.json({ error: "Could not start the cached assembly." }, { status: 502 });
