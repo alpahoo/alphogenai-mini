@@ -4,6 +4,7 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { UGCEditManifest } from "./manifest";
+import { localizeManifestMedia } from "./localize-media";
 import { renderProductAd } from "./render-product-ad";
 
 type RenderStatus = "queued" | "rendering" | "done" | "failed";
@@ -106,9 +107,12 @@ async function runRender(id: string, input: RenderRequest) {
   state.status = "rendering";
   const filename = `${id}.mp4`;
   const outputPath = resolve("output", filename);
+  let cleanupAssets: (() => Promise<void>) | undefined;
   try {
     await mkdir(resolve("output"), { recursive: true });
-    await renderProductAd(input.manifest, filename);
+    const localized = await localizeManifestMedia(id, input.manifest);
+    cleanupAssets = localized.cleanup;
+    await renderProductAd(localized.manifest, filename);
     const key = `videos/ugc-directed-edit/${input.jobId}/${id}.mp4`;
     state.videoUrl = await uploadOutput(outputPath, key);
     state.status = "done";
@@ -118,6 +122,7 @@ async function runRender(id: string, input: RenderRequest) {
     state.error = "render_failed";
   } finally {
     await rm(outputPath, { force: true }).catch(() => undefined);
+    await cleanupAssets?.().catch(() => undefined);
   }
 }
 

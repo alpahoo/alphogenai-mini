@@ -16,6 +16,7 @@ export async function renderProductAd(
       projectSettings: { size: { x: 1080, y: 1920 } },
       logProgress: true,
       puppeteer: { args: ["--no-sandbox", "--disable-setuid-sandbox"] },
+      viteConfig: { publicDir: resolve("public") },
     },
   });
 }

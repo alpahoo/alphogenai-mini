@@ -1,3 +1,9 @@
+## 2026-07-30 - Codex - T-1164c Revideo media localization
+- The approved directed-edit rerun succeeded at the paid provider boundary: all three Seedance 2.0 shots completed and were copied to permanent R2 for job `29802dff-2846-40fb-869e-097660904aaa`.
+- Revideo then failed before assembly because its Chromium renderer could not load the cross-origin R2 MP4 and MP3 sources (`MEDIA_ERR_SRC_NOT_SUPPORTED`), despite valid permanent URLs.
+- Hardened the isolated Revideo worker to download each remote asset once, normalize short videos to local H.264/yuv420p without audio, normalize the voice-over to local 48 kHz stereo WAV, and expose those files through the renderer's same-origin Vite public directory. Per-request assets are size-bounded, time-bounded and always cleaned up.
+- This recovery reuses the three completed paid shots. No provider regeneration or additional paid task is required.
+
 ## 2026-07-30 - Codex - T-1164c directed-edit privacy gate
 - Started exactly one approved Powerbeats directed-edit QA with reusable presenter `Paulo` and verified identity `Moi_5`. The provider rejected the first creator shot before task creation because the request still included the raw real-person performance video alongside the approved verified identity. Reserved job: `4892834e-decf-4fae-afc1-947567175e5f`.
 - Root cause: the directed storyboard correctly attached the verified identity, but the BytePlus adapter also forwarded `references.videos`; the provider privacy gate rejected that raw video as `InputVideoSensitiveContentDetected.PrivacyInformation`.
