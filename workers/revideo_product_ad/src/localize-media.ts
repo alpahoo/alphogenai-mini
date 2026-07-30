@@ -135,7 +135,7 @@ export async function localizeManifestMedia(
       await rm(source, { force: true });
       localizedShots.push({
         ...shot,
-        videoUrl: `/render-assets/${requestId}/shot-${index + 1}.mp4`,
+        videoUrl: output,
       });
     }
 
@@ -146,7 +146,7 @@ export async function localizeManifestMedia(
       await download(voiceoverUrl, source, AUDIO_LIMIT_BYTES);
       await normalizeAudio(source, output);
       await rm(source, { force: true });
-      voiceoverUrl = `/render-assets/${requestId}/voiceover.wav`;
+      voiceoverUrl = `render-assets/${requestId}/voiceover.wav`;
     }
 
     return {
