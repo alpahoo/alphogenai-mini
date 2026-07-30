@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import sharp from "sharp";
 import { requireAdmin } from "../../middleware";
 import { createServiceClient } from "@/lib/supabase/service";
 import { readProductPageBrief } from "@/lib/native-product-ad";
@@ -16,12 +17,14 @@ import {
   UGC_NATIVE_AD_VERSION,
   type UGCNativeAdTask,
 } from "@/lib/ugc-shot-provider";
-import { downloadAndUploadToR2 } from "@/lib/r2";
+import { downloadAndUploadToR2, uploadBufferToR2 } from "@/lib/r2";
 
 export const maxDuration = 60;
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_PRODUCT_REFERENCE_BYTES = 12 * 1024 * 1024;
+const MAX_NATIVE_PRODUCT_REFERENCES = 4;
 
 interface UGCNativeAdState {
   capability: "ugc_native_ad";
@@ -47,6 +50,77 @@ interface UGCNativeAdState {
     errorCode?: string;
     usageUnits?: number;
   } | null;
+}
+
+function isUnsafeImageHost(hostname: string) {
+  const host = hostname.toLowerCase();
+  return (
+    host === "localhost" ||
+    host === "::1" ||
+    host === "0.0.0.0" ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^169\.254\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  );
+}
+
+async function normalizeProductReference(urlString: string) {
+  const url = new URL(urlString);
+  if (!["http:", "https:"].includes(url.protocol) || isUnsafeImageHost(url.hostname)) {
+    throw new Error("unsafe_product_reference");
+  }
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "image/jpeg,image/png,image/webp,image/avif,*/*;q=0.5",
+      "User-Agent": "AlphoGen-Product-Reference/1.0",
+    },
+    redirect: "follow",
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`product_reference_download_${response.status}`);
+
+  const declaredLength = Number(response.headers.get("content-length") || 0);
+  if (declaredLength > MAX_PRODUCT_REFERENCE_BYTES) {
+    throw new Error("product_reference_too_large");
+  }
+
+  const input = Buffer.from(await response.arrayBuffer());
+  if (input.length === 0 || input.length > MAX_PRODUCT_REFERENCE_BYTES) {
+    throw new Error("product_reference_invalid_size");
+  }
+
+  const jpeg = await sharp(input, { limitInputPixels: 40_000_000 })
+    .rotate()
+    .resize({
+      width: 1536,
+      height: 1536,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .flatten({ background: "#ffffff" })
+    .jpeg({ quality: 92, chromaSubsampling: "4:4:4" })
+    .toBuffer();
+
+  return uploadBufferToR2(
+    jpeg,
+    `experiments/ugc-native-ad/product-references/${randomUUID()}.jpg`,
+    "image/jpeg"
+  );
+}
+
+async function normalizeProductReferences(imageUrls: string[]) {
+  const selected = imageUrls.slice(0, MAX_NATIVE_PRODUCT_REFERENCES);
+  const results = await Promise.allSettled(selected.map(normalizeProductReference));
+  const normalized = results.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : []
+  );
+  console.info(
+    `[ugc-native-ad] normalized product references ${normalized.length}/${selected.length}`
+  );
+  return normalized;
 }
 
 async function signPresenterVideo(
@@ -122,11 +196,26 @@ async function startNativeAd(
     );
   }
 
+  const providerBrief =
+    mode === "native"
+      ? {
+          ...brief,
+          imageUrls: await normalizeProductReferences(brief.imageUrls),
+        }
+      : brief;
+  if (!providerBrief.imageUrls.length) {
+    return NextResponse.json(
+      { error: "The product images could not be prepared for video generation." },
+      { status: 422 }
+    );
+  }
+  providerBrief.imageUrl = providerBrief.imageUrls[0] || null;
+
   const spec =
     mode === "visual_preview"
-      ? buildUGCVisualPreviewSpec({ brief, aspectRatio })
+      ? buildUGCVisualPreviewSpec({ brief: providerBrief, aspectRatio })
       : buildUGCNativeAdSpec({
-          brief,
+          brief: providerBrief,
           aspectRatio,
           language,
           verifiedAssetIds,
