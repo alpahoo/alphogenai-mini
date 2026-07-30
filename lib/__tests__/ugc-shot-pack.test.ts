@@ -66,6 +66,25 @@ describe("buildUGCShotPack", () => {
     expect(request.aspectRatio).toBe("9:16");
   });
 
+  it("never sends a raw presenter video when a verified identity is available", () => {
+    const presenter = {
+      role: "character_face" as const,
+      url: "https://cdn.example.com/presenter.mp4",
+      mime_type: "video/mp4",
+    };
+    const [hook, , cta] = buildUGCShotPack({
+      brief,
+      presenterVideo: presenter,
+      verifiedAssetIds: ["asset-presenter"],
+    });
+
+    for (const shot of [hook, cta]) {
+      const request = buildBytePlusUGCShotRequest(shot);
+      expect(request.assetIds).toEqual(["asset-presenter"]);
+      expect(request.references?.videos).toBeUndefined();
+    }
+  });
+
   it("anchors the product shot to one exact first frame", () => {
     const [, demo] = buildUGCShotPack({ brief });
     const request = buildBytePlusUGCShotRequest(demo);

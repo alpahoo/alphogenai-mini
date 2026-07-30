@@ -25,6 +25,10 @@ export function buildBytePlusUGCShotRequest(
 ): CreateBytePlusParams {
   const productFirstFrame =
     spec.role === "product_demo" ? spec.references.images?.[0]?.url : undefined;
+  const references =
+    spec.verifiedAssetIds?.length && spec.role !== "product_demo"
+      ? { ...spec.references, videos: undefined }
+      : spec.references;
   return {
     engineKey,
     prompt: spec.prompt,
@@ -32,7 +36,7 @@ export function buildBytePlusUGCShotRequest(
     aspectRatio: spec.aspectRatio,
     ...(productFirstFrame
       ? { imageUrl: productFirstFrame }
-      : { references: spec.references }),
+      : { references }),
     assetIds: spec.verifiedAssetIds,
     generateAudio: spec.generateAudio,
   };

@@ -1,3 +1,9 @@
+## 2026-07-30 - Codex - T-1164c directed-edit privacy gate
+- Started exactly one approved Powerbeats directed-edit QA with reusable presenter `Paulo` and verified identity `Moi_5`. The provider rejected the first creator shot before task creation because the request still included the raw real-person performance video alongside the approved verified identity. Reserved job: `4892834e-decf-4fae-afc1-947567175e5f`.
+- Root cause: the directed storyboard correctly attached the verified identity, but the BytePlus adapter also forwarded `references.videos`; the provider privacy gate rejected that raw video as `InputVideoSensitiveContentDetected.PrivacyInformation`.
+- Fixed the provider boundary so creator shots with verified asset IDs never transmit raw presenter videos. Product first-frame anchoring and the verified identity remain unchanged. Added a regression test covering both creator-facing shots.
+- Validation: focused UGC tests 13/13, TypeScript clean and production build successful. No generation task was created by the rejected QA and no automatic retry was performed.
+
 ## 2026-07-30 - Codex - T-1164b capped Seedance 2.0 native Product Ad QA
 - Deployed verified-identity routing for the native Product Ad experiment. The admin UI now selects one owned BytePlus verified creator identity and the server rejects unowned IDs; stale clients fall back to the latest owned verified identity instead of sending a raw real-person clip.
 - Ran exactly one approved Seedance 2.0 native Product Ad task for Powerbeats Pro 2 with `Moi_5`, French, 9:16 and 15 seconds. Production job `ce13f059-408d-4a51-875d-fa097ea6a9f7` completed in 5m17s and was copied to permanent R2.
