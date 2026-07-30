@@ -18,6 +18,11 @@ interface PresenterRequest {
   nativeBase: NativeBase | null;
 }
 
+interface VerifiedIdentity {
+  asset_id: string;
+  name: string;
+}
+
 interface ExperimentResult {
   jobId?: string;
   status?: "processing" | "done" | "failed";
@@ -31,6 +36,8 @@ export default function NativeUGCExperimentPage() {
   const [url, setUrl] = useState(DEFAULT_PRODUCT_URL);
   const [presenters, setPresenters] = useState<PresenterRequest[]>([]);
   const [nativeBaseId, setNativeBaseId] = useState("");
+  const [verifiedIdentities, setVerifiedIdentities] = useState<VerifiedIdentity[]>([]);
+  const [verifiedAssetId, setVerifiedAssetId] = useState("");
   const [loadingPresenters, setLoadingPresenters] = useState(true);
   const [running, setRunning] = useState(false);
   const [runningMode, setRunningMode] = useState<"visual_preview" | "native" | null>(
@@ -49,17 +56,32 @@ export default function NativeUGCExperimentPage() {
           data: { session },
         } = await supabase.auth.getSession();
         if (!session?.access_token) throw new Error("Unauthorized");
-        const response = await fetch("/api/presenters/video", {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-        const json = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(json.error || "Could not load presenters.");
-        const requests = Array.isArray(json.requests) ? json.requests : [];
+        const headers = { Authorization: `Bearer ${session.access_token}` };
+        const [presenterResponse, identityResponse] = await Promise.all([
+          fetch("/api/presenters/video", { headers }),
+          fetch("/api/byteplus-assets", { headers }),
+        ]);
+        const presenterJson = await presenterResponse.json().catch(() => ({}));
+        const identityJson = await identityResponse.json().catch(() => ({}));
+        if (!presenterResponse.ok) {
+          throw new Error(presenterJson.error || "Could not load presenters.");
+        }
+        if (!identityResponse.ok) {
+          throw new Error(identityJson.error || "Could not load verified identities.");
+        }
+        const requests = Array.isArray(presenterJson.requests)
+          ? presenterJson.requests
+          : [];
+        const identities = Array.isArray(identityJson.assets)
+          ? identityJson.assets
+          : [];
         setPresenters(requests);
+        setVerifiedIdentities(identities);
         const firstReady = requests.find(
           (item: PresenterRequest) => item.nativeBase?.status === "ready",
         );
         if (firstReady?.nativeBase?.id) setNativeBaseId(firstReady.nativeBase.id);
+        if (identities[0]?.asset_id) setVerifiedAssetId(identities[0].asset_id);
       } catch (error) {
         setResult({
           status: "failed",
@@ -116,6 +138,8 @@ export default function NativeUGCExperimentPage() {
           mode,
           url,
           nativeBaseId: mode === "native" ? nativeBaseId || undefined : undefined,
+          verifiedAssetIds:
+            mode === "native" && verifiedAssetId ? [verifiedAssetId] : undefined,
           aspectRatio: "9:16",
           language: "French (France)",
         }),
@@ -176,6 +200,27 @@ export default function NativeUGCExperimentPage() {
           </select>
         </label>
 
+        <label className="block space-y-2">
+          <span className="text-sm font-medium">Verified creator identity</span>
+          <select
+            value={verifiedAssetId}
+            onChange={(event) => setVerifiedAssetId(event.target.value)}
+            disabled={loadingPresenters || running}
+            className="h-11 w-full border border-border bg-background px-3 text-sm outline-none focus:border-blue-500"
+          >
+            <option value="">No verified identity</option>
+            {verifiedIdentities.map((identity) => (
+              <option key={identity.asset_id} value={identity.asset_id}>
+                {identity.name || identity.asset_id}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-muted-foreground">
+            Seedance uses this approved identity instead of the raw performance
+            video, which BytePlus blocks for privacy.
+          </span>
+        </label>
+
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
           <div className="text-sm text-muted-foreground">
             Free visual preview: 9:16 · 10 seconds · no presenter · no audio
@@ -207,7 +252,12 @@ export default function NativeUGCExperimentPage() {
           <button
             type="button"
             onClick={() => start("native")}
-            disabled={running || !url.trim() || loadingPresenters}
+            disabled={
+              running ||
+              !url.trim() ||
+              loadingPresenters ||
+              (Boolean(nativeBaseId) && !verifiedAssetId)
+            }
             className="inline-flex h-10 items-center gap-2 bg-foreground px-4 text-sm font-semibold text-background disabled:cursor-not-allowed disabled:opacity-50"
           >
             {runningMode === "native" ? (

@@ -4,7 +4,6 @@ import sharp from "sharp";
 import { requireAdmin } from "../../middleware";
 import { createServiceClient } from "@/lib/supabase/service";
 import { readProductPageBrief } from "@/lib/native-product-ad";
-import { NATIVE_PRESENTER_BASE_BUCKET } from "@/lib/video-presenter-native";
 import {
   buildUGCNativeAdSpec,
   buildUGCVisualPreviewSpec,
@@ -43,6 +42,7 @@ interface UGCNativeAdState {
   };
   prompt: string;
   nativeBaseId: string | null;
+  verifiedAssetIds: string[];
   task: {
     adId: string;
     providerTaskId: string;
@@ -126,27 +126,41 @@ async function normalizeProductReferences(imageUrls: string[]) {
   return normalized;
 }
 
-async function signPresenterVideo(
+async function resolveVerifiedAssetIds(
   service: ReturnType<typeof createServiceClient>,
   userId: string,
-  nativeBaseId: string
+  requestedAssetIds: string[],
+  useLatestFallback: boolean
 ) {
-  const { data: base, error } = await service
-    .from("user_presenter_native_bases")
-    .select("id,status,normalized_video_path")
-    .eq("id", nativeBaseId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (error) throw new Error("presenter_lookup_failed");
-  if (!base || base.status !== "ready" || !base.normalized_video_path) {
-    throw new Error("presenter_not_ready");
+  if (requestedAssetIds.length > 0) {
+    const { data, error } = await service
+      .from("byteplus_assets")
+      .select("asset_id")
+      .eq("user_id", userId)
+      .in("asset_id", requestedAssetIds);
+    if (error) throw new Error("verified_asset_lookup_failed");
+
+    const ownedIds = new Set((data ?? []).map((item) => item.asset_id));
+    if (requestedAssetIds.some((assetId) => !ownedIds.has(assetId))) {
+      throw new Error("verified_asset_not_owned");
+    }
+    return requestedAssetIds;
   }
 
-  const { data: signed, error: signedError } = await service.storage
-    .from(NATIVE_PRESENTER_BASE_BUCKET)
-    .createSignedUrl(base.normalized_video_path, 900);
-  if (signedError || !signed?.signedUrl) throw new Error("presenter_sign_failed");
-  return signed.signedUrl;
+  if (!useLatestFallback) return [];
+
+  // Older deployed clients only sent nativeBaseId. Fall back to the user's
+  // latest verified identity so a stale browser bundle cannot submit the raw
+  // real-person performance video that BytePlus rejects.
+  const { data, error } = await service
+    .from("byteplus_assets")
+    .select("asset_id")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error("verified_asset_lookup_failed");
+  return data?.asset_id ? [data.asset_id] : [];
 }
 
 async function startNativeAd(
@@ -178,15 +192,35 @@ async function startNativeAd(
   }
 
   const service = createServiceClient();
-  let presenterVideoUrl: string | null = null;
-  if (mode === "native" && nativeBaseId) {
+  let resolvedAssetIds: string[] = [];
+  if (mode === "native") {
     try {
-      presenterVideoUrl = await signPresenterVideo(service, user.id, nativeBaseId);
+      resolvedAssetIds = await resolveVerifiedAssetIds(
+        service,
+        user.id,
+        verifiedAssetIds,
+        Boolean(nativeBaseId)
+      );
     } catch (error) {
-      const message = error instanceof Error ? error.message : "presenter_not_ready";
+      const message =
+        error instanceof Error ? error.message : "verified_asset_lookup_failed";
       return NextResponse.json(
-        { error: "The reusable presenter clip is not ready." },
-        { status: message === "presenter_not_ready" ? 409 : 500 }
+        {
+          error:
+            message === "verified_asset_not_owned"
+              ? "The selected verified creator identity is not available."
+              : "The verified creator identity could not be loaded.",
+        },
+        { status: message === "verified_asset_not_owned" ? 404 : 500 }
+      );
+    }
+    if (nativeBaseId && resolvedAssetIds.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Select a verified creator identity before using a real-person presenter.",
+        },
+        { status: 409 }
       );
     }
   }
@@ -221,10 +255,10 @@ async function startNativeAd(
           brief: providerBrief,
           aspectRatio,
           language,
-          verifiedAssetIds,
-          presenterVideo: presenterVideoUrl
-            ? { role: "character_face", url: presenterVideoUrl, mime_type: "video/mp4" }
-            : null,
+          verifiedAssetIds: resolvedAssetIds,
+          // Seedance accepts the verified asset:// identity. Sending the raw
+          // performance video as well trips its real-person privacy filter.
+          presenterVideo: null,
         });
   const initialState: UGCNativeAdState = {
     capability: "ugc_native_ad",
@@ -234,6 +268,7 @@ async function startNativeAd(
     product: brief,
     prompt: spec.prompt,
     nativeBaseId: mode === "native" ? nativeBaseId || null : null,
+    verifiedAssetIds: mode === "native" ? resolvedAssetIds : [],
     task: null,
     output: null,
   };
