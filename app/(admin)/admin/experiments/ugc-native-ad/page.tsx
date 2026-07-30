@@ -177,6 +177,24 @@ export default function NativeUGCExperimentPage() {
     }
   };
 
+  const retryDirectedAssembly = async (jobId: string) => {
+    setRunning(true);
+    setRunningMode("directed_edit");
+    setResult((current) => (current ? { ...current, status: "processing", error: undefined } : current));
+    try {
+      await poll(jobId, "directed_edit");
+    } catch (error) {
+      setResult((current) => ({
+        ...current,
+        status: "failed",
+        error: error instanceof Error ? error.message : "Could not retry the final assembly.",
+      }));
+    } finally {
+      setRunning(false);
+      setRunningMode(null);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
@@ -379,6 +397,23 @@ export default function NativeUGCExperimentPage() {
                   Three-shot edit manifest ready for deterministic assembly.
                 </p>
               )}
+              {result.status === "failed" &&
+                result.jobId &&
+                Boolean(result.editManifest) && (
+                <button
+                  type="button"
+                  onClick={() => retryDirectedAssembly(result.jobId!)}
+                  disabled={running}
+                  className="mt-4 inline-flex h-9 items-center gap-2 bg-foreground px-3 text-sm font-semibold text-background disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {runningMode === "directed_edit" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  Retry assembly from cached shots
+                </button>
+                )}
             </div>
           </div>
         </section>
