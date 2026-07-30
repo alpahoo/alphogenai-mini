@@ -1,3 +1,9 @@
+## 2026-07-30 - Codex - T-1164b Seedance 1.0 Pro Fast visual-preview QA
+- Added and deployed an explicit free visual-preview mode using BytePlus `seedance-1-0-pro-fast-251015`, separate from the full Seedance 2.0 Product Ad contract. The preview uses one product image, 10 seconds, 9:16 and no presenter or audio.
+- Production job `bef1bc1f-13bd-492e-90e9-87e360f4dd72` completed successfully and was copied to permanent R2. The MP4 is valid H.264, 704x1248, 24 fps, 10.04 seconds and intentionally has no audio.
+- Product QA verdict: technically successful but not suitable for a faithful Powerbeats ad. Frame inspection at 1s/5s/9s showed invented branding, altered earbud geometry and a lifestyle shot that changed the product into a neckband headset.
+- Decision: keep Seedance 1.0 Pro Fast only as a free motion/concept preview. Do not use it as the final product-fidelity renderer. The next meaningful validation is one capped Seedance 2.0 native Product Ad using the activated full model, subject to explicit spend approval.
+
 ## 2026-07-29 - Codex - T-1164b native multi-shot Product Ad path
 - Corrected the architecture after reviewing Open-AI-UGC more closely: Framer Motion animates the studio interface but does not edit or export video. A provider-native complete ad therefore does not need Revideo when its output already meets the product bar.
 - Added a separate provider-neutral `UGCNativeAdProvider` contract and a Seedance/BytePlus implementation using one 15-second task, explicit timed three-beat direction, product/presenter references and synchronized native audio.
