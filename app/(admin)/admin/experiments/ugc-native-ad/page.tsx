@@ -419,9 +419,10 @@ export default function NativeUGCExperimentPage() {
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-sm font-medium">Product and scene references</div>
+              <div className="text-sm font-medium">Product references</div>
               <div className="mt-1 text-xs text-muted-foreground">
-                Add up to 6 clean references. They replace unpredictable page images.
+                Add up to 6 product-only images. Do not include people; the verified
+                creator identity is supplied separately.
               </div>
             </div>
             <input

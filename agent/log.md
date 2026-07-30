@@ -1,3 +1,10 @@
+## 2026-07-31 - Codex - Creator UGC paid QA stopped at BytePlus privacy preflight
+- Prepared one authorized 15-second French Creator UGC acceptance for Powerbeats Pro 2 with reusable performance `Paulo`, verified identity `Moi_5`, an explicit first-person script and three official Beats references.
+- BytePlus rejected the request before task creation with `InputImageSensitiveContentDetected.PrivacyInformation` on `content[3]`. The offending reference was the official lifestyle photo containing a real athlete; the verified creator identity was already supplied separately.
+- No video task or output was created. The rejected preflight should not consume generation spend, and no automatic retry was performed.
+- Hardened the contract: the studio now asks for product-only references with no people, and the route maps this provider privacy rejection to an actionable provider-neutral 422 message instead of a generic 502.
+- Validation: focused UGC tests 20/20, TypeScript clean and production build successful. A corrected paid QA requires a new explicit GO and must use only the clean packshot and product-case references.
+
 ## 2026-07-30 - Codex - Open-AI-UGC contract adapted into Creator UGC Studio
 - Audited `Anil-matcha/Open-AI-UGC` source under its MIT license. Its useful product mechanism is a free-form script plus up to seven ordered image references sent to one video model; Framer Motion animates its web UI and is not a video compositor.
 - Adapted that contract without importing MUAPI, NextAuth, Prisma, Stripe, the upstream schema or its application shell. The AlphoGen admin experiment now accepts a creator script and up to six private product/scene references.

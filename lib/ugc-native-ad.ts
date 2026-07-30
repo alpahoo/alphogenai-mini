@@ -20,6 +20,14 @@ export interface BuildUGCVisualPreviewInput {
   aspectRatio?: "9:16" | "1:1" | "16:9";
 }
 
+export interface UGCNativeStartFailure {
+  message: string;
+  status: 422 | 502;
+}
+
+const PRODUCT_REFERENCE_PRIVACY_ERROR =
+  "A selected product reference contains a person. Remove photos with people and keep only clean product images. The verified creator identity is added separately.";
+
 function productReferences(imageUrls: string[]): ReferenceItem[] {
   return imageUrls.slice(0, 6).map((url, index) => ({
     role: "product_reference",
@@ -30,6 +38,24 @@ function productReferences(imageUrls: string[]): ReferenceItem[] {
 
 function cleanCreativeText(value: string | undefined, maxLength: number): string {
   return (value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+export function toUGCNativeStartFailure(error: unknown): UGCNativeStartFailure {
+  const message = error instanceof Error ? error.message : String(error || "");
+  if (
+    message.includes("InputImageSensitiveContentDetected.PrivacyInformation") ||
+    (message.includes("input image") && message.includes("may contain real person"))
+  ) {
+    return {
+      message: PRODUCT_REFERENCE_PRIVACY_ERROR,
+      status: 422,
+    };
+  }
+
+  return {
+    message: "The native UGC ad could not be started.",
+    status: 502,
+  };
 }
 
 export function buildUGCNativeAdSpec(input: BuildUGCNativeAdInput): UGCNativeAdSpec {

@@ -7,6 +7,7 @@ import { readProductPageBrief } from "@/lib/native-product-ad";
 import {
   buildUGCNativeAdSpec,
   buildUGCVisualPreviewSpec,
+  toUGCNativeStartFailure,
 } from "@/lib/ugc-native-ad";
 import {
   BytePlusUGCNativeAdProvider,
@@ -376,17 +377,18 @@ async function startNativeAd(
     if (saveError) throw new Error("task_state_save_failed");
   } catch (error) {
     console.error(`[ugc-native-ad] start failed job=${job.id}`, error);
+    const failure = toUGCNativeStartFailure(error);
     await service
       .from("jobs")
       .update({
         status: "failed",
         current_stage: "failed",
-        error_message: "The native UGC ad could not be started.",
+        error_message: failure.message,
       })
       .eq("id", job.id);
     return NextResponse.json(
-      { error: "The native UGC ad could not be started.", jobId: job.id },
-      { status: 502 }
+      { error: failure.message, jobId: job.id },
+      { status: failure.status }
     );
   }
 

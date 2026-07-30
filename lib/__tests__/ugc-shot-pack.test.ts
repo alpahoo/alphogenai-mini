@@ -3,6 +3,7 @@ import { buildUGCShotPack } from "@/lib/ugc-shot-pack";
 import {
   buildUGCNativeAdSpec,
   buildUGCVisualPreviewSpec,
+  toUGCNativeStartFailure,
 } from "@/lib/ugc-native-ad";
 import {
   buildBytePlusUGCNativeAdRequest,
@@ -270,8 +271,8 @@ describe("buildUGCNativeAdSpec", () => {
   it("builds a coherent creator performance from an explicit script and selected references", () => {
     const selectedReferences = [
       "https://cdn.example.com/front.jpg",
-      "https://cdn.example.com/creator-wearing-product.jpg",
-      "https://cdn.example.com/gym.jpg",
+      "https://cdn.example.com/case-open.jpg",
+      "https://cdn.example.com/side-detail.jpg",
     ];
     const script =
       "Je les porte pendant chaque entrainement. Regarde comme ils restent bien en place.";
@@ -299,6 +300,27 @@ describe("buildUGCNativeAdSpec", () => {
     expect(() => buildUGCNativeAdSpec({ brief: { ...brief, imageUrls: [] } })).toThrow(
       "At least one product image"
     );
+  });
+
+  it("turns BytePlus real-person reference rejection into actionable product copy", () => {
+    const failure = toUGCNativeStartFailure(
+      new Error(
+        "BytePlus create task failed (400): InputImageSensitiveContentDetected.PrivacyInformation: input image 'content[3]' may contain real person"
+      )
+    );
+
+    expect(failure).toEqual({
+      message:
+        "A selected product reference contains a person. Remove photos with people and keep only clean product images. The verified creator identity is added separately.",
+      status: 422,
+    });
+  });
+
+  it("keeps unexpected provider start failures generic", () => {
+    expect(toUGCNativeStartFailure(new Error("provider unavailable"))).toEqual({
+      message: "The native UGC ad could not be started.",
+      status: 502,
+    });
   });
 
   it("builds a 10-second silent first-frame preview for Seedance 1.0 Fast", () => {
