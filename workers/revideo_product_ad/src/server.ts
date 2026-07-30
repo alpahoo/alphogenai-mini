@@ -38,22 +38,44 @@ function authorized(header: string | undefined) {
 }
 
 async function serveRenderAsset(
-  requestUrl: string,
+  request: import("node:http").IncomingMessage,
   response: import("node:http").ServerResponse
 ) {
-  const match = requestUrl.match(
+  const match = request.url?.match(
     /^\/render-assets\/([0-9a-f-]{36})\/(shot-[1-3]\.mp4|voiceover\.wav)$/i
   );
   if (!match) return false;
   try {
     const asset = await readFile(resolve("public", "render-assets", match[1], match[2]));
-    response.writeHead(200, {
+    const commonHeaders = {
       "Access-Control-Allow-Origin": "*",
+      "Accept-Ranges": "bytes",
       "Cache-Control": "no-store",
-      "Content-Length": asset.length,
       "Content-Type": match[2].endsWith(".mp4") ? "video/mp4" : "audio/wav",
+    };
+    const range = request.headers.range?.match(/^bytes=(\d*)-(\d*)$/);
+    if (range) {
+      const start = range[1] ? Number(range[1]) : 0;
+      const requestedEnd = range[2] ? Number(range[2]) : asset.length - 1;
+      const end = Math.min(requestedEnd, asset.length - 1);
+      if (!Number.isFinite(start) || start < 0 || start > end) {
+        response.writeHead(416, { "Content-Range": `bytes */${asset.length}` });
+        response.end();
+        return true;
+      }
+      response.writeHead(206, {
+        ...commonHeaders,
+        "Content-Length": end - start + 1,
+        "Content-Range": `bytes ${start}-${end}/${asset.length}`,
+      });
+      response.end(request.method === "HEAD" ? undefined : asset.subarray(start, end + 1));
+      return true;
+    }
+    response.writeHead(200, {
+      ...commonHeaders,
+      "Content-Length": asset.length,
     });
-    response.end(asset);
+    response.end(request.method === "HEAD" ? undefined : asset);
   } catch {
     json(response, 404, { error: "Render asset not found." });
   }
@@ -178,9 +200,8 @@ export const server = createServer(async (request, response) => {
     return json(response, 200, { ok: true, service: "product-ad-renderer" });
   }
   if (
-    request.method === "GET" &&
-    request.url &&
-    (await serveRenderAsset(request.url, response))
+    (request.method === "GET" || request.method === "HEAD") &&
+    (await serveRenderAsset(request, response))
   ) {
     return;
   }
