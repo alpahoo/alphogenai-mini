@@ -1,3 +1,10 @@
+## 2026-07-30 - Codex - T-1164c directed-edit final QA PASS
+- Rebuilt the Powerbeats directed edit once through Revideo using the three cached Seedance 2.0 shots; no new provider generation and no additional paid video spend.
+- Final request `2e415847-1c2d-412a-871d-a4a98dca8704` completed successfully and produced `https://pub-17f0392d1f8d4270ad79966ad1ea7545.r2.dev/videos/ugc-directed-edit/29802dff-2846-40fb-869e-097660904aaa/2e415847-1c2d-412a-871d-a4a98dca8704.mp4`.
+- Technical QA PASS: 15.03 seconds, 1080x1920, H.264 Main at 30 fps with AAC stereo audio.
+- Visual QA PASS at 1s/8s/14s: `Voici Powerbeats Pro 2.`, `Découvrez la nouvelle génération.`, then `Découvrez Powerbeats Pro 2.` with the `Découvrir` CTA. No dangling French connector remains.
+- The final fix chain was `a5e9690` (dangling connector guard), `07df2c7` (elided apostrophe guard) and `643fa96` (sanitize already-compacted cached captions). The last fix addresses the actual production root cause.
+
 ## 2026-07-30 - Codex - T-1164c Revideo media localization
 - The approved directed-edit rerun succeeded at the paid provider boundary: all three Seedance 2.0 shots completed and were copied to permanent R2 for job `29802dff-2846-40fb-869e-097660904aaa`.
 - Revideo then failed before assembly because its Chromium renderer could not load the cross-origin R2 MP4 and MP3 sources (`MEDIA_ERR_SRC_NOT_SUPPORTED`), despite valid permanent URLs.
