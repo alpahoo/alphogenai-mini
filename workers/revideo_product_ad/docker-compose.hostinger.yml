@@ -1,28 +1,37 @@
 services:
   revideo-product-ad:
-    build:
-      context: https://github.com/alpahoo/alphogenai-mini.git#main:workers/revideo_product_ad
+    image: node:22-bookworm-slim
     container_name: revideo-product-ad
     restart: unless-stopped
+    working_dir: /app
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        apt-get update
+        apt-get install -y --no-install-recommends git chromium ffmpeg fonts-inter ca-certificates
+        rm -rf /var/lib/apt/lists/*
+        rm -rf /tmp/alphogen-source
+        git clone --depth 1 https://github.com/alpahoo/alphogenai-mini.git /tmp/alphogen-source
+        rm -rf /app/*
+        cp -a /tmp/alphogen-source/workers/revideo_product_ad/. /app/
+        npm install --omit=dev
+        exec npm run serve
     environment:
       - PORT=4000
+      - DISABLE_TELEMETRY=true
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
       - REVIDEO_WORKER_SECRET=${REVIDEO_WORKER_SECRET}
       - R2_ENDPOINT=${R2_ENDPOINT}
       - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
       - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
       - R2_BUCKET_NAME=${R2_BUCKET_NAME}
       - R2_PUBLIC_URL=${R2_PUBLIC_URL}
-    expose:
-      - "4000"
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.revideo-product-ad.rule=Host(`revideo.srv859722.hstgr.cloud`)
-      - traefik.http.routers.revideo-product-ad.tls=true
-      - traefik.http.routers.revideo-product-ad.entrypoints=websecure
-      - traefik.http.routers.revideo-product-ad.tls.certresolver=mytlschallenge
-      - traefik.http.services.revideo-product-ad.loadbalancer.server.port=4000
-    networks:
-      - root_default
+    ports:
+      - "127.0.0.1:9400:4000"
+    volumes:
+      - revideo_app:/app
     mem_limit: 3g
     cpus: "1.5"
     shm_size: "1g"
@@ -35,8 +44,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 60s
+      start_period: 240s
 
-networks:
-  root_default:
-    external: true
+volumes:
+  revideo_app:

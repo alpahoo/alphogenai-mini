@@ -26,10 +26,12 @@ Required environment variables are `REVIDEO_WORKER_SECRET`, `R2_ENDPOINT`,
 `R2_PUBLIC_URL`. GPU generation remains on BytePlus, Modal GPU, or another
 provider implementing `UGCShotProvider`.
 
-`docker-compose.hostinger.yml` builds the worker directly from the `main`
-subdirectory, attaches it to the existing `root_default` Traefik network and
-publishes `https://revideo.srv859722.hstgr.cloud`. The matching Vercel
-configuration is:
+`docker-compose.hostinger.yml` starts from the official Node image, installs
+Chromium/FFmpeg, and checks out the worker from `main` during container startup.
+It publishes the service only on `127.0.0.1:9400`; the VPS Nginx virtual host
+`revideo.srv859722.hstgr.cloud` terminates TLS and proxies to that local port.
+This avoids the retired Traefik stack while keeping the raw worker port private.
+The matching Vercel configuration is:
 
 ```text
 REVIDEO_WORKER_URL=https://revideo.srv859722.hstgr.cloud
