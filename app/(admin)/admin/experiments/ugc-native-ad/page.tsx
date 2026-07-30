@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, Film, Loader2, Play, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -49,6 +49,7 @@ export default function NativeUGCExperimentPage() {
   const [running, setRunning] = useState(false);
   const [runningMode, setRunningMode] = useState<ExperimentMode | null>(null);
   const [result, setResult] = useState<ExperimentResult | null>(null);
+  const resumedJobRef = useRef<string | null>(null);
   const readyPresenters = useMemo(
     () => presenters.filter((item) => item.nativeBase?.status === "ready"),
     [presenters],
@@ -163,6 +164,13 @@ export default function NativeUGCExperimentPage() {
       if (!response.ok || !json.jobId) {
         throw new Error(json.error || "Could not start the native UGC experiment.");
       }
+      if (mode === "directed_edit") {
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}?job_id=${encodeURIComponent(json.jobId)}`,
+        );
+      }
       setResult({ ...json, status: "processing" });
       await poll(json.jobId, mode);
     } catch (error) {
@@ -176,6 +184,29 @@ export default function NativeUGCExperimentPage() {
       setRunningMode(null);
     }
   };
+
+  useEffect(() => {
+    const jobId = new URLSearchParams(window.location.search).get("job_id");
+    if (!jobId || resumedJobRef.current === jobId) return;
+    resumedJobRef.current = jobId;
+    setRunning(true);
+    setRunningMode("directed_edit");
+    setResult({ jobId, status: "processing" });
+    void poll(jobId, "directed_edit")
+      .catch((error) => {
+        setResult((current) => ({
+          ...current,
+          status: "failed",
+          error: error instanceof Error ? error.message : "Could not resume the directed edit.",
+        }));
+      })
+      .finally(() => {
+        setRunning(false);
+        setRunningMode(null);
+      });
+    // The selected job is encoded in the URL and must only resume once per page load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const retryDirectedAssembly = async (jobId: string) => {
     setRunning(true);
