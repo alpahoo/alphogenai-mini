@@ -130,6 +130,35 @@ export default function NativeUGCExperimentPage() {
     throw new Error("Product Ad generation is still running. Open the job later.");
   };
 
+  const pollDirectedAssembly = async (jobId: string, requestId: string) => {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20_000));
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Unauthorized");
+      const response = await fetch("/api/admin/experiments/ugc-shot-pack", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "poll_edit_request",
+          jobId,
+          requestId,
+        }),
+      });
+      const json = (await response.json().catch(() => ({}))) as ExperimentResult;
+      if (!response.ok || json.status === "failed") {
+        throw new Error(json.error || "The directed assembly failed.");
+      }
+      setResult(json);
+      if (json.status === "done") return;
+    }
+    throw new Error("The directed assembly is still running. Open the job later.");
+  };
+
   const start = async (mode: ExperimentMode) => {
     setRunning(true);
     setRunningMode(mode);
@@ -235,7 +264,12 @@ export default function NativeUGCExperimentPage() {
           "The new assembly request was not accepted. Refresh after deployment and try once more.",
         );
       }
-      await poll(jobId, "directed_edit");
+      setResult({
+        jobId,
+        status: "processing",
+        requestId: json.requestId,
+      });
+      await pollDirectedAssembly(jobId, json.requestId);
     } catch (error) {
       setResult((current) => ({
         ...current,

@@ -503,12 +503,135 @@ async function retryEdit(
   });
 }
 
+async function pollEditRequest(
+  user: { id: string },
+  body: Record<string, unknown>
+) {
+  const jobId = typeof body.jobId === "string" ? body.jobId : "";
+  const requestId = typeof body.requestId === "string" ? body.requestId : "";
+  if (!UUID_RE.test(jobId) || !UUID_RE.test(requestId)) {
+    return NextResponse.json(
+      { error: "A valid job id and assembly request id are required." },
+      { status: 400 }
+    );
+  }
+
+  const service = createServiceClient();
+  const { data: job, error } = await service
+    .from("jobs")
+    .select("id,app_state,updated_at")
+    .eq("id", jobId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (error || !job) return NextResponse.json({ error: "Job not found." }, { status: 404 });
+
+  const state = job.app_state as UGCShotPackState | null;
+  if (state?.capability !== "ugc_shot_pack") {
+    return NextResponse.json({ error: "This is not a UGC shot-pack job." }, { status: 400 });
+  }
+  if (state.editTaskId !== requestId) {
+    return NextResponse.json(
+      { error: "This assembly request was superseded by a newer rebuild." },
+      { status: 409 }
+    );
+  }
+  if (state.editVideoUrl) {
+    return NextResponse.json({
+      success: true,
+      jobId: job.id,
+      requestId,
+      status: "done",
+      videoUrl: state.editVideoUrl,
+      outputs: state.outputs,
+      editManifest: buildCachedEditManifest(state),
+    });
+  }
+
+  let edit;
+  try {
+    edit = await getRevideoProductAd(requestId);
+  } catch (pollError) {
+    console.error(
+      `[ugc-shot-pack] direct edit poll failed job=${job.id} request=${requestId}`,
+      pollError
+    );
+    return NextResponse.json(
+      { error: "The assembly worker could not find this rebuild." },
+      { status: 502 }
+    );
+  }
+
+  if (edit.status === "failed") {
+    return NextResponse.json(
+      {
+        success: false,
+        jobId: job.id,
+        requestId,
+        status: "failed",
+        error: "The directed assembly failed.",
+      },
+      { status: 502 }
+    );
+  }
+  if (edit.status !== "done" || !edit.videoUrl) {
+    return NextResponse.json({
+      success: true,
+      jobId: job.id,
+      requestId,
+      status: "processing",
+    });
+  }
+
+  const permanentUrl = await downloadAndUploadToR2(
+    edit.videoUrl,
+    `videos/ugc-directed-edit/${job.id}/${requestId}.mp4`
+  );
+  const nextState: UGCShotPackState = {
+    ...state,
+    editTaskId: requestId,
+    editVideoUrl: permanentUrl,
+  };
+  const { data: updatedJob, error: updateError } = await service
+    .from("jobs")
+    .update({
+      status: "done",
+      current_stage: "ugc_edit_ready",
+      video_url: permanentUrl,
+      error_message: null,
+      app_state: nextState,
+    })
+    .eq("id", job.id)
+    .eq("updated_at", job.updated_at)
+    .select("id")
+    .maybeSingle();
+  if (updateError) {
+    return NextResponse.json({ error: "Could not save the rebuilt assembly." }, { status: 500 });
+  }
+  if (!updatedJob) {
+    return NextResponse.json(
+      { error: "Assembly state changed concurrently. Poll again." },
+      { status: 409 }
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+    jobId: job.id,
+    requestId,
+    status: "done",
+    videoUrl: permanentUrl,
+    outputs: state.outputs,
+    editManifest: buildCachedEditManifest(nextState),
+  });
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth.response) return auth.response;
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   if (body.action === "start") return startPack(auth.user, body);
   if (body.action === "poll") return pollPack(auth.user, body);
+  if (body.action === "poll_edit_request") return pollEditRequest(auth.user, body);
   if (body.action === "retry_edit" || body.action === "restart_edit_v2") {
     return retryEdit(auth.user, body);
   }
