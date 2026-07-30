@@ -5,6 +5,7 @@ export interface RevideoProductAdShot {
   durationSeconds: number;
   eyebrow: string;
   headline: string;
+  caption: string;
   cta?: string;
 }
 
@@ -13,6 +14,7 @@ export interface RevideoProductAdManifest {
   brand: string;
   accentColor: string;
   voiceoverUrl?: string;
+  productImageUrl?: string;
 }
 
 interface ReadyShot {
@@ -26,7 +28,7 @@ function boundedCopy(value: string, fallback: string, max = 72): string {
   const normalized = value.replace(/\s+/g, " ").trim() || fallback;
   return normalized.length <= max
     ? normalized
-    : `${normalized.slice(0, max - 1).trimEnd()}…`;
+    : `${normalized.slice(0, max - 3).trimEnd()}...`;
 }
 
 export function buildRevideoProductAdManifest(input: {
@@ -36,6 +38,9 @@ export function buildRevideoProductAdManifest(input: {
   brand?: string;
   accentColor?: string;
   voiceoverUrl?: string;
+  productImageUrl?: string;
+  captions?: [string, string, string];
+  cta?: string;
 }): RevideoProductAdManifest {
   if (input.shots.length !== UGC_SHOT_PACK_SIZE) {
     throw new Error("A Revideo Product Ad manifest requires exactly three ready shots.");
@@ -60,25 +65,29 @@ export function buildRevideoProductAdManifest(input: {
       {
         videoUrl: hook.videoUrl,
         durationSeconds: hook.durationSeconds,
-        eyebrow: "REAL-WORLD TEST",
+        eyebrow: "DECOUVERTE",
         headline: title,
+        caption: input.captions?.[0] ?? title,
       },
       {
         videoUrl: demo.videoUrl,
         durationSeconds: demo.durationSeconds,
-        eyebrow: "THE DETAIL",
+        eyebrow: "LE PRODUIT",
         headline: benefit,
+        caption: input.captions?.[1] ?? benefit,
       },
       {
         videoUrl: cta.videoUrl,
         durationSeconds: cta.durationSeconds,
-        eyebrow: "READY TO MOVE",
+        eyebrow: "PRET A BOUGER",
         headline: title,
-        cta: "Discover",
+        caption: input.captions?.[2] ?? title,
+        cta: input.cta ?? "Decouvrir",
       },
     ],
     brand: input.brand ?? "AlphoGen",
     accentColor: input.accentColor ?? "#36d399",
     ...(input.voiceoverUrl ? { voiceoverUrl: input.voiceoverUrl } : {}),
+    ...(input.productImageUrl ? { productImageUrl: input.productImageUrl } : {}),
   };
 }

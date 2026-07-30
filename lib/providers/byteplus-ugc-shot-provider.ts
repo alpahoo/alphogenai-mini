@@ -14,7 +14,7 @@ import type {
   UGCShotTask,
 } from "@/lib/ugc-shot-provider";
 
-export const DEFAULT_UGC_BYTEPLUS_ENGINE = "seedance2_fast_byteplus";
+export const DEFAULT_UGC_BYTEPLUS_ENGINE = "seedance2_byteplus";
 export const DEFAULT_UGC_NATIVE_BYTEPLUS_ENGINE = "seedance2_byteplus";
 export const DEFAULT_UGC_VISUAL_PREVIEW_BYTEPLUS_ENGINE =
   "seedance10pro_fast_byteplus";
@@ -23,12 +23,16 @@ export function buildBytePlusUGCShotRequest(
   spec: UGCShotSpec,
   engineKey = DEFAULT_UGC_BYTEPLUS_ENGINE
 ): CreateBytePlusParams {
+  const productFirstFrame =
+    spec.role === "product_demo" ? spec.references.images?.[0]?.url : undefined;
   return {
     engineKey,
     prompt: spec.prompt,
     duration: spec.durationSeconds,
     aspectRatio: spec.aspectRatio,
-    references: spec.references,
+    ...(productFirstFrame
+      ? { imageUrl: productFirstFrame }
+      : { references: spec.references }),
     assetIds: spec.verifiedAssetIds,
     generateAudio: spec.generateAudio,
   };

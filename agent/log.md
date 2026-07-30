@@ -3383,3 +3383,11 @@ Parsing client extrait (`parseJoggEnvelope`, `parseProductVideo`) pour test unit
 Validation : tsc clean, nouveaux tests verts (voir commit). AUCUN appel Jogg payant, aucune génération prod pour ce lot.
 
 Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, poller batché, couverture submit/status complète.
+## 2026-07-30 - Codex - T-1164c directed Product Ad quality path
+- Reworked the rejected native Product Ad into a strict directed-edit contract. Creator hook and CTA shots no longer receive product images and explicitly forbid any generated/held/worn product; the product demo receives exactly one immutable first-frame product reference.
+- Switched the directed shot provider from the Fast Seedance route to the full Seedance 2 quality route. The product shot is sent as first-frame image-to-video rather than a loose multi-reference prompt.
+- Added deterministic French copy, one separately generated TTS voice-over, per-shot captions and CTA to the Revideo manifest. TTS and durable R2 upload complete before any paid three-shot task starts.
+- Tightened the Revideo design to full-screen media, restrained branding, caption hierarchy and CTA only on the closing shot. Removed the oversized poster-like text treatment.
+- Exposed `directed_edit` in the existing admin experiment page. It starts/polls the three-shot route, shows each permanent clip and reports when the edit manifest is ready. The public Product Ad workflow remains unchanged.
+- Validation without provider spend: 12 focused tests pass, root TypeScript clean, Revideo worker typecheck clean and production build passes. No Seedance generation, GPU job or Hostinger deployment was started.
+- Remaining gate: turn the CLI-only Revideo worker into a private authenticated Hostinger service, then run exactly one capped three-shot Beats validation and assemble the final MP4.

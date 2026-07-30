@@ -23,54 +23,59 @@ export function makeUGCShotScene(index: 0 | 1 | 2) {
           decoder="ffmpeg"
         />
         <Rect
-          y={650}
+          y={760}
           width={1080}
-          height={620}
-          fill="rgba(3, 7, 18, 0.56)"
+          height={400}
+          fill="rgba(3, 7, 18, 0.72)"
         />
-        <Txt
+        <Rect
           x={-390}
-          y={-835}
+          y={-825}
           width={220}
-          text={manifest.brand ?? "AlphoGen"}
-          fill="#ffffff"
-          fontFamily="Inter, Arial, sans-serif"
-          fontWeight={800}
-          fontSize={34}
-          textAlign="left"
-        />
+          height={58}
+          radius={8}
+          fill="rgba(3, 7, 18, 0.68)"
+        >
+          <Txt
+            text={manifest.brand ?? "AlphoGen"}
+            fill="#ffffff"
+            fontFamily="Inter, Arial, sans-serif"
+            fontWeight={800}
+            fontSize={28}
+          />
+        </Rect>
         {shot.eyebrow ? (
           <Txt
-            x={-370}
-            y={565}
-            width={260}
+            x={-350}
+            y={630}
+            width={320}
             text={shot.eyebrow}
             fill={manifest.accentColor ?? "#36d399"}
             fontFamily="Inter, Arial, sans-serif"
             fontWeight={800}
-            fontSize={26}
+            fontSize={24}
             textAlign="left"
           />
         ) : null}
-        {shot.headline ? (
+        {shot.caption || shot.headline ? (
           <Txt
-            y={685}
+            y={740}
             width={900}
-            text={shot.headline}
+            text={shot.caption ?? shot.headline}
             fill="#ffffff"
             fontFamily="Inter, Arial, sans-serif"
-            fontWeight={800}
-            fontSize={66}
-            lineHeight={78}
+            fontWeight={700}
+            fontSize={48}
+            lineHeight={58}
             textAlign="center"
             textWrap
           />
         ) : null}
         {shot.cta ? (
           <Rect
-            y={840}
-            width={330}
-            height={92}
+            y={880}
+            width={300}
+            height={72}
             radius={10}
             fill={manifest.accentColor ?? "#36d399"}
           >
@@ -79,7 +84,7 @@ export function makeUGCShotScene(index: 0 | 1 | 2) {
               fill="#07110c"
               fontFamily="Inter, Arial, sans-serif"
               fontWeight={900}
-              fontSize={34}
+              fontSize={30}
             />
           </Rect>
         ) : null}

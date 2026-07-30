@@ -29,7 +29,14 @@ interface ExperimentResult {
   videoUrl?: string;
   usageUnits?: number;
   error?: string;
+  ready?: number;
+  failed?: number;
+  processing?: number;
+  outputs?: Record<string, { status: string; videoUrl?: string }>;
+  editManifest?: unknown;
 }
+
+type ExperimentMode = "visual_preview" | "native" | "directed_edit";
 
 export default function NativeUGCExperimentPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -40,9 +47,7 @@ export default function NativeUGCExperimentPage() {
   const [verifiedAssetId, setVerifiedAssetId] = useState("");
   const [loadingPresenters, setLoadingPresenters] = useState(true);
   const [running, setRunning] = useState(false);
-  const [runningMode, setRunningMode] = useState<"visual_preview" | "native" | null>(
-    null
-  );
+  const [runningMode, setRunningMode] = useState<ExperimentMode | null>(null);
   const [result, setResult] = useState<ExperimentResult | null>(null);
   const readyPresenters = useMemo(
     () => presenters.filter((item) => item.nativeBase?.status === "ready"),
@@ -93,32 +98,37 @@ export default function NativeUGCExperimentPage() {
     })();
   }, [supabase]);
 
-  const poll = async (jobId: string) => {
+  const poll = async (jobId: string, mode: ExperimentMode) => {
     for (let attempt = 0; attempt < 60; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 20_000));
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Unauthorized");
-      const response = await fetch("/api/admin/experiments/ugc-native-ad", {
+      const response = await fetch(
+        mode === "directed_edit"
+          ? "/api/admin/experiments/ugc-shot-pack"
+          : "/api/admin/experiments/ugc-native-ad",
+        {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.access_token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ action: "poll", jobId }),
-      });
+        }
+      );
       const json = (await response.json().catch(() => ({}))) as ExperimentResult;
       if (!response.ok || json.status === "failed") {
-        throw new Error(json.error || "Native UGC generation failed.");
+        throw new Error(json.error || "Product Ad generation failed.");
       }
       setResult(json);
       if (json.status === "done") return;
     }
-    throw new Error("Native UGC generation is still running. Open the job later.");
+    throw new Error("Product Ad generation is still running. Open the job later.");
   };
 
-  const start = async (mode: "visual_preview" | "native") => {
+  const start = async (mode: ExperimentMode) => {
     setRunning(true);
     setRunningMode(mode);
     setResult(null);
@@ -127,7 +137,11 @@ export default function NativeUGCExperimentPage() {
         data: { session },
       } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Unauthorized");
-      const response = await fetch("/api/admin/experiments/ugc-native-ad", {
+      const response = await fetch(
+        mode === "directed_edit"
+          ? "/api/admin/experiments/ugc-shot-pack"
+          : "/api/admin/experiments/ugc-native-ad",
+        {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.access_token}`,
@@ -137,19 +151,20 @@ export default function NativeUGCExperimentPage() {
           action: "start",
           mode,
           url,
-          nativeBaseId: mode === "native" ? nativeBaseId || undefined : undefined,
+          nativeBaseId: mode !== "visual_preview" ? nativeBaseId || undefined : undefined,
           verifiedAssetIds:
-            mode === "native" && verifiedAssetId ? [verifiedAssetId] : undefined,
+            mode !== "visual_preview" && verifiedAssetId ? [verifiedAssetId] : undefined,
           aspectRatio: "9:16",
           language: "French (France)",
         }),
-      });
+        }
+      );
       const json = (await response.json().catch(() => ({}))) as ExperimentResult;
       if (!response.ok || !json.jobId) {
         throw new Error(json.error || "Could not start the native UGC experiment.");
       }
       setResult({ ...json, status: "processing" });
-      await poll(json.jobId);
+      await poll(json.jobId, mode);
     } catch (error) {
       setResult((current) => ({
         ...current,
@@ -273,6 +288,39 @@ export default function NativeUGCExperimentPage() {
             )}
           </button>
         </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
+          <div>
+            <div className="text-sm font-medium">Directed edit quality gate</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              Three separate silent shots, exact product first-frame anchor, French
+              voice-over and deterministic edit manifest. This starts three paid shots.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => start("directed_edit")}
+            disabled={
+              running ||
+              !url.trim() ||
+              loadingPresenters ||
+              (Boolean(nativeBaseId) && !verifiedAssetId)
+            }
+            className="inline-flex h-10 items-center gap-2 bg-blue-600 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {runningMode === "directed_edit" ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Generating 3 shots
+              </>
+            ) : (
+              <>
+                <Play className="h-4 w-4" />
+                Run directed edit
+              </>
+            )}
+          </button>
+        </div>
       </section>
 
       {result && (
@@ -307,6 +355,29 @@ export default function NativeUGCExperimentPage() {
                   Open final MP4
                   <ExternalLink className="h-4 w-4" />
                 </a>
+              )}
+              {result.outputs && (
+                <div className="mt-4 flex flex-wrap gap-3">
+                  {Object.entries(result.outputs)
+                    .filter(([, output]) => output.status === "ready" && output.videoUrl)
+                    .map(([shotId, output], index) => (
+                      <a
+                        key={shotId}
+                        href={output.videoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:underline"
+                      >
+                        Open shot {index + 1}
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    ))}
+                </div>
+              )}
+              {Boolean(result.editManifest) && (
+                <p className="mt-3 text-sm text-emerald-700">
+                  Three-shot edit manifest ready for deterministic assembly.
+                </p>
               )}
             </div>
           </div>

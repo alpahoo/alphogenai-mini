@@ -126,3 +126,25 @@ The native path remains useful for Fast/concept output, but it is not the
 default faithful Product Ad renderer. Per the gate above, the next validation
 uses `directed_edit`: three separately generated full-frame shots with stronger
 product-reference constraints, followed by one deterministic Revideo assembly.
+
+## Directed edit V2 implementation - 2026-07-30
+
+The first directed-edit implementation is code-ready and intentionally removes
+the source of the native product drift:
+
+- `creator_hook` and `lifestyle_cta` receive the verified creator identity but
+  no product image. Their prompts forbid showing, inventing, holding or wearing
+  a product.
+- `product_demo` receives exactly one product image as an immutable first frame.
+  The model may animate only camera movement and existing light.
+- the full Seedance 2 quality route is used for these three final shots; the
+  Fast model remains a concept preview only;
+- French voice-over, captions and CTA are generated separately and persisted
+  before any paid shot task starts;
+- Revideo receives the three permanent MP4s and the deterministic edit manifest.
+  It owns voice, captions, restrained branding and closing CTA.
+
+Local validation passed without provider spend. The remaining infrastructure
+gate is the private authenticated Hostinger service around the currently
+CLI-only Revideo worker. Only after that service is deployed should one capped
+Powerbeats three-shot QA be started.

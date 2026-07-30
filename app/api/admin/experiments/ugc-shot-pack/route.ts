@@ -11,8 +11,10 @@ import {
   UGC_SHOT_PACK_VERSION,
   type UGCShotTask,
 } from "@/lib/ugc-shot-provider";
-import { downloadAndUploadToR2 } from "@/lib/r2";
+import { downloadAndUploadToR2, uploadBufferToR2 } from "@/lib/r2";
 import { buildRevideoProductAdManifest } from "@/lib/revideo-product-ad";
+import { buildDirectedProductAdCopy } from "@/lib/product-ad-directed-copy";
+import { generateVoiceover, isTTSAvailable } from "@/lib/tts";
 
 export const maxDuration = 60;
 
@@ -52,6 +54,11 @@ interface UGCShotPackState {
   tasks: StoredShotTask[];
   outputs: Record<string, StoredShotOutput>;
   nativeBaseId: string | null;
+  copy: {
+    captions: [string, string, string];
+    cta: string;
+  };
+  voiceoverUrl: string;
 }
 
 async function signPresenterVideo(
@@ -99,6 +106,10 @@ async function startPack(
         .filter(Boolean)
         .slice(0, 2)
     : [];
+  const voice =
+    typeof body.voice === "string" && body.voice.trim()
+      ? body.voice.trim().slice(0, 100)
+      : "rachel";
 
   if (!/^https?:\/\/.+\..+/.test(url) || url.length > 2000) {
     return NextResponse.json({ error: "A valid product URL is required." }, { status: 400 });
@@ -121,6 +132,34 @@ async function startPack(
     return NextResponse.json(
       { error: "No usable product image was found on this page." },
       { status: 422 }
+    );
+  }
+
+  if (!isTTSAvailable()) {
+    return NextResponse.json(
+      { error: "The directed edit voice service is not configured." },
+      { status: 503 }
+    );
+  }
+
+  const copy = buildDirectedProductAdCopy(brief, language);
+  let voiceoverUrl: string;
+  try {
+    const tts = await generateVoiceover({
+      text: copy.voiceover,
+      voice,
+      format: "mp3",
+    });
+    voiceoverUrl = await uploadBufferToR2(
+      Buffer.from(tts.audio),
+      `audio/ugc-shot-pack/${user.id}/${randomUUID()}.mp3`,
+      tts.content_type
+    );
+  } catch (error) {
+    console.error("[ugc-shot-pack] deterministic voiceover failed", error);
+    return NextResponse.json(
+      { error: "The directed edit voice-over could not be prepared." },
+      { status: 502 }
     );
   }
 
@@ -147,6 +186,8 @@ async function startPack(
     tasks: [],
     outputs: {},
     nativeBaseId: nativeBaseId || null,
+    copy: { captions: copy.captions, cta: copy.cta },
+    voiceoverUrl,
   };
 
   const { data: job, error: jobError } = await service
@@ -266,10 +307,15 @@ async function pollPack(
   const completePack =
     finished && failed === 0 && missing === 0 && ready === UGC_SHOT_PACK_SIZE;
   const finalStatus = completePack ? "done" : finished ? "failed" : "in_progress";
+  const fallbackCopy = buildDirectedProductAdCopy(state.product, "French (France)");
   const editManifest = completePack
     ? buildRevideoProductAdManifest({
         productTitle: state.product.title,
         productDescription: state.product.description,
+        productImageUrl: state.product.imageUrl ?? undefined,
+        voiceoverUrl: state.voiceoverUrl || undefined,
+        captions: state.copy?.captions ?? fallbackCopy.captions,
+        cta: state.copy?.cta ?? fallbackCopy.cta,
         shots: state.shots.map((shot) => ({
           id: shot.id,
           role: shot.role as "creator_hook" | "product_demo" | "lifestyle_cta",

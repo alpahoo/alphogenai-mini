@@ -11,6 +11,7 @@ import {
 } from "@/lib/providers/byteplus-ugc-shot-provider";
 import { validateUGCShotPack } from "@/lib/ugc-shot-provider";
 import { buildRevideoProductAdManifest } from "@/lib/revideo-product-ad";
+import { buildDirectedProductAdCopy } from "@/lib/product-ad-directed-copy";
 
 const brief = {
   url: "https://example.com/headphones",
@@ -40,8 +41,13 @@ describe("buildUGCShotPack", () => {
     };
     const shots = buildUGCShotPack({ brief, presenterVideo: presenter });
     expect(shots[0].references.videos).toEqual([presenter]);
+    expect(shots[0].references.images).toBeUndefined();
     expect(shots[1].references.videos).toBeUndefined();
+    expect(shots[1].references.images).toHaveLength(1);
     expect(shots[2].references.videos).toEqual([presenter]);
+    expect(shots[2].references.images).toBeUndefined();
+    expect(shots[0].prompt).toContain("Do not show, invent, hold, wear");
+    expect(shots[1].prompt).toContain("immutable product source of truth");
   });
 
   it("requires a real product reference", () => {
@@ -53,11 +59,18 @@ describe("buildUGCShotPack", () => {
   it("maps a shot into the provider-neutral BytePlus request", () => {
     const [shot] = buildUGCShotPack({ brief, verifiedAssetIds: ["asset-presenter"] });
     const request = buildBytePlusUGCShotRequest(shot);
-    expect(request.engineKey).toBe("seedance2_fast_byteplus");
-    expect(request.references?.images).toHaveLength(2);
+    expect(request.engineKey).toBe("seedance2_byteplus");
+    expect(request.references?.images).toBeUndefined();
     expect(request.assetIds).toEqual(["asset-presenter"]);
     expect(request.generateAudio).toBe(false);
     expect(request.aspectRatio).toBe("9:16");
+  });
+
+  it("anchors the product shot to one exact first frame", () => {
+    const [, demo] = buildUGCShotPack({ brief });
+    const request = buildBytePlusUGCShotRequest(demo);
+    expect(request.imageUrl).toBe(brief.imageUrls[0]);
+    expect(request.references).toBeUndefined();
   });
 
   it("rejects incomplete packs", () => {
@@ -67,9 +80,14 @@ describe("buildUGCShotPack", () => {
 
   it("builds a restrained Revideo manifest from three ready full-frame shots", () => {
     const shots = buildUGCShotPack({ brief });
+    const copy = buildDirectedProductAdCopy(brief);
     const manifest = buildRevideoProductAdManifest({
       productTitle: brief.title,
       productDescription: brief.description,
+      productImageUrl: brief.imageUrl ?? undefined,
+      voiceoverUrl: "https://cdn.example.com/voice.mp3",
+      captions: copy.captions,
+      cta: copy.cta,
       shots: shots.map((shot) => ({
         id: shot.id,
         role: shot.role,
@@ -84,7 +102,17 @@ describe("buildUGCShotPack", () => {
       "https://cdn.example.com/product_demo.mp4",
       "https://cdn.example.com/lifestyle_cta.mp4",
     ]);
-    expect(manifest.shots[2].cta).toBe("Discover");
+    expect(manifest.shots.map((shot) => shot.caption)).toEqual(copy.captions);
+    expect(manifest.shots[2].cta).toBe("Découvrir");
+    expect(manifest.voiceoverUrl).toBe("https://cdn.example.com/voice.mp3");
+    expect(manifest.productImageUrl).toBe(brief.imageUrl);
+  });
+
+  it("builds one deterministic French narration for the three-shot edit", () => {
+    const copy = buildDirectedProductAdCopy(brief, "French (France)");
+    expect(copy.captions).toHaveLength(3);
+    expect(copy.voiceover).toBe(copy.captions.join(" "));
+    expect(copy.cta).toBe("Découvrir");
   });
 });
 

@@ -1560,3 +1560,9 @@ Bêta fermée admin-only OK sans eux ; **requis avant tout trafic client payant.
 - [ ] **Poller batché** (Codex P1 #4) : borner le nombre de jobs traités par run + concurrence limitée + budget temps < `maxDuration` (éviter le timeout en plein download quand plusieurs jobs sont actifs).
 - [ ] **Couverture tests complète submit/status/poll/idempotence** : validation d'entrée, quota, échec provider, transitions poll, idempotence bout-en-bout (l'auth cron + parsing + persistance poller sont déjà couverts par le lot quick-wins).
 Réfs : revue Codex 2026-07-16 ; `agent/log.md` (entrée durcissement).
+## T-1164c - Directed Product Ad quality path - CODE READY (2026-07-30, Codex)
+- Versioned the shot pack to V2 and removed product generation from both creator shots. The product demo is anchored to one exact first frame and uses full Seedance 2.
+- Added deterministic French narration, captions and CTA before paid generation; the Revideo manifest owns voice, copy, branding and timing.
+- Added an admin `directed_edit` control that starts and polls the three-shot pack and exposes the three permanent outputs plus manifest readiness.
+- Validation: 12 focused tests, root TypeScript, Revideo worker TypeScript and production build pass. Zero paid generation in this slice.
+- Next: deploy an authenticated Revideo service on Hostinger, then run one capped three-shot Beats QA. Do not repeat native one-shot QA.

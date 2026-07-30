@@ -1,6 +1,6 @@
 import type { ReferencePayload } from "@/lib/types";
 
-export const UGC_SHOT_PACK_VERSION = "ugc-shot-pack-v1";
+export const UGC_SHOT_PACK_VERSION = "ugc-shot-pack-v2";
 export const UGC_SHOT_PACK_SIZE = 3;
 export const UGC_NATIVE_AD_VERSION = "ugc-native-ad-v1";
 

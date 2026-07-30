@@ -16,9 +16,17 @@ export interface BuildUGCShotPackInput {
 
 const QUALITY_GUARDRAILS =
   "Photorealistic native UGC video, one coherent continuous shot, natural camera motion, " +
-  "premium commercial lighting. Preserve the exact product design, colors, proportions and logo. " +
-  "No poster layout, no collage, no floating product cutout, no duplicated object, no generated text, " +
+  "premium commercial lighting. No poster layout, no collage, no floating cutout, no generated text, " +
   "no captions, no watermark.";
+
+const CREATOR_ONLY_GUARDRAILS =
+  "Do not show, invent, hold, wear or interact with any product, package, logo or accessory. " +
+  "Keep both hands empty and below chest level. Product media is added separately in post.";
+
+const PRODUCT_ONLY_GUARDRAILS =
+  "The supplied first frame is the immutable product source of truth. Preserve the exact product " +
+  "geometry, colors, proportions, materials, case, accessories and logo. Do not add hands, people, " +
+  "extra products, alternate colors, labels or packaging. Animate only the camera and existing light.";
 
 function productReferences(imageUrls: string[]): ReferenceItem[] {
   return imageUrls.slice(0, 4).map((url, index) => ({
@@ -51,41 +59,41 @@ export function buildUGCShotPack(input: BuildUGCShotPackInput): UGCShotSpec[] {
       role: "creator_hook",
       durationSeconds: 5,
       aspectRatio,
-      references: { images: productRefs, videos: presenterRefs },
+      references: { videos: presenterRefs },
       verifiedAssetIds: input.verifiedAssetIds,
       generateAudio: false,
       prompt:
         `${QUALITY_GUARDRAILS} Creator hook for ${productName}. ` +
-        `A credible creator in a modern everyday setting notices the product, picks it up naturally, ` +
-        `and reacts with genuine curiosity. Medium close-up, immediate movement in the first second. ` +
-        `The creator will speak in ${language} later; keep the mouth neutral because audio is added separately.`,
+        `${CREATOR_ONLY_GUARDRAILS} A credible creator in a modern everyday setting looks into camera ` +
+        `with an immediate, genuine discovery reaction. Medium shot, restrained natural movement, stable ` +
+        `identity and framing. The creator will speak in ${language} later; keep the mouth relaxed and neutral.`,
     },
     {
       id: `${UGC_SHOT_PACK_VERSION}-02-demo`,
       role: "product_demo",
       durationSeconds: 5,
       aspectRatio,
-      references: { images: productRefs },
+      references: { images: productRefs.slice(0, 1) },
       generateAudio: false,
       prompt:
         `${QUALITY_GUARDRAILS} Product demonstration for ${productName}. ` +
-        `Close-up sequence in one continuous shot: natural hands remove the product from its case, ` +
-        `show the important detail, then demonstrate real use. Emphasize ${benefit}. ` +
-        `Authentic social-ad cinematography, shallow depth of field, no presenter face required.`,
+        `${PRODUCT_ONLY_GUARDRAILS} Begin from the supplied image and create a restrained premium hero shot: ` +
+        `a slow push-in with subtle parallax and realistic reflections only. Emphasize ${benefit}. ` +
+        `The product must remain visually identical from first frame to last frame.`,
     },
     {
       id: `${UGC_SHOT_PACK_VERSION}-03-cta`,
       role: "lifestyle_cta",
       durationSeconds: 5,
       aspectRatio,
-      references: { images: productRefs, videos: presenterRefs },
+      references: { videos: presenterRefs },
       verifiedAssetIds: input.verifiedAssetIds,
       generateAudio: false,
       prompt:
         `${QUALITY_GUARDRAILS} Lifestyle payoff for ${productName}. ` +
-        `The same creator uses the product confidently in a believable active setting, then gives a subtle ` +
-        `satisfied reaction to camera. Premium but authentic UGC, decisive final product hero moment, ` +
-        `clean composition with safe lower-third space for an AlphoGen call to action added in post.`,
+        `${CREATOR_ONLY_GUARDRAILS} The same creator moves confidently through a believable active setting, ` +
+        `then gives a subtle satisfied reaction to camera. Keep the creator in the upper two-thirds and leave ` +
+        `clean lower-third space for an AlphoGen call to action added in post.`,
     },
   ];
 

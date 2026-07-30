@@ -3,6 +3,7 @@ export interface UGCEditShot {
   durationSeconds: number;
   eyebrow?: string;
   headline?: string;
+  caption?: string;
   cta?: string;
 }
 
@@ -11,6 +12,7 @@ export interface UGCEditManifest {
   voiceoverUrl?: string;
   brand?: string;
   accentColor?: string;
+  productImageUrl?: string;
 }
 
 export const DEFAULT_MANIFEST: UGCEditManifest = {
@@ -20,18 +22,21 @@ export const DEFAULT_MANIFEST: UGCEditManifest = {
       durationSeconds: 5,
       eyebrow: "PRODUCT DISCOVERY",
       headline: "A better way to move.",
+      caption: "A better way to move.",
     },
     {
       videoUrl: "https://revideo-example-assets.s3.amazonaws.com/stars.mp4",
       durationSeconds: 5,
       eyebrow: "DESIGNED FOR REAL LIFE",
       headline: "See the detail. Feel the difference.",
+      caption: "See the detail. Feel the difference.",
     },
     {
       videoUrl: "https://revideo-example-assets.s3.amazonaws.com/stars.mp4",
       durationSeconds: 5,
       eyebrow: "AVAILABLE NOW",
       headline: "Ready when you are.",
+      caption: "Ready when you are.",
       cta: "Discover",
     },
   ],
