@@ -24,7 +24,10 @@ export const maxDuration = 60;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_PRODUCT_REFERENCE_BYTES = 12 * 1024 * 1024;
-const MAX_NATIVE_PRODUCT_REFERENCES = 4;
+// Product pages often mix packshots with lifestyle photos containing real
+// people. The presenter is supplied separately as a consented video reference,
+// so keep one known-clean packshot and never forward incidental page faces.
+const MAX_NATIVE_PRODUCT_REFERENCES = 1;
 
 interface UGCNativeAdState {
   capability: "ugc_native_ad";
