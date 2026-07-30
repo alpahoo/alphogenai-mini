@@ -342,8 +342,14 @@ async function pollPack(
       } else {
         const edit = await getRevideoProductAd(state.editTaskId);
         if (edit.status === "done" && edit.videoUrl) {
-          finalVideoUrl = edit.videoUrl;
-          nextState = { ...nextState, editVideoUrl: edit.videoUrl };
+          const permanentUrl =
+            state.editVideoUrl ??
+            (await downloadAndUploadToR2(
+              edit.videoUrl,
+              `videos/ugc-directed-edit/${job.id}/${state.editTaskId}.mp4`
+            ));
+          finalVideoUrl = permanentUrl;
+          nextState = { ...nextState, editVideoUrl: permanentUrl };
           finalStatus = "done";
         } else if (edit.status === "failed") {
           finalStatus = "failed";
