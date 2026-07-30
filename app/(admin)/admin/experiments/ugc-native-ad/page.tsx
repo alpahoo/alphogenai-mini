@@ -32,6 +32,7 @@ interface ExperimentResult {
   ready?: number;
   failed?: number;
   processing?: number;
+  requestId?: string;
   outputs?: Record<string, { status: string; videoUrl?: string }>;
   editManifest?: unknown;
 }
@@ -211,7 +212,7 @@ export default function NativeUGCExperimentPage() {
   const retryDirectedAssembly = async (jobId: string) => {
     setRunning(true);
     setRunningMode("directed_edit");
-    setResult((current) => (current ? { ...current, status: "processing", error: undefined } : current));
+    setResult({ jobId, status: "processing" });
     try {
       const {
         data: { session },
@@ -223,11 +224,16 @@ export default function NativeUGCExperimentPage() {
           Authorization: `Bearer ${session.access_token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ action: "retry_edit", jobId }),
+        body: JSON.stringify({ action: "restart_edit_v2", jobId }),
       });
       const json = (await response.json().catch(() => ({}))) as ExperimentResult;
       if (!response.ok) {
         throw new Error(json.error || "Could not restart the cached assembly.");
+      }
+      if (!json.requestId) {
+        throw new Error(
+          "The new assembly request was not accepted. Refresh after deployment and try once more.",
+        );
       }
       await poll(jobId, "directed_edit");
     } catch (error) {

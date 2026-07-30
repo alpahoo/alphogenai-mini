@@ -507,6 +507,8 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   if (body.action === "start") return startPack(auth.user, body);
   if (body.action === "poll") return pollPack(auth.user, body);
-  if (body.action === "retry_edit") return retryEdit(auth.user, body);
+  if (body.action === "retry_edit" || body.action === "restart_edit_v2") {
+    return retryEdit(auth.user, body);
+  }
   return NextResponse.json({ error: "Unsupported action." }, { status: 400 });
 }
