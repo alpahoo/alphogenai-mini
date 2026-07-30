@@ -14,16 +14,17 @@ npm run render -- --manifest ./manifest.json --output product-ad.mp4
 ## Hostinger deployment
 
 Run the Docker image behind a private network or an authenticated reverse proxy.
-The VPS owns queueing and Revideo rendering; GPU generation remains on BytePlus,
-Modal GPU, or another provider implementing `UGCShotProvider`.
+The service exposes:
 
-The final production service should:
+- `GET /health`
+- `POST /render` with `Authorization: Bearer $REVIDEO_WORKER_SECRET`
+- `GET /status/:requestId` with the same authorization
 
-1. accept a signed AlphoGen render request;
-2. download or reference the three permanent MP4 shots;
-3. call Revideo with the supplied manifest;
-4. upload the final MP4 to R2;
-5. notify AlphoGen with the resulting permanent URL.
+It queues one render at a time and uploads completed MP4 files directly to R2.
+Required environment variables are `REVIDEO_WORKER_SECRET`, `R2_ENDPOINT`,
+`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` and
+`R2_PUBLIC_URL`. GPU generation remains on BytePlus, Modal GPU, or another
+provider implementing `UGCShotProvider`.
 
 Never expose the raw Revideo render endpoint publicly without authentication and
 per-user quotas.

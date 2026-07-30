@@ -12,4 +12,6 @@ COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
 COPY src ./src
 
-CMD ["npx", "revideo", "serve", "--projectFile", "./src/project.ts", "--port", "4000"]
+EXPOSE 4000
+
+CMD ["npm", "run", "serve"]

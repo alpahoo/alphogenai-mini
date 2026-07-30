@@ -1566,3 +1566,4 @@ Réfs : revue Codex 2026-07-16 ; `agent/log.md` (entrée durcissement).
 - Added an admin `directed_edit` control that starts and polls the three-shot pack and exposes the three permanent outputs plus manifest readiness.
 - Validation: 12 focused tests, root TypeScript, Revideo worker TypeScript and production build pass. Zero paid generation in this slice.
 - Next: deploy an authenticated Revideo service on Hostinger, then run one capped three-shot Beats QA. Do not repeat native one-shot QA.
+- Worker service is code-ready: async private API, concurrency 1, direct R2 output, Next.js start/poll integration and local security smoke pass. Deployment requires `REVIDEO_WORKER_SECRET` plus existing R2 variables on Hostinger and matching worker URL/secret on Vercel.

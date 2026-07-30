@@ -15,6 +15,11 @@ import { downloadAndUploadToR2, uploadBufferToR2 } from "@/lib/r2";
 import { buildRevideoProductAdManifest } from "@/lib/revideo-product-ad";
 import { buildDirectedProductAdCopy } from "@/lib/product-ad-directed-copy";
 import { generateVoiceover, isTTSAvailable } from "@/lib/tts";
+import {
+  getRevideoProductAd,
+  isRevideoWorkerConfigured,
+  startRevideoProductAd,
+} from "@/lib/revideo-worker-client";
 
 export const maxDuration = 60;
 
@@ -59,6 +64,8 @@ interface UGCShotPackState {
     cta: string;
   };
   voiceoverUrl: string;
+  editTaskId?: string;
+  editVideoUrl?: string;
 }
 
 async function signPresenterVideo(
@@ -306,7 +313,7 @@ async function pollPack(
   const finished = processing === 0;
   const completePack =
     finished && failed === 0 && missing === 0 && ready === UGC_SHOT_PACK_SIZE;
-  const finalStatus = completePack ? "done" : finished ? "failed" : "in_progress";
+  let finalStatus = completePack ? "done" : finished ? "failed" : "in_progress";
   const fallbackCopy = buildDirectedProductAdCopy(state.product, "French (France)");
   const editManifest = completePack
     ? buildRevideoProductAdManifest({
@@ -324,16 +331,62 @@ async function pollPack(
         })),
       })
     : null;
+  let nextState: UGCShotPackState = { ...state, outputs };
+  let finalVideoUrl = state.editVideoUrl;
+  if (completePack && editManifest && isRevideoWorkerConfigured()) {
+    try {
+      if (!state.editTaskId) {
+        const started = await startRevideoProductAd(job.id, editManifest);
+        nextState = { ...nextState, editTaskId: started.requestId };
+        finalStatus = "in_progress";
+      } else {
+        const edit = await getRevideoProductAd(state.editTaskId);
+        if (edit.status === "done" && edit.videoUrl) {
+          finalVideoUrl = edit.videoUrl;
+          nextState = { ...nextState, editVideoUrl: edit.videoUrl };
+          finalStatus = "done";
+        } else if (edit.status === "failed") {
+          finalStatus = "failed";
+        } else {
+          finalStatus = "in_progress";
+        }
+      }
+    } catch (error) {
+      console.error(`[ugc-shot-pack] edit orchestration failed job=${job.id}`, error);
+      if (
+        error instanceof Error &&
+        error.message === "revideo_worker_request_not_found"
+      ) {
+        try {
+          const restarted = await startRevideoProductAd(job.id, editManifest);
+          nextState = { ...nextState, editTaskId: restarted.requestId };
+        } catch (restartError) {
+          console.error(`[ugc-shot-pack] edit restart failed job=${job.id}`, restartError);
+        }
+      }
+      finalStatus = "in_progress";
+    }
+  }
   const { error: updateError } = await service
     .from("jobs")
     .update({
       status: finalStatus,
-      current_stage: finalStatus === "done" ? "ugc_shots_ready" : finalStatus === "failed" ? "failed" : "ugc_shots_generating",
+      current_stage:
+        finalStatus === "done"
+          ? finalVideoUrl
+            ? "ugc_edit_ready"
+            : "ugc_shots_ready"
+          : finalStatus === "failed"
+            ? "failed"
+            : completePack
+              ? "ugc_edit_rendering"
+              : "ugc_shots_generating",
+      video_url: finalVideoUrl ?? null,
       error_message:
         failed || missing
           ? `${failed + missing} UGC shot(s) unavailable.`
           : null,
-      app_state: { ...state, outputs },
+      app_state: nextState,
     })
     .eq("id", job.id);
   if (updateError) {
@@ -350,6 +403,7 @@ async function pollPack(
     missing,
     outputs,
     editManifest,
+    videoUrl: finalVideoUrl,
   });
 }
 

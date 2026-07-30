@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { renderVideo } from "@revideo/renderer";
 import type { UGCEditManifest } from "./manifest";
+import { renderProductAd } from "./render-product-ad";
 
 function argument(name: string) {
   const index = process.argv.indexOf(name);
@@ -22,17 +22,6 @@ if (!Array.isArray(manifest.shots) || manifest.shots.length !== 3) {
   throw new Error("The edit manifest must contain exactly three shots.");
 }
 
-const result = await renderVideo({
-  projectFile: resolve("src/project.ts"),
-  variables: { manifest },
-  settings: {
-    outFile: output as `${string}.mp4`,
-    outDir: resolve("output"),
-    workers: 1,
-    projectSettings: { size: { x: 1080, y: 1920 } },
-    logProgress: true,
-    puppeteer: { args: ["--no-sandbox", "--disable-setuid-sandbox"] },
-  },
-});
+const result = await renderProductAd(manifest, output);
 
 console.log(JSON.stringify({ success: true, output: result }));
