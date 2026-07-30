@@ -122,6 +122,7 @@ export async function localizeManifestMedia(
   manifest: UGCEditManifest
 ): Promise<LocalizedManifest> {
   const assetRoot = resolve("public", "render-assets", requestId);
+  const localMediaBase = `http://127.0.0.1:${Number(process.env.PORT || 4000)}`;
   await mkdir(assetRoot, { recursive: true });
 
   try {
@@ -135,7 +136,7 @@ export async function localizeManifestMedia(
       await rm(source, { force: true });
       localizedShots.push({
         ...shot,
-        videoUrl: output,
+        videoUrl: `${localMediaBase}/render-assets/${requestId}/shot-${index + 1}.mp4`,
       });
     }
 

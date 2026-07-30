@@ -37,6 +37,29 @@ function authorized(header: string | undefined) {
   return Boolean(secret) && header === `Bearer ${secret}`;
 }
 
+async function serveRenderAsset(
+  requestUrl: string,
+  response: import("node:http").ServerResponse
+) {
+  const match = requestUrl.match(
+    /^\/render-assets\/([0-9a-f-]{36})\/(shot-[1-3]\.mp4|voiceover\.wav)$/i
+  );
+  if (!match) return false;
+  try {
+    const asset = await readFile(resolve("public", "render-assets", match[1], match[2]));
+    response.writeHead(200, {
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "no-store",
+      "Content-Length": asset.length,
+      "Content-Type": match[2].endsWith(".mp4") ? "video/mp4" : "audio/wav",
+    });
+    response.end(asset);
+  } catch {
+    json(response, 404, { error: "Render asset not found." });
+  }
+  return true;
+}
+
 function mediaUrl(value: unknown) {
   if (typeof value !== "string" || value.length > 2_000) return false;
   try {
@@ -153,6 +176,13 @@ setInterval(() => {
 export const server = createServer(async (request, response) => {
   if (request.method === "GET" && request.url === "/health") {
     return json(response, 200, { ok: true, service: "product-ad-renderer" });
+  }
+  if (
+    request.method === "GET" &&
+    request.url &&
+    (await serveRenderAsset(request.url, response))
+  ) {
+    return;
   }
   if (!authorized(request.headers.authorization)) {
     return json(response, 401, { error: "Unauthorized" });
