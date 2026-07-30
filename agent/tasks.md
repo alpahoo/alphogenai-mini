@@ -1,5 +1,14 @@
 # agent/tasks.md — Backlog partagé
 
+## T-1164d - Creator UGC Studio adaptation - CODE READY (2026-07-30, Codex)
+- Audited Open-AI-UGC and retained its useful generation contract: one script plus ordered actor/product/scene references in one native video request.
+- Added an explicit creator script and up to six private product/scene reference uploads to the admin UGC studio.
+- Hardened the provider prompt around visible product use, same-creator continuity, product fidelity and native creator speech.
+- BytePlus remains the first provider behind the existing provider-neutral contract. No MUAPI, NextAuth, Prisma or Stripe code was imported.
+- Revideo is optional post-production only; the three-shot assembly is now marked legacy.
+- Validation: 18 focused tests, TypeScript and production build pass; zero provider spend.
+- Next: deploy, upload 2-4 clean Powerbeats references, write one short first-person script and run one capped 15-second native UGC acceptance. Do not run the legacy assembly for this gate.
+
 ## T-1164b - Native multi-shot Product Ad path - TECH PASS / PRODUCT FAIL (2026-07-30, Codex)
 - Added a provider-neutral `UGCNativeAdProvider` contract alongside the existing three-shot contract.
 - Added one high-quality Seedance/BytePlus adapter task for a complete 15-second native ad with timed hook, product demo and lifestyle CTA beats.

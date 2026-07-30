@@ -267,6 +267,34 @@ describe("buildUGCNativeAdSpec", () => {
     expect(request.generateAudio).toBe(true);
   });
 
+  it("builds a coherent creator performance from an explicit script and selected references", () => {
+    const selectedReferences = [
+      "https://cdn.example.com/front.jpg",
+      "https://cdn.example.com/creator-wearing-product.jpg",
+      "https://cdn.example.com/gym.jpg",
+    ];
+    const script =
+      "Je les porte pendant chaque entrainement. Regarde comme ils restent bien en place.";
+    const spec = buildUGCNativeAdSpec({
+      brief,
+      language: "French (France)",
+      verifiedAssetIds: ["asset-presenter"],
+      productReferenceUrls: selectedReferences,
+      script,
+    });
+    const request = buildBytePlusUGCNativeAdRequest(spec);
+
+    expect(spec.references.images?.map((item) => item.url)).toEqual(selectedReferences);
+    expect(spec.prompt).toContain("one real influencer performance");
+    expect(spec.prompt).toContain("image 1");
+    expect(spec.prompt).toContain("image 2, image 3, image 4");
+    expect(spec.prompt).toContain(script);
+    expect(spec.prompt).toContain("wear, hold or use this exact product");
+    expect(spec.prompt).toContain("Never show the creator empty-handed");
+    expect(request.assetIds).toEqual(["asset-presenter"]);
+    expect(request.references?.images).toHaveLength(3);
+  });
+
   it("requires a real product reference", () => {
     expect(() => buildUGCNativeAdSpec({ brief: { ...brief, imageUrls: [] } })).toThrow(
       "At least one product image"

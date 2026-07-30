@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, Film, Loader2, Play, RefreshCw } from "lucide-react";
+import {
+  ExternalLink,
+  Film,
+  ImagePlus,
+  Loader2,
+  Play,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 const DEFAULT_PRODUCT_URL =
@@ -21,6 +29,15 @@ interface PresenterRequest {
 interface VerifiedIdentity {
   asset_id: string;
   name: string;
+}
+
+interface ProductReference {
+  id: string;
+  name: string;
+  previewUrl: string;
+  storagePath?: string;
+  status: "uploading" | "ready" | "failed";
+  error?: string;
 }
 
 interface ExperimentResult {
@@ -46,15 +63,89 @@ export default function NativeUGCExperimentPage() {
   const [nativeBaseId, setNativeBaseId] = useState("");
   const [verifiedIdentities, setVerifiedIdentities] = useState<VerifiedIdentity[]>([]);
   const [verifiedAssetId, setVerifiedAssetId] = useState("");
+  const [script, setScript] = useState("");
+  const [productReferences, setProductReferences] = useState<ProductReference[]>([]);
   const [loadingPresenters, setLoadingPresenters] = useState(true);
   const [running, setRunning] = useState(false);
   const [runningMode, setRunningMode] = useState<ExperimentMode | null>(null);
   const [result, setResult] = useState<ExperimentResult | null>(null);
   const resumedJobRef = useRef<string | null>(null);
+  const productReferenceInputRef = useRef<HTMLInputElement | null>(null);
   const readyPresenters = useMemo(
     () => presenters.filter((item) => item.nativeBase?.status === "ready"),
     [presenters],
   );
+  const readyProductReferences = useMemo(
+    () => productReferences.filter((item) => item.status === "ready"),
+    [productReferences],
+  );
+  const productReferenceSelectionBlocked = productReferences.some(
+    (item) => item.status !== "ready",
+  );
+
+  const uploadProductReferences = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const selected = Array.from(files).slice(
+      0,
+      Math.max(0, 6 - productReferences.length),
+    );
+    for (const file of selected) {
+      const id = crypto.randomUUID();
+      const previewUrl = URL.createObjectURL(file);
+      setProductReferences((current) => [
+        ...current,
+        { id, name: file.name, previewUrl, status: "uploading" },
+      ]);
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await fetch("/api/upload?bucket=references", {
+          method: "POST",
+          body: formData,
+        });
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok || typeof json.storage_path !== "string") {
+          throw new Error(json.error || "Upload failed.");
+        }
+        setProductReferences((current) =>
+          current.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  storagePath: json.storage_path,
+                  previewUrl:
+                    typeof json.url === "string" ? json.url : item.previewUrl,
+                  status: "ready",
+                }
+              : item,
+          ),
+        );
+      } catch (error) {
+        setProductReferences((current) =>
+          current.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  status: "failed",
+                  error: error instanceof Error ? error.message : "Upload failed.",
+                }
+              : item,
+          ),
+        );
+      }
+    }
+    if (productReferenceInputRef.current) {
+      productReferenceInputRef.current.value = "";
+    }
+  };
+
+  const removeProductReference = (id: string) => {
+    setProductReferences((current) => {
+      const removed = current.find((item) => item.id === id);
+      if (removed?.previewUrl.startsWith("blob:")) URL.revokeObjectURL(removed.previewUrl);
+      return current.filter((item) => item.id !== id);
+    });
+  };
 
   useEffect(() => {
     (async () => {
@@ -185,6 +276,13 @@ export default function NativeUGCExperimentPage() {
           nativeBaseId: mode !== "visual_preview" ? nativeBaseId || undefined : undefined,
           verifiedAssetIds:
             mode !== "visual_preview" && verifiedAssetId ? [verifiedAssetId] : undefined,
+          script: mode === "native" ? script : undefined,
+          productReferencePaths:
+            mode === "native"
+              ? readyProductReferences
+                  .map((item) => item.storagePath)
+                  .filter((value): value is string => Boolean(value))
+              : undefined,
           aspectRatio: "9:16",
           language: "French (France)",
         }),
@@ -286,10 +384,10 @@ export default function NativeUGCExperimentPage() {
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
         <p className="text-xs font-semibold uppercase text-blue-600">Admin experiment</p>
-        <h1 className="mt-1 text-2xl font-bold">Native multi-shot product ad</h1>
+        <h1 className="mt-1 text-2xl font-bold">Creator UGC Studio</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Start with the free 10-second visual preview. Use the full 15-second native
-          validation only after the product motion and pacing look convincing.
+          One creator, one script and selected product references in a single coherent
+          performance. BytePlus is the first engine behind this provider-neutral workflow.
         </p>
       </div>
 
@@ -302,6 +400,89 @@ export default function NativeUGCExperimentPage() {
             className="h-11 w-full border border-border bg-background px-3 text-sm outline-none focus:border-blue-500"
           />
         </label>
+
+        <label className="block space-y-2">
+          <span className="text-sm font-medium">Creator script / UGC brief</span>
+          <textarea
+            value={script}
+            onChange={(event) => setScript(event.target.value.slice(0, 1600))}
+            rows={5}
+            placeholder="Example: Je les porte pendant chaque entraînement. Montre comment ils tiennent derrière l'oreille, ajuste-les face caméra, puis recommande-les naturellement."
+            className="w-full resize-y border border-border bg-background px-3 py-2 text-sm outline-none focus:border-blue-500"
+          />
+          <span className="text-xs text-muted-foreground">
+            Drives one coherent creator performance. Native speech follows this wording
+            as closely as the model allows.
+          </span>
+        </label>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium">Product and scene references</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Add up to 6 clean references. They replace unpredictable page images.
+              </div>
+            </div>
+            <input
+              ref={productReferenceInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              className="hidden"
+              onChange={(event) => void uploadProductReferences(event.target.files)}
+            />
+            <button
+              type="button"
+              onClick={() => productReferenceInputRef.current?.click()}
+              disabled={running || productReferences.length >= 6}
+              className="inline-flex h-9 items-center gap-2 border border-border px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ImagePlus className="h-4 w-4" />
+              Add references
+            </button>
+          </div>
+          {productReferences.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {productReferences.map((item, index) => (
+                <div key={item.id} className="relative border border-border p-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.previewUrl}
+                    alt=""
+                    className="aspect-square w-full object-cover"
+                  />
+                  <div className="mt-2 truncate text-xs font-medium">
+                    Reference {index + 1}: {item.name}
+                  </div>
+                  <div
+                    className={`mt-1 text-xs ${
+                      item.status === "failed"
+                        ? "text-red-600"
+                        : item.status === "ready"
+                          ? "text-emerald-700"
+                          : "text-muted-foreground"
+                    }`}
+                  >
+                    {item.status === "uploading"
+                      ? "Uploading"
+                      : item.status === "ready"
+                        ? "Ready"
+                        : item.error || "Upload failed"}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeProductReference(item.id)}
+                    aria-label={`Remove ${item.name}`}
+                    className="absolute right-3 top-3 grid h-7 w-7 place-items-center bg-background/90 shadow"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <label className="block space-y-2">
           <span className="text-sm font-medium">Reusable performance clip</span>
@@ -376,6 +557,7 @@ export default function NativeUGCExperimentPage() {
               running ||
               !url.trim() ||
               loadingPresenters ||
+              productReferenceSelectionBlocked ||
               (Boolean(nativeBaseId) && !verifiedAssetId)
             }
             className="inline-flex h-10 items-center gap-2 bg-foreground px-4 text-sm font-semibold text-background disabled:cursor-not-allowed disabled:opacity-50"
@@ -383,12 +565,12 @@ export default function NativeUGCExperimentPage() {
             {runningMode === "native" ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Generating validation
+                Generating UGC performance
               </>
             ) : (
               <>
                 <Play className="h-4 w-4" />
-                Run full native validation
+                Generate coherent UGC performance
               </>
             )}
           </button>
@@ -396,10 +578,10 @@ export default function NativeUGCExperimentPage() {
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
           <div>
-            <div className="text-sm font-medium">Directed edit quality gate</div>
+            <div className="text-sm font-medium">Legacy three-shot assembly</div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Three separate silent shots, exact product first-frame anchor, French
-              voice-over and deterministic edit manifest. This starts three paid shots.
+              Kept for comparison. Three separate clips plus deterministic captions;
+              this is not the recommended native UGC path.
             </div>
           </div>
           <button

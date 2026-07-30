@@ -23,10 +23,11 @@ export const maxDuration = 60;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_PRODUCT_REFERENCE_BYTES = 12 * 1024 * 1024;
-// Product pages often mix packshots with lifestyle photos containing real
-// people. The presenter is supplied separately as a consented video reference,
-// so keep one known-clean packshot and never forward incidental page faces.
-const MAX_NATIVE_PRODUCT_REFERENCES = 1;
+// User-selected references may include product, use and scene images. Automatic
+// page extraction still contributes only one packshot because pages often mix
+// product media with incidental real-person photos.
+const MAX_NATIVE_PRODUCT_REFERENCES = 6;
+const MAX_NATIVE_SCRIPT_LENGTH = 1600;
 
 interface UGCNativeAdState {
   capability: "ugc_native_ad";
@@ -41,6 +42,10 @@ interface UGCNativeAdState {
     hostname: string;
   };
   prompt: string;
+  creative: {
+    script: string | null;
+    productReferenceCount: number;
+  };
   nativeBaseId: string | null;
   verifiedAssetIds: string[];
   task: {
@@ -126,6 +131,30 @@ async function normalizeProductReferences(imageUrls: string[]) {
   return normalized;
 }
 
+async function resolveUploadedProductReferences(
+  service: ReturnType<typeof createServiceClient>,
+  userId: string,
+  requestedPaths: string[]
+) {
+  const uniquePaths = [...new Set(requestedPaths)]
+    .filter((path) => path.startsWith(`${userId}/`) && !path.includes(".."))
+    .slice(0, MAX_NATIVE_PRODUCT_REFERENCES);
+  if (uniquePaths.length !== requestedPaths.length) {
+    throw new Error("invalid_product_reference_path");
+  }
+
+  const signed = await Promise.all(
+    uniquePaths.map(async (path) => {
+      const { data, error } = await service.storage
+        .from("references")
+        .createSignedUrl(path, 15 * 60);
+      if (error || !data?.signedUrl) throw new Error("product_reference_sign_failed");
+      return data.signedUrl;
+    })
+  );
+  return normalizeProductReferences(signed);
+}
+
 async function resolveVerifiedAssetIds(
   service: ReturnType<typeof createServiceClient>,
   userId: string,
@@ -178,6 +207,17 @@ async function startNativeAd(
     typeof body.language === "string" && body.language.trim()
       ? body.language.trim().slice(0, 80)
       : "French (France)";
+  const script =
+    typeof body.script === "string"
+      ? body.script.replace(/\s+/g, " ").trim().slice(0, MAX_NATIVE_SCRIPT_LENGTH)
+      : "";
+  const productReferencePaths = Array.isArray(body.productReferencePaths)
+    ? body.productReferencePaths
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .slice(0, MAX_NATIVE_PRODUCT_REFERENCES)
+    : [];
   const verifiedAssetIds = Array.isArray(body.verifiedAssetIds)
     ? body.verifiedAssetIds
         .filter((value): value is string => typeof value === "string")
@@ -233,11 +273,30 @@ async function startNativeAd(
     );
   }
 
+  let normalizedProductReferences: string[] = [];
+  if (mode === "native") {
+    try {
+      normalizedProductReferences = productReferencePaths.length
+        ? await resolveUploadedProductReferences(
+            service,
+            user.id,
+            productReferencePaths
+          )
+        : await normalizeProductReferences(brief.imageUrls.slice(0, 1));
+    } catch (error) {
+      console.error("[ugc-native-ad] product reference preparation failed", error);
+      return NextResponse.json(
+        { error: "The selected product references could not be prepared." },
+        { status: 422 }
+      );
+    }
+  }
+
   const providerBrief =
     mode === "native"
       ? {
           ...brief,
-          imageUrls: await normalizeProductReferences(brief.imageUrls),
+          imageUrls: normalizedProductReferences,
         }
       : brief;
   if (!providerBrief.imageUrls.length) {
@@ -255,6 +314,8 @@ async function startNativeAd(
           brief: providerBrief,
           aspectRatio,
           language,
+          script,
+          productReferenceUrls: providerBrief.imageUrls,
           verifiedAssetIds: resolvedAssetIds,
           // Seedance accepts the verified asset:// identity. Sending the raw
           // performance video as well trips its real-person privacy filter.
@@ -267,6 +328,10 @@ async function startNativeAd(
     url,
     product: brief,
     prompt: spec.prompt,
+    creative: {
+      script: script || null,
+      productReferenceCount: providerBrief.imageUrls.length,
+    },
     nativeBaseId: mode === "native" ? nativeBaseId || null : null,
     verifiedAssetIds: mode === "native" ? resolvedAssetIds : [],
     task: null,

@@ -11,6 +11,8 @@ export interface BuildUGCNativeAdInput {
   presenterVideo?: ReferenceItem | null;
   verifiedAssetIds?: string[];
   language?: string;
+  script?: string;
+  productReferenceUrls?: string[];
 }
 
 export interface BuildUGCVisualPreviewInput {
@@ -26,9 +28,15 @@ function productReferences(imageUrls: string[]): ReferenceItem[] {
   }));
 }
 
+function cleanCreativeText(value: string | undefined, maxLength: number): string {
+  return (value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
 export function buildUGCNativeAdSpec(input: BuildUGCNativeAdInput): UGCNativeAdSpec {
   const { brief } = input;
-  if (!brief.imageUrls.length) {
+  const selectedProductReferences =
+    input.productReferenceUrls?.filter(Boolean).slice(0, 6) ?? brief.imageUrls.slice(0, 6);
+  if (!selectedProductReferences.length) {
     throw new Error("At least one product image is required to build a native UGC ad.");
   }
 
@@ -36,6 +44,12 @@ export function buildUGCNativeAdSpec(input: BuildUGCNativeAdInput): UGCNativeAdS
   const language = input.language?.trim() || "French (France)";
   const productName = brief.title || "the featured product";
   const benefit = brief.description || "its main practical benefit";
+  const script = cleanCreativeText(input.script, 1600);
+  const actorReferenceIndex = input.verifiedAssetIds?.length ? 1 : null;
+  const productReferenceStart = actorReferenceIndex ? 2 : 1;
+  const productReferenceLabels = selectedProductReferences
+    .map((_, index) => `image ${productReferenceStart + index}`)
+    .join(", ");
   const presenterVideos = input.presenterVideo
     ? [{ ...input.presenterVideo, role: input.presenterVideo.role || "character_face" }]
     : undefined;
@@ -45,24 +59,34 @@ export function buildUGCNativeAdSpec(input: BuildUGCNativeAdInput): UGCNativeAdS
     durationSeconds: 15,
     aspectRatio,
     references: {
-      images: productReferences(brief.imageUrls),
+      images: productReferences(selectedProductReferences),
       ...(presenterVideos ? { videos: presenterVideos } : {}),
     },
     verifiedAssetIds: input.verifiedAssetIds,
     generateAudio: true,
     prompt:
-      `Create one polished 15-second native UGC product advertisement for ${productName}. ` +
-      `Use a coherent three-beat sequence with seamless motivated cuts, not a collage: ` +
-      `[0-4s] immediate creator hook in a believable everyday setting; the creator holds the exact product ` +
-      `and speaks one short natural sentence in ${language}. ` +
-      `[4-10s] close product demonstration with natural hands showing real use and emphasizing ${benefit}. ` +
-      `[10-15s] return to the same creator using the product in a credible lifestyle moment, ending on a ` +
-      `confident reaction and a clean product hero frame. ` +
-      `Preserve the exact product design, colors, proportions and logo from the references. Preserve the ` +
-      `presenter's identity and appearance when a presenter reference is supplied. Photorealistic handheld ` +
-      `social-ad cinematography, premium natural lighting, coherent wardrobe and location, synchronized ` +
-      `native speech and realistic ambient sound. No subtitles, no generated text, no watermark, no floating ` +
-      `product cutout, no poster layout, no split screen, no duplicated product.`,
+      `Create one coherent 15-second creator-led UGC product advertisement for ${productName}. ` +
+      `This must feel like one real influencer performance, not B-roll with a voice-over and not a collage. ` +
+      (actorReferenceIndex
+        ? `The creator is image ${actorReferenceIndex}; preserve this exact verified identity throughout. `
+        : "") +
+      `The exact product references are ${productReferenceLabels}. Preserve their design, colors, proportions, ` +
+      `materials and logo. The creator must visibly wear, hold or use this exact product in every creator-facing ` +
+      `shot. Show believable physical interaction: touch it, adjust it, demonstrate the fit or feature, and ` +
+      `recommend it directly to camera. Never show the creator empty-handed or without the product. ` +
+      `Use one continuous believable setting, wardrobe and identity with motivated camera cuts: ` +
+      `[0-4s] direct-to-camera hook while already wearing or holding the product; ` +
+      `[4-10s] close demonstration by the same creator with natural hands and real use, emphasizing ${benefit}; ` +
+      `[10-15s] credible personal recommendation and confident call to action while still using the product. ` +
+      (script
+        ? `Spoken creative brief in ${language}: "${script}". Follow this wording and intent as closely as native ` +
+          `speech generation allows; do not replace it with generic marketing copy. `
+        : `Write one short, natural first-person recommendation in ${language}. `) +
+      `Photorealistic handheld social-ad cinematography, premium natural lighting, synchronized native speech, ` +
+      `natural facial performance and realistic ambient sound. Product-only detail cutaways are allowed only ` +
+      `inside the demonstration beat, then return to the same creator wearing or using the product. ` +
+      `No subtitles, no generated text, no watermark, no floating product cutout, no poster layout, no split ` +
+      `screen, no duplicated product, no unrelated lifestyle montage.`,
   };
 }
 

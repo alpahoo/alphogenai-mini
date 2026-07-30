@@ -1,3 +1,11 @@
+## 2026-07-30 - Codex - Open-AI-UGC contract adapted into Creator UGC Studio
+- Audited `Anil-matcha/Open-AI-UGC` source under its MIT license. Its useful product mechanism is a free-form script plus up to seven ordered image references sent to one video model; Framer Motion animates its web UI and is not a video compositor.
+- Adapted that contract without importing MUAPI, NextAuth, Prisma, Stripe, the upstream schema or its application shell. The AlphoGen admin experiment now accepts a creator script and up to six private product/scene references.
+- Uploaded references remain in the private Supabase `references` bucket. The route accepts canonical own-user storage paths, signs them server-side, normalizes them to permanent R2 JPEGs and sends them with the verified BytePlus creator identity.
+- Rebuilt the native prompt around one coherent influencer performance: the same creator must visibly wear, hold or use the exact product, interact with it on camera and deliver a natural recommendation. Detached voice-over montage, empty-handed creator shots and unrelated B-roll are explicitly rejected.
+- Repositioned the directed Revideo path as a legacy comparison. Revideo is now optional post-production only after a native UGC output passes the product-quality gate.
+- Validation: TypeScript clean, focused UGC tests 18/18 and production build successful. No provider call or paid generation was started.
+
 ## 2026-07-30 - Codex - T-1164c directed-edit final QA PASS
 - Rebuilt the Powerbeats directed edit once through Revideo using the three cached Seedance 2.0 shots; no new provider generation and no additional paid video spend.
 - Final request `2e415847-1c2d-412a-871d-a4a98dca8704` completed successfully and produced `https://pub-17f0392d1f8d4270ad79966ad1ea7545.r2.dev/videos/ugc-directed-edit/29802dff-2846-40fb-869e-097660904aaa/2e415847-1c2d-412a-871d-a4a98dca8704.mp4`.
