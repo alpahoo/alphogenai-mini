@@ -59,14 +59,14 @@ export function makeUGCShotScene(index: 0 | 1 | 2) {
         ) : null}
         {shot.caption || shot.headline ? (
           <Txt
-            y={740}
-            width={900}
+            y={720}
+            width={860}
             text={shot.caption ?? shot.headline}
             fill="#ffffff"
             fontFamily="Inter, Arial, sans-serif"
             fontWeight={700}
-            fontSize={48}
-            lineHeight={58}
+            fontSize={44}
+            lineHeight={52}
             textAlign="center"
             textWrap
           />

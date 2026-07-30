@@ -213,6 +213,22 @@ export default function NativeUGCExperimentPage() {
     setRunningMode("directed_edit");
     setResult((current) => (current ? { ...current, status: "processing", error: undefined } : current));
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Unauthorized");
+      const response = await fetch("/api/admin/experiments/ugc-shot-pack", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "retry_edit", jobId }),
+      });
+      const json = (await response.json().catch(() => ({}))) as ExperimentResult;
+      if (!response.ok) {
+        throw new Error(json.error || "Could not restart the cached assembly.");
+      }
       await poll(jobId, "directed_edit");
     } catch (error) {
       setResult((current) => ({
@@ -428,7 +444,7 @@ export default function NativeUGCExperimentPage() {
                   Three-shot edit manifest ready for deterministic assembly.
                 </p>
               )}
-              {result.status === "failed" &&
+              {(result.status === "failed" || result.status === "done") &&
                 result.jobId &&
                 Boolean(result.editManifest) && (
                 <button
@@ -442,7 +458,9 @@ export default function NativeUGCExperimentPage() {
                   ) : (
                     <RefreshCw className="h-4 w-4" />
                   )}
-                  Retry assembly from cached shots
+                  {result.status === "done"
+                    ? "Rebuild assembly from cached shots"
+                    : "Retry assembly from cached shots"}
                 </button>
                 )}
             </div>

@@ -121,10 +121,42 @@ describe("buildUGCShotPack", () => {
       "https://cdn.example.com/product_demo.mp4",
       "https://cdn.example.com/lifestyle_cta.mp4",
     ]);
-    expect(manifest.shots.map((shot) => shot.caption)).toEqual(copy.captions);
+    expect(manifest.shots.map((shot) => shot.caption)).toEqual([
+      copy.captions[0],
+      "Secure-fit earbuds with heart-rate.",
+      copy.captions[2],
+    ]);
     expect(manifest.shots[2].cta).toBe("Découvrir");
     expect(manifest.voiceoverUrl).toBe("https://cdn.example.com/voice.mp3");
     expect(manifest.productImageUrl).toBe(brief.imageUrl);
+  });
+
+  it("keeps deterministic overlay captions short and free of clipped ellipses", () => {
+    const shots = buildUGCShotPack({ brief });
+    const manifest = buildRevideoProductAdManifest({
+      productTitle: "Powerbeats Pro 2 - Ecouteurs sans fil pour le sport",
+      productDescription:
+        "Decouvrez la nouvelle generation d'ecouteurs concus pour accompagner chaque mouvement.",
+      captions: [
+        "Voici Powerbeats Pro 2 - Ecouteurs sans fil pour le sport.",
+        "Decouvrez la nouvelle generation d'ecouteurs concus pour accompagner chaque mouvement.",
+        "Decouvrez Powerbeats Pro 2 - Ecouteurs sans fil pour le sport des maintenant.",
+      ],
+      shots: shots.map((shot) => ({
+        id: shot.id,
+        role: shot.role,
+        durationSeconds: shot.durationSeconds,
+        videoUrl: `https://cdn.example.com/${shot.role}.mp4`,
+      })),
+    });
+
+    expect(manifest.shots.map((shot) => shot.caption)).toEqual([
+      "Voici Powerbeats Pro 2.",
+      "Decouvrez la nouvelle generation.",
+      "Decouvrez Powerbeats Pro 2.",
+    ]);
+    expect(manifest.shots.every((shot) => shot.caption.length <= 44)).toBe(true);
+    expect(manifest.shots.every((shot) => !shot.caption.includes("..."))).toBe(true);
   });
 
   it("builds one deterministic French narration for the three-shot edit", () => {

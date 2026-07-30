@@ -413,11 +413,63 @@ async function pollPack(
   });
 }
 
+async function retryEdit(
+  user: { id: string },
+  body: Record<string, unknown>
+) {
+  const jobId = typeof body.jobId === "string" ? body.jobId : "";
+  if (!UUID_RE.test(jobId)) {
+    return NextResponse.json({ error: "A valid job id is required." }, { status: 400 });
+  }
+
+  const service = createServiceClient();
+  const { data: job, error } = await service
+    .from("jobs")
+    .select("id,app_state")
+    .eq("id", jobId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (error || !job) return NextResponse.json({ error: "Job not found." }, { status: 404 });
+
+  const state = job.app_state as UGCShotPackState | null;
+  if (state?.capability !== "ugc_shot_pack") {
+    return NextResponse.json({ error: "This is not a UGC shot-pack job." }, { status: 400 });
+  }
+  const ready = Object.values(state.outputs ?? {}).filter(
+    (output) => output.status === "ready" && output.videoUrl
+  ).length;
+  if (ready !== UGC_SHOT_PACK_SIZE) {
+    return NextResponse.json(
+      { error: "All three cached shots must be ready before rebuilding the edit." },
+      { status: 409 }
+    );
+  }
+
+  const nextState = { ...state };
+  delete nextState.editTaskId;
+  delete nextState.editVideoUrl;
+  const { error: updateError } = await service
+    .from("jobs")
+    .update({
+      status: "in_progress",
+      current_stage: "ugc_edit_rendering",
+      video_url: null,
+      error_message: null,
+      app_state: nextState,
+    })
+    .eq("id", job.id);
+  if (updateError) {
+    return NextResponse.json({ error: "Could not restart the cached assembly." }, { status: 500 });
+  }
+  return NextResponse.json({ success: true, jobId: job.id, status: "processing" });
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth.response) return auth.response;
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   if (body.action === "start") return startPack(auth.user, body);
   if (body.action === "poll") return pollPack(auth.user, body);
+  if (body.action === "retry_edit") return retryEdit(auth.user, body);
   return NextResponse.json({ error: "Unsupported action." }, { status: 400 });
 }

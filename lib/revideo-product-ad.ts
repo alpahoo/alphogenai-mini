@@ -31,6 +31,25 @@ function boundedCopy(value: string, fallback: string, max = 72): string {
     : `${normalized.slice(0, max - 3).trimEnd()}...`;
 }
 
+function displayCopy(value: string | undefined, fallback: string, max = 44): string {
+  const normalized = (value ?? "").replace(/\s+/g, " ").trim() || fallback;
+  if (normalized.length <= max) return normalized;
+
+  const beforeSeparator = normalized.split(/\s(?:[-–—|])\s/, 1)[0]?.trim();
+  if (beforeSeparator && beforeSeparator.length >= 12 && beforeSeparator.length <= max) {
+    return `${beforeSeparator.replace(/[.,;:!?]+$/, "")}.`;
+  }
+
+  const words = normalized.split(" ");
+  let compact = "";
+  for (const word of words) {
+    const candidate = compact ? `${compact} ${word}` : word;
+    if (candidate.length > max - 1) break;
+    compact = candidate;
+  }
+  return `${(compact || fallback.slice(0, max - 1)).replace(/[.,;:!?]+$/, "")}.`;
+}
+
 export function buildRevideoProductAdManifest(input: {
   productTitle: string;
   productDescription?: string;
@@ -67,21 +86,21 @@ export function buildRevideoProductAdManifest(input: {
         durationSeconds: hook.durationSeconds,
         eyebrow: "DECOUVERTE",
         headline: title,
-        caption: input.captions?.[0] ?? title,
+        caption: displayCopy(input.captions?.[0], title),
       },
       {
         videoUrl: demo.videoUrl,
         durationSeconds: demo.durationSeconds,
         eyebrow: "LE PRODUIT",
         headline: benefit,
-        caption: input.captions?.[1] ?? benefit,
+        caption: displayCopy(input.captions?.[1], benefit),
       },
       {
         videoUrl: cta.videoUrl,
         durationSeconds: cta.durationSeconds,
         eyebrow: "PRET A BOUGER",
         headline: title,
-        caption: input.captions?.[2] ?? title,
+        caption: displayCopy(input.captions?.[2], title),
         cta: input.cta ?? "Decouvrir",
       },
     ],
