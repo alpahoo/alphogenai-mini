@@ -334,43 +334,45 @@ async function pollPack(
   let nextState: UGCShotPackState = { ...state, outputs };
   let finalVideoUrl = state.editVideoUrl;
   if (completePack && editManifest && isRevideoWorkerConfigured()) {
-    try {
-      if (!state.editTaskId) {
-        const started = await startRevideoProductAd(job.id, editManifest);
-        nextState = { ...nextState, editTaskId: started.requestId };
-        finalStatus = "in_progress";
-      } else {
-        const edit = await getRevideoProductAd(state.editTaskId);
-        if (edit.status === "done" && edit.videoUrl) {
-          const permanentUrl =
-            state.editVideoUrl ??
-            (await downloadAndUploadToR2(
+    if (state.editVideoUrl) {
+      finalStatus = "done";
+    } else {
+      try {
+        if (!state.editTaskId) {
+          const started = await startRevideoProductAd(job.id, editManifest);
+          nextState = { ...nextState, editTaskId: started.requestId };
+          finalStatus = "in_progress";
+        } else {
+          const edit = await getRevideoProductAd(state.editTaskId);
+          if (edit.status === "done" && edit.videoUrl) {
+            const permanentUrl = await downloadAndUploadToR2(
               edit.videoUrl,
               `videos/ugc-directed-edit/${job.id}/${state.editTaskId}.mp4`
-            ));
-          finalVideoUrl = permanentUrl;
-          nextState = { ...nextState, editVideoUrl: permanentUrl };
-          finalStatus = "done";
-        } else if (edit.status === "failed") {
-          finalStatus = "failed";
-        } else {
-          finalStatus = "in_progress";
+            );
+            finalVideoUrl = permanentUrl;
+            nextState = { ...nextState, editVideoUrl: permanentUrl };
+            finalStatus = "done";
+          } else if (edit.status === "failed") {
+            finalStatus = "failed";
+          } else {
+            finalStatus = "in_progress";
+          }
         }
-      }
-    } catch (error) {
-      console.error(`[ugc-shot-pack] edit orchestration failed job=${job.id}`, error);
-      if (
-        error instanceof Error &&
-        error.message === "revideo_worker_request_not_found"
-      ) {
-        try {
-          const restarted = await startRevideoProductAd(job.id, editManifest);
-          nextState = { ...nextState, editTaskId: restarted.requestId };
-        } catch (restartError) {
-          console.error(`[ugc-shot-pack] edit restart failed job=${job.id}`, restartError);
+      } catch (error) {
+        console.error(`[ugc-shot-pack] edit orchestration failed job=${job.id}`, error);
+        if (
+          error instanceof Error &&
+          error.message === "revideo_worker_request_not_found"
+        ) {
+          try {
+            const restarted = await startRevideoProductAd(job.id, editManifest);
+            nextState = { ...nextState, editTaskId: restarted.requestId };
+          } catch (restartError) {
+            console.error(`[ugc-shot-pack] edit restart failed job=${job.id}`, restartError);
+          }
         }
+        finalStatus = "in_progress";
       }
-      finalStatus = "in_progress";
     }
   }
   const { error: updateError } = await service
