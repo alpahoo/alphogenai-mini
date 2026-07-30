@@ -58,10 +58,11 @@ const DANGLING_END_WORDS = new Set([
 
 function finishDisplaySentence(value: string, fallback: string): string {
   const words = value.replace(/[.,;:!?]+$/, "").trim().split(/\s+/);
-  while (
-    words.length > 1 &&
-    DANGLING_END_WORDS.has(words[words.length - 1].toLocaleLowerCase("fr"))
-  ) {
+  while (words.length > 1) {
+    const lastWord = words[words.length - 1]
+      .replace(/['’]+$/, "")
+      .toLocaleLowerCase("fr");
+    if (!DANGLING_END_WORDS.has(lastWord)) break;
     words.pop();
   }
   return `${words.join(" ") || fallback.replace(/[.,;:!?]+$/, "")}.`;
