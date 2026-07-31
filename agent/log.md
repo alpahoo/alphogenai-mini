@@ -1,3 +1,17 @@
+## 2026-07-31 — Claude — Creator UGC (T-1164d) corrected paid QA: visual+audio PASS, lip-sync gap
+- After Codex's product-only hardening (`065f016`), the corrected 15s FR acceptance ran and produced a permanent
+  MP4: job `5b64a9e4-a3e3-44c9-99e8-679ec9346d4b` (`Paulo` + verified identity `Moi_5`, refs = Powerbeats
+  packshot+case only, no person). One generation, no retry.
+- Did the visual review Codex couldn't (navigation-blocked): downloaded + probed + sampled frames (1/5/9/13s) +
+  extracted audio. PASS on format (1080×1920, 15.07s, H.264 + real stereo audio), creator continuity (same
+  person/wardrobe/office 1s↔13s), Powerbeats fidelity (black Powerbeats Pro + Beats logo faithful in the 9s
+  close-up), and UGC structure (talking-head → product b-roll → thumbs-up). Owner confirmed the French audio is
+  good (1-2 slightly slurred words, coherent).
+- **BLOCKER = lip-sync**: mouth moves on the right timing but the visemes don't track French phonemes ("dubbing"
+  effect). This is the BytePlus provider lip-sync (English-biased). The AlphoGen-owned native path (LatentSync,
+  T-1163) is the fidelity fix → **T-1163e** (provider-neutral native compositor + fallback) is the priority lever
+  for lip-sync quality, not just integration. MP4/frames kept local in `tmp/ugc-qa/` (gitignored).
+
 ## 2026-07-31 - Codex - Creator UGC paid QA stopped at BytePlus privacy preflight
 - Prepared one authorized 15-second French Creator UGC acceptance for Powerbeats Pro 2 with reusable performance `Paulo`, verified identity `Moi_5`, an explicit first-person script and three official Beats references.
 - BytePlus rejected the request before task creation with `InputImageSensitiveContentDetected.PrivacyInformation` on `content[3]`. The offending reference was the official lifestyle photo containing a real athlete; the verified creator identity was already supplied separately.

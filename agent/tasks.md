@@ -1,6 +1,15 @@
 # agent/tasks.md — Backlog partagé
 
-## T-1164d - Creator UGC Studio adaptation - QA PREFLIGHT BLOCKED / FIX READY (2026-07-31, Codex)
+## T-1164d - Creator UGC corrected paid QA - VISUAL+AUDIO PASS / LIP-SYNC BLOCKER (2026-07-31, Claude)
+- Corrected acceptance ran after the product-only hardening: job `5b64a9e4-a3e3-44c9-99e8-679ec9346d4b` (15s FR,
+  `Paulo`+`Moi_5`, Powerbeats packshot+case refs, no person) → permanent MP4, 1 generation, no retry.
+- Visual review (Claude, Codex was navigation-blocked): PASS on format 1080×1920/15s H.264+audio, creator
+  continuity, Powerbeats fidelity (Beats logo faithful), UGC structure. Owner confirms FR audio good (minor slur).
+- **BLOCKER = lip-sync**: visemes don't match FR phonemes (dubbing effect) — provider (BytePlus) lip-sync,
+  English-biased. Fix = native LatentSync path (T-1163) → **T-1163e prioritized** for provider-neutral native
+  compositor + fallback to raise lip-sync fidelity. Everything else = PASS.
+
+
 - Audited Open-AI-UGC and retained its useful generation contract: one script plus ordered actor/product/scene references in one native video request.
 - Added an explicit creator script and up to six private product/scene reference uploads to the admin UGC studio.
 - Hardened the provider prompt around visible product use, same-creator continuity, product fidelity and native creator speech.
