@@ -1,5 +1,6 @@
 from modal_app.latentsync_lipsync import (
     LATENTSYNC_MAX_CONTAINERS,
+    _chunk_plan,
     _create_latentsync_web,
     _valid_native_output_path,
 )
@@ -21,6 +22,11 @@ def test_start_accepts_json_body_instead_of_req_query_parameter():
 
 def test_gpu_concurrency_is_deliberately_bounded():
     assert LATENTSYNC_MAX_CONTAINERS == 2
+
+
+def test_long_ugc_input_is_split_into_bounded_chunks():
+    assert _chunk_plan(15.0) == [(0.0, 5.0), (5.0, 5.0), (10.0, 5.0)]
+    assert _chunk_plan(12.4) == [(0.0, 5.0), (5.0, 5.0), (10.0, 2.4)]
 
 
 def test_native_adapter_uses_separate_start_and_status_endpoints():

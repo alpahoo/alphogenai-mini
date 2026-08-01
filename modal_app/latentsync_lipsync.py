@@ -39,6 +39,7 @@ LATENTSYNC_COMMIT = "a229c3948406bc2cf6eaf4873e662e70c6a04746"
 LATENTSYNC_MAX_CONTAINERS = 2
 LATENTSYNC_UGC_MAX_SECONDS = 16
 LATENTSYNC_NATIVE_MAX_SECONDS = 8
+LATENTSYNC_CHUNK_SECONDS = 5.0
 
 latentsync_image = (
     modal.Image.debian_slim(python_version="3.10")
@@ -276,6 +277,135 @@ def _prepare_inputs(video_url: str, audio_url: str, max_seconds: float, workdir:
     return input_video, input_audio
 
 
+def _chunk_plan(duration_seconds: float, chunk_seconds: float = LATENTSYNC_CHUNK_SECONDS) -> list[tuple[float, float]]:
+    if duration_seconds <= 0 or chunk_seconds <= 0:
+        return []
+    chunks: list[tuple[float, float]] = []
+    start = 0.0
+    while start < duration_seconds - 0.01:
+        length = min(chunk_seconds, duration_seconds - start)
+        chunks.append((round(start, 3), round(length, 3)))
+        start += length
+    return chunks
+
+
+def _run_latentsync_inference(video_path: Path, audio_path: Path, output_path: Path) -> None:
+    repo = Path("/opt/LatentSync")
+    env = os.environ.copy()
+    env["PYTHONPATH"] = f"{repo}:{env.get('PYTHONPATH', '')}"
+    result = subprocess.run(
+        [
+            "python",
+            "-m",
+            "scripts.inference",
+            "--unet_config_path",
+            "configs/unet/stage2_512.yaml",
+            "--inference_ckpt_path",
+            "checkpoints/latentsync_unet.pt",
+            "--inference_steps",
+            "20",
+            "--guidance_scale",
+            "1.5",
+            "--enable_deepcache",
+            "--video_path",
+            str(video_path),
+            "--audio_path",
+            str(audio_path),
+            "--video_out_path",
+            str(output_path),
+        ],
+        cwd=str(repo),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=3000,
+    )
+    if result.returncode != 0:
+        tail = (result.stderr or result.stdout)[-4000:]
+        raise RuntimeError(f"LatentSync inference failed ({result.returncode}):\n{tail}")
+    if not output_path.exists():
+        raise RuntimeError(f"LatentSync produced no output at {output_path}")
+
+
+def _copy_chunk_with_audio(video_path: Path, audio_path: Path, output_path: Path) -> None:
+    _run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(video_path),
+            "-i",
+            str(audio_path),
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-shortest",
+            str(output_path),
+        ],
+        timeout=120,
+    )
+
+
+def _run_chunked_latentsync(input_video: Path, input_audio: Path, output_path: Path, workdir: Path) -> dict[str, int]:
+    duration = min(
+        float(_probe(input_video)["duration_seconds"]),
+        float(_probe(input_audio)["duration_seconds"]),
+    )
+    plan = _chunk_plan(duration)
+    if not plan:
+        raise RuntimeError("LatentSync input has no usable duration")
+
+    outputs: list[Path] = []
+    polished_chunks = 0
+    for index, (start, length) in enumerate(plan):
+        chunk_video = workdir / f"chunk_{index:02d}.mp4"
+        chunk_audio = workdir / f"chunk_{index:02d}.wav"
+        chunk_output = workdir / f"chunk_{index:02d}_output.mp4"
+        _run(
+            [
+                "ffmpeg", "-y", "-ss", str(start), "-i", str(input_video),
+                "-t", str(length), "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                "-an", str(chunk_video),
+            ],
+            timeout=120,
+        )
+        _run(
+            [
+                "ffmpeg", "-y", "-ss", str(start), "-i", str(input_audio),
+                "-t", str(length), "-ar", "16000", "-ac", "1", str(chunk_audio),
+            ],
+            timeout=120,
+        )
+        try:
+            _run_latentsync_inference(chunk_video, chunk_audio, chunk_output)
+            polished_chunks += 1
+        except Exception as exc:
+            # Product cutaways may contain no stable face. Preserve those shots
+            # instead of failing the complete UGC ad.
+            print(f"LatentSync chunk {index} fallback: {exc}")
+            _copy_chunk_with_audio(chunk_video, chunk_audio, chunk_output)
+        outputs.append(chunk_output)
+
+    if polished_chunks == 0:
+        raise RuntimeError("LatentSync found no face-bearing chunk to polish")
+
+    concat_file = workdir / "concat.txt"
+    concat_file.write_text(
+        "".join(f"file '{path.as_posix()}'\n" for path in outputs),
+        encoding="utf-8",
+    )
+    _run(
+        [
+            "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_file),
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+            "-movflags", "+faststart", str(output_path),
+        ],
+        timeout=300,
+    )
+    return {"chunks": len(outputs), "polished_chunks": polished_chunks}
+
+
 @app.function(
     image=latentsync_image,
     gpu="A10G",
@@ -303,42 +433,7 @@ def run_latentsync_clip(
     input_video, input_audio = _prepare_inputs(video_url, audio_url, max_seconds, workdir)
     _ensure_latentsync_weights()
 
-    repo = Path("/opt/LatentSync")
-    env = os.environ.copy()
-    env["PYTHONPATH"] = f"{repo}:{env.get('PYTHONPATH', '')}"
-
-    result = subprocess.run(
-        [
-            "python",
-            "-m",
-            "scripts.inference",
-            "--unet_config_path",
-            "configs/unet/stage2_512.yaml",
-            "--inference_ckpt_path",
-            "checkpoints/latentsync_unet.pt",
-            "--inference_steps",
-            "20",
-            "--guidance_scale",
-            "1.5",
-            "--enable_deepcache",
-            "--video_path",
-            str(input_video),
-            "--audio_path",
-            str(input_audio),
-            "--video_out_path",
-            str(output_path),
-        ],
-        cwd=str(repo),
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=3000,
-    )
-    if result.returncode != 0:
-        tail = (result.stderr or result.stdout)[-4000:]
-        raise RuntimeError(f"LatentSync inference failed ({result.returncode}):\n{tail}")
-    if not output_path.exists():
-        raise RuntimeError(f"LatentSync produced no output at {output_path}")
+    chunk_stats = _run_chunked_latentsync(input_video, input_audio, output_path, workdir)
 
     probe = _probe(output_path)
     output_bytes = output_path.read_bytes()
@@ -361,6 +456,7 @@ def run_latentsync_clip(
         "input_video_probe": _probe(input_video),
         "input_audio_probe": _probe(input_audio),
         "output_probe": probe,
+        **chunk_stats,
         "output_url": output_url,
         "output_path": saved_output_path,
     }
