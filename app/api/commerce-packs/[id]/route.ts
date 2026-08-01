@@ -14,25 +14,29 @@ function escapeXml(value: string) {
 
 async function addFeaturePanel(buffer: Buffer, productName: string, features: string[]) {
   const sharp = (await import("sharp")).default;
-  const lines = features.slice(0, 3).map((feature, index) =>
-    `<text x="90" y="${790 + index * 66}" font-family="Arial, sans-serif" font-size="30" font-weight="600" fill="#19202a"><tspan fill="#2563eb">&#10003;</tspan><tspan dx="18">${escapeXml(feature)}</tspan></text>`,
-  ).join("");
+  const lines = features.slice(0, 3).map((feature, index) => {
+    const y = 790 + index * 66;
+    return `<circle cx="102" cy="${y - 10}" r="15" fill="#2563eb"/>
+      <path d="M94 ${y - 10}l6 6 11-13" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="134" y="${y}" font-family="sans-serif" font-size="30" font-weight="600" fill="#19202a">${escapeXml(feature)}</text>`;
+  }).join("");
   const panel = Buffer.from(`<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
     <rect x="40" y="690" width="944" height="294" rx="18" fill="#ffffff" fill-opacity="0.96"/>
-    <text x="90" y="748" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#2563eb">${escapeXml(productName.toUpperCase())}</text>
+    <text x="90" y="748" font-family="sans-serif" font-size="24" font-weight="700" fill="#2563eb">${escapeXml(productName.toUpperCase())}</text>
     ${lines}
   </svg>`);
   return sharp(buffer).resize(1024, 1024, { fit: "cover" }).composite([{ input: panel }]).jpeg({ quality: 92 }).toBuffer();
 }
 
 async function persistImage(sourceUrl: string, packId: string, role: string, pack: Record<string, unknown>) {
+  const sharp = (await import("sharp")).default;
   const response = await fetch(sourceUrl, { signal: AbortSignal.timeout(30_000) });
   if (!response.ok) throw new Error(`Generated image download failed (${response.status}).`);
   const downloaded = Buffer.from(await response.arrayBuffer());
   if (downloaded.length < 1_000) throw new Error("Generated image was unexpectedly small.");
   const finalImage = role === "feature"
     ? await addFeaturePanel(downloaded, String(pack.product_name ?? "Product"), Array.isArray(pack.verified_features) ? pack.verified_features.map(String) : [])
-    : downloaded;
+    : await sharp(downloaded).jpeg({ quality: 92 }).toBuffer();
   return uploadBufferToR2(finalImage, `commerce/amazon/${packId}/${role}-${randomUUID()}.jpg`, "image/jpeg");
 }
 
