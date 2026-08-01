@@ -30,6 +30,16 @@ interface Tool {
 
 const TOOLS: Tool[] = [
   {
+    id: "amazon",
+    title: "Amazon Product Pack",
+    description: "Upload product photos and receive a hero, lifestyle image, feature card, and close-up.",
+    badge: "New",
+    visual: "linear-gradient(135deg, #eefbf4, #ffffff 52%, #d9f3ff)",
+    href: "/create/amazon",
+    status: "live",
+    recommended: true,
+  },
+  {
     id: "story",
     title: "Story / Cinematic",
     description: "Plan scenes with the Director. Describe a scene or sequence, add references, then generate.",
@@ -47,7 +57,6 @@ const TOOLS: Tool[] = [
     visual: "linear-gradient(135deg, #fff7db, #f9fbff 50%, #83e8ff)",
     href: "/create/url",
     status: "live",
-    recommended: true,
   },
   {
     id: "avatar",
@@ -94,6 +103,18 @@ const TOOLS: Tool[] = [
 function CardVisual({ tool }: { tool: Tool }) {
   const common = "h-32 w-full rounded-2xl border border-white/50 shadow-inner overflow-hidden";
   switch (tool.id) {
+    case "amazon":
+      return (
+        <div className={common} style={{ background: tool.visual }}>
+          <div className="grid h-full grid-cols-2 gap-2 p-4">
+            {["Hero", "Lifestyle", "Features", "Detail"].map((label, index) => (
+              <div key={label} className="flex items-end border border-emerald-200 bg-white p-2 shadow-sm">
+                <span className="text-[10px] font-bold text-slate-600">{index + 1}. {label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
     case "story": // director clapperboard + scene frames (dark featured card)
       return (
         <div className={common} style={{ background: tool.visual }}>
