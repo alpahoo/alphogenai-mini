@@ -1,7 +1,33 @@
 const API_BASE = "https://api.muapi.ai/api/v1";
 
+export type MuapiEnvironment = "sandbox" | "production";
+
+export function resolveMuapiConfig(env: Record<string, string | undefined> = process.env): {
+  environment: MuapiEnvironment;
+  apiKey: string;
+} {
+  const environment: MuapiEnvironment = env.MUAPI_ENV?.trim().toLowerCase() === "production"
+    ? "production"
+    : "sandbox";
+
+  if (environment === "production") {
+    return {
+      environment,
+      apiKey: env.MUAPI_PRODUCTION_API_KEY?.trim() || "",
+    };
+  }
+
+  return {
+    environment,
+    apiKey: env.MUAPI_SANDBOX_API_KEY?.trim()
+      || env.MUAPI_API_KEY?.trim()
+      || env.MU_API_KEY?.trim()
+      || "",
+  };
+}
+
 function apiKey() {
-  return process.env.MUAPI_API_KEY || process.env.MU_API_KEY || "";
+  return resolveMuapiConfig().apiKey;
 }
 
 export function isCommerceImageProviderConfigured() {
@@ -52,4 +78,3 @@ export async function pollCommerceImage(taskId: string): Promise<
     : typeof nestedUrls?.get === "string" ? nestedUrls.get : null;
   return url ? { status: "ready", url } : { status: "processing" };
 }
-
