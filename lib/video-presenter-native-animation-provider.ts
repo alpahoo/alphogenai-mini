@@ -88,6 +88,7 @@ export async function pollNativePresenterAnimation(taskId: string) {
 }
 
 export const UGC_LIPSYNC_POLISH_MAX_SECONDS = 16;
+const UGC_LIPSYNC_START_TIMEOUT_MS = 60_000;
 
 export async function startUGCLipSyncPolish(input: {
   videoUrl: string;
@@ -101,7 +102,9 @@ export async function startUGCLipSyncPolish(input: {
       audio_url: input.audioUrl,
       max_seconds: UGC_LIPSYNC_POLISH_MAX_SECONDS,
     }),
-    signal: AbortSignal.timeout(15_000),
+    // The web endpoint only spawns the GPU task, but its first request may still
+    // wait for a Modal web-container cold start.
+    signal: AbortSignal.timeout(UGC_LIPSYNC_START_TIMEOUT_MS),
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => response.statusText);

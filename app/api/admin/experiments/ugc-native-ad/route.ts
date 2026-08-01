@@ -623,11 +623,92 @@ async function pollNativeAd(user: { id: string }, body: Record<string, unknown>)
   });
 }
 
+async function retryLipSyncPolish(user: { id: string }, body: Record<string, unknown>) {
+  const jobId = typeof body.jobId === "string" ? body.jobId : "";
+  if (!UUID_RE.test(jobId)) {
+    return NextResponse.json({ error: "A valid job id is required." }, { status: 400 });
+  }
+
+  const service = createServiceClient();
+  const { data: job, error } = await service
+    .from("jobs")
+    .select("id,status,app_state,output_url_final,video_url")
+    .eq("id", jobId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (error || !job) return NextResponse.json({ error: "Job not found." }, { status: 404 });
+
+  const state = job.app_state as UGCNativeAdState | null;
+  if (state?.capability !== "ugc_native_ad" || state.mode !== "native") {
+    return NextResponse.json({ error: "This job cannot use UGC lip-sync polish." }, { status: 400 });
+  }
+  if (state.polish?.status === "processing") {
+    return NextResponse.json(
+      { success: true, jobId: job.id, status: "processing", stage: "lipsync_polish" },
+      { status: 202 },
+    );
+  }
+
+  const rawVideoUrl =
+    state.polish?.rawVideoUrl ||
+    state.output?.videoUrl ||
+    job.output_url_final ||
+    job.video_url;
+  if (typeof rawVideoUrl !== "string" || !rawVideoUrl) {
+    return NextResponse.json({ error: "This job has no reusable source video." }, { status: 409 });
+  }
+
+  try {
+    const taskId = await startUGCLipSyncPolish({
+      videoUrl: rawVideoUrl,
+      audioUrl: rawVideoUrl,
+    });
+    const nextState: UGCNativeAdState = {
+      ...state,
+      polish: { status: "processing", taskId, rawVideoUrl },
+      output: {
+        status: "ready",
+        videoUrl: rawVideoUrl,
+        usageUnits: state.output?.usageUnits,
+        polishApplied: false,
+      },
+    };
+    const { error: updateError } = await service
+      .from("jobs")
+      .update({
+        status: "in_progress",
+        current_stage: "lipsync_polish",
+        error_message: null,
+        app_state: nextState,
+      })
+      .eq("id", job.id);
+    if (updateError) {
+      return NextResponse.json({ error: "Could not save lip-sync retry progress." }, { status: 500 });
+    }
+    return NextResponse.json(
+      { success: true, jobId: job.id, status: "processing", stage: "lipsync_polish" },
+      { status: 202 },
+    );
+  } catch (retryError) {
+    console.error(`[ugc-native-ad] lip-sync retry failed job=${job.id}`, retryError);
+    return NextResponse.json(
+      {
+        error:
+          retryError instanceof Error
+            ? retryError.message
+            : "Lip-sync polish could not be started.",
+      },
+      { status: 502 },
+    );
+  }
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth.response) return auth.response;
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   if (body.action === "start") return startNativeAd(auth.user, body);
   if (body.action === "poll") return pollNativeAd(auth.user, body);
+  if (body.action === "retry_polish") return retryLipSyncPolish(auth.user, body);
   return NextResponse.json({ error: "Unsupported action." }, { status: 400 });
 }
