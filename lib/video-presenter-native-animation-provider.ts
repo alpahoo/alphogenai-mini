@@ -86,3 +86,60 @@ export async function pollNativePresenterAnimation(taskId: string) {
   }
   return { status: "processing" as const };
 }
+
+export const UGC_LIPSYNC_POLISH_MAX_SECONDS = 16;
+
+export async function startUGCLipSyncPolish(input: {
+  videoUrl: string;
+  audioUrl: string;
+}) {
+  const response = await fetch(`${baseUrl()}/start`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({
+      video_url: input.videoUrl,
+      audio_url: input.audioUrl,
+      max_seconds: UGC_LIPSYNC_POLISH_MAX_SECONDS,
+    }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => response.statusText);
+    throw new Error(`Lip-sync polish start ${response.status}: ${detail.slice(0, 200)}`);
+  }
+  const payload = (await response.json().catch(() => null)) as
+    | { call_id?: unknown }
+    | null;
+  if (typeof payload?.call_id !== "string" || !payload.call_id) {
+    throw new Error("Lip-sync polish start returned no task id");
+  }
+  return payload.call_id;
+}
+
+export async function pollUGCLipSyncPolish(taskId: string) {
+  const response = await fetch(
+    `${baseUrl()}/status?call_id=${encodeURIComponent(taskId)}`,
+    { headers: headers(), signal: AbortSignal.timeout(15_000) },
+  );
+  if (response.status === 202) return { status: "processing" as const };
+  const payload = (await response.json().catch(() => null)) as
+    | { status?: unknown; output_url?: unknown; error?: unknown }
+    | null;
+  if (!response.ok || payload?.status === "failed") {
+    return {
+      status: "failed" as const,
+      error:
+        typeof payload?.error === "string"
+          ? payload.error
+          : `Lip-sync polish poll ${response.status}`,
+    };
+  }
+  if (
+    payload?.status === "completed"
+    && typeof payload.output_url === "string"
+    && payload.output_url
+  ) {
+    return { status: "completed" as const, outputUrl: payload.output_url };
+  }
+  return { status: "processing" as const };
+}

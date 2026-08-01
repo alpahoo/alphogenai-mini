@@ -37,6 +37,8 @@ class NativeLatentSyncStartRequest(LatentSyncStartRequest):
 # PyTorch stack and diffusion/video dependencies that should not touch render_podcast.
 LATENTSYNC_COMMIT = "a229c3948406bc2cf6eaf4873e662e70c6a04746"
 LATENTSYNC_MAX_CONTAINERS = 2
+LATENTSYNC_UGC_MAX_SECONDS = 16
+LATENTSYNC_NATIVE_MAX_SECONDS = 8
 
 latentsync_image = (
     modal.Image.debian_slim(python_version="3.10")
@@ -289,8 +291,8 @@ def run_latentsync_clip(
     max_seconds: float = 8.0,
     private_output_path: str = "",
 ) -> dict[str, Any]:
-    if max_seconds <= 0 or max_seconds > 8:
-        raise ValueError("max_seconds must be between 0 and 8")
+    if max_seconds <= 0 or max_seconds > LATENTSYNC_UGC_MAX_SECONDS:
+        raise ValueError(f"max_seconds must be between 0 and {LATENTSYNC_UGC_MAX_SECONDS}")
 
     started = time.time()
     run_id = uuid.uuid4().hex[:12]
@@ -388,8 +390,11 @@ def _create_latentsync_web():
         authorize(x_webhook_secret)
         if not req.video_url.startswith("https://") or not req.audio_url.startswith("https://"):
             raise HTTPException(status_code=400, detail="HTTPS media URLs are required")
-        if req.max_seconds <= 0 or req.max_seconds > 8:
-            raise HTTPException(status_code=400, detail="max_seconds must be between 0 and 8")
+        if req.max_seconds <= 0 or req.max_seconds > LATENTSYNC_UGC_MAX_SECONDS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"max_seconds must be between 0 and {LATENTSYNC_UGC_MAX_SECONDS}",
+            )
         call = await run_latentsync_clip.spawn.aio(req.video_url, req.audio_url, req.max_seconds)
         return {"call_id": call.object_id, "status": "processing"}
 
@@ -401,8 +406,11 @@ def _create_latentsync_web():
         authorize(x_webhook_secret)
         if not req.video_url.startswith("https://") or not req.audio_url.startswith("https://"):
             raise HTTPException(status_code=400, detail="HTTPS media URLs are required")
-        if req.max_seconds <= 0 or req.max_seconds > 8:
-            raise HTTPException(status_code=400, detail="max_seconds must be between 0 and 8")
+        if req.max_seconds <= 0 or req.max_seconds > LATENTSYNC_NATIVE_MAX_SECONDS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"max_seconds must be between 0 and {LATENTSYNC_NATIVE_MAX_SECONDS}",
+            )
         if not _valid_native_output_path(req.output_path):
             raise HTTPException(status_code=400, detail="Invalid private output path")
         call = await run_latentsync_clip.spawn.aio(

@@ -7,7 +7,9 @@ import {
 } from "@/lib/video-presenter-native-animation";
 import {
   pollNativePresenterAnimation,
+  pollUGCLipSyncPolish,
   startNativePresenterAnimation,
+  startUGCLipSyncPolish,
 } from "@/lib/video-presenter-native-animation-provider";
 
 afterEach(() => {
@@ -131,5 +133,39 @@ describe("native presenter animation provider", () => {
       audioUrl: "https://signed.example/speech.mp3",
       outputPath: "user-1/animation-1/animated.mp4",
     })).rejects.toThrow(/not configured/);
+  });
+
+  it("starts a 16-second UGC polish without changing the private avatar cap", async () => {
+    configure();
+    const fetchMock = vi.fn<(...args: unknown[]) => Promise<Response>>(async () =>
+      new Response(JSON.stringify({ call_id: "ugc-polish-1" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(startUGCLipSyncPolish({
+      videoUrl: "https://cdn.example.com/native-ad.mp4",
+      audioUrl: "https://cdn.example.com/native-ad.mp4",
+    })).resolves.toBe("ugc-polish-1");
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(fetchMock.mock.calls[0][0]).toBe("https://native-animation.example/start");
+    expect(JSON.parse(String(init.body))).toEqual({
+      video_url: "https://cdn.example.com/native-ad.mp4",
+      audio_url: "https://cdn.example.com/native-ad.mp4",
+      max_seconds: 16,
+    });
+  });
+
+  it("returns a polished public result without provider metadata", async () => {
+    configure();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      status: "completed",
+      output_url: "https://cdn.example.com/polished.mp4",
+      gpu: "A10G",
+    }), { status: 200 })));
+
+    await expect(pollUGCLipSyncPolish("ugc-polish-1")).resolves.toEqual({
+      status: "completed",
+      outputUrl: "https://cdn.example.com/polished.mp4",
+    });
   });
 });

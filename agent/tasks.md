@@ -1,15 +1,6 @@
 # agent/tasks.md — Backlog partagé
 
-## T-1164d - Creator UGC corrected paid QA - VISUAL+AUDIO PASS / LIP-SYNC BLOCKER (2026-07-31, Claude)
-- Corrected acceptance ran after the product-only hardening: job `5b64a9e4-a3e3-44c9-99e8-679ec9346d4b` (15s FR,
-  `Paulo`+`Moi_5`, Powerbeats packshot+case refs, no person) → permanent MP4, 1 generation, no retry.
-- Visual review (Claude, Codex was navigation-blocked): PASS on format 1080×1920/15s H.264+audio, creator
-  continuity, Powerbeats fidelity (Beats logo faithful), UGC structure. Owner confirms FR audio good (minor slur).
-- **BLOCKER = lip-sync**: visemes don't match FR phonemes (dubbing effect) — provider (BytePlus) lip-sync,
-  English-biased. Fix = native LatentSync path (T-1163) → **T-1163e prioritized** for provider-neutral native
-  compositor + fallback to raise lip-sync fidelity. Everything else = PASS.
-
-
+## T-1164d - Creator UGC Studio adaptation - PRODUCT PASS / PHONETIC LIP-SYNC POLISH READY (2026-08-01, Codex)
 - Audited Open-AI-UGC and retained its useful generation contract: one script plus ordered actor/product/scene references in one native video request.
 - Added an explicit creator script and up to six private product/scene reference uploads to the admin UGC studio.
 - Hardened the provider prompt around visible product use, same-creator continuity, product fidelity and native creator speech.
@@ -18,7 +9,11 @@
 - Validation: 18 focused tests, TypeScript and production build pass; zero provider spend.
 - First paid acceptance attempt did not create a provider task: BytePlus rejected an official lifestyle reference containing a real athlete. No automatic retry was performed.
 - Hardened UI/API copy now requires product-only references without people and surfaces an actionable provider-neutral 422.
-- Next: deploy the hardening, then request a new explicit spend GO before one corrected 15-second acceptance using only the clean packshot and case references. Do not run the legacy assembly for this gate.
+- Corrected paid acceptance completed as production job `5b64a9e4-a3e3-44c9-99e8-679ec9346d4b` using only the clean packshot and case references. One provider task completed and the durable MP4 was saved; no retry was submitted.
+- Technical QA PASS: product-only upload contract, verified identity routing, provider start/poll and permanent output all work in production.
+- User product review PASS for creator continuity, product use, coherent French speech and overall creative. Remaining blocker: lips move on time but do not match French phonemes.
+- Added a fallback-safe post-generation LatentSync stage using the approved video's own audio. The raw native result remains the fallback; reusable-avatar animation stays capped at 8 seconds while this UGC adapter permits 16 seconds.
+- Next: deploy Modal + Vercel, then run one capped 15-second QA only after explicit approval. No further Seedance experimentation is required for this defect.
 
 ## T-1164b - Native multi-shot Product Ad path - TECH PASS / PRODUCT FAIL (2026-07-30, Codex)
 - Added a provider-neutral `UGCNativeAdProvider` contract alongside the existing three-shot contract.
