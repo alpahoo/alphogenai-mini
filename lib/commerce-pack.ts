@@ -52,8 +52,10 @@ export function validateCommerceInput(body: unknown): { value?: CommercePackInpu
   const raw = body as Record<string, unknown>;
   const productName = typeof raw.product_name === "string" ? raw.product_name.trim() : "";
   const category = typeof raw.category === "string" ? raw.category.trim() : "";
-  const targetBuyer = typeof raw.target_buyer === "string" ? raw.target_buyer.trim() : undefined;
-  const sourceUrl = typeof raw.source_url === "string" ? raw.source_url.trim() : undefined;
+  const targetBuyerValue = typeof raw.target_buyer === "string" ? raw.target_buyer.trim() : "";
+  const sourceUrlValue = typeof raw.source_url === "string" ? raw.source_url.trim() : "";
+  const targetBuyer = targetBuyerValue || undefined;
+  const sourceUrl = sourceUrlValue || undefined;
   const sourceImages = Array.isArray(raw.source_images)
     ? raw.source_images.filter((v): v is string => typeof v === "string" && /^https?:\/\//.test(v))
     : [];
@@ -82,4 +84,3 @@ export function derivePackStatus(statuses: string[]) {
   if (failed === COMMERCE_ROLES.length) return "failed";
   return "draft";
 }
-

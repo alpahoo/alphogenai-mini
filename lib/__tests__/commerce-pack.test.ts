@@ -22,6 +22,12 @@ describe("commerce pack contract", () => {
     expect(validateCommerceInput({ ...valid, verified_features: [] }).error).toContain("at least one");
   });
 
+  it("normalizes blank optional fields instead of violating database constraints", () => {
+    const result = validateCommerceInput({ ...valid, source_url: "   ", target_buyer: "   " });
+    expect(result.value?.sourceUrl).toBeUndefined();
+    expect(result.value?.targetBuyer).toBeUndefined();
+  });
+
   it("builds four product-faithful prompts with role-specific constraints", () => {
     const input = validateCommerceInput(valid).value!;
     const prompts = buildCommercePrompts(input);
