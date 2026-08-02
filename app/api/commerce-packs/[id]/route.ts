@@ -1,4 +1,6 @@
 import { randomUUID } from "crypto";
+import { readFile } from "fs/promises";
+import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUserFromRequest } from "@/lib/podcast/auth";
@@ -8,21 +10,30 @@ import { uploadBufferToR2 } from "@/lib/r2";
 
 type Context = { params: Promise<{ id: string }> };
 
+let featureFontPromise: Promise<Buffer> | null = null;
+
+function getFeatureFont() {
+  featureFontPromise ??= readFile(path.join(process.cwd(), "public", "fonts", "noto-sans-latin-regular.ttf"));
+  return featureFontPromise;
+}
+
 function escapeXml(value: string) {
   return value.replace(/[<>&'\"]/g, (character) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", "\"": "&quot;" })[character]!);
 }
 
 async function addFeaturePanel(buffer: Buffer, productName: string, features: string[]) {
   const sharp = (await import("sharp")).default;
+  const fontData = (await getFeatureFont()).toString("base64");
   const lines = features.slice(0, 3).map((feature, index) => {
     const y = 790 + index * 66;
     return `<circle cx="102" cy="${y - 10}" r="15" fill="#2563eb"/>
       <path d="M94 ${y - 10}l6 6 11-13" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="134" y="${y}" font-family="sans-serif" font-size="30" font-weight="600" fill="#19202a">${escapeXml(feature)}</text>`;
+      <text x="134" y="${y}" font-family="Noto Sans" font-size="30" font-weight="600" fill="#19202a">${escapeXml(feature)}</text>`;
   }).join("");
   const panel = Buffer.from(`<svg width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
+    <style>@font-face { font-family: "Noto Sans"; src: url("data:font/truetype;base64,${fontData}"); } text { font-family: "Noto Sans"; }</style>
     <rect x="40" y="690" width="944" height="294" rx="18" fill="#ffffff" fill-opacity="0.96"/>
-    <text x="90" y="748" font-family="sans-serif" font-size="24" font-weight="700" fill="#2563eb">${escapeXml(productName.toUpperCase())}</text>
+    <text x="90" y="748" font-size="24" font-weight="700" fill="#2563eb">${escapeXml(productName.toUpperCase())}</text>
     ${lines}
   </svg>`);
   return sharp(buffer).resize(1024, 1024, { fit: "cover" }).composite([{ input: panel }]).jpeg({ quality: 92 }).toBuffer();
