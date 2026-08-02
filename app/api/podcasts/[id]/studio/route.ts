@@ -58,19 +58,12 @@ export async function PATCH(
       .eq("status", "ready");
     if (clipError) throw new Error(`Could not load studio motion: ${clipError.message}`);
 
-    const hostClip = clips?.find((clip) =>
-      clip.persona_id === preset.hostPersonaId && (
-        clip.id === existingHostClipId || clip.prompt_version === preset.hostPromptVersion
-      ),
-    );
-    const guestClip = clips?.find((clip) =>
-      clip.persona_id === preset.guestPersonaId && (
-        clip.id === existingGuestClipId || clip.prompt_version === preset.guestPromptVersion
-      ),
-    );
-    if (!hostClip || !guestClip) {
-      return NextResponse.json({ error: "This studio is still preparing its presenters" }, { status: 409 });
-    }
+    const hostCandidates = clips?.filter((clip) => clip.persona_id === preset.hostPersonaId) ?? [];
+    const guestCandidates = clips?.filter((clip) => clip.persona_id === preset.guestPersonaId) ?? [];
+    const hostClip = hostCandidates.find((clip) => clip.prompt_version === preset.hostPromptVersion)
+      ?? hostCandidates.find((clip) => clip.id === existingHostClipId);
+    const guestClip = guestCandidates.find((clip) => clip.prompt_version === preset.guestPromptVersion)
+      ?? guestCandidates.find((clip) => clip.id === existingGuestClipId);
 
     // Clear the old MP4 before changing any visual input.
     const { error: resetError } = await service
@@ -98,7 +91,10 @@ export async function PATCH(
       studio_preset_id: preset.id,
       studio_pack_id: preset.packId,
       studio_shots: preset.shots,
-      studio_base_clips: { host: hostClip.id, guest: guestClip.id },
+      studio_base_clips: {
+        ...(hostClip ? { host: hostClip.id } : {}),
+        ...(guestClip ? { guest: guestClip.id } : {}),
+      },
     };
     const { data: updatedPodcast, error: updateError } = await service
       .from("podcasts")
@@ -116,7 +112,12 @@ export async function PATCH(
       .eq("podcast_id", id)
       .order("position", { ascending: true });
 
-    return NextResponse.json({ podcast: updatedPodcast, speakers: updatedSpeakers || [], preset });
+    return NextResponse.json({
+      podcast: updatedPodcast,
+      speakers: updatedSpeakers || [],
+      preset,
+      motion: { host: Boolean(hostClip), guest: Boolean(guestClip) },
+    });
   } catch (error) {
     console.error("PATCH /api/podcasts/[id]/studio:", error);
     return NextResponse.json({ error: "Could not prepare the studio" }, { status: 500 });
