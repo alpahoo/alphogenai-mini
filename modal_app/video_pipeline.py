@@ -307,10 +307,32 @@ def _short_candidates(segments, count: int):
             density = len(words) / max(duration, 1)
             hook = sum(1 for word in words if word in hook_words)
             ending = 1.0 if text.endswith((".", "!", "?")) else 0.0
+            segment_text = segments[start_index]["text"].strip()
+            clean_start = (
+                start_index == 0
+                or segments[start_index - 1]["text"].strip().endswith((".", "!", "?"))
+                or (segment_text and segment_text[0].isupper())
+            )
             score = density + hook * 0.45 + ending * 0.25 - abs(duration - 30) * 0.012
-            candidates.append({"start": start, "end": end, "text": text, "score": score})
+            candidates.append({
+                "start": start,
+                "end": end,
+                "text": text,
+                "score": score,
+                "clean_start": clean_start,
+            })
+    clean_candidates = sorted(
+        (candidate for candidate in candidates if candidate["clean_start"]),
+        key=lambda item: item["score"],
+        reverse=True,
+    )
+    fallback_candidates = sorted(
+        (candidate for candidate in candidates if not candidate["clean_start"]),
+        key=lambda item: item["score"],
+        reverse=True,
+    )
     selected = []
-    for candidate in sorted(candidates, key=lambda item: item["score"], reverse=True):
+    for candidate in clean_candidates + fallback_candidates:
         if any(min(candidate["end"], item["end"]) - max(candidate["start"], item["start"]) > 3 for item in selected):
             continue
         selected.append(candidate)
@@ -325,6 +347,28 @@ def _srt_timestamp(seconds: float) -> str:
     minutes, millis = divmod(millis, 60_000)
     secs, millis = divmod(millis, 1000)
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+
+def _short_caption_cues(segments, window_start: float, window_end: float, words_per_cue: int = 5):
+    """Split verbose Whisper segments into short, timed social-video captions."""
+    cues = []
+    for item in segments:
+        words = item["text"].strip().split()
+        if not words:
+            continue
+        start = max(window_start, float(item["start"]))
+        end = min(window_end, float(item["end"]))
+        if end <= start:
+            continue
+        chunks = [words[index:index + words_per_cue] for index in range(0, len(words), words_per_cue)]
+        total_words = max(1, len(words))
+        cursor = start
+        for index, chunk in enumerate(chunks):
+            share = len(chunk) / total_words
+            chunk_end = end if index == len(chunks) - 1 else min(end, cursor + (end - start) * share)
+            cues.append({"start": cursor - window_start, "end": chunk_end - window_start, "text": " ".join(chunk)})
+            cursor = chunk_end
+    return cues
 
 
 @app.function(image=clipping_image, secrets=[secrets], timeout=1800, cpu=4, memory=8192)
@@ -369,18 +413,18 @@ def create_short_pack(pack_id: str):
                 relative = [item for item in segments if item["end"] > window["start"] and item["start"] < window["end"]]
                 srt = workdir / f"short-{index}.srt"
                 blocks = []
-                for number, item in enumerate(relative, start=1):
-                    start = max(0, item["start"] - window["start"])
-                    end = min(window["end"] - window["start"], item["end"] - window["start"])
-                    blocks.append(f"{number}\n{_srt_timestamp(start)} --> {_srt_timestamp(end)}\n{item['text'].strip()}\n")
+                for number, cue in enumerate(_short_caption_cues(relative, window["start"], window["end"]), start=1):
+                    blocks.append(
+                        f"{number}\n{_srt_timestamp(cue['start'])} --> {_srt_timestamp(cue['end'])}\n{cue['text']}\n"
+                    )
                 srt.write_text("\n".join(blocks), encoding="utf-8")
                 output = workdir / f"short-{index}.mp4"
                 escaped_srt = str(srt).replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
                 vf = (
                     "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,"
-                    f"subtitles='{escaped_srt}':force_style='FontName=DejaVu Sans,FontSize=20,"
+                    f"subtitles='{escaped_srt}':force_style='FontName=DejaVu Sans,FontSize=14,"
                     "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=3,"
-                    "Shadow=1,Alignment=2,MarginV=150'"
+                    "Shadow=1,Alignment=2,MarginV=80'"
                 )
                 result = subprocess.run([
                     "ffmpeg", "-y", "-ss", f"{window['start']:.3f}", "-to", f"{window['end']:.3f}",
