@@ -49,7 +49,7 @@ CREATE POLICY clipping_pack_clips_owner_all ON public.clipping_pack_clips FOR AL
 );
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES ('clipping-sources', 'clipping-sources', false, 1073741824, ARRAY['video/mp4','video/quicktime','video/webm'])
+VALUES ('clipping-sources', 'clipping-sources', false, 50000000, ARRAY['video/mp4','video/quicktime','video/webm'])
 ON CONFLICT (id) DO UPDATE SET
   public = excluded.public,
   file_size_limit = excluded.file_size_limit,

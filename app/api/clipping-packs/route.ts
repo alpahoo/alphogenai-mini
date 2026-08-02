@@ -46,10 +46,17 @@ export async function POST(request: NextRequest) {
     const id = typeof body?.pack_id === "string" ? body.pack_id : "";
     const { data: pack } = await service.from("clipping_packs").select("*").eq("id", id).eq("user_id", user.id).maybeSingle();
     if (!pack) return NextResponse.json({ error: "Clipping project not found." }, { status: 404 });
-    if (pack.status !== "uploading") return NextResponse.json({ pack, reused: true });
-    const objects = await service.storage.from("clipping-sources").list(`${user.id}/${id}`, { limit: 10 });
-    if (objects.error || !objects.data?.some((item) => `${user.id}/${id}/${item.name}` === pack.source_path)) {
-      return NextResponse.json({ error: "The video upload is not complete yet." }, { status: 409 });
+    if (["ready", "partial", "processing"].includes(pack.status)) {
+      return NextResponse.json({ pack, reused: true });
+    }
+    if (!["uploading", "queued", "failed"].includes(pack.status)) {
+      return NextResponse.json({ error: "This clipping project cannot be resumed." }, { status: 409 });
+    }
+    if (pack.status === "uploading") {
+      const objects = await service.storage.from("clipping-sources").list(`${user.id}/${id}`, { limit: 10 });
+      if (objects.error || !objects.data?.some((item) => `${user.id}/${id}/${item.name}` === pack.source_path)) {
+        return NextResponse.json({ error: "The video upload is not complete yet." }, { status: 409 });
+      }
     }
     const { error } = await service.from("clipping_packs").update({ status: "queued", error_message: null }).eq("id", id).eq("user_id", user.id);
     if (error) return NextResponse.json({ error: "Could not queue the Shorts." }, { status: 500 });

@@ -1,5 +1,7 @@
 export const CLIPPING_SOURCE_MIMES = ["video/mp4", "video/quicktime", "video/webm"] as const;
-export const CLIPPING_MAX_BYTES = 1024 * 1024 * 1024;
+// Supabase Free rejects single-object uploads above 50 MB even when a bucket
+// advertises a larger limit. Keep the product contract aligned with prod.
+export const CLIPPING_MAX_BYTES = 50_000_000;
 
 export function validateClippingPrepare(input: unknown):
   | { value: { title: string; mime: string; size: number; clipCount: number }; error?: never }
@@ -12,7 +14,7 @@ export function validateClippingPrepare(input: unknown):
   const clipCount = Number(body.clip_count ?? 3);
   if (!title) return { error: "Name this clipping project." };
   if (!(CLIPPING_SOURCE_MIMES as readonly string[]).includes(mime)) return { error: "Use an MP4, MOV, or WEBM video." };
-  if (!Number.isFinite(size) || size <= 0 || size > CLIPPING_MAX_BYTES) return { error: "Video must be smaller than 1 GB." };
+  if (!Number.isFinite(size) || size <= 0 || size > CLIPPING_MAX_BYTES) return { error: "Video must be smaller than 50 MB." };
   if (!Number.isInteger(clipCount) || clipCount < 1 || clipCount > 8) return { error: "Choose between 1 and 8 Shorts." };
   return { value: { title, mime, size, clipCount } };
 }
