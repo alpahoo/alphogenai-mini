@@ -15,6 +15,42 @@ const COPY: Record<HeadshotRole, { title: string; description: string }> = {
   creative: { title: "Creative", description: "Modern personal brand" },
 };
 
+const CLIENT_IMAGE_MAX_EDGE = 1600;
+const CLIENT_IMAGE_QUALITY = 0.9;
+
+async function prepareHeadshotUpload(file: File): Promise<File> {
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch {
+    throw new Error(`${file.name} is not a readable JPG, PNG or WebP image.`);
+  }
+
+  try {
+    const scale = Math.min(1, CLIENT_IMAGE_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error(`Could not prepare ${file.name}.`);
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.drawImage(bitmap, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", CLIENT_IMAGE_QUALITY));
+    if (!blob) throw new Error(`Could not prepare ${file.name}.`);
+
+    return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", {
+      type: "image/jpeg",
+      lastModified: file.lastModified,
+    });
+  } finally {
+    bitmap.close();
+  }
+}
+
 export default function HeadshotPage() {
   const supabase = useMemo(() => createClient(), []);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -56,7 +92,8 @@ export default function HeadshotPage() {
     try {
       const added: string[] = [];
       for (const file of Array.from(files).slice(0, 6 - images.length)) {
-        const form = new FormData(); form.append("file", file);
+        const prepared = await prepareHeadshotUpload(file);
+        const form = new FormData(); form.append("file", prepared);
         const res = await fetch("/api/headshot-packs/upload", { method: "POST", body: form }); const json = await res.json().catch(() => ({}));
         if (!res.ok || !json.url) throw new Error(json.error || `Could not upload ${file.name}.`);
         added.push(json.url);
