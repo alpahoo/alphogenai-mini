@@ -26,6 +26,7 @@ export default function HeadshotPage() {
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [uploadWarning, setUploadWarning] = useState("");
 
   const authHeaders = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
@@ -51,14 +52,15 @@ export default function HeadshotPage() {
 
   async function upload(files: FileList | null) {
     if (!files?.length) return;
-    setUploading(true); setError("");
+    setUploading(true); setError(""); setUploadWarning("");
     try {
       const added: string[] = [];
       for (const file of Array.from(files).slice(0, 6 - images.length)) {
         const form = new FormData(); form.append("file", file);
-        const res = await fetch("/api/upload?bucket=references", { method: "POST", body: form }); const json = await res.json().catch(() => ({}));
+        const res = await fetch("/api/headshot-packs/upload", { method: "POST", body: form }); const json = await res.json().catch(() => ({}));
         if (!res.ok || !json.url) throw new Error(json.error || `Could not upload ${file.name}.`);
         added.push(json.url);
+        if (json.warning) setUploadWarning(json.warning);
       }
       setImages((current) => [...current, ...added].slice(0, 6));
     } catch (e) { setError(e instanceof Error ? e.message : "Upload failed."); }
@@ -90,6 +92,7 @@ export default function HeadshotPage() {
       {!pack && <section className="mt-8 grid gap-7 border border-slate-200 bg-white p-6 md:grid-cols-[1fr_1.2fr]">
         <div><label className="text-sm font-bold">Name <span className="font-normal text-slate-400">(optional)</span></label><input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Maya Rivers" className="mt-2 w-full border border-slate-300 px-3 py-2.5 outline-none focus:border-blue-500" />
           <div className="mt-5 flex items-start gap-3 border border-blue-100 bg-blue-50 p-4"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" /><label className="text-sm text-slate-700"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mr-2" />I own these photos or have explicit permission to create professional portraits of this person.</label></div>
+          {uploadWarning && <p className="mt-4 bg-amber-50 p-3 text-sm text-amber-800">{uploadWarning}</p>}
           {error && <p className="mt-4 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
           <button onClick={() => void generate()} disabled={busy || uploading || !consent || images.length < 1} className="mt-5 inline-flex w-full items-center justify-center gap-2 bg-slate-950 px-5 py-3 font-bold text-white disabled:opacity-40">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserRound className="h-4 w-4" />} Create 4 headshots</button>
         </div>
