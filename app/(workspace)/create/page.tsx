@@ -30,6 +30,15 @@ interface Tool {
 
 const TOOLS: Tool[] = [
   {
+    id: "headshot",
+    title: "Professional Headshots",
+    description: "Upload a few photos and receive four consistent professional portraits.",
+    badge: "New",
+    visual: "linear-gradient(135deg, #e9f1ff, #ffffff 52%, #e8dcff)",
+    href: "/create/headshot",
+    status: "live",
+  },
+  {
     id: "amazon",
     title: "Amazon Product Pack",
     description: "Upload product photos and receive a hero, lifestyle image, feature card, and close-up.",
@@ -103,6 +112,8 @@ const TOOLS: Tool[] = [
 function CardVisual({ tool }: { tool: Tool }) {
   const common = "h-32 w-full rounded-2xl border border-white/50 shadow-inner overflow-hidden";
   switch (tool.id) {
+    case "headshot":
+      return <div className={common} style={{ background: tool.visual }}><div className="grid h-full grid-cols-4 gap-2 p-4">{["Studio", "Executive", "Natural", "Creative"].map((label, index) => <div key={label} className="flex flex-col items-center justify-end border border-blue-100 bg-white p-2 shadow-sm"><div className={`mb-2 h-10 w-10 rounded-full ${["bg-slate-200", "bg-blue-100", "bg-amber-100", "bg-violet-100"][index]}`} /><span className="text-[9px] font-bold text-slate-600">{label}</span></div>)}</div></div>;
     case "amazon":
       return (
         <div className={common} style={{ background: tool.visual }}>
