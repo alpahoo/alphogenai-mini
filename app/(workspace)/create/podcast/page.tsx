@@ -51,7 +51,7 @@ type PodcastRow = {
   created_at?: string | null;
   source_topic?: string | null;
   source_asset_url?: string | null;
-  metadata?: { podcast_style?: string; target_duration_seconds?: number; render_mode?: string; lipsync_quality_mode?: string } | null;
+  metadata?: { podcast_style?: string; target_duration_seconds?: number; render_mode?: string; lipsync_quality_mode?: string; studio_preset_id?: string } | null;
 };
 
 const LANGUAGES = [
@@ -145,6 +145,7 @@ export default function CreatePodcastPage() {
   // Duo picker (T-1136d) — catalog personas for host/guest
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [savingPersona, setSavingPersona] = useState(false);
+  const [savingStudio, setSavingStudio] = useState(false);
   // My Personas upload (T-1138)
   const [uploadName, setUploadName] = useState("");
   const [uploadConsent, setUploadConsent] = useState(false);
@@ -571,6 +572,30 @@ export default function CreatePodcastPage() {
       setError(e instanceof Error ? e.message : "Could not save the persona.");
     } finally {
       setSavingPersona(false);
+    }
+  }
+
+  async function applyStudioPreset() {
+    if (!podcast) return;
+    setSavingStudio(true);
+    setError(null);
+    try {
+      const headers = await authHeaders();
+      if (!headers) throw new Error("Please sign in again.");
+      const res = await fetch(`/api/podcasts/${podcast.id}/studio`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ preset_id: "maya-leo-modern" }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || "Could not prepare the studio.");
+      setPodcast(json.podcast);
+      setSpeakers(json.speakers || []);
+      setRenderMode("talking_visual");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not prepare the studio.");
+    } finally {
+      setSavingStudio(false);
     }
   }
 
@@ -1147,7 +1172,7 @@ export default function CreatePodcastPage() {
           <div>
             <label className="block text-sm font-semibold text-neutral-900">Podcast setup</label>
             <p className="mt-1 text-xs text-neutral-500">
-              Script engine: LiteLLM. Voices are selected and generated after the dialogue.
+              Voices are selected and generated after the dialogue.
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold text-neutral-500">
@@ -1286,6 +1311,40 @@ export default function CreatePodcastPage() {
             is exact per-speaker lip-sync and is <strong>paid</strong>; the estimated cost is
             shown and confirmed before anything is generated.
           </p>
+
+          {podcast && (
+            <div className={`mt-3 overflow-hidden rounded-xl border ${
+              podcast.metadata?.studio_preset_id === "maya-leo-modern"
+                ? "border-emerald-300 bg-emerald-50"
+                : "border-neutral-200 bg-white"
+            }`}>
+              <div className="grid sm:grid-cols-[180px_1fr_auto] sm:items-center">
+                <img
+                  src="https://pub-17f0392d1f8d4270ad79966ad1ea7545.r2.dev/podcast/studio-packs/8155d96d-5bd7-4dcd-b094-20c9222ddc9f/shot-1.jpg"
+                  alt="Maya and Leo in the podcast studio"
+                  className="aspect-video h-full w-full object-cover"
+                />
+                <div className="p-3">
+                  <div className="flex items-center gap-2 text-sm font-bold text-neutral-900">
+                    Studio conversation
+                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700">Beta</span>
+                  </div>
+                  <p className="mt-1 text-[11px] leading-relaxed text-neutral-500">
+                    Maya and Leo share one real studio. The edit alternates wide shots, speaker close-ups and reactions.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={applyStudioPreset}
+                  disabled={savingStudio || podcast.metadata?.studio_preset_id === "maya-leo-modern"}
+                  className="m-3 inline-flex items-center justify-center gap-2 rounded-lg bg-neutral-900 px-3 py-2 text-xs font-semibold text-white disabled:bg-emerald-600"
+                >
+                  {savingStudio ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Film className="h-3.5 w-3.5" />}
+                  {podcast.metadata?.studio_preset_id === "maya-leo-modern" ? "Studio ready" : "Use this studio"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {renderMode === "lipsync_premium" && (
