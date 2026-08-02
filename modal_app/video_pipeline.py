@@ -88,6 +88,7 @@ clipping_image = (
     .apt_install("ffmpeg", "fonts-dejavu-core")
     .pip_install(
         "faster-whisper==1.1.1",
+        "requests",
         "supabase",
         "boto3",
         "httpx",
@@ -333,8 +334,6 @@ def create_short_pack(pack_id: str):
     import subprocess
     import tempfile
     from pathlib import Path
-    from faster_whisper import WhisperModel
-
     sb = get_supabase_client()
     pack_rows = sb.table("clipping_packs").select("*").eq("id", pack_id).limit(1).execute().data
     if not pack_rows:
@@ -343,6 +342,8 @@ def create_short_pack(pack_id: str):
     sb.table("clipping_packs").update({"status": "processing", "error_message": None}).eq("id", pack_id).execute()
     workdir = Path(tempfile.mkdtemp(prefix=f"clips-{pack_id[:8]}-"))
     try:
+        from faster_whisper import WhisperModel
+
         source = workdir / "source.mp4"
         source.write_bytes(sb.storage.from_("clipping-sources").download(pack["source_path"]))
         model = WhisperModel("small", device="cpu", compute_type="int8", cpu_threads=4)

@@ -93,6 +93,7 @@ export default function ClippingPage() {
     </section>}
 
     {pack && <section className="mt-9"><div className="mb-4 flex items-end justify-between"><div><h2 className="text-xl font-bold">{pack.title}</h2><p className="text-sm capitalize text-slate-500">{pack.status === "processing" || pack.status === "queued" ? "Finding and rendering the strongest moments..." : pack.status}</p></div><button onClick={() => { setPack(null); setFile(null); setProgress(0); setError(""); }} className="border border-slate-300 bg-white px-4 py-2 text-sm font-semibold">New video</button></div>
+      {error && <p className="mb-4 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {pack.error_message && <p className="mb-4 bg-red-50 p-3 text-sm text-red-700">{pack.error_message}</p>}
       {["queued", "failed"].includes(pack.status) && <button onClick={() => void resume(pack.id)} disabled={busy} className="mb-4 inline-flex items-center gap-2 border border-slate-300 bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50">{busy && <Loader2 className="h-4 w-4 animate-spin" />} Retry processing</button>}
       {["queued", "processing"].includes(pack.status) && <div className="flex min-h-72 items-center justify-center border border-slate-200 bg-white"><div className="text-center"><Loader2 className="mx-auto h-9 w-9 animate-spin text-fuchsia-600" /><p className="mt-4 font-semibold">Creating your ranked Shorts</p><p className="mt-1 text-sm text-slate-500">You can leave this page and return later.</p></div></div>}
