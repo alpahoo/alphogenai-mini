@@ -124,6 +124,51 @@ Pinned commit: `72be0ec3e2aad7503e1d89a7ffa925d8d3a272b1` (MIT repository).
 The Skills are LLM-orchestrated recipes, not production guarantees. Their hard-coded
 model names must be resolved against current official schemas at execution time.
 
+### 5.3a Open Generative AI studio
+
+Repository: `Anil-matcha/Open-Generative-AI` (MIT).
+Pinned audit commit: `2a2e0a2970a9dca1dd5c4cbb4ab8876c7b2b0879` (2026-08-01).
+
+This repository is a broad image, video, audio, clipping, cinema, lip-sync and workflow
+studio. It is a future source for targeted module audits, not an application shell to
+merge into AlphoGenAI.
+
+| Source | Useful brick | Amazon decision |
+|---|---|---|
+| `packages/studio/src/components/ImageStudio.jsx` | Multi-reference selection/removal, model-aware reference ceiling, compact ratio/resolution controls, result grid and per-result download | Reuse interaction patterns only; AlphoGen already has the required Amazon intake and four-slot result grid |
+| `packages/studio/src/models.js` | Data-driven input capabilities, defaults, aspect ratios, resolutions and example prompts | Reuse the capability-driven control pattern in later generic studios; Amazon deliberately exposes marketplace outcomes rather than model controls |
+| `packages/studio/src/muapi.js` | Thin submit -> `request_id` -> bounded poll contract; `images_list` plus primary `image_url` | Pattern already represented by AlphoGen's commerce adapter and durable jobs; do not replace it |
+| `src/lib/pendingJobs.js` | Browser-local recovery of pending request IDs | Do not reuse for Amazon: Supabase-backed durable pack/assets are stronger and cross-device |
+| `src/lib/uploadHistory.js` | Small persisted reference picker with generated thumbnails | Potential standalone UX component for later studios; Amazon already persists references with the pack |
+| `app/api/upload-binary/route.js` | Validated server-side proxy for provider-presigned uploads | Not needed: AlphoGen uploads to its own durable R2 path |
+| Image history/result cards | Preview, copy settings, regenerate, delete and download interactions | Consider the compact action pattern later; current Amazon review grid already supports regenerate/download |
+
+Amazon-specific findings:
+
+- Multi-reference upload is real and model-aware (up to 14 where the selected schema
+  permits it), but reference roles are positional rather than product-semantic.
+- Presets are mostly model examples and style controls. The repository does not ship
+  the Amazon four-role contract, verified-claim policy, deterministic feature card,
+  or marketplace fidelity gates already present in AlphoGenAI.
+- Ratio, resolution and quality controls are dynamically derived from a provider model
+  catalogue. Amazon V1 intentionally fixes square outputs and hides these controls.
+- Submission and polling are tightly coupled to MuAPI endpoints and API-key semantics.
+  The web/hosted studio is not locally generative merely because the UI is self-hosted.
+- Actual local image inference exists only in the desktop application through bundled
+  `stable-diffusion.cpp`; optional local/remote video inference requires a separately
+  operated Wan2GP GPU server. These paths are not drop-in Amazon production services.
+- Gallery and pending-job state can live in browser `localStorage`; this is less durable
+  than AlphoGenAI's authenticated Supabase/R2 implementation.
+
+Decision for the active Amazon slice: **no plan change**. Reuse only the capability-
+driven control and compact result-action patterns when a concrete UX gap appears. Do
+not import the studio, MuAPI proxy, localStorage job state, model catalogue, Electron
+runtime, local inference engines, or provider-facing controls.
+
+After Amazon is complete, audit this same pinned repository separately for video,
+lip-sync, cinema, workflows and clipping. Each audit remains scoped to one user
+deliverable and must not reopen the Amazon implementation.
+
 ### 5.4 MuAPI official documentation
 
 | Source | Verified capability | Confidence |

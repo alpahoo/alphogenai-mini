@@ -81,6 +81,29 @@ Do not import:
 - Provider key logging.
 - Polling every processing item without a bounded server-side strategy.
 
+### Open Generative AI (targeted Amazon audit)
+
+Audited repository: `Anil-matcha/Open-Generative-AI`, MIT, commit
+`2a2e0a2970a9dca1dd5c4cbb4ab8876c7b2b0879` (2026-08-01).
+
+Comparison with the selected Amazon bricks:
+
+| Area | Open Generative AI | Amazon Product Studio / Skills | Current AlphoGenAI | Decision |
+|---|---|---|---|---|
+| Multi-reference upload | Strong generic picker, ordered references, model-aware maximum | Amazon Studio supplies the same proven ceiling/pattern | Up to 14 product references already shipped | No change |
+| Product-reference semantics | Generic `image_url` + `images_list`; order carries meaning | Listing and multi-angle Skills define product-specific roles and fidelity language | Product is explicitly the source of truth in every role prompt | Keep AlphoGen contract |
+| Presets | Broad model examples/styles | Product Photography and listing recipes are commerce-specific | Four restrained commerce directions already shipped | No change |
+| Ratio/resolution | Dynamic provider controls | Amazon output requirements narrow the useful set | V1 fixes square deliverables | Do not expose yet |
+| Submission/polling | MuAPI-bound submit/poll in the client library; pending jobs can be localStorage-only | Amazon Studio offers similar async patterns | Durable Supabase parent/child records and R2 outputs | Keep AlphoGen implementation |
+| Results/download | Generic gallery, download, reuse/delete interactions | Amazon Studio offers history/download | Four named review slots, per-slot regenerate/download, recent packs | Pattern parity; no import |
+| Local/self-hosted | UI self-hostable; cloud generation remains MuAPI. Desktop image inference uses sd.cpp; video requires a separate Wan2GP GPU server | Not central to the selected Amazon recipe | Server product already deployed | No Amazon change |
+
+**Decision:** do not add code or alter the active Amazon plan. The only reusable items
+are interaction patterns already present in AlphoGenAI. The repository does not replace
+Amazon Product Studio, Amazon Listing Pack, Product Photography Skill, or Multi-Angle
+Shots because it lacks their marketplace output semantics and product-truth safeguards.
+Its broader studios remain candidates for separate post-Amazon audits.
+
 ### Skills
 
 Adapt `amazon-product-listing` as the initial four-output role contract.
@@ -236,4 +259,3 @@ No paid call is authorized by this document.
 
 Do not generalize a universal media-provider interface in this slice. After a second
 image module is implemented, extract only the common proven fields and lifecycle.
-
