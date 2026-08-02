@@ -42,21 +42,31 @@ export async function PATCH(
       return NextResponse.json({ error: "Podcast is missing its speakers" }, { status: 500 });
     }
 
+    const currentMetadata = podcast.metadata && typeof podcast.metadata === "object"
+      ? podcast.metadata as Record<string, unknown>
+      : {};
+    const boundClipIds = currentMetadata.studio_base_clips && typeof currentMetadata.studio_base_clips === "object"
+      ? currentMetadata.studio_base_clips as Record<string, unknown>
+      : {};
+    const existingHostClipId = typeof boundClipIds.host === "string" ? boundClipIds.host : "";
+    const existingGuestClipId = typeof boundClipIds.guest === "string" ? boundClipIds.guest : "";
+
     const { data: clips, error: clipError } = await service
       .from("podcast_persona_base_clips")
       .select("id,persona_id,prompt_version,status")
       .in("persona_id", [preset.hostPersonaId, preset.guestPersonaId])
-      .eq("provider", "byteplus")
-      .eq("aspect_ratio", "16:9")
-      .eq("resolution", "720p")
       .eq("status", "ready");
     if (clipError) throw new Error(`Could not load studio motion: ${clipError.message}`);
 
     const hostClip = clips?.find((clip) =>
-      clip.persona_id === preset.hostPersonaId && clip.prompt_version === preset.hostPromptVersion,
+      clip.persona_id === preset.hostPersonaId && (
+        clip.id === existingHostClipId || clip.prompt_version === preset.hostPromptVersion
+      ),
     );
     const guestClip = clips?.find((clip) =>
-      clip.persona_id === preset.guestPersonaId && clip.prompt_version === preset.guestPromptVersion,
+      clip.persona_id === preset.guestPersonaId && (
+        clip.id === existingGuestClipId || clip.prompt_version === preset.guestPromptVersion
+      ),
     );
     if (!hostClip || !guestClip) {
       return NextResponse.json({ error: "This studio is still preparing its presenters" }, { status: 409 });
@@ -82,9 +92,6 @@ export async function PATCH(
       .eq("id", guest.id);
     if (guestError) throw new Error(`Could not set the guest: ${guestError.message}`);
 
-    const currentMetadata = podcast.metadata && typeof podcast.metadata === "object"
-      ? podcast.metadata as Record<string, unknown>
-      : {};
     const metadata = {
       ...currentMetadata,
       render_mode: "talking_visual",
