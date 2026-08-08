@@ -24,6 +24,7 @@ import {
   formatEstimatedTime,
 } from "@/lib/podcast/lipsync-estimate";
 import { type PodcastLipsyncQualityMode } from "@/lib/podcast/lipsync-quality";
+import { PODCAST_STUDIO_STYLES } from "@/lib/podcast/studio-preview";
 
 type Speaker = { id: string; role: "host" | "guest"; name: string; position: number; voice_id?: string | null; persona_id?: string | null };
 type Persona = { id: string; name: string; portrait_url: string | null; thumb_url: string | null; is_catalog: boolean };
@@ -51,7 +52,17 @@ type PodcastRow = {
   created_at?: string | null;
   source_topic?: string | null;
   source_asset_url?: string | null;
-  metadata?: { podcast_style?: string; target_duration_seconds?: number; render_mode?: string; lipsync_quality_mode?: string; studio_preset_id?: string } | null;
+  metadata?: {
+    podcast_style?: string;
+    target_duration_seconds?: number;
+    render_mode?: string;
+    lipsync_quality_mode?: string;
+    studio_preset_id?: string;
+    studio_preview_id?: string;
+    studio_preview_url?: string;
+    studio_preview_style?: string;
+    studio_preview_personas?: { host?: string; guest?: string };
+  } | null;
 };
 
 const LANGUAGES = [
@@ -145,7 +156,8 @@ export default function CreatePodcastPage() {
   // Duo picker (T-1136d) — catalog personas for host/guest
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [savingPersona, setSavingPersona] = useState(false);
-  const [savingStudio, setSavingStudio] = useState(false);
+  const [studioStyle, setStudioStyle] = useState("modern");
+  const [generatingStudioPreview, setGeneratingStudioPreview] = useState(false);
   // My Personas upload (T-1138)
   const [uploadName, setUploadName] = useState("");
   const [uploadConsent, setUploadConsent] = useState(false);
@@ -361,7 +373,16 @@ export default function CreatePodcastPage() {
       if (!res.ok) throw new Error(json?.error || "Could not write the dialogue.");
       setSegments(json.segments || []);
       // New dialogue → drop any previously rendered video locally (backend reset it too).
-      setPodcast((p) => (p ? { ...p, video_url: null, render_status: "idle", render_error: null } : p));
+      setPodcast((p) => {
+        if (!p) return p;
+        const metadata = { ...(p.metadata || {}) };
+        delete metadata.studio_preview_id;
+        delete metadata.studio_preview_url;
+        delete metadata.studio_preview_style;
+        delete metadata.studio_preview_personas;
+        delete metadata.studio_preset_id;
+        return { ...p, metadata, video_url: null, render_status: "idle", render_error: null };
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not write the dialogue.");
     } finally {
@@ -437,6 +458,12 @@ export default function CreatePodcastPage() {
         const meta = p.metadata || {};
         if (meta.podcast_style) setPodcastStyle(meta.podcast_style);
         if (meta.target_duration_seconds) setTargetDuration(meta.target_duration_seconds);
+        if (
+          meta.studio_preview_style &&
+          PODCAST_STUDIO_STYLES.some((style) => style.id === meta.studio_preview_style)
+        ) {
+          setStudioStyle(meta.studio_preview_style);
+        }
         // Restore the saved render mode. Premium is live (T-1146): restore it and
         // treat its cost as already acknowledged (the podcast was saved in premium),
         // so the per-line premium badges/controls show immediately on reopen.
@@ -566,8 +593,17 @@ export default function CreatePodcastPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Could not save the persona.");
       if (json.speakers) setSpeakers(json.speakers);
-      // A persona change invalidates the rendered MP4 (backend cleared it too).
-      setPodcast((p) => (p ? { ...p, video_url: null, render_status: "idle", render_error: null } : p));
+      // A persona change invalidates both the rendered MP4 and its shared studio reference.
+      setPodcast((p) => {
+        if (!p) return p;
+        const metadata = { ...(p.metadata || {}) };
+        delete metadata.studio_preview_id;
+        delete metadata.studio_preview_url;
+        delete metadata.studio_preview_style;
+        delete metadata.studio_preview_personas;
+        delete metadata.studio_preset_id;
+        return { ...p, metadata, video_url: null, render_status: "idle", render_error: null };
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save the persona.");
     } finally {
@@ -575,27 +611,29 @@ export default function CreatePodcastPage() {
     }
   }
 
-  async function applyStudioPreset() {
+  async function generateStudioPreview() {
     if (!podcast) return;
-    setSavingStudio(true);
+    if (!hostPersonaId || !guestPersonaId) {
+      setError("Choose a host and guest before creating the studio preview.");
+      return;
+    }
+    setGeneratingStudioPreview(true);
     setError(null);
     try {
       const headers = await authHeaders();
       if (!headers) throw new Error("Please sign in again.");
       const res = await fetch(`/api/podcasts/${podcast.id}/studio`, {
-        method: "PATCH",
+        method: "POST",
         headers,
-        body: JSON.stringify({ preset_id: "maya-leo-modern" }),
+        body: JSON.stringify({ confirm: true, style: studioStyle }),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.error || "Could not prepare the studio.");
+      if (!res.ok || !json.podcast) throw new Error(json?.error || "Could not create the studio preview.");
       setPodcast(json.podcast);
-      setSpeakers(json.speakers || []);
-      setRenderMode("talking_visual");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not prepare the studio.");
+      setError(e instanceof Error ? e.message : "Could not create the studio preview.");
     } finally {
-      setSavingStudio(false);
+      setGeneratingStudioPreview(false);
     }
   }
 
@@ -1313,35 +1351,53 @@ export default function CreatePodcastPage() {
           </p>
 
           {podcast && (
-            <div className={`mt-3 overflow-hidden rounded-xl border ${
-              podcast.metadata?.studio_preset_id === "maya-leo-modern"
-                ? "border-emerald-300 bg-emerald-50"
-                : "border-neutral-200 bg-white"
-            }`}>
-              <div className="grid sm:grid-cols-[180px_1fr_auto] sm:items-center">
-                <img
-                  src="https://pub-17f0392d1f8d4270ad79966ad1ea7545.r2.dev/podcast/studio-packs/8155d96d-5bd7-4dcd-b094-20c9222ddc9f/shot-1.jpg"
-                  alt="Maya and Leo in the podcast studio"
-                  className="aspect-video h-full w-full object-cover"
-                />
-                <div className="p-3">
+            <div className="mt-3 overflow-hidden rounded-xl border border-neutral-200 bg-white">
+              <div className="grid sm:grid-cols-[240px_1fr]">
+                <div className="relative aspect-video min-h-36 bg-neutral-100 sm:aspect-auto">
+                  {podcast.metadata?.studio_preview_url ? (
+                    <img
+                      src={podcast.metadata.studio_preview_url}
+                      alt="Selected presenters sharing a podcast studio"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full min-h-36 items-center justify-center px-6 text-center text-xs text-neutral-400">
+                      Choose two presenters and create their shared studio preview.
+                    </div>
+                  )}
+                </div>
+                <div className="p-4">
                   <div className="flex items-center gap-2 text-sm font-bold text-neutral-900">
-                    Studio conversation
-                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700">Beta</span>
+                    Shared studio preview
+                    <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-blue-700">New</span>
                   </div>
                   <p className="mt-1 text-[11px] leading-relaxed text-neutral-500">
-                    Maya and Leo share one real studio. The edit alternates wide shots, speaker close-ups and reactions.
+                    Build one coherent studio image from the host and guest selected below. This becomes the visual reference for the episode.
                   </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <select
+                      value={studioStyle}
+                      onChange={(event) => setStudioStyle(event.target.value)}
+                      className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs text-neutral-700"
+                    >
+                      {PODCAST_STUDIO_STYLES.map((style) => (
+                        <option key={style.id} value={style.id}>{style.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => void generateStudioPreview()}
+                      disabled={generatingStudioPreview || !hostPersonaId || !guestPersonaId}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg bg-neutral-900 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {generatingStudioPreview ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                      {generatingStudioPreview ? "Creating preview..." : podcast.metadata?.studio_preview_url ? "Regenerate preview" : "Create studio preview"}
+                    </button>
+                  </div>
+                  {podcast.metadata?.studio_preview_url && (
+                    <div className="mt-2 text-[11px] font-semibold text-emerald-700">Preview ready</div>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={applyStudioPreset}
-                  disabled={savingStudio || podcast.metadata?.studio_preset_id === "maya-leo-modern"}
-                  className="m-3 inline-flex items-center justify-center gap-2 rounded-lg bg-neutral-900 px-3 py-2 text-xs font-semibold text-white disabled:bg-emerald-600"
-                >
-                  {savingStudio ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Film className="h-3.5 w-3.5" />}
-                  {podcast.metadata?.studio_preset_id === "maya-leo-modern" ? "Studio ready" : "Use this studio"}
-                </button>
               </div>
             </div>
           )}
