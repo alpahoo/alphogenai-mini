@@ -295,6 +295,11 @@ Safety net : GitHub Actions cron /5min ─► /api/cron/evolink-poll
 - Migrations dans `supabase/migrations/`, format `YYYYMMDD_description.sql`
 - **Toujours additif** — pas de `DROP COLUMN` / `DROP TABLE` sans plan de rollback
 - RLS activé sur toutes les tables user-scoped (`auth.uid()`)
+- **GRANT explicites obligatoires** sur toute nouvelle table `public` : depuis le 30/10/2026, Supabase
+  n'accorde plus automatiquement l'accès Data API (supabase-js / PostgREST / GraphQL) aux nouvelles tables.
+  Sans GRANT → `permission denied` côté app, workers inclus. GRANT + RLS + policies dans **la même migration**
+  que le `CREATE TABLE` (voir « Comment ajouter… une nouvelle migration DB »). `anon` seulement si lecture
+  publique voulue. Ne pas réactiver les default privileges larges (`alter default privileges … to anon`).
 - `SUPABASE_SERVICE_ROLE_KEY` côté serveur uniquement
 
 ### Git
@@ -348,6 +353,27 @@ Safety net : GitHub Actions cron /5min ─► /api/cron/evolink-poll
 # Toujours additif (ADD COLUMN IF NOT EXISTS, CREATE TABLE IF NOT EXISTS)
 # Pour appliquer en prod : via Supabase MCP apply_migration ou dashboard SQL
 ```
+
+Modèle pour une nouvelle table (GRANT obligatoires depuis le 30/10/2026) :
+```sql
+create table if not exists public.ma_table (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table public.ma_table enable row level security;
+
+grant select, insert, update, delete on public.ma_table to authenticated;
+grant select, insert, update, delete on public.ma_table to service_role;
+-- grant select on public.ma_table to anon;  -- uniquement si lecture publique voulue
+
+create policy "ma_table_own_rows" on public.ma_table
+  for all to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+```
+Une table recréée (`drop` + `create`) perd ses GRANT : les remettre dans la même migration.
+Vérif après application : `select grantee, privilege_type from information_schema.role_table_grants where table_schema='public' and table_name='ma_table';`
 
 ### Un nouvel engine
 1. Insert row dans `engines` (id, name, type, status, priority, api_config JSONB)

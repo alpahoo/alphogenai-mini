@@ -1,3 +1,10 @@
+## 2026-10-20 — Claude — Règle GRANT explicites Supabase (changement du 30/10/2026)
+- Supabase n'accordera plus automatiquement l'accès Data API aux nouvelles tables `public` à partir du 30/10/2026
+  (tables existantes non affectées). Vérifié sur le projet : default privileges encore actifs aujourd'hui.
+- Ajouté la règle + un modèle de migration (CREATE TABLE + RLS + GRANT + policy) dans `CLAUDE.md`, et un rappel
+  dans les garde-fous de `AGENTS.md` pour Codex. Docs uniquement, aucune migration ni changement DB.
+- Prochaine étape : appliquer le modèle à la prochaine table créée et vérifier ses GRANT après application.
+
 ## 2026-07-31 — Claude — Creator UGC (T-1164d) corrected paid QA: visual+audio PASS, lip-sync gap
 - After Codex's product-only hardening (`065f016`), the corrected 15s FR acceptance ran and produced a permanent
   MP4: job `5b64a9e4-a3e3-44c9-99e8-679ec9346d4b` (`Paulo` + verified identity `Moi_5`, refs = Powerbeats
