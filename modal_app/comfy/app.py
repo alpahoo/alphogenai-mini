@@ -67,8 +67,11 @@ def broker(run_id: str):
                     header = await anext(stream)
                     if not isinstance(header, dict) or not str(header.get("call_id", "")).startswith("fc-"):
                         raise ValueError("INVALID_EXECUTOR_HANDLE")
-                    call = modal.FunctionCall.from_id(header["call_id"])
-                    database().table("comfy_runs").update({"modal_call_id": call.object_id}).eq("id", run_id).execute()
+                    call_id = header["call_id"]
+                    call = modal.FunctionCall.from_id(call_id)
+                    # from_id creates a lazy handle: object_id is unavailable until
+                    # hydration. Persist the ID already supplied by the executor.
+                    database().table("comfy_runs").update({"modal_call_id": call_id}).eq("id", run_id).execute()
                     return await receive_output(stream)
             finally:
                 # Also kill ComfyUI subprocesses; default cancel does not terminate a container.

@@ -19,6 +19,39 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_broker_receives_output_with_real_lazy_modal_handle(self):
+        import importlib
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, Mock
+        with patch.dict("os.environ", {"H3_MODAL_REGION": "eu"}):
+            app_module = importlib.import_module("modal_app.comfy.app")
+        import modal
+        call_id = "fc-01M6YEHKDKB3TZQBF0QX5VS7WN"
+        # Real SDK regression: from_id produces a handle with no object_id yet.
+        handle = modal.FunctionCall.from_id(call_id)
+        with self.assertRaises(AttributeError):
+            _ = handle.object_id
+        raw = b"\x00\x00\x00\x18ftyp" + b"x" * (3 * 1024 * 1024)
+        expected = {"mp4": raw, "generation_seconds": 63.5}
+        async def stream(*args):
+            yield {"call_id": call_id}
+            for frame in output_frames(expected):
+                yield frame
+        received = []
+        def run(run_id, invoke):
+            received.append(invoke({}, None, run_id))
+        db = Mock()
+        cancel = AsyncMock()
+        with patch.object(app_module.execute_graph, "remote_gen", SimpleNamespace(aio=stream)), \
+             patch("modal.FunctionCall.from_id", return_value=handle), \
+             patch.object(handle, "cancel", SimpleNamespace(aio=cancel)), \
+             patch("modal_app.comfy.broker.database", return_value=db), \
+             patch("modal_app.comfy.broker.run", side_effect=run):
+            app_module.broker.local("00000000-0000-4000-8000-000000000000")
+        self.assertEqual(received, [expected])
+        db.table.return_value.update.assert_called_once_with({"modal_call_id": call_id})
+        cancel.assert_awaited_once_with(terminate_containers=True)
+
     def test_large_output_uses_inline_modal_stream_without_blob_access(self):
         from types import SimpleNamespace
         from unittest.mock import AsyncMock

@@ -111,3 +111,19 @@ not certified until the approved deployment and single end-to-end run.
   a >3 MiB round-trip, corrupt/truncated output rejection, and real audio/video packet preservation. This is a
   free local transport check, not proof of a successful remote GPU generation. A second GPU attempt requires
   fresh explicit owner approval; expected test cost remains $0.15–$0.30, with a $0.75 reservation.
+
+## Second authorized test — 9 November 2026 (Europe/Paris)
+
+- Owner approved merging PR #92 and exactly one additional GPU test. PR #92 merged at `97aa16f`.
+- The existing $0.75 commitment was preserved; the total pilot budget was raised to $1.50 and one permit added.
+- The second UI request used the same five-second vertical turbo configuration, seed 42 and 0.4-second audio
+  advance. Run `fefcfbb0-3bb0-4d58-9d7d-db221b6a69fc` failed before its executor ID could be stored; no media
+  was delivered. The pilot was closed immediately; no third GPU invocation was authorized or launched.
+- Root cause reproduced locally with Modal 1.6.3: `FunctionCall.from_id(...)` returns an unhydrated handle;
+  reading its `object_id` raises `AttributeError`. The broker now stores the ID from the executor's header
+  directly, retaining the lazy handle for explicit cancellation.
+- Seven free CPU tests pass. The added regression exercises the complete broker callback with a real lazy SDK
+  handle, synthetic >3 MiB output and explicit container termination, without remote invocation. It catches the
+  second failure that the previous stream serialization tests did not cover.
+- Both $0.75 reservations remain committed pending actual billing reconciliation. A third GPU test requires
+  fresh approval. Successful remote transfer, private downloads and playback are still unverified.
