@@ -1,171 +1,146 @@
 # 5. Plan d'implémentation progressif
 
-Règles valables pour chaque phase :
+Révision 2 (2026-11-08) : ordre des étapes repris de la revue Codex (sécuriser l'orchestration **avant** le socle
+d'exécution), critères d'acceptation vérifiables. Correspondance : [09](09-correspondance-revue-codex.md).
 
-- Une phase = une PR (ou une petite série), revue avant fusion. Pas de push direct sur `main` pour ce chantier :
-  `modal_app/**` déclenche un déploiement Modal de production.
-- Aucune dépense GPU sans accord explicite du propriétaire, avec le montant annoncé. Les plafonds ci-dessous sont
-  des maxima à faire valider (D10).
-- Aucune migration appliquée en production sans validation. Migrations additives, GRANT + RLS dans le même fichier.
+Règles valables pour toutes les étapes :
+
+- Une étape = une PR (ou une petite série), revue avant fusion. Pas de push direct sur `main`.
+- **Aucune dépense** (GPU, CPU, stockage, API de modération) sans autorisation explicite du propriétaire, demandée
+  avant chaque lancement avec une estimation détaillée (§5.9). Budget de tests total : **3,00 $** jusqu'à MOSS inclus.
+- Aucune migration appliquée en production sans validation. Migrations additives, RLS + GRANT dans le même fichier.
 - Tous les tests existants restent verts (`npm run test`, `npx tsc --noEmit`, `npm run lint`, `next build`).
-- Le garde-fou anti-fuite des fournisseurs reste vert ; il est étendu à chaque phase qui ajoute des libellés.
+- Le garde-fou anti-fuite des fournisseurs reste vert et est étendu à chaque étape qui ajoute des libellés.
+- Aucune condition confidentielle de l'autorisation MiniMax n'est écrite dans le dépôt, une PR, un ticket ou un log.
 
-## Phase 0 : décisions (ce dossier)
+## Étape 0 : dossier corrigé (cette révision)
 
-Livrable : décisions D1 à D11 tranchées par le propriétaire.
-Acceptation : chaque décision a une réponse écrite dans `00-README.md`.
-
-## Phase 1 : socle sans GPU (runtime, templates, validateur, résolveur)
-
-| Livrable | Détail |
+| Livrable | Acceptation |
 |---|---|
-| Format de runtime | `workflows/comfy/runtimes/h3-video@1.yaml` (ComfyUI v0.42.0, aucun custom node, catalogue des 6 fichiers du labo avec source HF et SHA-256, GPU H100, options de lancement de sécurité) |
-| Template H3 | `workflows/comfy/templates/minimax-h3/{graph.api.json, manifest.json, object_info.snapshot.json, README.md}` |
-| Schéma | `lib/comfy/manifest-schema.ts` (types + validation de structure) |
-| Validateur | `lib/comfy/validate-params.ts` (4.1 à 4.5) |
-| Résolveur | `lib/comfy/resolve-graph.ts` (variantes, valeurs, dérivés, empreinte SHA-256) |
-| Dérivés | `lib/comfy/derived.ts` (`frames_from_seconds`, `dims_from_aspect`, `random_seed`) |
-| Sécurité du graphe | `lib/comfy/graph-policy.ts` (liste blanche de `class_type`, refus des chemins, modèles hors catalogue) |
-| Tests | `lib/comfy/__tests__/*.test.ts` |
+| Corrections B1-B5, I1-I8, mineurs | Chaque constat a une ligne dans 09 avec statut et emplacement de la correction |
+| Nouvelles décisions du propriétaire | Inscrites dans le README |
+| Attestation privée des droits H3 | **Hors dépôt** : le propriétaire confirme qu'elle couvre entité, territoires des utilisateurs et du calcul (région Modal), usages et conditions (annexe A.1). Le dépôt ne contient que « attestation : oui / date » |
 
-Critères d'acceptation :
+## Étape 1 : vérifier les contrats, sans GPU
 
-1. Pour les 3 cas du labo (`t2v_ugc_fr`, `i2v_celimax_lifestyle`, `t2v_product_macro`, mêmes valeurs, largeur et hauteur passées explicitement en mode Advanced), le graphe
-   résolu est **identique** (JSON normalisé, clés triées) au graphe produit par `h3-lab/app.py::build_workflow`
-   en mode `turbo=v4, te=int8`. Test automatisé avec les graphes de référence en fixtures.
-2. `frames_from_seconds` : 5 s → 124 images et 7 s → 175 images (valeurs du labo).
-3. Le validateur rejette, avec un code d'erreur stable, au moins : clé inconnue, valeur hors plage, option hors
-   liste, paramètre verrouillé modifié, paramètre réservé à un autre plan, modèle hors catalogue, `class_type`
-   hors liste blanche, valeur de type chemin (`../`, `/`, `\`), prompt vide. ≥ 20 cas de test.
-4. Couverture des lignes de `lib/comfy/` ≥ 90 %.
-5. Aucun fichier ajouté sous `modal_app/` dans cette phase. 0 $ dépensé.
-
-## Phase 2 : runner Modal + intégration jobs (admin uniquement)
-
-| Livrable | Détail |
+| Livrable | Acceptation |
 |---|---|
-| App Modal | `modal_app/comfy/app.py` (`alphogenai-comfy`) : dispatcher web (secret), classe `ComfyRunner` générée par runtime, volume de modèles, `retries=0`, `max_containers=1` au départ |
-| Client ComfyUI | `modal_app/comfy/comfy_client.py` (`/prompt`, `/ws`, `/view`, `/upload/image`, `/interrupt`, `/history` clear) |
-| Post-traitement | `modal_app/comfy/postprocess.py` : `audio_shift` (portage de `h3-lab/app.py::shift_audio`), `keep_raw` |
-| Téléchargement modèles | `modal_app/comfy/models.py` : lit le catalogue du runtime, vérifie les SHA-256 |
-| Migrations | `comfy_templates`, `comfy_template_versions`, `comfy_runs` ; CHECK `engines.type` élargi à `comfy_workflow` |
-| API | branche comfy dans `app/api/jobs/route.ts` ; lecture `comfy_runs` dans `app/api/jobs/[id]/route.ts` ; `POST /api/jobs/[id]/cancel` |
-| Registre | ligne `engines` `comfy:minimax-h3`, `status = coming_soon`, plans vides : visible seulement des admins |
-| Déploiement | manuel (`python -m modal deploy modal_app/comfy/app.py`), après accord ; `deploy-modal.yml` non modifié dans cette phase |
+| Graphes API H3 exportés nativement (variantes `t2v`, `i2v`, `t2v_full`) | Trois fichiers JSON inspectables ; `t2v` identique (JSON normalisé) au graphe du labo `build_workflow(turbo='v4', te='int8')` |
+| Graphe API MOSS texte vers image exporté nativement (sans branche contrôle) | Fichier inspectable ; liste exacte des `class_type` restants et des packs qu'ils exigent |
+| Démarrage Studio CPU (`--cpu`) des runtimes `h3-video@1` et `moss-image@1` | ComfyUI démarre, `/object_info` répond pour tous les nodes des graphes, le frontend s'affiche ; packs qui exigent un GPU à l'import listés |
+| Contrat courtier / exécuteur (02 §2.7), sur CPU | Une fonction Modal avec `block_network=True` et **aucun** `Secret` : (a) reçoit et rend des octets par appel ; (b) envoie des événements en mode générateur ; (c) accepte une annulation (canal de contrôle ou `FunctionCall.cancel()`) en < 10 s ; (d) taille maximale d'entrée et de sortie mesurée (objectif : vidéo de 10 s) ; sinon le repli (volume éphémère par run) est choisi et documenté |
+| Contrat de widgets (04 §4.2) | Chaque entrée exposée de H3 et MOSS est classée « supportée » ou « hors contrat » |
+| Contrainte réelle `jobs.status` en production | Lue (lecture seule) et consignée ; correspondance d'annulation tranchée (02 §2.5) |
 
-Critères d'acceptation :
+Coût : CPU uniquement (§5.9), sur autorisation.
 
-1. Smoke test payant (accord préalable, plafond **0,30 $**) : 3 runs H3 lancés depuis l'UI admin réussissent.
-   Chaque MP4 a une piste vidéo H.264 et une piste audio, une durée de 5,17 s ± 0,05 s pour 5 s demandées.
-2. `audio_shift` appliqué : `lipsync_measure.py` donne un décalage global dans ±150 ms sur le clip UGC
-   (le brut donnait +330 à +540 ms). Le fichier brut est conservé quand `keep_raw = true`.
-3. `comfy_runs.cost_usd` diffère de moins de 10 % du coût facturé par Modal pour ces runs.
-4. Démarrage à froid ≤ 120 s et génération à chaud ≤ 35 s pour 5 s en 480x832 (référence labo : 50 s à froid,
-   22 s à chaud).
-5. Une valeur invalide est rejetée en 4xx **avant** tout appel Modal (vérifié par un test : aucun appel réseau).
-6. L'annulation pendant l'exécution passe le run à `cancelled` et libère le GPU en moins de 30 s.
-7. Un utilisateur non admin ne voit pas le moteur et reçoit 403 s'il force `preferred_engine = comfy:minimax-h3`.
-8. Le job apparaît dans la bibliothèque ; les boutons existants overlay et voix fonctionnent sur la sortie.
-9. Aucune régression : moteurs existants inchangés, `alphogenai-v2` non redéployé.
+## Étape 2 : sécuriser l'orchestration (aucun GPU)
 
-## Phase 3 : formulaires générés (Simple / Advanced)
-
-| Livrable | Détail |
+| Livrable | Acceptation (tests automatisés) |
 |---|---|
-| Composant | `components/comfy/manifest-form.tsx` + `components/comfy/widgets/*` (prompt via le composer existant, upload via le panneau d'assets existant) |
-| Page | `app/(workspace)/create/comfy/[slug]/page.tsx` (ou intégration dans `create/[mode]`, à décider à l'implémentation selon le code de `origin/main`) |
-| Progression | barre par étape (`progress` de `comfy_runs` via realtime), aperçu intermédiaire si ComfyUI en envoie |
-| Presets | sauvegarde de jeux de valeurs par utilisateur (réutiliser le pattern `saved-look-payload.ts` s'il convient) |
+| Lecture privée : `GET /api/jobs/[id]` (parcours ComfyUI) et `GET /api/media/[asset_id]` authentifiés, contrôle propriétaire | Utilisateur B ne peut lire ni le job, ni les assets, ni la progression de A (403/404) ; anonyme : 401 |
+| Stockage privé + URL signées ≤ 10 min | Aucune URL publique produite pour un asset ComfyUI (test sur le helper) |
+| Publication explicite (`published_at`) ; `/v/[id]` et galerie lisent uniquement les assets publiés | Asset non publié, `held`, `blocked` ou retiré : 404 sur la page publique |
+| Retrait et révocation (02 §2.6) | Après retrait : nouvelle URL refusée immédiatement ; URL privée déjà émise refusée au plus tard à son TTL (10 min) et servie avec `Cache-Control: private, no-store` ; URL publique d'un asset publié → 404 après purge, purge mesurée (objectif ≤ 5 min) ; délai total ≤ 15 min mesuré ; cascade sur brut, final, miniature, aperçus ; objets supprimés du stockage à la fin de la rétention |
+| Admission atomique `admit_comfy_job` + idempotence | 20 requêtes simultanées du même utilisateur (1 job actif autorisé) → exactement 1 admission ; même clé d'idempotence rejouée → même `job_id` ; erreur de comptage simulée → refus ; anonyme → 401 |
+| Plafonds financiers (02 §2.5) | Admission refusée au plafond (jour et mois, par périmètre) ; 20 réservations concurrentes ne dépassent jamais la limite ; run `queued` au-delà de la limite → `failed` (`BUDGET`) au dispatch ; règlement, libération et ajustement corrects ; dépassement constaté au rapprochement → kill switch automatique + alerte ; budget de tests isolé (`scope = 'tests'`) |
+| Machine à états `transition_comfy_run` | Toutes les transitions interdites échouent. **Matrice de courses** : annulation × fin ; expiration × fin ; deux dispatchs × un run ; annulation × modération ; revue × retrait ; notification rejouée. Dans chaque cas : un seul état terminal, budget réglé une fois, une notification au plus, aucun asset publié après un état terminal autre que `done`, parent `jobs` cohérent |
+| Expiration et réconciliation (cron) | Run sans heartbeat > 2 min → `expired`, réservation libérée |
+| Routage historique (B4) | Test : template `comfy_workflow` actif de priorité maximale → le routeur Python ne le sélectionne jamais ; identifiant inconnu dans la branche comfy → 4xx explicite |
+| Règles de déploiement (I5) | `deploy-modal.yml` modifié pour que les changements sous `modal_app/comfy/**` **ne déclenchent pas** le déploiement de `alphogenai-v2`, ni sur `main`, ni sur `claude/**` ; vérifié par un commit de test sur une branche dédiée **avant** tout fichier sous `modal_app/comfy/` |
 
-Critères d'acceptation :
+## Étape 3 : socle générique d'exécution
 
-1. Aucun code propre à H3 dans `components/comfy/` (test : recherche de `minimax`, `h3` → 0 résultat).
-2. Mode Simple H3 : exactement les 4 champs du manifeste. Mode Advanced : tous les champs déclarés, les champs
-   verrouillés en lecture seule.
-3. Une requête falsifiée (valeur verrouillée, hors plage, clé inconnue) est rejetée par le serveur (test API).
-4. Le libellé « MiniMax H3 » est visible sur la page et sur le job (test qui l'impose), et le test anti-fuite reste vert.
-5. Progression visible et mise à jour au moins toutes les 2 s pendant le sampling.
-
-## Phase 4 : conformité H3 (porte obligatoire avant tout utilisateur non admin)
-
-Détail des obligations : annexe A.
-
-| Livrable | Critère d'acceptation |
+| Livrable | Acceptation |
 |---|---|
-| Signalement : bouton « Signaler » sur page job, page publique `/v/[id]`, galerie ; table `content_reports` ; file admin `/admin/reports` | Un signalement crée une ligne et notifie l'admin (e-mail Resend existant) ; l'admin peut retirer le contenu (URL désactivée, job masqué) en 1 action |
-| Sanctions : compteur d'infractions, suspension | Un utilisateur suspendu reçoit 403 sur `POST /api/jobs` (test) |
-| Contrat de modération interchangeable (02 §2.7) : `ModerationProvider`, politiques versionnées, `moderation_events` | Deux adaptateurs au moins (un d'API externe, un auto-hébergé sur Modal, ou un faux fournisseur de test) passent la **même** suite de tests de contrat ; changer de fournisseur = changer une configuration, sans modifier le code appelant |
-| Modération des entrées : prompt (existant + contrat) + images d'entrée | Jeu de tests interne : 100 % des cas `block` refusés avant tout appel GPU ; taux de faux positifs mesuré et documenté |
-| Modération des sorties : images, ou échantillon d'images de la vidéo | `block` → statut `failed`, code `MODERATION`, sortie non livrée ; `review` → livrée en privé, publication publique refusée jusqu'à revue (test sur galerie, page publique, export social) ; panne du fournisseur → comportement du profil (`fail_closed` pour H3) |
-| Liberté créative | Jeu de tests « contenus légitimes » (fiction, horreur, violence non graphique, contenu artistique) : taux de blocage ≤ 2 %, mesuré et publié dans la PR |
-| CGU : répercussion de la politique d'usage H3 et lien vers la licence | Texte validé par le propriétaire (D9) ; acceptation enregistrée (date, version) avant le premier run H3 |
-| Notice en UI à côté du modèle | « MiniMax H3 » + lien licence + rappel « contenu généré par IA » |
-| Mention IA sur les publications | Toute publication sociale d'une sortie H3 contient une mention « généré par IA » (test sur `social-metadata`) ; métadonnée de fichier indiquant la génération par IA (recommandé par la licence) |
-| Revue périodique des garde-fous | Procédure écrite (fréquence, responsable) dans `docs/compliance/minimax-h3.md` |
+| Runtime YAML, catalogue (source, révision, SHA-256, licence) | Le validateur refuse un modèle sans licence connue |
+| Validateur et résolveur TS (`lib/comfy/*`) | ≥ 20 cas de rejet (clé inconnue, hors plage, option hors liste, verrou, plan, modèle hors catalogue, `class_type` hors liste blanche, longueur de prompt, MIME d'upload…) ; les prompts contenant `/` ou `\` sont acceptés ; couverture ≥ 90 % |
+| Graphe résolu stocké (`comfy_run_graphs`) + hash + `resolver_version` | Le courtier refuse un graphe dont le hash ne correspond pas (test) |
+| Courtier / exécuteur (`modal_app/comfy/*`) | L'exécuteur n'a aucun `modal.Secret` attaché (vérifié par test sur la définition de l'app) |
+| Résultats typés (`assets`), brut et corrigé distincts | Un run produit des assets avec `kind`, `mime`, `role`, `derived_from` |
+| Annulation native, heartbeat, réconciliation `/history` | Annulation pendant un run factice → `cancelled` en < 30 s |
+| Realtime `comfy_runs` + notification idempotente | Une seule notification par run, même si l'événement terminal est rejoué |
+| **Test image factice sur CPU** (graphe du cœur ComfyUI, ex. image vide → sauvegarde) | Chaîne complète admission → courtier → exécuteur → asset privé → bibliothèque, **sans GPU** ; la bibliothèque affiche l'image comme image |
+| Test de fuite inter-utilisateurs | Deux runs factices de deux utilisateurs sur le même conteneur : aucune donnée du premier accessible au second |
+| Aucun moteur de nodes maison | Le seul traitement de graphe dans le code est `set` sur des entrées déclarées (revue de code) |
 
-Passage de `comfy:minimax-h3` en `beta` (plans pro, premium) **uniquement** après validation de cette liste par le
-propriétaire.
+## Étape 4 : H3 en admin
 
-## Phase 5 : Studio admin
-
-| Livrable | Critère d'acceptation |
+| Livrable | Acceptation |
 |---|---|
-| `StudioServer` Modal (CPU) + session signée | Non-admin : 403. Jeton expiré : refus. Arrêt automatique après 10 min d'inactivité (mesuré) |
-| Import `POST /api/admin/comfy/templates/import` | Le graphe H3 exporté depuis le Studio, réimporté, produit la même empreinte que la version de la phase 1 |
-| Éditeur de manifeste admin | Propose toutes les entrées scalaires avec type et plage issus d'`object_info` ; refuse une valeur par défaut invalide |
-| Diff de versions | Affiche nodes ajoutés, retirés, paramètres modifiés |
-| « Tester dans AlphoGen » | Crée un run admin sur le runner GPU (plafond **0,10 $** par test, accord préalable) |
+| Template `minimax-h3` (graphes de l'étape 1, manifeste 04 §4.4) | Statut `admin`, `plans` vides |
+| Formulaire de test admin minimal | Permet de lancer un run H3 avant les formulaires générés |
+| Post-traitement `audio_shift` | Mesure `lipsync_measure.py` : décalage global dans ±150 ms (brut : +330 à +540 ms) |
+| Smoke test (sur autorisation, §5.9) | 3 runs dans une seule rafale réussissent ; MP4 H.264 + audio ; durée 5,17 s ± 0,05 s pour 5 s |
+| Mesure de **toute** la durée facturable | Démarrage du conteneur, démarrage ComfyUI, chargement des modèles, calcul, post-traitement, inactivité : chaque poste mesuré et rapporté ; coût total de la période comparé à la facture Modal (écart < 10 % sur le total de la période, pas par run) |
+| Accès | Non-admin : moteur invisible et 403 s'il est forcé |
 
-Coût cible du Studio : ≤ 0,10 $ par heure d'édition (CPU, cf. 07).
+## Étape 5 : conformité et formulaires
 
-## Phase 6 : MOSS-Image (deuxième template, preuve de généricité)
+Détail des obligations : annexe A. Aucun utilisateur non admin avant validation de cette étape.
 
-| Livrable | Détail |
+| Livrable | Acceptation |
 |---|---|
-| Runtime | `moss-image@1.yaml` : custom nodes `comfyui-kjnodes`, `comfyui_controlnet_aux` (et rgthree seulement si un node d'exécution en a besoin), épinglés au commit ; modèles Comfy-Org/MOSS-Image (SFT int8, Qwen3.5 9B int8, VAE) ; GPU à mesurer (L40S candidat) |
-| Template | `workflows/comfy/templates/moss-image/` importé via le Studio |
+| Contrat de modération + 2 adaptateurs (dont un faux pour les tests) | Même suite de tests de contrat ; changer de fournisseur = configuration seulement |
+| Couverture : texte, images d'entrée, image et vidéo de sortie, **audio** (transcription) | Jeux de tests : 100 % des cas bloquants refusés ou retenus ; catégorie non supportée → `held` ; panne simulée sous `h3_fail_closed` → `held`, rien n'est livré |
+| Jeu « contenus légitimes » | Taux de blocage ≤ 2 %, publié dans la PR |
+| File de revue, signalement, retrait, sanctions | Revue ≤ 48 h affichée ; suppression automatique à 7 jours des contenus `held` sans décision ; utilisateur suspendu → refus à l'admission |
+| Journal d'accès des modérateurs | Chaque consultation d'un contenu retenu est journalisée |
+| CGU (répercussion section V + Exhibit A H3), notice, lien licence, mention IA | Textes validés par le propriétaire ; acceptation enregistrée avant le premier run H3 d'un utilisateur |
+| « MiniMax H3 » visible | Test qui l'impose sur la page de création, le job et la page publique |
+| Formulaires générés Simple / Advanced | Aucun code propre à H3 dans `components/comfy/` ; Simple H3 = 4 champs ; Advanced = tous les champs autorisés du contrat de widgets ; valeurs falsifiées rejetées par le serveur |
+| Procédure de revue périodique | `docs/compliance/minimax-h3.md` (fréquence, responsable, journal) |
 
-Critères d'acceptation :
+## Étape 6 : MOSS-Image, texte vers image (preuve de généricité)
 
-1. **Diff limité** à : un YAML de runtime, un dossier de template, des lignes en base. **0 ligne** modifiée dans
-   `modal_app/comfy/*.py`, `lib/comfy/*.ts`, `components/comfy/*` (vérifié sur la PR). Si une modification du
-   socle est nécessaire, elle est justifiée et générique (utile à tout template image).
-2. Sortie image PNG ou WebP dans R2, visible dans la bibliothèque et sur la page job.
-3. Coût mesuré à chaud pour 1024x1024 et choix du GPU documenté (plafond de tests **0,20 $**).
-4. Aucun modèle « abliterated » ; licences de chaque fichier inscrites dans le catalogue du runtime.
+| Livrable | Acceptation |
+|---|---|
+| Runtime `moss-image@1` (packs restants après export, épinglés) | **Revue écrite de chaque pack** (`workflows/comfy/runtimes/reviews/`) **obligatoire, quelle que soit la politique de réutilisation** : un conteneur par run ne dispense pas de l'audit (02 §2.7) ; licences `verified-docs` pour **chaque** fichier du catalogue (annexe A.3) **avant** tout déploiement |
+| Template `moss-image` | **0 ligne** modifiée dans `modal_app/comfy/*.py`, `lib/comfy/*.ts`, `components/comfy/*`. Si un manque générique est trouvé : correction séparée du socle, puis nouveau test |
+| Sortie image | Asset `image/png` privé, affiché comme image, modéré |
+| Mesure (sur autorisation) | Coût complet mesuré sur L40S et H100 ; choix du GPU documenté |
+| Variante contrôle de profondeur | **Hors périmètre** tant que la provenance du LoRA n'est pas clarifiée (annexe A.3) |
 
-## Phase 7 : ouverture bêta
+## Étape 7 : ouverture progressive
 
-Conditions : phases 2 à 4 validées, décision du propriétaire. Critères : taux d'échec < 5 % sur 50 runs réels,
-p95 du temps total documenté, coût moyen par run comparé à l'estimation (écart < 20 %), aucun signalement non
-traité depuis plus de 48 h.
+Conditions : étapes 2 à 6 validées, MOSS compris, attestation H3 confirmée, décision du propriétaire.
 
-## Phase 8 et suivantes (conception seulement)
+| Critère | Seuil |
+|---|---|
+| Cohorte | Liste d'utilisateurs autorisés, puis plan pro |
+| Fiabilité | Taux d'échec < 5 % sur 50 runs réels |
+| Coût | Coût moyen par run comparé à l'estimation : écart < 20 % ; plafond global jamais dépassé |
+| Conformité | Aucun signalement non traité depuis plus de 48 h |
+| Retour arrière | Procédure testée : kill switch en base coupe l'admission et la publication en < 1 min, sans déploiement |
 
-- Entraînement LoRA (cf. 02 §2.9) : nouvelle étude dédiée, licences des entraîneurs vérifiées, budget à part.
-- Studio Pro (cf. 03 §3.4) : avis juridique GPL, conteneur par utilisateur, runtime restreint.
-- Portefeuille de crédits (D6) : chantier Stripe séparé.
+## Perspectives (documentées, hors V1)
 
-## Budget de tests (D10, validé)
+Entraînement LoRA, Studio Pro, portefeuille de crédits : études séparées, sans impact sur le schéma V1 (02 §2.9).
 
-**Plafond global : 3,00 $ jusqu'à MOSS inclus. Aucune dépense n'est engagée sans l'autorisation explicite du
-propriétaire, demandée avant chaque lancement.**
+## 5.9 Budget de tests (D10)
 
-Chaque demande d'autorisation indique, poste par poste : construction d'image et téléchargement des modèles
-(CPU), démarrage à froid (ComfyUI + chargement des modèles en mémoire GPU), calcul à chaud, fenêtre d'inactivité
-avant arrêt, et le total. Après le test, le coût réel est rapporté et comparé à l'estimation.
+**Plafond total : 3,00 $ jusqu'à MOSS inclus. Chaque lancement est soumis à autorisation explicite avec l'estimation
+ci-dessous, puis le coût réel est rapporté.**
 
-Estimations (prix H100 0,001097 $/s, mesures du labo ; à froid ≈ 50 s, à chaud ≈ 22 s par clip H3 de 5 s ;
-inactivité 60 s par rafale ; L40S ≈ 0,00054 $/s `unknown`, à revérifier) :
+Prix Modal relevés le 2026-11-08 (`verified-docs`, modal.com/pricing) : H100 0,001097 $/s ; L40S 0,000542 $/s ;
+L4 0,000222 $/s ; CPU 0,0000131 $/cœur/s ; mémoire 0,00000222 $/Gio/s ; volumes 0,09 $/Gio/mois (franchise annoncée,
+sans garantie de coût nul : taille des volumes relevée à chaque étape, 07 §7.1). Un conteneur GPU facture **aussi**
+son CPU et sa mémoire. Tous les montants ci-dessous sont des **estimations** (méthode D de 07 §7.3), remplacées par
+les coûts mesurés après chaque étape.
 
-| Phase | Contenu | Froid + chargement | Chaud | Inactivité | Autres | Estimation | Plafond |
+Hypothèses H3 (480x832, 5 s) : démarrage du conteneur ~20 s (`unknown`, à mesurer) + démarrage ComfyUI 13 s +
+chargement des modèles et premier calcul 50 s + inactivité de fin 60 s = **143 s** de conteneur pour le premier run
+d'une rafale ; ~22 s par run chaud supplémentaire. Mémoire du conteneur supposée 64 Gio (+0,000142 $/s).
+
+| Étape | Contenu | Froid + chargement | Calcul chaud | Inactivité | Autres | Estimation | Plafond |
 |---|---|---|---|---|---|---|---|
-| 1 | aucun GPU | — | — | — | — | 0 $ | 0 $ |
-| 2 | 3 runs H3 en une rafale | 1 × 50 s = 0,055 $ | 2 × 22 s = 0,048 $ | 60 s = 0,066 $ | image + copie des ~42 Go de modèles vers le volume de l'app (CPU, quelques centimes, `unknown`) | ≈ 0,20 $ | 0,30 $ |
-| 3 | 3 runs depuis l'UI, en 2 rafales | 2 × 50 s = 0,110 $ | 1 × 22 s = 0,024 $ | 2 × 60 s = 0,132 $ | — | ≈ 0,27 $ | 0,30 $ |
-| 4 | modération des sorties (modèle auto-hébergé testé sur des sorties existantes, 2 rafales) | ≈ 0,10 $ (GPU à choisir) | ≈ 0,05 $ | ≈ 0,10 $ | appels d'API externe éventuels (centimes) | ≈ 0,25 $ | 0,50 $ |
-| 5 | Studio CPU ~2 h + 2 « Tester dans AlphoGen » H3 | 2 × 50 s = 0,110 $ | — | 2 × 60 s = 0,132 $ | Studio CPU ≈ 0,10 à 0,20 $ (`unknown`) | ≈ 0,40 $ | 0,50 $ |
-| 6 | MOSS : 10 images sur L40S + 5 sur H100 (choix du GPU) | ≈ 0,03 $ + 0,05 $ | ≈ 0,08 $ + 0,04 $ | ≈ 0,03 $ + 0,07 $ | téléchargement ~16 Go de modèles (CPU, centimes) | ≈ 0,32 $ | 0,40 $ |
-| **Total** | | | | | | **≈ 1,44 $** | **2,00 $** (+ 1,00 $ de réserve) |
+| 1 | Studio CPU ×2 runtimes, test `block_network`, construction d'images | — | — | inclus | CPU 2 cœurs / 8 Gio ≈ 0,158 $/h, ~1 h | ≈ 0,20 $ | 0,25 $ |
+| 3 | Tests factices CPU (image vide → sauvegarde, fuite, annulation) | — | — | inclus | CPU ~20 min | ≈ 0,05 $ | 0,10 $ |
+| 4 | Copie des ~42 Go de modèles H3 vers le volume de l'app ; 3 runs H3 en 1 rafale | 83 s ≈ 0,103 $ | 2 × 22 s ≈ 0,055 $ | 60 s ≈ 0,074 $ | copie CPU ~15 min ≈ 0,04 $ | ≈ 0,27 $ | 0,35 $ |
+| 5 | Banc de modération (modèle auto-hébergé sur L4, ~10 min, sorties existantes) ; 3 runs UI en 2 rafales | 2 × 83 s ≈ 0,206 $ | 22 s ≈ 0,027 $ | 2 × 60 s ≈ 0,149 $ | L4 ≈ 0,15 $ ; API externe éventuelle (centimes) | ≈ 0,55 $ | 0,65 $ |
+| 6 | MOSS : copie ~16 Go ; 10 images L40S + 5 images H100, 1 rafale par GPU | L40S ≈ 0,045 $ ; H100 ≈ 0,078 $ | ≈ 0,066 $ + 0,030 $ | ≈ 0,037 $ + 0,074 $ | copie CPU ≈ 0,03 $ | ≈ 0,36 $ | 0,45 $ |
+| **Total** | | | | | | **≈ 1,43 $** | **1,80 $** (+ 1,20 $ de réserve = 3,00 $) |
 
-L'inactivité pèse autant que le calcul : grouper les tests d'une phase en une seule rafale divise ce poste.
+L'étape 2 ne consomme rien sur Modal. L'inactivité pèse autant que le calcul : grouper les tests d'une étape en une
+seule rafale. Le forfait de calcul inclus de Modal peut absorber une partie de ces montants ; ils sont tout de même
+comptés dans le budget.

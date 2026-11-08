@@ -1,26 +1,50 @@
 # 4. Synchronisation entre workflows ComfyUI et paramètres du frontend
 
-## 4.1 Principe
+Révision 2 (2026-11-08), après revue Codex (I4, mineurs). Correspondance : [09](09-correspondance-revue-codex.md).
 
-Le graphe API dit **ce qui s'exécute**. Le manifeste dit **ce que l'utilisateur peut changer** et **comment**.
-`/object_info` (figé dans `object_info_snapshot` au moment de l'import) dit **ce que ComfyUI accepte**.
+## 4.1 Principe et partage des validations
 
 ```
-graph.api.json   ──┐
-object_info figé ──┼──► validateur ──► formulaire (Simple / Advanced) ──► valeurs ──► graphe résolu ──► /prompt
-manifest.json    ──┘
+graphs API (1 par variante) ─┐
+object_info figé ────────────┼──► validation AlphoGen ──► formulaire ──► valeurs ──► graphe résolu ──► /prompt
+manifest.json ───────────────┘    (autorisations, plafonds)                              (validation native ComfyUI)
 ```
+
+| Couche | Valide |
+|---|---|
+| AlphoGen (avant admission) | clé déclarée, mode, plan, verrou, type et plage (manifeste ∩ `object_info`), plafonds, modèle du catalogue, rôle du champ |
+| ComfyUI (au `POST /prompt`) | validation **sémantique native** des nodes, y compris celle écrite en Python par les custom nodes. Une erreur est rendue avec un code public (`INVALID_INPUT`) et le détail reste dans les logs admin |
 
 Règles :
 
-1. Tout paramètre exposé pointe vers une entrée précise : `node_id` + `input`. Pas de recherche par nom de node.
-2. Type, plage et options viennent de `object_info`. Le manifeste ne peut que les **restreindre**
-   (intersection), jamais les élargir.
-3. Une entrée non exposée garde la valeur du graphe. Le serveur ignore et journalise toute valeur non déclarée.
-4. Les modifications de structure (ajout de node, lien) ne passent que par le Studio, sous forme de nouvelle
-   version. En mode Advanced, une alternative de structure n'est possible que via une **variante déclarée** (D11).
+1. Tout paramètre exposé pointe vers une entrée précise : `node_id` + `input`, **dans chaque graphe de variante** où
+   il s'applique. Pas de recherche par nom de node.
+2. Type, plage et options viennent d'`object_info`. Le manifeste ne peut que les **restreindre**.
+3. **Clé inconnue = rejet explicite** (400, code `UNKNOWN_PARAM`). Aucune valeur non déclarée n'est ignorée en silence.
+4. La structure d'un graphe ne change que dans le Studio, sous forme de nouvelle version.
 
-## 4.2 Schéma du manifeste (v1)
+## 4.2 Contrat de widgets supportés
+
+`/object_info` décrit des entrées, pas toute l'ergonomie : des custom nodes ajoutent des widgets JavaScript, des
+comportements dynamiques ou des valeurs structurées. La génération automatique est donc **limitée à un contrat
+explicite** :
+
+| Type ComfyUI (`object_info`) | Widget AlphoGen | Validation par rôle |
+|---|---|---|
+| `INT` | `number`, `slider`, `seed` | entier, min/max/step |
+| `FLOAT` | `number`, `slider` | min/max/step |
+| `STRING` (multiline) | `prompt`, `text` | longueur max par template ; texte libre (les `/` et `\` sont autorisés) ; modération |
+| `STRING` (une ligne) | `text` | longueur max ; motif optionnel déclaré dans le manifeste |
+| `BOOLEAN` | `toggle` | booléen |
+| COMBO (liste d'options) | `select`, `model`, `lora` | valeur ∈ options ∩ manifeste ; pour `model`/`lora` : ∈ catalogue du runtime |
+| entrée image de `LoadImage` | `image` | upload privé de l'utilisateur, MIME et taille, modération ; **nom de fichier généré par le serveur** |
+| entrée audio / vidéo (`LoadAudio`, `LoadVideo` ou équivalent du runtime) | `audio`, `video` | idem |
+| tout autre type (boîtes, listes structurées, éditeurs spatiaux, widgets JS de custom nodes) | **non généré** | exposé seulement via une **extension de widget déclarée** (composant + schéma JSON + validation serveur), écrite une fois et réutilisable. Sinon : non exposable, la valeur du graphe s'applique |
+
+Le mode Advanced expose **tout** ce que l'admin autorise dans ce contrat, sans autre limite. L'éditeur de manifeste
+signale les entrées hors contrat, au lieu de prétendre les gérer.
+
+## 4.3 Schéma du manifeste (v1)
 
 ```jsonc
 {
@@ -32,123 +56,90 @@ Règles :
   "runtime": "h3-video@1",
   "gpu": "H100", "timeout_s": 900,
   "license": { "ids": ["minimax-h3-community", "apache-2.0"], "notices": ["minimax_h3_ui", "ai_generated"],
-               "moderation_profile": "strict", "user_terms": "minimax_h3_aup" },
-  "plans": ["admin"],                         // puis ["pro","premium"] après la phase conformité
-  "params": [ /* cf. 4.3 */ ],
-  "variants": [ /* cf. 4.4 */ ],
-  "derived": [ /* cf. 4.5 */ ],
-  "outputs": [{ "node_id": "15", "kind": "video", "audio": true }],
-  "postprocess": [{ "type": "audio_shift", "seconds": 0.4, "param": "audio_shift_s", "keep_raw": "keep_raw" }],
-  "cost": { "model": "gpu_seconds", "estimate": { "base_s": 25, "per_output_second_s": 0 } },
-  "limits": { "max_seconds": 10, "max_pixels": 921600 }
+               "user_terms": "minimax_h3_aup" },
+  "moderation_profile": "h3_fail_closed",
+  "plans": [],                               // vide = admin seulement ; rempli après l'étape de conformité
+  "variants": { "default": "t2v", "graphs": { "t2v": "graph.t2v.api.json", "i2v": "graph.i2v.api.json",
+                                               "t2v_full": "graph.t2v_full.api.json" } },
+  "variant_rules": [ { "when": { "param_present": "first_frame" }, "use": "i2v" },
+                     { "when": { "param_equals": { "quality": "full" } }, "use": "t2v_full" } ],
+  "params": [ /* §4.4 */ ],
+  "derived": [ /* §4.6 */ ],
+  "outputs": [{ "node_id": "15", "kind": "video", "mime": "video/mp4", "audio": true }],
+  "postprocess": [{ "type": "audio_shift", "seconds_param": "audio_shift_s", "keep_raw_param": "keep_raw",
+                    "content_preserving": true }],
+  "asset_capabilities": ["voiceover", "social_export"],   // seulement après test ; overlay exclu en V1
+  "limits": { "max_seconds": 10, "max_pixels": 921600, "prompt_max_chars": 2000 },
+  "cost": { "estimate": { "warm_s": 22, "per_extra_second_s": 4 } }
 }
 ```
 
-Champ de paramètre :
+## 4.4 Exemple : paramètres H3 (graphe validé du labo, `verified-runtime`)
 
-| Clé | Rôle |
-|---|---|
-| `key` | identifiant stable côté API et UI (`prompt`, `seconds`, `seed`…) |
-| `target` | `{ "node_id": "6", "input": "prompt" }`, ou `null` si le paramètre ne sert qu'à un champ dérivé ou à un post-traitement |
-| `widget` | `prompt`, `text`, `number`, `slider`, `select`, `toggle`, `seed`, `image`, `video`, `audio`, `lora`, `model`, `resolution` |
-| `label`, `help` | libellés publics, sans nom de fournisseur |
-| `modes` | `["simple","advanced"]` ou `["advanced"]` |
-| `default` | valeur par défaut (doit être valide selon `object_info`) |
-| `min`/`max`/`step`/`options` | restriction de la plage ComfyUI |
-| `locked` | `true` : visible en Advanced en lecture seule, jamais modifiable (réglages validés) |
-| `plans` | restriction par plan (ex. résolution maximale réservée à premium) |
-| `required` | champ obligatoire |
-
-## 4.3 Exemple : paramètres H3 (graphe du labo, `verified-runtime`)
-
-Ids de nodes du graphe validé (`h3-lab/app.py`) : 1 UNET, 2 encodeur, 3-4 VAE, 5 LoRA turbo,
-6 `MiniMaxH3ImageToVideo`, 8 bruit, 9 sampler, 10 scheduler, 11 sampling, 12-14 décodage, 15 sauvegarde,
-20 image d'entrée (optionnelle).
+Ids du graphe (`h3-lab/app.py`) : 1 UNET, 2 encodeur, 3-4 VAE, 5 LoRA turbo, 6 `MiniMaxH3ImageToVideo`, 8 bruit,
+9 sampler, 10 scheduler, 11 sampling, 12-14 décodage, 15 sauvegarde, 20 image d'entrée (graphe `i2v` seulement).
 
 | key | target | widget | modes | défaut | contrainte |
 |---|---|---|---|---|---|
-| `prompt` | 6.prompt | prompt (aide au format officiel) | simple, advanced | — | requis, ≤ 4000 car. |
-| `first_frame` | 20.image (active la variante `i2v`) | image | simple, advanced | — | optionnel, modéré |
+| `prompt` | 6.prompt | prompt (aide au format officiel) | simple, advanced | — | requis, ≤ 2 000 car. (limite commune actuelle de `guard.ts`) |
+| `first_frame` | 20.image (variante `i2v`) | image | simple, advanced | — | optionnel, modéré |
 | `seconds` | — (dérivé) | slider | simple, advanced | 5 | 2 à 10, pas de 1 |
 | `aspect` | 6.width / 6.height (dérivé) | select | simple, advanced | 9:16 | 9:16, 16:9, 1:1 |
-| `width`, `height` | 6.width / 6.height | number | advanced | issus de `aspect` | multiples de 16, ≤ `limits.max_pixels` ; remplacent `aspect` s'ils sont fournis |
-| `seed` | 8.noise_seed | seed | advanced | aléatoire | plage `object_info` |
-| `quality` | variante `turbo_v4` / `full` | select | advanced | turbo_v4 | — |
-| `steps` | 10.steps | number | advanced | 8 | **locked** tant que `quality = turbo_v4` |
-| `sampler_name` | 9.sampler_name | select | advanced | euler | **locked** (réglage validé) |
-| `scheduler` | 10.scheduler | select | advanced | beta | **locked** |
-| `lora_strength` | 5.strength_model | slider | advanced | 1.0 | **locked** |
-| `text_encoder` | 2.clip_name | model | advanced | int8_convrot | **locked** |
+| `width`, `height` | 6.width / 6.height | number | advanced | issus de `aspect` | multiples de 16, ≤ `max_pixels` ; remplacent `aspect` s'ils sont fournis |
+| `seed` | 8.noise_seed | seed | advanced | tiré par le serveur et **figé** dans le run | plage `object_info` |
+| `quality` | choix de variante (`t2v` turbo v4 / `t2v_full` 20 steps) | select | advanced | turbo v4 | — |
+| `steps` | 10.steps | number | advanced | 8 | **verrouillé** en turbo v4 |
+| `sampler_name` | 9.sampler_name | select | advanced | euler | **verrouillé** (réglage validé) |
+| `scheduler` | 10.scheduler | select | advanced | beta | **verrouillé** |
+| `lora_strength` | 5.strength_model | slider | advanced | 1.0 | **verrouillé** |
+| `text_encoder` | 2.clip_name | model | advanced | int8_convrot | **verrouillé** |
 | `audio_shift_s` | — (post-traitement) | slider | advanced | 0.4 | 0 à 0.6, pas de 0.01 |
 | `keep_raw` | — (post-traitement) | toggle | advanced | true | — |
 
-Le mode Simple affiche 4 champs : prompt, image de départ, durée, format. Les champs verrouillés montrent la
-valeur validée sans permettre de la changer : l'admin les déverrouille dans le manifeste s'il le veut.
+Mode Simple : 4 champs (prompt, image de départ, durée, format). Les verrous sont des décisions de l'admin, qu'il
+peut lever dans le manifeste.
 
-## 4.4 Variantes
+## 4.5 Variantes : graphes complets exportés nativement (I4)
 
-Une variante applique un patch déclaré au graphe. Elle couvre ce que le labo faisait en Python
-(`TURBO_MODES`, image d'entrée facultative) sans code :
+Pour ne pas créer un moteur de graphes, une variante **structurelle** (avec ou sans image d'entrée, avec ou sans
+LoRA turbo) est un **graphe API complet**, conçu et exporté dans le Studio. Le manifeste choisit le graphe par des
+règles simples (`variant_rules`). Il n'y a ni ajout, ni suppression, ni rebranchement de nodes par AlphoGen.
 
-```jsonc
-"variants": [
-  { "key": "quality", "options": {
-      "turbo_v4": { "set": { "5.lora_name": "minimax_h3_turbo_v4_step600_ema_pruned_comfyui.safetensors",
-                             "9.sampler_name": "euler", "10.scheduler": "beta", "10.steps": 8 } },
-      "full":     { "remove_nodes": ["5"], "relink": { "7.model": ["1", 0], "10.model": ["1", 0] },
-                    "set": { "9.sampler_name": "res_multistep", "10.scheduler": "simple", "10.steps": 20 } } } },
-  { "key": "i2v", "when": { "param_present": "first_frame" },
-    "add_nodes": { "20": { "class_type": "LoadImage", "inputs": { "image": "$first_frame" } } },
-    "relink": { "6.first_frame": ["20", 0] } }
-]
-```
+La seule opération sur un graphe est `set` : écrire une valeur dans une entrée déclarée. Le résultat est soumis tel
+quel à ComfyUI, qui le valide nativement.
 
-Opérations autorisées : `set`, `remove_nodes`, `add_nodes` (uniquement des `class_type` de la liste blanche du
-template), `relink`. Le résultat est revalidé comme un graphe complet.
+## 4.6 Champs dérivés
 
-## 4.5 Champs dérivés
-
-Petite liste fermée de fonctions pures, testées unitairement, et non un langage d'expressions libre :
+Liste fermée de fonctions pures, testées, versionnées avec le résolveur (`resolver_version`) :
 
 | Fonction | Usage |
 |---|---|
-| `frames_from_seconds(seconds, fps=24)` | formule du template officiel H3 : `n = max(5, round(s*fps)); n + (5 - n % 17) % 17` |
-| `dims_from_aspect(aspect, max_pixels, multiple=16)` | largeur et hauteur à partir du format et du budget de pixels |
-| `random_seed()` | seed tiré côté serveur si l'utilisateur n'en donne pas |
+| `frames_from_seconds(seconds, fps=24)` | formule du template officiel H3 : `n = max(5, round(s*fps)); n + (5 - n % 17) % 17` (5 s → 124, 7 s → 175) |
+| `dims_from_aspect(aspect, max_pixels, multiple=16)` | largeur et hauteur à partir du format |
+| `random_seed()` | seed tiré par le serveur, **stocké** dans `params_effective` |
 
-Nouvelle fonction = code TypeScript + test, une fois pour toutes (et non par workflow).
+Nouvelle fonction = code TypeScript + test + incrément de `resolver_version`, une fois pour toutes.
 
-## 4.6 Exemple : MOSS-Image (deuxième template)
+## 4.7 MOSS-Image (deuxième template) : texte vers image seul en V1
 
 Source : `MOSS_IMAGE_ULTRA_WORKFLOW.json` (format UI, communauté). Nodes inventoriés (`verified-code` sur le
-fichier) : cœur ComfyUI (`UNETLoader`, `CLIPLoader`, `KSampler`, `EmptyFlux2LatentImage`, `MOSSImageControl`,
-`MOSSImageLayoutPrompt`, `TextGenerate`, `CreateBoundingBoxes`…), plus `comfyui-kjnodes`
-(`SetNode`/`GetNode`, `Ideogram4PromptBuilderKJ`), `comfyui_controlnet_aux` (`DepthAnythingV2Preprocessor`) et
-`rgthree-comfy` (nodes d'interface : groupes, comparateur, Power Lora Loader).
+fichier) : cœur ComfyUI (`UNETLoader`, `CLIPLoader`, `KSampler`, `EmptyFlux2LatentImage`, `MOSSImageLayoutPrompt`,
+`TextGenerate`, …) et packs `comfyui-kjnodes`, `comfyui_controlnet_aux`, `rgthree-comfy`.
 
-Procédure :
+1. Studio admin (runtime `moss-image@1`) : remplacer l'encodeur « abliterated » par `qwen3.5_9b_int8_convrot`
+   officiel ; VAE `flux2-vae_small` (licence vérifiée) ; **retirer la branche contrôle de profondeur** (LoRA en attente de clarification,
+   annexe A.3) ; retirer ce qui ne sert qu'à l'interface.
+2. Export API natif. Vérifier ce qui reste comme `class_type` : si un pack n'est plus nécessaire après l'export, il
+   sort du runtime (moins de code tiers, réutilisation plus sûre).
+3. Manifeste V1 : `prompt`, `aspect`, `seed`, `steps` (advanced). Sortie `SaveImage` → asset `image/png`.
+4. Les textes produits par `TextGenerate` (si conservé) sont modérés comme du texte (02 §2.8).
 
-1. L'ouvrir dans le Studio admin (runtime `moss-image@1`), remplacer l'encodeur « abliterated » par
-   `qwen3.5_9b_int8_convrot` officiel (Comfy-Org/MOSS-Image), retirer ce qui ne sert qu'à l'interface.
-2. Export API. Les nodes virtuels (`SetNode`/`GetNode`) et d'interface rgthree disparaissent à l'export
-   (`inferred`, à vérifier) : si un node rgthree **d'exécution** reste (Power Lora Loader), il doit être dans la
-   liste blanche du runtime, sinon être remplacé par `LoraLoaderModelOnly`.
-3. Manifeste V1 : `prompt`, `aspect`, `seed`, `steps` (advanced), `image_control` (variante contrôle profondeur,
-   advanced). Sortie : node `SaveImage`.
-
-C'est précisément ce test qui prouve la généricité : **aucune ligne de Python** entre H3 et MOSS, seulement un
-nouveau runtime YAML et un nouveau dossier de template.
-
-## 4.7 Synchronisation dans le temps
+## 4.8 Synchronisation dans le temps
 
 | Événement | Ce qui se passe |
 |---|---|
-| Nouvelle version d'un template (Studio) | Nouvelle ligne immuable. Les runs passés gardent leur version. L'admin publie quand il veut |
-| Montée de version d'un runtime (ComfyUI, custom node) | Outil `comfy-drift` : relance `/object_info` sur le nouveau runtime, compare au `object_info_snapshot` de chaque template (entrée disparue, type changé, option retirée, plage réduite). Rapport bloquant avant de basculer un template sur le nouveau runtime |
-| Paramètre exposé qui n'existe plus | Import refusé (entrée inconnue) |
-| Valeur par défaut hors plage après mise à jour | Import refusé |
-| Nouveau paramètre disponible dans un node | Proposé à l'admin dans l'éditeur de manifeste (non exposé par défaut) |
-
-L'éditeur de manifeste admin propose automatiquement **toutes** les entrées scalaires du graphe (avec leur type et
-leur plage issus d'`object_info`). L'admin coche ce qu'il expose, en quel mode, pour quels plans, et ce qu'il
-verrouille. C'est ce qui permet au mode Advanced d'exposer « tout ce qui est techniquement compatible et autorisé ».
+| Nouvelle version d'un template | Nouvelle ligne immuable ; les runs passés gardent leur version ; publication manuelle |
+| Montée de version d'un runtime | Outil `comfy-drift` : `/object_info` du nouveau runtime comparé à l'`object_info_snapshot` de chaque template (entrée disparue, type changé, option retirée, plage réduite). Rapport bloquant avant bascule |
+| Paramètre exposé qui n'existe plus | Import refusé |
+| Défaut hors plage après mise à jour | Import refusé |
+| Nouvelle entrée disponible | Proposée à l'admin (non exposée par défaut) si elle entre dans le contrat de widgets (§4.2) |

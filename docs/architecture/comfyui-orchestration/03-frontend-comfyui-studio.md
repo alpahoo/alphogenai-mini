@@ -19,40 +19,44 @@
 
 | Option | Description | Coût de dev | Licence | Verdict |
 |---|---|---|---|---|
-| A. Éditeur natif servi par ComfyUI, ouvert dans un nouvel onglet ou une iframe | Le conteneur Studio sert son propre frontend. AlphoGen ne fait que l'authentification et l'import/export | Faible | Usage interne : aucune redistribution à des tiers. Pour un Studio Pro, redistribution à des clients → obligations GPL sur **ce** composant (fourniture du code source, y compris des modifications), sans effet sur le code Next.js tant qu'il reste un programme séparé (`inferred`, avis juridique recommandé) | **Retenu** |
+| A. Éditeur natif servi par ComfyUI, ouvert dans un nouvel onglet | Le conteneur Studio sert son propre frontend. AlphoGen ne fait que l'authentification et l'import/export | Faible | Usage interne : aucune transmission à des tiers. Pour un Studio Pro, transmission à des clients → obligations GPL sur ce composant (sources correspondantes, notices, inventaire exact). Le servir séparément est une **précaution**, pas une garantie juridique (`inferred`, avis juridique avant diffusion) | **Retenu** |
 | B. Intégrer le paquet frontend dans l'app Next.js | Importer et monter les composants Vue du frontend dans React | Élevé, fragile (Vue dans React, état global, mises à jour) | Risque de former une œuvre combinée GPL avec le code AlphoGen | Écarté |
 | C. Réécrire un éditeur de graphes (React Flow, etc.) | Éditeur maison sur la base `/object_info` | Très élevé, réinvente ComfyUI | — | Écarté (contraire au principe directeur) |
 | D. Convertisseur maison format UI → format API | Pour importer des workflows sans ouvrir le Studio | Moyen, et casse à chaque évolution du frontend (sous-graphes, nodes virtuels) | — | Écarté : on passe par l'export du frontend natif |
 
 ## 3.3 Studio admin (V1)
 
+**Hypothèse à lever tôt** (I8) : ComfyUI démarre en `--cpu` avec les packs du runtime et sert `/object_info` et le
+frontend sans GPU. Certains packs chargent des dépendances GPU à l'import. Vérification en **étape 1** (CPU, sans
+génération, sur autorisation), pas après plusieurs phases.
+
 ```
-Admin ── /admin/workflows/studio ── bouton « Ouvrir le Studio »
-          │ POST /api/admin/comfy/studio-session (isAdminEmail) → URL signée courte durée
-          ▼
-Modal « alphogenai-comfy » : StudioServer (CPU, web_server)
-   - ComfyUI + frontend natif, runtime choisi (h3-video@1, moss-image@1)
-   - démarre en --cpu : l'édition et /object_info ne demandent pas de GPU (`inferred`, à confirmer en phase 5)
-   - vérifie le jeton signé à chaque requête (middleware devant ComfyUI), cookie de session
-   - arrêt après 10 min d'inactivité ; jamais plus d'un conteneur Studio
-   - modèles visibles en lecture seule (volume monté en lecture seule si l'option est disponible)
-          │ « Exporter vers AlphoGen » : l'admin exporte le graphe API (+ graphe UI)
-          ▼
-POST /api/admin/comfy/templates/import
-   - validation (nodes ⊆ liste blanche du runtime, modèles ⊆ catalogue, pas de chemin)
-   - capture de /object_info pour les nodes utilisés → object_info_snapshot
-   - diff avec la version précédente (nodes ajoutés, retirés, paramètres changés)
-   - création d'une version « draft » ; l'admin complète le manifeste (cf. 04)
+Admin ── /admin/workflows/studio ── « Ouvrir le Studio »
+   │ POST /api/admin/comfy/studio-session  → requireAdmin (contrôle serveur, app/api/admin/middleware.ts)
+   │   → jeton signé à usage unique, validité 60 s, lié à l'admin et au runtime
+   ▼
+Modal « alphogenai-comfy » : STUDIO (CPU, web_server), runtime choisi
+   - proxy d'authentification DEVANT ComfyUI (ComfyUI n'écoute que sur 127.0.0.1)
+   - 1re requête : échange du jeton contre un cookie de session HttpOnly, Secure, SameSite=Strict, 30 min,
+     puis redirection vers une URL SANS jeton
+   - le proxy vérifie la session sur TOUTES les routes HTTP et sur la connexion WebSocket /ws
+   - routes d'exécution REFUSÉES par le proxy : POST /prompt, /queue, /interrupt, /api/jobs*, /upload/*,
+     /free, /history (écriture) → le Studio édite, il n'exécute pas
+   - pas de ComfyUI-Manager, nodes d'API désactivés, modèles en lecture seule, aucun secret métier
+   - arrêt après 10 min d'inactivité ; un seul conteneur Studio à la fois
+   │ « Exporter vers AlphoGen » : export natif du graphe API (+ graphe UI) par l'admin
+   ▼
+POST /api/admin/comfy/templates/import (requireAdmin)
+   - validation (class_type ⊆ liste blanche du runtime, modèles ⊆ catalogue, licences connues)
+   - capture de /object_info des nodes utilisés → object_info_snapshot
+   - diff avec la version précédente ; création d'une version « draft » ; manifeste à compléter (04)
 ```
 
-Tester un graphe depuis le Studio : le bouton d'exécution natif du frontend lancerait le calcul sur le conteneur
-CPU. Deux solutions, à trancher en phase 5 (`unknown`) :
+Tester un graphe : bouton « Tester dans AlphoGen », qui crée un **run admin normal** (admission, budget,
+courtier, exécuteur GPU). Même chemin que la production : vraie mesure de coût et de compatibilité, et aucune
+exécution qui contournerait `/api/jobs`.
 
-1. Studio sur GPU à la demande (simple, plus cher : un H100 inactif pendant l'édition).
-2. **Recommandé** : Studio en CPU pour l'édition, et bouton « Tester dans AlphoGen » qui crée un run admin
-   normal sur le runner GPU (même chemin que la production, donc vraie mesure de coût et de compatibilité).
-
-## 3.4 Studio Pro (plus tard, prévu dans la conception)
+## 3.4 Studio Pro (perspective, sans impact sur le schéma V1)
 
 | Exigence | Pourquoi | Comment |
 |---|---|---|
