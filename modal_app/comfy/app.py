@@ -11,9 +11,15 @@ REGION = os.environ.get("H3_MODAL_REGION")
 if not REGION:
     raise RuntimeError("Set H3_MODAL_REGION to the privately approved compute region before loading this app")
 app = modal.App("alphogenai-comfy")
+runtime_environment = {
+    "H3_MODAL_REGION": REGION,
+    "H3_SOURCE_ENVIRONMENT": os.environ.get("H3_SOURCE_ENVIRONMENT", "main"),
+    "H3_MODELS_VOLUME": os.environ.get("H3_MODELS_VOLUME", "alphogenai-comfy-models"),
+}
 volume = modal.Volume.from_name(os.environ.get("H3_MODELS_VOLUME", "alphogenai-comfy-models"), create_if_missing=False)
 cpu_image = (modal.Image.debian_slim(python_version="3.12").apt_install("ffmpeg")
              .pip_install("supabase==2.28.0", "requests==2.32.5", "fastapi==0.121.1", "av==17.0.0")
+             .env(runtime_environment)
              .add_local_python_source("modal_app.comfy")
              .add_local_dir("workflows/comfy/runtimes", "/opt/comfy-catalog"))
 gpu_image = (modal.Image.debian_slim(python_version="3.12")
@@ -21,6 +27,7 @@ gpu_image = (modal.Image.debian_slim(python_version="3.12")
              .run_commands("git clone --depth 1 --branch v0.42.0 https://github.com/Comfy-Org/ComfyUI /root/ComfyUI",
                            "pip install -r /root/ComfyUI/requirements.txt")
              .pip_install("requests==2.32.5", "fastapi==0.121.1")
+             .env(runtime_environment)
              .add_local_python_source("modal_app.comfy")
              .add_local_dir("workflows/comfy/runtimes", "/opt/comfy-catalog"))
 broker_secret = modal.Secret.from_name("alphogenai-comfy-broker")
