@@ -110,9 +110,10 @@ le web server est facturé au tarif non préemptible : ~0,47 $/h (à vérifier).
 - **Plafonds financiers** : périmètre, comptabilisation (réservation, règlement, libération, ajustement par
   rapprochement quotidien) et cinq mécanismes d'arrêt définis en 02 §2.5. Distincts des quotas utilisateurs et du
   budget de tests (`scope = 'tests'`).
-- **Limite de dépense de l'espace Modal** en filet de sécurité. Elle couvre **tout l'espace**, production
-  `alphogenai-v2` comprise : la placer au-dessus des besoins de la production, ou loger `alphogenai-comfy` dans un
-  espace séparé (Q2).
+- **Filet de sécurité Modal** : budget d'espace (usage avant crédits), limite de dépense (net après crédits) et
+  budget d'environnement (calcul d'un environnement seulement). Les deux premiers couvrent tout l'espace, production
+  `alphogenai-v2` comprise ; le troisième isole `alphogenai-comfy` sans couvrir le stockage ni le trafic. Options
+  comparées en 02 §2.5 (Q2).
 - `max_containers` par runtime : borne le **débit** de dépense, pas son cumul.
 - Plafonds par template : `timeout_s`, `limits`, nombre de sorties.
 - Kill switch relu en base au dispatch, à la prise en charge et avant publication.

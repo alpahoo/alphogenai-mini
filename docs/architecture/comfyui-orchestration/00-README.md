@@ -16,7 +16,7 @@ stade.
 1. **ComfyUI est le moteur privilégié** des workflows de génération compatibles. Les fournisseurs API existants
    restent en place là où ils sont meilleurs. Aucun fournisseur n'est retiré.
 2. **Intégration générique** : graphe(s) API exportés nativement + manifeste + catalogue. Ajouter un workflow sur un
-   runtime existant ne modifie pas le code commun ; c'est un critère **vérifié** sur MOSS, pas une hypothèse.
+   runtime existant ne modifie pas le code commun ; c'est un critère **qui sera vérifié** sur MOSS (étape 6), pas une propriété acquise.
 3. **Pas de moteur de nodes maison** : AlphoGen ne fait qu'écrire des valeurs dans des entrées déclarées. Les
    variantes structurelles sont des graphes complets exportés par le Studio.
 4. **Advanced expose tout ce que l'admin autorise** dans le contrat de widgets (04 §4.2), sans autre limite.
@@ -87,11 +87,12 @@ stade.
 | ID | Question | Proposition |
 |---|---|---|
 | Q1 | Réutilisation des conteneurs entre utilisateurs (02 §2.7) | `cross_user` pour H3 (cœur ComfyUI seul) après test de fuite ; `none` pour MOSS au départ. Dans tous les cas, **revue écrite obligatoire de chaque custom node** |
-| Q2 | Plafonds financiers et filet Modal (02 §2.5) | `comfy_global` : 5 $/jour et 50 $/mois pendant la bêta. Filet : soit la limite de dépense de l'espace Modal au-dessus des besoins de la production existante, soit un **espace Modal séparé** pour `alphogenai-comfy` (recommandé, pour qu'un dépassement ComfyUI n'arrête jamais la production) |
+| Q2 | Plafonds financiers et filet Modal (02 §2.5) | `comfy_global` : 5 $/jour et 50 $/mois pendant la bêta. Filet, options à comparer : (a) **environnement Modal dédié** avec budget d'environnement (calcul seul, disponibilité selon le plan à vérifier) + budget d'espace placé au-dessus des besoins de la production ; (b) espace Modal séparé ; (c) budget d'espace seul, réglé haut. **Orientation du propriétaire : isoler budgétairement ComfyUI sans jamais affecter les services Modal déjà en production** ; donc (a) si le plan le permet, sinon (b) ; (c) écartée |
 | Q3 | Délais de modération | revue ≤ 48 h ; contenu `held` sans décision supprimé à 7 jours ; contenu `blocked` supprimé à 7 jours, métadonnées gardées 12 mois |
-| Q4 | Révocation des médias (02 §2.6) | URL signées de 10 min, purge du cache ≤ 5 min, délai maximal garanti ≤ 15 min |
+| Q4 | Révocation des médias (02 §2.6) | URL signées de 10 min, purge du cache ≤ 5 min, objectif d'acceptation ≤ 15 min (à mesurer, pas encore garanti) |
 | Q5 | Défauts confirmés dans le code de `main` (01 §1.5), présence en production non vérifiée | vérifier le commit déployé, puis correctif dédié et séparé de ce chantier, à autoriser |
 | Q6 | Quota quotidien sur un run échoué pour cause d'infrastructure | règle actuelle conservée (tout job créé compte) ; remboursement possible plus tard, décision produit |
+| Q7 | « Un job actif par utilisateur » entre parcours ComfyUI et historique (02 §2.5) | **Décision ouverte.** Préférence du propriétaire : **un seul job actif par utilisateur, tous moteurs confondus**. Avant de figer la solution (par ex. index unique partiel commun), vérifier l'impact sur l'existant : parcours qui créent plusieurs jobs actifs (scènes, podcasts, research, packs), jobs bloqués en `pending`/`in_progress` en production, comportement des crons. En attendant, la limite entre parcours est documentée |
 
 ## Points encore ouverts
 

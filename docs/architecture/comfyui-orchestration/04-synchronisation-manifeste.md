@@ -59,10 +59,13 @@ signale les entrées hors contrat, au lieu de prétendre les gérer.
                "user_terms": "minimax_h3_aup" },
   "moderation_profile": "h3_fail_closed",
   "plans": [],                               // vide = admin seulement ; rempli après l'étape de conformité
-  "variants": { "default": "t2v", "graphs": { "t2v": "graph.t2v.api.json", "i2v": "graph.i2v.api.json",
-                                               "t2v_full": "graph.t2v_full.api.json" } },
-  "variant_rules": [ { "when": { "param_present": "first_frame" }, "use": "i2v" },
-                     { "when": { "param_equals": { "quality": "full" } }, "use": "t2v_full" } ],
+  "variant_axes": { "first_frame": ["absent", "present"], "quality": ["turbo", "full"] },
+  "variants": {                              // table COMPLÈTE : chaque combinaison des axes a une entrée
+    "absent|turbo":  { "graph": "graph.t2v.api.json" },
+    "absent|full":   { "graph": "graph.t2v_full.api.json" },
+    "present|turbo": { "graph": "graph.i2v.api.json" },
+    "present|full":  { "unsupported": "UNSUPPORTED_COMBINATION" }   // pas de graphe i2v_full exporté en V1
+  },
   "params": [ /* §4.4 */ ],
   "derived": [ /* §4.6 */ ],
   "outputs": [{ "node_id": "15", "kind": "video", "mime": "video/mp4", "audio": true }],
@@ -87,12 +90,12 @@ Ids du graphe (`h3-lab/app.py`) : 1 UNET, 2 encodeur, 3-4 VAE, 5 LoRA turbo, 6 `
 | `aspect` | 6.width / 6.height (dérivé) | select | simple, advanced | 9:16 | 9:16, 16:9, 1:1 |
 | `width`, `height` | 6.width / 6.height | number | advanced | issus de `aspect` | multiples de 16, ≤ `max_pixels` ; remplacent `aspect` s'ils sont fournis |
 | `seed` | 8.noise_seed | seed | advanced | tiré par le serveur et **figé** dans le run | plage `object_info` |
-| `quality` | choix de variante (`t2v` turbo v4 / `t2v_full` 20 steps) | select | advanced | turbo v4 | — |
-| `steps` | 10.steps | number | advanced | 8 | **verrouillé** en turbo v4 |
-| `sampler_name` | 9.sampler_name | select | advanced | euler | **verrouillé** (réglage validé) |
-| `scheduler` | 10.scheduler | select | advanced | beta | **verrouillé** |
-| `lora_strength` | 5.strength_model | slider | advanced | 1.0 | **verrouillé** |
-| `text_encoder` | 2.clip_name | model | advanced | int8_convrot | **verrouillé** |
+| `quality` | axe de variante `turbo` / `full` (§4.5) | select | advanced | `turbo` | `full` refusé si `first_frame` est présent (V1) |
+| `steps` | 10.steps | number | advanced | **valeur du graphe de la variante** | verrouillé (turbo : 8 ; full : 20) |
+| `sampler_name` | 9.sampler_name | select | advanced | **valeur du graphe** | verrouillé (turbo : euler ; full : res_multistep) |
+| `scheduler` | 10.scheduler | select | advanced | **valeur du graphe** | verrouillé (turbo : beta ; full : simple) |
+| `lora_strength` | 5.strength_model | slider | advanced | 1.0 | verrouillé ; **n'existe pas** dans la variante full (pas de node 5) |
+| `text_encoder` | 2.clip_name | model | advanced | int8_convrot | verrouillé |
 | `audio_shift_s` | — (post-traitement) | slider | advanced | 0.4 | 0 à 0.6, pas de 0.01 |
 | `keep_raw` | — (post-traitement) | toggle | advanced | true | — |
 
@@ -102,11 +105,33 @@ peut lever dans le manifeste.
 ## 4.5 Variantes : graphes complets exportés nativement (I4)
 
 Pour ne pas créer un moteur de graphes, une variante **structurelle** (avec ou sans image d'entrée, avec ou sans
-LoRA turbo) est un **graphe API complet**, conçu et exporté dans le Studio. Le manifeste choisit le graphe par des
-règles simples (`variant_rules`). Il n'y a ni ajout, ni suppression, ni rebranchement de nodes par AlphoGen.
+LoRA turbo) est un **graphe API complet**, conçu et exporté dans le Studio. Il n'y a ni ajout, ni suppression, ni
+rebranchement de nodes par AlphoGen.
 
-La seule opération sur un graphe est `set` : écrire une valeur dans une entrée déclarée. Le résultat est soumis tel
-quel à ComfyUI, qui le valide nativement.
+**Sélection sans ambiguïté.** Le manifeste déclare des **axes** (`variant_axes`) et une **table complète** : chaque
+combinaison des valeurs des axes a exactement une entrée, soit un graphe, soit `unsupported`. Le validateur de
+manifeste refuse une table incomplète ou une clé en double. À l'exécution, la combinaison est calculée à partir des
+paramètres, puis :
+
+- combinaison `unsupported` → rejet 400 (`UNSUPPORTED_COMBINATION`) **avant** admission, avec un message clair ;
+- sinon, le graphe de la combinaison est utilisé. Il n'y a pas de règles ordonnées, donc pas de conflit possible.
+
+Pour H3 en V1 : image présente × full n'est pas proposé (aucun graphe `i2v_full` exporté) ; l'UI désactive `full`
+quand une image est fournie, et le serveur rejette la combinaison si elle arrive quand même.
+
+**Défauts et verrous par variante.** Un paramètre verrouillé n'est **jamais écrit** par AlphoGen : sa valeur est celle
+du graphe de la variante choisie (8 / euler / beta en turbo ; 20 / res_multistep / simple en full). Un paramètre
+dont la cible n'existe pas dans le graphe choisi (ex. `lora_strength` en full) est ignoré s'il est verrouillé, et
+**rejeté** (400) s'il est envoyé explicitement. Les défauts affichés dans l'UI sont lus dans le graphe de la variante
+courante.
+
+La seule opération sur un graphe est `set` : écrire une valeur dans une entrée déclarée et non verrouillée. Le
+résultat est soumis tel quel à ComfyUI, qui le valide nativement.
+
+Test d'acceptation (05 étape 3) : les 4 combinaisons image absente/présente × turbo/full. Trois produisent le bon
+graphe, avec des valeurs verrouillées identiques à celles du graphe exporté ; la quatrième est rejetée avant
+admission. S'y ajoutent un `lora_strength` explicite en full → 400, et un manifeste à table incomplète → refusé à
+l'import.
 
 ## 4.6 Champs dérivés
 

@@ -33,9 +33,14 @@ Principe : **créer** du générique, **modifier** l'existant au minimum, ne **r
 | `modal_app/comfy/moderation.py` | 5 | Adaptateur auto-hébergé, transcription audio |
 | `modal_app/comfy/studio_proxy.py` | 1 / 5 | Proxy d'authentification du Studio (session, WS, routes d'exécution refusées) |
 | `supabase/migrations/2026MMDD_create_comfy_catalog.sql` | 2 | `comfy_templates`, `comfy_template_versions` |
-| `supabase/migrations/2026MMDD_create_comfy_runs.sql` | 2 | `comfy_runs`, `comfy_run_graphs` (service seulement), `dispatch_outbox` |
+| `supabase/migrations/2026MMDD_create_comfy_runs.sql` | 2 | `comfy_runs`, `comfy_run_graphs` (service seulement) |
 | `supabase/migrations/2026MMDD_create_assets.sql` | 2 | `assets` (privé, RLS propriétaire) |
-| `supabase/migrations/2026MMDD_create_spend.sql` | 2 | `spend_ledger`, `spend_limits` |
+| `supabase/migrations/2026MMDD_create_spend.sql` | 2 | `spend_ledger` (journal), `spend_envelopes` (compteurs verrouillés à l'admission, 02 §2.5) |
+| `supabase/migrations/2026MMDD_create_outboxes.sql` | 2 | `dispatch_outbox`, `notification_outbox` |
+| `supabase/migrations/2026MMDD_create_moderation_tasks.sql` | 2 | `moderation_tasks` (échéances de revue et de suppression des runs `held`) |
+| `supabase/migrations/2026MMDD_storage_comfy_outputs.sql` | 2 | Bucket privé `comfy-outputs` **sans aucune politique** pour `anon` et `authenticated` ; vue `assets_public_meta` (métadonnées sans `storage_key`) |
+| `app/api/cron/comfy-notify/route.ts` | 3 | Envoyeur de `notification_outbox` (reprises, clé d'idempotence) |
+| `app/api/cron/comfy-moderation-deadlines/route.ts` | 5 | Rappels, escalade et suppression des runs `held` |
 | `supabase/migrations/2026MMDD_comfy_functions.sql` | 2 | `admit_comfy_job`, `transition_comfy_run` (security definer, search_path figé) |
 | `supabase/migrations/2026MMDD_engines_comfy_type.sql` | 2 | CHECK `engines.type` élargi à `comfy_workflow` |
 | `supabase/migrations/2026MMDD_realtime_comfy_runs.sql` | 3 | Publication realtime `comfy_runs` |
@@ -66,7 +71,7 @@ Principe : **créer** du générique, **modifier** l'existant au minimum, ne **r
 | `app/api/admin/engines/route.ts`, `[id]/test/route.ts`, `app/api/engines/route.ts` | 4 | Accepter / présenter `comfy_workflow` (02 §2.3) |
 | `lib/jobs/guard.ts` | 3 | Règles reprises par `admit_comfy_job` ; refus des comptes suspendus |
 | `lib/use-job-realtime.ts` | 3 | Abonnement à `comfy_runs` |
-| `app/api/webhooks/modal/route.ts` | 3 | Événement terminal idempotent (`notified_at`) pour les runs ComfyUI |
+| `lib/email.ts` | 3 | Utilisé par l'envoyeur de `notification_outbox` (clé d'idempotence transmise si le fournisseur l'accepte) ; la route `app/api/webhooks/modal/route.ts` reste inchangée pour les parcours historiques |
 | `app/(workspace)/library/page.tsx`, page job | 3 | Rendu selon `assets.kind` (image ou vidéo) |
 | `lib/engine-intentions.ts`, `lib/__tests__/provider-leak-guard.test.ts` | 5 | Libellés des manifestes ; « MiniMax H3 » imposé |
 | `lib/types.ts` | 2 | Types des runs, assets, états |

@@ -115,11 +115,13 @@ comfy_runs(id, job_id fk jobs on delete cascade, user_id not null, template_vers
   resolver_version text not null, runtime text not null,
   resolved_graph_sha256 text not null,
   status ..., -- cf. §2.5
-  attempt int default 1, claimed_by text, claimed_at, heartbeat_at, expires_at,
+  attempt int default 1, claimed_by text, claimed_at, heartbeat_at, exec_expires_at,
+  review_due_at, retention_deadline,                  -- échéances de modération (état held)
+  financial_status check in ('open','closing','closed') default 'open',
   comfy_prompt_id text, modal_call_id text,
   progress jsonb, error_code text, error_message_internal text,
   reserved_cost_usd numeric, gpu_type, gpu_seconds, container_seconds, cold_start_s, cost_usd numeric,
-  notified_at timestamptz, created_at, started_at, finished_at)
+  created_at, started_at, finished_at)
 
 comfy_run_graphs(run_id pk fk comfy_runs, resolved_graph jsonb not null)
   -- service_role uniquement (aucun GRANT à authenticated) : le graphe n'est jamais exposé au navigateur
@@ -133,8 +135,13 @@ assets(id, owner_id, job_id, run_id, role check in ('final','raw','preview','thu
   created_at)
 
 dispatch_outbox(id, run_id unique, created_at, dispatched_at, attempts, last_error)
+notification_outbox(id text pk,          -- stable : run_id + type d'événement
+  run_id, kind, payload jsonb, status check in ('pending','sent','failed'), attempts, next_attempt_at,
+  provider_message_id, sent_at, created_at)
+moderation_tasks(run_id pk, review_due_at, retention_deadline, reminded_at, escalated_at, done_at)
 spend_ledger(id, scope, run_id, kind check in ('reservation','settlement','release','adjustment'), amount_usd, period_day, created_at)
-spend_limits(scope, period check in ('day','month'), limit_usd, primary key (scope, period))
+spend_envelopes(scope, period check in ('day','month'), period_start date, limit_usd, reserved_usd, consumed_usd,
+  primary key (scope, period, period_start))          -- compteurs verrouillés à l'admission (§2.5)
                                                        -- scopes : comfy_global, runtime:<id>, template:<slug>, tests
 moderation_policies, moderation_events, content_reports, user_strikes   -- §2.8
 ```
@@ -154,16 +161,56 @@ l'exécuteur. Pas de second résolveur en Python.
 Fonction Postgres `admit_comfy_job(...)` (`security definer`, `search_path` figé, appelée par le client service
 après authentification) :
 
-1. verrou par utilisateur (`pg_advisory_xact_lock(hashtext(user_id))`) ;
+1. verrou par utilisateur (`pg_advisory_xact_lock(hashtext(user_id))`) : protège **seulement** les compteurs propres
+   à l'utilisateur (quota, job actif) ;
 2. si `(user_id, idempotency_key)` existe déjà : renvoie le job existant (idempotence) ;
 3. relit en base : plan, suspension, template actif et autorisé pour ce plan (kill switch) ;
 4. compte les jobs actifs et ceux des 24 dernières heures ; **toute erreur = refus** ;
-5. réserve le budget : coût maximal du run (`timeout_s` × prix du GPU + post-traitement + inactivité de fin) contre
-   `spend_limits` (global, template, runtime) ; dépassement = refus « capacité atteinte » ;
+5. **réserve les enveloppes budgétaires partagées** (ci-dessous) ; un seul refus = annulation de toute la
+   transaction (« capacité atteinte ») ;
 6. insère `jobs`, `comfy_runs`, `comfy_run_graphs`, `dispatch_outbox`, `spend_ledger(reservation)`.
 
 Tout ou rien. Un utilisateur anonyme ne peut pas lancer de run ComfyUI. Le navigateur génère la clé
 d'idempotence (UUID par intention de génération) et la renvoie en cas de nouvel essai réseau.
+
+**Réservation atomique des enveloppes partagées.** Le verrou par utilisateur ne protège pas le budget : deux
+utilisateurs différents prennent deux verrous différents. Les plafonds sont donc portés par des **lignes de
+compteurs** (`spend_envelopes`, une ligne par périmètre et par période : `comfy_global`, `runtime:<id>`,
+`template:<slug>`, `tests` × jour, mois), mises à jour par une **écriture conditionnelle** :
+
+```sql
+-- pour chaque enveloppe concernée, dans un ORDRE STABLE (tri lexicographique de scope, puis période),
+-- afin qu'aucun couple de transactions ne puisse se bloquer mutuellement
+UPDATE spend_envelopes
+   SET reserved_usd = reserved_usd + :amount
+ WHERE scope = :scope AND period_start = :period
+   AND consumed_usd + reserved_usd + :amount <= limit_usd
+RETURNING 1;
+-- 0 ligne → plafond atteint → RAISE → toute la transaction est annulée
+```
+
+L'`UPDATE` verrouille la ligne jusqu'à la fin de la transaction : une seconde admission concurrente attend, puis
+relit le solde **à jour** et échoue si elle le dépasse. Les lignes d'enveloppe sont créées à l'avance (cron du début
+de période) pour ne pas dépendre d'une insertion concurrente. `spend_ledger` reste le journal (append-only) ; les
+compteurs sont recalculés et comparés au journal à chaque rapprochement.
+
+Test d'acceptation : N utilisateurs **différents** lancent en même temps une admission alors que l'enveloppe
+globale ne permet qu'**une** réservation → exactement 1 admission, N−1 refus « capacité atteinte », compteurs
+cohérents avec le journal.
+
+**Limite « un job actif par utilisateur » entre parcours.** Les créations historiques (`app/api/jobs/route.ts`
+hors branche comfy) ne prennent pas ce verrou. Sans mécanisme commun, une création ComfyUI et une création
+historique simultanées peuvent dépasser `MAX_ACTIVE_JOBS = 1`. Deux options (décision Q7) :
+
+1. **Mécanisme commun en base** : index unique partiel sur `jobs(user_id) WHERE status IN ('pending','in_progress')`,
+   qui s'applique à tous les parcours. À n'adopter qu'après vérification qu'aucun parcours existant ne crée
+   légitimement plusieurs jobs actifs (scènes, podcasts, research) ; sinon il casserait la production.
+2. **Limite assumée** : la garantie ne vaut qu'à l'intérieur du parcours ComfyUI ; un dépassement entre parcours est
+   possible, rare, et sans conséquence de coût pour le budget ComfyUI (qui reste protégé par les enveloppes).
+
+**Décision ouverte (Q7).** Préférence du propriétaire : option 1 (un seul job actif par utilisateur, tous moteurs
+confondus), à figer seulement après vérification de l'impact sur les parcours existants. Tant qu'elle n'est pas
+tranchée, l'option 2 s'applique et la limite est documentée.
 
 **Dispatch durable** : un envoyeur (dans la requête après commit, puis rattrapage par cron pour les lignes non
 envoyées) poste `run_id` au courtier. Le courtier prend le run par `UPDATE comfy_runs SET status='starting',
@@ -178,8 +225,8 @@ exécution.
 | `starting` | `in_progress` | `running`, `failed`, `cancelled`, `expired` |
 | `running` | `in_progress` | `postprocessing`, `failed`, `cancelled`, `expired` |
 | `postprocessing` | `in_progress` | `moderating`, `failed`, `cancelled` |
-| `moderating` | `in_progress` | `done`, `held`, `blocked`, `failed` |
-| `held` (en revue) | `in_progress` | `done` (après revue), `blocked` |
+| `moderating` | `in_progress` | `done`, `held`, `blocked`, `failed`, `cancelled` |
+| `held` (en revue, **aucune ressource de calcul**) | `in_progress` | `done` (revue favorable), `blocked` (revue défavorable), `expired` (échéance de modération dépassée, `error_code = REVIEW_TIMEOUT`), `cancelled` |
 | `done` | `done` | — (terminal) |
 | `failed`, `blocked`, `expired` | `failed` (+ `error_code`) | — (terminal) |
 | `cancelled` | `cancelled` si la contrainte en production l'autorise, sinon `failed` + `error_code = CANCELLED` (à vérifier, cf. 09 §9.5) | — (terminal) |
@@ -187,7 +234,18 @@ exécution.
 ### Transitions terminales
 
 États terminaux : `done`, `failed`, `blocked`, `expired`, `cancelled`. `held` n'est **pas** terminal : il a une
-échéance (§2.8).
+échéance de modération (ci-dessous).
+
+**Deux échéances distinctes** :
+
+| Échéance | S'applique à | Valeur | Contrôle |
+|---|---|---|---|
+| `exec_expires_at` + heartbeat | `queued` → `moderating` (le courtier travaille) | création + `timeout_s` + marge ; heartbeat ≤ 2 min | cron d'expiration d'exécution |
+| `review_due_at`, `retention_deadline` | `held` uniquement | entrée en `held` + 48 h (revue) ; + 7 jours (suppression) | **tâche différée persistante** (`moderation_tasks`, une ligne par run retenu), traitée par un cron : rappel à 24 h, escalade à 48 h, passage en `expired` + suppression des médias à 7 jours |
+
+À l'entrée en `held`, le courtier **termine son travail et rend toutes les ressources** : les médias sont déjà dans
+le stockage privé, l'exécuteur est arrêté, plus aucun heartbeat n'est attendu, `exec_expires_at` est mis à `NULL`. Le
+cron d'expiration d'exécution **exclut** les runs `held`. Aucun courtier n'attend une revue humaine.
 
 Une seule fonction SQL, `transition_comfy_run(run_id, from_states[], to_state, payload)`, porte toutes les
 transitions :
@@ -197,15 +255,39 @@ UPDATE comfy_runs SET status = :to, … WHERE id = :run AND status = ANY(:from) 
 -- 0 ligne modifiée = transition refusée (un autre acteur est passé avant) → l'appelant s'arrête
 ```
 
-Dans la **même transaction** : mise à jour de `jobs.status`, écriture `spend_ledger` (règlement ou libération),
-changement d'état des assets du run, et pose de `notified_at` si l'état est terminal.
+Dans la **même transaction** : mise à jour de `jobs.status`, changement d'état des assets du run, et, si l'état est
+terminal, insertion d'un événement dans `notification_outbox` (§ « Notification »). **La transition terminale ne
+clôt pas les comptes** : elle fixe le résultat pour l'utilisateur ; la clôture financière est un processus distinct
+(§ « Clôture financière »).
 
 | Effet par état terminal | `done` | `failed` / `expired` | `blocked` | `cancelled` |
 |---|---|---|---|---|
-| Budget | règlement du coût mesuré | règlement du consommé, libération du reste | règlement | règlement du consommé, libération du reste |
+| Résultat utilisateur | figé | figé | figé | figé |
+| Budget | clôture financière ouverte (provision conservée) | idem | idem | idem |
 | Assets | `final` (et `raw` si conservé) passent à l'état décidé par la modération ; aperçus supprimés | tous supprimés | médias supprimés selon la rétention (§2.8) | tous supprimés |
-| Quota quotidien | compté | compté (règle actuelle : tout job créé compte ; un remboursement sur panne d'infrastructure est une **décision produit**, Q6 du README) | compté | compté |
-| Notification | une fois | une fois | une fois (« contenu non conforme ») | aucune |
+| Quota quotidien | compté | compté (règle actuelle : tout job créé compte ; remboursement sur panne d'infrastructure = **décision produit**, Q6) | compté | compté |
+| Notification (outbox) | 1 événement | 1 événement | 1 événement (« contenu non conforme ») | aucun |
+
+### Clôture financière
+
+Un état terminal ne signifie pas que la consommation est arrêtée : un conteneur peut encore tourner pendant son
+arrêt ou sa fenêtre d'inactivité. `comfy_runs.financial_status` suit donc son propre cycle :
+
+| `financial_status` | Signification | Passage au suivant |
+|---|---|---|
+| `open` | run en cours ; réservation complète en place | à l'état terminal du run |
+| `closing` | résultat figé ; **la provision reste réservée** ; arrêt du calcul demandé si nécessaire | quand l'arrêt est **confirmé** : événement `done` de l'exécuteur, ou statut terminal de l'appel Modal (`FunctionCall`) après annulation |
+| `closed` | coût réglé (consommé mesuré + part d'inactivité allouée), reste libéré | — |
+
+- **Destruction du conteneur** : pour `cancelled`, `expired`, OOM, `cleanup_ok = false` ou timeout, le courtier
+  appelle `FunctionCall.cancel(terminate_containers=True)`. Par défaut (`terminate_containers=False`), Modal annule
+  l'entrée mais **ne détruit pas** le conteneur (`verified-docs`, SDK Modal `FunctionCall.cancel`), qui resterait
+  réutilisable et facturé jusqu'à sa fenêtre d'inactivité.
+- **Consommation tardive** : toute consommation constatée après la transition terminale (fin d'arrêt, inactivité)
+  est comptabilisée comme `settlement` complémentaire du même run, **sans** seconde livraison, publication ou
+  notification.
+- **Runs bloqués en `closing`** : le rapprochement quotidien les clôt à partir des données d'usage Modal ; au-delà de
+  24 h, alerte admin. La provision reste imputée au plafond tant que le run n'est pas `closed`.
 
 Règles :
 
@@ -218,10 +300,10 @@ Règles :
 - **Relance = nouveau job** (nouvelle clé d'idempotence, nouvelle unité de quota). Pas de relance automatique
   (`retries=0`, convention du dépôt).
 - Matrice de courses testée (05 étape 2) : annulation × fin, expiration × fin, deux dispatchs × un run, revue ×
-  retrait, notification rejouée.
-- **Heartbeat** du courtier toutes les 15 s. Un cron d'expiration passe en `expired` les runs dont le heartbeat
-  dépasse 2 minutes ou dont `expires_at` (création + `timeout_s` + marge) est dépassé, libère la réservation de
-  budget, et tente un arrêt de l'appel Modal (`modal_call_id`).
+  retrait, annulation × `held`, échéance de modération × revue, notification rejouée.
+- **Heartbeat** du courtier toutes les 15 s, pendant l'exécution seulement. Le cron d'expiration d'exécution passe en
+  `expired` les runs **hors `held`** dont le heartbeat dépasse 2 minutes ou dont `exec_expires_at` est dépassé, puis
+  ouvre la clôture financière et demande la destruction du conteneur (`modal_call_id`).
 - **Réconciliation** : après une coupure WebSocket, le courtier relit `/history/{prompt_id}` ; après disparition du
   conteneur, le cron d'expiration fait foi.
 
@@ -232,19 +314,32 @@ heartbeat (≤ 15 s) et :
 
 1. demande à l'exécuteur, par le canal de contrôle (§2.7), l'annulation native de ComfyUI
    `POST /api/jobs/{prompt_id}/cancel` (v0.42.0, idempotente, `server.py` L1060) ;
-2. si l'exécuteur ne répond pas sous 10 s : annule l'appel Modal (`FunctionCall.cancel()`) et marque le conteneur
-   à recycler.
+2. si l'exécuteur ne répond pas sous 10 s : `FunctionCall.cancel(terminate_containers=True)` (destruction du
+   conteneur).
 
-Budget : règlement du temps réellement consommé.
+En `held`, aucune ressource n'est à arrêter : l'annulation supprime les médias retenus et clôt le run.
+Budget : clôture financière (ci-dessus), jamais au moment même de l'annulation.
 
 ### Progression et notification
 
 - `comfy_runs` ajouté à la publication realtime ; RLS : le propriétaire lit ses runs (sans `params_effective`
   sensibles si besoin, via une vue). Le hook existant écoute `jobs` et `job_scenes` : il est étendu, pas remplacé.
-- Progression écrite au plus une fois par seconde.
-- Notification terminale idempotente : le courtier pose `notified_at` par `UPDATE … WHERE notified_at IS NULL` et
-  envoie l'e-mail via la route de webhook existante (qui envoie déjà les e-mails sur `done`/`failed`), ou une route
-  équivalente. Jamais deux e-mails pour un run.
+- Progression écrite au plus une fois par seconde. Pour les profils de modération `fail_closed` (H3), la progression
+  est **uniquement textuelle** (étape, pourcentage) : aucun aperçu visuel n'est transmis avant autorisation (§2.6).
+
+### Notification (outbox transactionnelle)
+
+- La transition terminale insère, dans la même transaction, une ligne `notification_outbox` : `id` **stable**
+  (dérivé de `run_id` + type d'événement, contrainte d'unicité), `status` (`pending`/`sent`/`failed`), `attempts`,
+  `next_attempt_at`, `provider_message_id`, `sent_at`.
+- Un envoyeur (cron, plus déclenchement après commit) traite les lignes `pending` : envoi via `lib/email.ts`, avec
+  l'`id` de l'outbox comme **clé d'idempotence du fournisseur** si celui-ci en accepte une (`unknown` pour Resend, à
+  vérifier en étape 3) ; reprises avec délai croissant ; `failed` après N essais, alerte admin.
+- `sent_at` (ancien `notified_at`) est posé **après** confirmation du fournisseur : c'est une **confirmation
+  d'envoi**, pas une réservation.
+- Garantie réelle : livraison **au moins une fois**. « Jamais deux e-mails » n'est garanti que si le fournisseur
+  déduplique sur la clé d'idempotence ; sinon, un doublon reste possible dans le cas rare d'un arrêt entre l'envoi
+  et l'enregistrement de `sent_at`. Le critère d'acceptation est formulé ainsi (05).
 
 ### Plafonds financiers
 
@@ -253,7 +348,7 @@ du courtier, du Studio et des crons), le trafic sortant, les appels payants de m
 liés aux runs ComfyUI. Ne comptent pas : les pipelines existants (`alphogenai-v2`, fournisseurs API), qui gardent
 leurs propres suivis. Le budget de **tests** (05 §5.9) est un périmètre séparé (`scope = 'tests'`).
 
-**Périmètres de plafond** (`spend_limits`) : `comfy_global`, `runtime:<id>`, `template:<slug>`, `tests` ; périodes
+**Périmètres de plafond** (`spend_envelopes`) : `comfy_global`, `runtime:<id>`, `template:<slug>`, `tests` ; périodes
 jour (UTC) et mois civil.
 
 **Comptabilisation** (`spend_ledger`) :
@@ -261,8 +356,8 @@ jour (UTC) et mois civil.
 | Écriture | Quand | Montant |
 |---|---|---|
 | `reservation` | à l'admission | coût **maximal** : (`timeout_s` + démarrage + post-traitement + inactivité de fin) × prix du conteneur, + modération estimée |
-| `settlement` | à l'état terminal | coût mesuré : secondes de conteneur × prix (GPU + CPU + mémoire), part d'inactivité allouée (07 §7.4), appels de modération facturés |
-| `release` | à l'état terminal | réservation − règlement |
+| `settlement` | à la **clôture financière** (arrêt confirmé), puis en complément si une consommation tardive est constatée | coût mesuré : secondes de conteneur × prix (GPU + CPU + mémoire), part d'inactivité allouée (07 §7.4), appels de modération facturés |
+| `release` | à la clôture financière | réservation − règlement |
 | `adjustment` | rapprochement quotidien | écart entre le total comptabilisé et la consommation relevée chez Modal (relevé d'usage ou facture) |
 
 Consommé de la période = règlements + ajustements + réservations ouvertes.
@@ -277,9 +372,18 @@ Consommé de la période = règlements + ajustements + réservations ouvertes.
    qui garantit qu'aucun run ne dépasse le plafond de plus que sa propre réservation.
 4. **Coupure automatique** : si le rapprochement montre un dépassement, le template ou le runtime concerné passe en
    kill switch (statut en base), avec alerte admin.
-5. **Filet de sécurité Modal** : limite de dépense de l'espace Modal. **Attention** : cette limite s'applique à
-   tout l'espace, donc aussi à la production existante `alphogenai-v2`. Soit on la place assez haut pour ne jamais
-   gêner la production, soit on loge `alphogenai-comfy` dans un espace Modal séparé (décision Q2 du README).
+5. **Filet de sécurité Modal.** Modal distingue trois mécanismes (`verified-docs`, guide Budgets) :
+
+   | Mécanisme | Ce qu'il plafonne | Portée | Effet pour nous |
+   |---|---|---|---|
+   | Budget d'espace (*Workspace budget*) | l'**usage** total du mois, avant application des crédits | tout l'espace | couvre aussi la production `alphogenai-v2` : un dépassement ComfyUI pourrait l'arrêter |
+   | Limite de dépense (*spend limit*) | les charges **nettes** après crédits | tout l'espace | même réserve |
+   | Budget d'environnement (*Environment budget*) | l'usage **de calcul** d'un environnement Modal | un environnement | isole `alphogenai-comfy` sans toucher la production ; ne couvre **pas** tous les frais (stockage, trafic) ; disponibilité selon le plan, **à vérifier** |
+
+   Options à comparer (décision Q2) : (a) environnement Modal dédié à `alphogenai-comfy` avec son budget
+   d'environnement, plus le budget d'espace placé au-dessus des besoins de la production ; (b) espace Modal séparé ;
+   (c) budget d'espace seul, réglé haut. Les frais non couverts par un budget d'environnement restent suivis par
+   notre propre comptabilisation (enveloppes et rapprochement).
 
 Tests (05 étape 2) : refus d'admission au plafond, run `queued` bloqué au dispatch, réservations concurrentes qui
 ne dépassent jamais la limite, ajustement de rapprochement, coupure automatique.
@@ -295,7 +399,8 @@ des URL publiques. Le parcours ComfyUI ne s'appuie sur aucun de ces comportement
 |---|---|
 | **Privé par défaut** | Toute sortie (finale, brute, aperçu, miniature) est écrite dans un stockage privé (bucket privé, clé non devinable, aucune URL publique) |
 | Lecture privée | `GET /api/jobs/[id]` et `GET /api/media/[asset_id]` exigent une session et vérifient `owner_id = auth.uid()` (ou admin via `requireAdmin`) avant toute lecture ; URL signées de courte durée (≤ 10 min) |
-| États d'accès | `pending`, `held`, `blocked` : aucun accès propriétaire (sauf aperçu de progression non média) ; `private_ok` : propriétaire seulement ; `public_ok` : peut être publié |
+| États d'accès | `pending`, `held`, `blocked` : **aucun octet** accessible au propriétaire ; `private_ok` : propriétaire seulement ; `public_ok` : peut être publié |
+| **Aperçus** | Une vignette de progression **est un média**, même en basse définition. Profils `fail_closed` (H3) : aucun aperçu visuel n'est produit ni transmis avant autorisation (ComfyUI lancé avec `--preview-method none`, événement `preview` désactivé côté exécuteur) ; progression **textuelle** seulement. Autres profils : un aperçu est un asset `role = preview`, soumis aux mêmes règles d'accès et de modération que le final |
 | **Publication explicite** | Action de l'utilisateur sur un asset `public_ok` : pose `published_at`. `/v/[id]`, la galerie et l'export social ne lisent que des assets publiés et non retirés |
 | Retrait | Voir « Retrait et révocation » ci-dessous |
 | Assets typés | `kind`, `mime`, `role`, `postprocess_capabilities`. La bibliothèque et la page job rendent selon `kind` (image ou vidéo). Une post-production n'est proposée que si l'asset la déclare |
@@ -304,10 +409,30 @@ des URL publiques. Le parcours ComfyUI ne s'appuie sur aucun de ces comportement
 
 Ces règles s'appliquent **avant les premiers contenus utilisateurs**, y compris en bêta fermée.
 
+### Droits : métadonnées et octets séparés, aucun accès direct au stockage
+
+Les permissions de Supabase Storage s'appliquent sur `storage.objects`, **indépendamment** des routes applicatives
+(`verified-docs`, guide Storage access control) : une politique « propriétaire » sur le bucket permettrait au client
+de signer ou de télécharger un objet retenu en contournant `/api/media`. D'où :
+
+| Ressource | `anon` | `authenticated` (propriétaire) | `service_role` (serveur) |
+|---|---|---|---|
+| Bucket des sorties ComfyUI (`comfy-outputs`, privé) : `storage.objects` | aucune politique | **aucune politique** : ni lecture, ni liste, ni signature, ni écriture | lecture, écriture, signature |
+| Objets R2, si R2 est utilisé à la place | aucun domaine public, aucun bucket public | aucune clé | URL présignées émises par le serveur seulement |
+| `assets` : **métadonnées** (id, job, kind, mime, état de modération, dates) | — | lecture de **ses** lignes via une vue `assets_public_meta`, **sans** `storage_key` ni provenance interne | tout |
+| `assets.storage_key` et colonnes internes | — | **aucun GRANT** sur ces colonnes | tout |
+| Octets | — | uniquement via `GET /api/media/[asset_id]` : session + propriétaire + `moderation_state ∈ {private_ok, public_ok}` + non retiré → URL signée courte émise par le serveur | — |
+
+Tests (05 étape 2), **par les API directes et pas seulement par les routes Next.js** : avec le jeton d'un utilisateur,
+appels Storage directs (`createSignedUrl`, `download`, `list`, `upload`) sur `comfy-outputs` → refusés, y compris pour
+ses propres objets ; `select storage_key from assets` via PostgREST → refusé ; URL R2 devinée → refusée ; asset
+`held` de l'utilisateur lui-même → aucun octet par aucun chemin.
+
 ### Retrait et révocation
 
-**Délai maximal de révocation garanti** : `T_rev = TTL des URL signées (10 min) + délai de purge du cache (mesuré,
-objectif ≤ 5 min)`, soit **≤ 15 min** pour toute copie servie par AlphoGen. Valeurs à confirmer (Q4).
+**Délai maximal de révocation : objectif d'acceptation, à mesurer** (pas encore une garantie acquise) :
+`T_rev = TTL des URL signées (10 min) + délai de purge du cache (objectif ≤ 5 min)`, soit **≤ 15 min** pour toute
+copie servie par AlphoGen. Valeurs à confirmer (Q4).
 
 | Copie | Mécanisme | Délai |
 |---|---|---|
@@ -323,8 +448,9 @@ Après expiration de la rétention (§2.8) ou retrait définitif, les objets son
 seulement masqués), journal de suppression conservé.
 
 Tests (05 étape 2) : émettre une URL, retirer, vérifier immédiatement le refus de nouvelles URL, puis le refus de
-l'ancienne URL après le TTL ; publier, retirer, vérifier le 404 sur l'URL publique après purge et l'absence de copie
-dans le cache (en-têtes de réponse) ; cascade sur les dérivés.
+l'ancienne URL après le TTL ; publier, **mettre l'URL publique en cache** (requêtes préalables par le CDN), retirer,
+puis **rejouer cette URL déjà en cache** à intervalles réguliers jusqu'au 404 : le délai observé est la mesure de
+`T_rev` (les en-têtes seuls ne prouvent pas l'absence de copie servie par un cache) ; cascade sur les dérivés.
 
 ## 2.7 Isolation du code tiers et des secrets (B3)
 
@@ -348,7 +474,7 @@ Interface (une fonction Modal de l'exécuteur, appelée par le courtier) :
 ```python
 # executor.run_graph(run_nonce: str, graph: dict, inputs: dict[str, bytes], limits: dict) -> Iterator[Event]
 # Event = {"type": "progress"|"preview"|"output"|"done"|"error", ...}
-#   output  : {"name", "mime", "bytes"}            preview : vignette basse définition, jamais un média complet
+#   output  : {"name", "mime", "bytes"}            preview : vignette = MÉDIA ; jamais émis pour un profil fail_closed (H3)
 #   done    : {"cleanup_ok": bool, "gpu_seconds": float}   error : {"code": "OOM"|"INVALID_INPUT"|"TIMEOUT"|"INTERNAL"}
 ```
 

@@ -1,8 +1,11 @@
 # 9. Correspondance avec la revue Codex (PR #89, commit `a34ae8f`)
 
 Revue indépendante reçue le 2026-11-08. Chaque constat a été **revérifié dans le code** (`origin/main` @ `39cfbc6`)
-ou dans les sources officielles avant correction. Statut : ✅ accepté et corrigé, 🟡 accepté avec nuance,
-❌ contesté (preuve fournie).
+ou dans les sources officielles avant correction.
+
+Statuts : ✅ **corrigé dans la spécification, réalisation à vérifier pendant le développement** ; 🟡 accepté avec
+nuance ; ❌ contesté (preuve fournie). Aucun ✅ ne signifie que le mécanisme existe ou fonctionne : seuls les
+critères d'acceptation de 05, une fois passés, le prouveront.
 
 ## 9.1 Bloquants
 
@@ -23,7 +26,7 @@ ou dans les sources officielles avant correction. Statut : ✅ accepté et corri
 | I3 | Le registre demande plus qu'un CHECK : API admin, test, catalogue public, statuts `beta/live` absents | Confirmé : `app/api/admin/engines/route.ts` L72 (`api`/`modal_local` seulement), `[id]/test/route.ts` L33 (`api` seulement), `app/api/engines/route.ts` (listes statiques) | ✅ | Inventaire des contrats à modifier, lien `engine_id` ↔ template, statuts du catalogue séparés de `engines.status` (02 §2.3, 08) |
 | I4 | `/object_info` ne suffit pas à générer tous les widgets | Accepté : les custom nodes peuvent avoir une validation Python et des widgets JS propres | ✅ | Contrat de widgets supportés + extensions déclarées ; validation native ComfyUI conservée au `/prompt` ; variantes structurelles = graphes complets exportés nativement, patches limités à `set` (04) |
 | I5 | Le déploiement se déclenche sur `main` **et** `claude/**` pour `modal_app/**` ; le placement dans `modal_app/comfy/` ne l'évite pas | Confirmé : `.github/workflows/deploy-modal.yml` | ✅ | Règles de déploiement corrigées **avant** le premier fichier sous `modal_app/` (étape 3, prérequis) (05, 06 R1) |
-| I6 | Realtime et e-mails non réutilisés automatiquement | Confirmé : `lib/use-job-realtime.ts` écoute `jobs` et `job_scenes` ; e-mail envoyé uniquement par `app/api/webhooks/modal/route.ts` L77-84 | ✅ | Publication realtime de `comfy_runs` (RLS propriétaire), événement terminal idempotent (`notified_at`), récupération par l'historique ComfyUI après coupure (02 §2.5) |
+| I6 | Realtime et e-mails non réutilisés automatiquement | Confirmé : `lib/use-job-realtime.ts` écoute `jobs` et `job_scenes` ; e-mail envoyé uniquement par `app/api/webhooks/modal/route.ts` L77-84 | ✅ | Publication realtime de `comfy_runs` (RLS propriétaire), événement terminal par `notification_outbox` (révisé en 9.7), récupération par l'historique ComfyUI après coupure (02 §2.5) |
 | I7 | Image et post-production pas transparentes : bibliothèque vidéo, overlay lié à Research | Confirmé : `app/(workspace)/library/page.tsx` L390, `app/api/jobs/[id]/route.ts` L234-245, `app/api/jobs/[id]/overlay/route.ts` | ✅ | Résultat typé (MIME, rôle, capacités de post-production), test image factice CPU avant H3, brut et corrigé = deux assets à provenance commune ; overlay retiré des promesses (02 §2.6) |
 | I8 | Studio CPU à vérifier tôt ; routes HTTP et WS à protéger ; `requireAdmin` | Confirmé : `app/api/admin/middleware.ts` exporte `requireAdmin` | ✅ | Vérification CPU en étape 1 ; échange URL signée → session courte ; toutes routes + WS protégées ; soumission directe bloquée (03) |
 
@@ -86,3 +89,24 @@ Aucun autre point n'est contesté.
 | 7 | Vulnérabilités confirmées dans le code de `main` distinguées de la production déployée (non vérifiée) | 01 §1.5, 9.1 |
 | — | Contrat courtier / exécuteur détaillé (interface, canal de contrôle, tailles, recyclage) | 02 §2.7 |
 | — | Transitions terminales : effets par état, événements tardifs, matrice de courses | 02 §2.5 |
+
+## 9.7 Troisième lecture (commit `90825e0`)
+
+Codex juge satisfaisants dans la spécification : graphe résolu stocké et résolveur unique, variantes en graphes
+complets, filtrage du routage historique, résultats typés, séparation courtier / exécuteur et audit des custom nodes,
+distinction `main` / production, réserves sur coûts, licences MOSS et conditions H3. Constats restants :
+
+| # | Constat | Vérification | Statut | Correction |
+|---|---|---|---|---|
+| 1 (bloquant) | Le verrou par utilisateur ne protège pas les budgets partagés : deux utilisateurs peuvent réserver le même solde | Exact : `pg_advisory_xact_lock(hashtext(user_id))` ne sérialise que les admissions d'un même utilisateur | ✅ | Enveloppes `spend_envelopes` mises à jour par `UPDATE` conditionnel dans un ordre stable (verrou de ligne), test multi-utilisateurs avec une seule admission possible (02 §2.5, 05 étape 2) |
+| 1 bis | « Un job actif » non garanti entre parcours ComfyUI et historique | Exact : le parcours historique ne prend pas ce verrou | ✅ | Deux options décrites (index unique partiel commun ou limite assumée), décision Q7 ; V1 proposée : limite assumée et documentée |
+| 2 (bloquant) | Accès secondaires aux médias : vignette = média ; RLS « propriétaire » sur le stockage contournerait `/api/media` | Exact (permissions Supabase Storage portées par `storage.objects`, `verified-docs`) | ✅ | Aucun aperçu visuel pour H3 avant autorisation (`--preview-method none`) ; bucket `comfy-outputs` sans aucune politique client ; métadonnées (vue sans `storage_key`) séparées des octets ; tests par les API directes de stockage (02 §2.6, 05 étape 2) |
+| 3 | Un run `held` expirerait avant la revue ; table incomplète (`held → expired`, annulation depuis `moderating`/`held`) | Exact | ✅ | Échéance d'exécution et échéance de modération séparées ; ressources rendues à l'entrée en `held` ; tâche différée persistante `moderation_tasks` ; table et tests harmonisés (02 §2.5) |
+| 4 | État terminal ≠ fin de consommation ; `FunctionCall.cancel()` ne détruit pas le conteneur par défaut | Exact : `cancel(terminate_containers=False)` par défaut (`verified-docs`, SDK Modal) | ✅ | Clôture financière distincte (`open` → `closing` → `closed`), provision conservée jusqu'à l'arrêt confirmé, consommation tardive comptabilisée sans livraison, `terminate_containers=True` explicite (02 §2.5) |
+| 5 | La notification décrite ne pouvait jamais partir (`notified_at` posé deux fois) et perdait ou doublait l'e-mail | Exact | ✅ | `notification_outbox` transactionnelle, identifiant stable, reprises, clé d'idempotence du fournisseur si disponible, `sent_at` = confirmation ; garantie « au moins une fois », « aucun doublon » conditionné au fournisseur (02 §2.5, 05 étape 3) |
+| 6 | Variantes H3 ambiguës (image + full) ; verrous turbo écrasant le graphe full | Exact | ✅ | Axes + table complète des combinaisons, `unsupported` explicite, verrous jamais écrits (valeurs du graphe de la variante), test des 4 combinaisons (04 §4.5) |
+| Mineur | Révocation : objectif à mesurer ; rejouer une URL déjà en cache | Exact | ✅ | Formulation « objectif d'acceptation » ; test de rejeu après mise en cache (02 §2.6, 05) |
+| Mineur | Budgets Modal : usage, dépense après crédits, budgets par environnement | Exact (`verified-docs`, guide Budgets) | ✅ | Trois mécanismes distingués, trois options comparées (02 §2.5, 07, Q2) |
+| Mineur | « critère vérifié sur MOSS » → « qui sera vérifié » | Exact | ✅ | README corrigé |
+
+Aucun point de cette troisième lecture n'est contesté.
