@@ -90,3 +90,24 @@ permit/idempotency/claim/terminal/RLS checks; real synthetic ffmpeg audio shift 
 local Modal definition import without authentication, deployment or invocation. Native ComfyUI with these models,
 Modal argument transfer under blocked networking, actual region capacity and storage on the target account are
 not certified until the approved deployment and single end-to-end run.
+
+## Authorized activation — 8 November 2026
+
+- PRs #90 and #91 were merged with owner approval; the web deployment is ready.
+- Migration applied to the existing AlphoGenAI project. The private output bucket and anonymous access denials
+  were verified online. This still does not resolve historical R2/public-page exposure.
+- Dedicated Modal environment `comfy-admin`, app `alphogenai-comfy`, region `eu`. Five lab model files were
+  hashed and copied; the verification marker matches the pinned catalog. No source model was modified.
+- One UI request was admitted: five seconds, 480×832, turbo, seed 42, audio advance 0.4 seconds.
+  It failed during result delivery: the restricted executor could not call Modal's BlobCreate API for a large
+  serialized return value (`AuthError`, HTTP 401). No usable output was delivered or retained in the app.
+- The permit is consumed, the gate is disabled, and no H3 containers remain active. The $0.75 reservation remains
+  committed pending billing reconciliation. Do not re-arm automatically or infer invoice cost from runtime.
+- PR #92 preserves the deployment environment during container import and replaces the large return value with
+  bounded native Modal generator frames. Hash, byte-count and size checks reject incomplete or corrupt streams;
+  the broker retains a cancellation handle and explicitly terminates the executor. Network blocking, no secrets,
+  restricted Modal access, read-only models and single-use containers remain enabled.
+- Six local CPU tests pass, including the actual Modal SDK streaming output path with Blob access forbidden,
+  a >3 MiB round-trip, corrupt/truncated output rejection, and real audio/video packet preservation. This is a
+  free local transport check, not proof of a successful remote GPU generation. A second GPU attempt requires
+  fresh explicit owner approval; expected test cost remains $0.15–$0.30, with a $0.75 reservation.
