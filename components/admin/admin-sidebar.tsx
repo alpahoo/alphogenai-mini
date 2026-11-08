@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 const NAV_ITEMS = [
+  { href: "/admin/workflows/minimax-h3", label: "MiniMax H3", icon: Film },
   { href: "/admin", label: "Dashboard", icon: BarChart3 },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/jobs", label: "Jobs", icon: Film },

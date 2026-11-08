@@ -1,4 +1,5 @@
 {
+  "git": { "deploymentEnabled": { "codex/h3-admin": false } },
   "crons": [
     {
       "path": "/api/cron/publish-scheduled",

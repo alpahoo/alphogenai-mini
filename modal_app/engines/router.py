@@ -41,7 +41,7 @@ def select_engine(
         Engine key string (always returns something — falls back to wan_i2v).
     """
     # 1. Preferred engine (user choice) — wins if valid
-    if preferred and is_engine_available(preferred, plan, supabase_client):
+    if preferred and not preferred.startswith("comfy:") and is_engine_available(preferred, plan, supabase_client):
         logger.info(f"engine_router: using preferred '{preferred}'")
         return preferred
 
@@ -51,7 +51,8 @@ def select_engine(
         engines = get_all_engines(supabase_client)
         for eng in engines:
             if (
-                eng["status"] == "active"
+                eng.get("type") != "comfy_workflow"
+                and eng["status"] == "active"
                 and plan in eng.get("plans", [])
                 and duration_seconds <= eng.get("max_duration", 999)
                 and eng["id"] != FALLBACK_ENGINE  # prefer API engines first
@@ -66,7 +67,8 @@ def select_engine(
     engines = get_all_engines(supabase_client)
     for eng in engines:
         if (
-            eng["status"] == "active"
+            eng.get("type") != "comfy_workflow"
+            and eng["status"] == "active"
             and plan in eng.get("plans", [])
             and duration_seconds <= eng.get("max_duration", 999)
         ):

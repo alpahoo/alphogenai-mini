@@ -1,5 +1,11 @@
 # AlphoGen — Handover (source of truth)
 
+## 2026-11-08 — H3 private admin pilot, code prepared only
+- Branch `codex/h3-admin` depends on PR #90. Entry: `/admin/workflows/minimax-h3`.
+- Disabled server flag + service-only gate: no paid execution until owner approval, rights attestation and one permit.
+- Separate `alphogenai-comfy` Modal app; original and audio-advanced files in private `comfy-outputs`, no legacy R2 URLs.
+- No merge, migration application, deployment or paid run. Activation: `docs/implementation/h3-admin-activation.md`.
+
 > Short, current, actionable onboarding doc. If anything here disagrees with
 > `README.md`, **trust this file** (the README still contains historical
 > Runpod/SVI/AudioLDM2/LangGraph notes that no longer reflect the system).

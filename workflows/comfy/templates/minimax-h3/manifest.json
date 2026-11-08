@@ -1,0 +1,26 @@
+{
+  "schema": "alphogen.comfy.manifest/1",
+  "slug": "minimax-h3",
+  "title": "MiniMax H3",
+  "runtime": "h3-video@1",
+  "version": 1,
+  "access": "admin",
+  "variants": {
+    "absent|turbo": "t2v",
+    "absent|full": "t2v_full",
+    "present|turbo": "i2v",
+    "present|full": null
+  },
+  "params": [
+    {"key":"prompt","label":"Prompt","widget":"text","required":true,"maxLength":2000,"target":{"node":"6","input":"prompt"}},
+    {"key":"seconds","label":"Duration (seconds)","widget":"number","min":2,"max":10,"step":1,"default":5,"derived":"frames_from_seconds"},
+    {"key":"aspect","label":"Format","widget":"select","options":["9:16","16:9","1:1"],"default":"9:16"},
+    {"key":"seed","label":"Seed","widget":"number","min":0,"max":9007199254740991,"step":1,"target":{"node":"8","input":"noise_seed"}},
+    {"key":"quality","label":"Quality","widget":"select","options":["turbo","full"],"default":"turbo"},
+    {"key":"audio_shift_s","label":"Advance audio (seconds)","widget":"number","min":0,"max":0.6,"step":0.01,"default":0.4}
+  ],
+  "resolutions":{"9:16":[480,832],"16:9":[832,480],"1:1":[640,640]},
+  "locked":["steps","sampler_name","scheduler","lora_strength","text_encoder"],
+  "outputs":[{"node":"15","kind":"video","mime":"video/mp4"}],
+  "preserve_raw":true
+}
