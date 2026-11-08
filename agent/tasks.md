@@ -1582,3 +1582,7 @@ Réfs : revue Codex 2026-07-16 ; `agent/log.md` (entrée durcissement).
 - Validation: 12 focused tests, root TypeScript, Revideo worker TypeScript and production build pass. Zero paid generation in this slice.
 - Next: deploy an authenticated Revideo service on Hostinger, then run one capped three-shot Beats QA. Do not repeat native one-shot QA.
 - Worker service is code-ready: async private API, concurrency 1, direct R2 output, Next.js start/poll integration and local security smoke pass. Deployment requires `REVIDEO_WORKER_SECRET` plus existing R2 variables on Hostinger and matching worker URL/secret on Vercel.
+## H3-ADMIN-1 — 2026-11-08 — owner: codex — code_ready
+- User-authorized implementation: PR #90 CI verification, then private admin H3 path from PR #89.
+- Scope: versioned API graphs/manifest, bounded admission, private storage, admin form/API, separate Modal app, free tests and draft code PR. No merge, production mutation, deployment or paid call.
+- Acceptance: preserve validated H3 settings and raw MP4; advance audio 0.4s; reject non-admin/unknown parameters; one explicitly authorized GPU execution permit; no public media URLs; mock integration and regression tests.

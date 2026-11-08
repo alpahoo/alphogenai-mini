@@ -1,0 +1,39 @@
+name: ComfyUI admin free tests
+on:
+  pull_request:
+    paths:
+      - "lib/comfy/**"
+      - "app/api/admin/comfy/**"
+      - "app/(admin)/admin/workflows/**"
+      - "modal_app/comfy/**"
+      - "modal_app/engines/router.py"
+      - "workflows/comfy/**"
+      - "supabase/migrations/20261108_comfy_admin_h3.sql"
+      - "tools/test-comfy-admission.mjs"
+      - ".github/workflows/comfy-admin-tests.yml"
+permissions:
+  contents: read
+jobs:
+  free-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npx tsc --noEmit -p tsconfig.json
+      - run: npm install --prefix tmp/h3-db @electric-sql/pglite@0.5.15 --no-save --ignore-scripts --no-audit --no-fund
+      - run: node tools/test-comfy-admission.mjs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install av==17.0.0 numpy imageio-ffmpeg requests==2.32.5 modal==1.6.3 supabase==2.28.0 fastapi==0.121.1
+      - run: python -m unittest modal_app.comfy.test_runtime -v
+      - name: Load Modal definitions without deployment or execution
+        env:
+          H3_MODAL_REGION: eu
+        run: python -c "import modal_app.comfy.app; import modal_app.comfy.broker; print('Definitions loaded; no calls')"

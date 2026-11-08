@@ -1,0 +1,44 @@
+// Free local PostgreSQL integration test. No remote DB or Modal access.
+// npm install --prefix tmp/h3-db @electric-sql/pglite --no-save
+import {PGlite} from "../tmp/h3-db/node_modules/@electric-sql/pglite/dist/index.js";
+import {readFileSync} from "node:fs";
+import assert from "node:assert/strict";
+const db=new PGlite();
+await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
+create schema auth; create table auth.users(id uuid primary key);
+create table profiles(id uuid primary key,plan text);
+create table jobs(id uuid primary key default gen_random_uuid(),user_id uuid,prompt text,status text,plan text,current_stage text,engine_used text,target_duration_seconds integer,metadata jsonb,created_at timestamptz default now(),error_message text);
+create table engines(id text primary key,name text,type text constraint engines_type_check check(type in ('api','modal_local')),status text,max_duration integer,gpu text,priority integer);
+create schema storage; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+create table storage.objects(id uuid default gen_random_uuid(),bucket_id text); alter table storage.objects enable row level security;
+grant usage on schema public,storage to anon,authenticated; grant select,insert,update,delete on storage.objects to anon,authenticated;
+create policy unrelated_permissive on storage.objects for all to authenticated using(true) with check(true);`);
+await db.exec(readFileSync(new URL("../supabase/migrations/20261108_comfy_admin_h3.sql",import.meta.url),"utf8"));
+const owner="11111111-1111-4111-8111-111111111111",other="22222222-2222-4222-8222-222222222222";
+await db.query("insert into auth.users values($1),($2)",[owner,other]);
+await db.query("insert into profiles values($1,'premium')",[owner]);
+async function admit(key,user=owner){return (await db.query("select admit_comfy_admin_run($1,$2,'A cinematic scene',$3,$4,$5,null) id",[user,key,{seconds:5},{"1":{class_type:"Test",inputs:{}}},"f".repeat(64)])).rows[0].id;}
+await assert.rejects(admit("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),/H3_NOT_AUTHORIZED/);
+await db.query("update comfy_admin_gate set enabled=true,rights_confirmed_at=now(),allowed_user_id=$1,expires_at=now()+interval '1 hour',remaining_runs=1,budget_usd=0.75",[owner]);
+await assert.rejects(admit("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",other),/H3_NOT_AUTHORIZED/);
+const id=await admit("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+assert.equal(await admit("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),id);
+await assert.rejects(admit("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),/H3_NOT_AUTHORIZED/);
+assert.equal((await db.query("select count(*)::int n from jobs")).rows[0].n,1);
+assert.equal((await db.query("select committed_usd from comfy_admin_gate")).rows[0].committed_usd,"0.75");
+assert.equal((await db.query("select claim_comfy_admin_run($1) ok",[id])).rows[0].ok,true);
+assert.equal((await db.query("select claim_comfy_admin_run($1) ok",[id])).rows[0].ok,false);
+await assert.rejects(db.query("select finish_comfy_admin_run($1,true,null,22)",[id]),/MISSING_OUTPUTS/);
+for(const role of ["raw","final"]) await db.query("insert into comfy_assets(run_id,owner_id,role,storage_key) values($1,$2,$3,$3)",[id,owner,role]);
+assert.equal((await db.query("select finish_comfy_admin_run($1,true,null,22) ok",[id])).rows[0].ok,true);
+assert.equal((await db.query("select finish_comfy_admin_run($1,false,'LATE',null) ok",[id])).rows[0].ok,false);
+await db.query("select expire_comfy_admin_run($1,$2)",[id,owner]);
+assert.equal((await db.query("select status from comfy_runs where id=$1",[id])).rows[0].status,"done");
+assert.equal((await db.query("select status,video_url from (select status,null::text video_url from jobs) j")).rows[0].status,"done");
+await db.exec("insert into storage.objects(bucket_id) values('comfy-outputs'),('other'); set role authenticated;");
+assert.equal((await db.query("select count(*)::int n from storage.objects where bucket_id='comfy-outputs'")).rows[0].n,0);
+await assert.rejects(db.query("select * from comfy_run_graphs"),/permission denied/);
+await assert.rejects(db.query("select claim_comfy_admin_run($1)",[id]),/permission denied/);
+await db.exec("reset role");
+await db.close();
+console.log("PASS: migration, closed gate, owner permit, single admission, idempotency, claim fencing, terminal fencing, private storage RLS and RPC grants (local PostgreSQL).");

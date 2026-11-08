@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "modal_app/**"
+      - "!modal_app/comfy/**"
       - ".github/workflows/deploy-modal.yml"
     branches:
       - main
