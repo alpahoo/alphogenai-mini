@@ -1,5 +1,6 @@
 """Free CPU verification: real ffmpeg audio correction, frozen graphs, isolation definition."""
 import hashlib
+import asyncio
 import json
 import subprocess
 import tempfile
@@ -12,11 +13,57 @@ import numpy as np
 
 from modal_app.comfy.executor import canonical_hash
 from modal_app.comfy.postprocess import shift_audio, probe
+from modal_app.comfy.transfer import output_frames, receive_output, CHUNK_BYTES, MAX_BYTES
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_large_output_uses_inline_modal_stream_without_blob_access(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+        from modal._runtime.container_io_manager import _ContainerIOManager, serialize_data_format
+        from modal._utils.blob_utils import MAX_OBJECT_SIZE_BYTES
+        from modal_proto import api_pb2
+
+        raw = b"\x00\x00\x00\x18ftyp" + bytes(range(256)) * (3 * 1024 * 1024 // 256)
+        frames = list(output_frames({"mp4": raw, "generation_seconds": 63.5}))
+        serialized = [serialize_data_format(item, api_pb2.DATA_FORMAT_PICKLE) for item in frames]
+        self.assertGreater(len(raw), MAX_OBJECT_SIZE_BYTES)
+        self.assertTrue(all(len(item) < MAX_OBJECT_SIZE_BYTES for item in serialized))
+        sender = AsyncMock()
+        manager = SimpleNamespace(
+            _client=SimpleNamespace(_stub=SimpleNamespace(FunctionCallPutDataOut=sender)),
+            _max_object_size_bytes=MAX_OBJECT_SIZE_BYTES, input_plane_server_url=None,
+        )
+
+        async def verify():
+            # Actual SDK output path: BlobCreate is forbidden in this executor.
+            with patch("modal._runtime.container_io_manager.blob_upload", side_effect=AssertionError("Blob API used")):
+                await _ContainerIOManager.put_data_out(manager, "fc-test", "", 1, api_pb2.DATA_FORMAT_PICKLE, serialized)
+            request = sender.await_args.args[0]
+            self.assertTrue(all(chunk.data and not chunk.data_blob_id for chunk in request.data_chunks))
+            async def stream():
+                for frame in frames:
+                    yield frame
+            result = await receive_output(stream())
+            self.assertEqual(result, {"mp4": raw, "generation_seconds": 63.5})
+        asyncio.run(verify())
+
+    def test_incomplete_or_corrupt_stream_never_delivers_media(self):
+        raw = b"\x00\x00\x00\x18ftyp" + b"x" * CHUNK_BYTES
+        frames = list(output_frames({"mp4": raw, "generation_seconds": 2}))
+        invalid = [frames[:-1], [frames[0], b"bad"],
+                   [{**frames[0], "bytes": MAX_BYTES + 1}],
+                   [frames[0], b"x" * (CHUNK_BYTES + 1)],
+                   [{**frames[0], "sha256": "0" * 64}, *frames[1:]]]
+        for items in invalid:
+            async def stream():
+                for item in items:
+                    yield item
+            with self.subTest(items=len(items)), self.assertRaises(ValueError):
+                asyncio.run(receive_output(stream()))
+
     def test_real_audio_shift_preserves_video_and_raw(self):
         import imageio_ffmpeg
         ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
@@ -63,7 +110,8 @@ class RuntimeTests(unittest.TestCase):
         for key in ("block_network", "restrict_modal_access", "single_use_containers"):
             self.assertTrue(ast.literal_eval(settings[key]))
         self.assertEqual(ast.literal_eval(settings["secrets"]), [])
-        self.assertEqual(ast.literal_eval(settings["retries"]), 0)
+        # Modal generators prohibit any retries argument, including zero.
+        self.assertNotIn("retries", settings)
 
     def test_legacy_router_never_selects_comfy(self):
         import importlib.util

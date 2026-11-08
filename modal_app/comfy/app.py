@@ -11,9 +11,15 @@ REGION = os.environ.get("H3_MODAL_REGION")
 if not REGION:
     raise RuntimeError("Set H3_MODAL_REGION to the privately approved compute region before loading this app")
 app = modal.App("alphogenai-comfy")
+runtime_environment = {
+    "H3_MODAL_REGION": REGION,
+    "H3_SOURCE_ENVIRONMENT": os.environ.get("H3_SOURCE_ENVIRONMENT", "main"),
+    "H3_MODELS_VOLUME": os.environ.get("H3_MODELS_VOLUME", "alphogenai-comfy-models"),
+}
 volume = modal.Volume.from_name(os.environ.get("H3_MODELS_VOLUME", "alphogenai-comfy-models"), create_if_missing=False)
 cpu_image = (modal.Image.debian_slim(python_version="3.12").apt_install("ffmpeg")
              .pip_install("supabase==2.28.0", "requests==2.32.5", "fastapi==0.121.1", "av==17.0.0")
+             .env(runtime_environment)
              .add_local_python_source("modal_app.comfy")
              .add_local_dir("workflows/comfy/runtimes", "/opt/comfy-catalog"))
 gpu_image = (modal.Image.debian_slim(python_version="3.12")
@@ -21,6 +27,7 @@ gpu_image = (modal.Image.debian_slim(python_version="3.12")
              .run_commands("git clone --depth 1 --branch v0.42.0 https://github.com/Comfy-Org/ComfyUI /root/ComfyUI",
                            "pip install -r /root/ComfyUI/requirements.txt")
              .pip_install("requests==2.32.5", "fastapi==0.121.1")
+             .env(runtime_environment)
              .add_local_python_source("modal_app.comfy")
              .add_local_dir("workflows/comfy/runtimes", "/opt/comfy-catalog"))
 broker_secret = modal.Secret.from_name("alphogenai-comfy-broker")
@@ -30,10 +37,17 @@ broker_secret = modal.Secret.from_name("alphogenai-comfy-broker")
               volumes={"/models": volume.with_mount_options(read_only=True)},
               secrets=[], block_network=True, restrict_modal_access=True,
               single_use_containers=True, min_containers=0, max_containers=1,
-              timeout=180, startup_timeout=120, retries=0, region=REGION)
-def execute_graph(graph: dict, reference: bytes | None):
+              timeout=180, startup_timeout=120, region=REGION)
+def execute_graph(graph: dict, reference: bytes | None, start_before: float):
+    import time
     from modal_app.comfy.executor import execute
-    return execute(graph, reference)
+    from modal_app.comfy.transfer import output_frames
+    # Publish the cancellation handle before ComfyUI starts. Small stream frames
+    # stay on Modal's invocation channel, avoiding BlobCreate under restricted access.
+    yield {"call_id": modal.current_function_call_id()}
+    if time.time() >= start_before:
+        raise TimeoutError("EXECUTOR_START_EXPIRED")
+    yield from output_frames(execute(graph, reference))
 
 
 @app.function(image=cpu_image, secrets=[broker_secret], timeout=420, retries=0, max_containers=1, region=REGION)
@@ -41,13 +55,28 @@ def broker(run_id: str):
     from modal_app.comfy.broker import database, run
 
     def invoke(graph, reference, run_id):
-        call = execute_graph.spawn(graph, reference)
-        try:
-            database().table("comfy_runs").update({"modal_call_id": call.object_id}).eq("id", run_id).execute()
-            return call.get(timeout=310)
-        finally:
-            # Also kill ComfyUI subprocesses; default cancel does not terminate a container.
-            call.cancel(terminate_containers=True)
+        import asyncio
+        import time
+        from modal_app.comfy.transfer import receive_output
+
+        async def collect():
+            call = None
+            stream = execute_graph.remote_gen.aio(graph, reference, time.time() + 110)
+            try:
+                async with asyncio.timeout(310):
+                    header = await anext(stream)
+                    if not isinstance(header, dict) or not str(header.get("call_id", "")).startswith("fc-"):
+                        raise ValueError("INVALID_EXECUTOR_HANDLE")
+                    call = modal.FunctionCall.from_id(header["call_id"])
+                    database().table("comfy_runs").update({"modal_call_id": call.object_id}).eq("id", run_id).execute()
+                    return await receive_output(stream)
+            finally:
+                # Also kill ComfyUI subprocesses; default cancel does not terminate a container.
+                if call is not None:
+                    await call.cancel.aio(terminate_containers=True)
+                await stream.aclose()
+
+        return asyncio.run(collect())
     run(run_id, invoke)
 
 
