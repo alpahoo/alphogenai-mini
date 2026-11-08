@@ -6,7 +6,7 @@ ci-dessous existent déjà en production. Ils ne dépendent pas de ComfyUI.
 | # | Défaut | Dans cette PR |
 |---|---|---|
 | 1 | `GET /api/jobs/[id]` renvoie n'importe quel job à n'importe qui | **Corrigé et testé** |
-| 2 | `/v/[id]` publie tout job `done` | **Proposition** : migration écrite, **non appliquée**, code `/v` inchangé |
+| 2 | `/v/[id]` publie tout job `done` | **Chantier distinct** : migration `shared_at` à créer dans une PR ultérieure ; code `/v` inchangé |
 | 3 | Sorties servies par des URL R2 publiques | **Analyse seule**, aucun changement de stockage |
 
 ---
@@ -66,7 +66,7 @@ miniature. Le bouton « Share » de la page job **copie seulement l'URL**. Aucun
 enregistré, donc tout job terminé est public pour qui devine ou intercepte son id.
 
 ### Proposition
-Migration additive **écrite mais non appliquée** : `supabase/migrations/20261108_add_jobs_shared_at.sql`
+Migration additive **à préparer dans une PR distincte**, non incluse dans ce correctif d'API : future colonne `jobs.shared_at TIMESTAMPTZ NULL`
 - `jobs.shared_at TIMESTAMPTZ NULL` (NULL = privé). C'est un horodatage plutôt qu'un booléen
   `is_public` : il porte la même information plus la date de publication.
 - Index partiel `WHERE shared_at IS NOT NULL`.
@@ -91,7 +91,7 @@ filtre sur une colonne absente ferait échouer toutes les pages `/v`.
 
 Recommandation : **B**. Rien ne permet de distinguer un lien vraiment partagé d'un job jamais partagé
 (le clic « Share » n'est pas journalisé), et C en récupère peu. A garde le défaut pour tout
-l'historique. Les trois options sont en commentaire en bas de la migration, une seule à activer.
+l'historique. Les trois options devront être documentées dans cette future PR ; aucune migration de publication n'est incluse dans la présente branche.
 
 **Questions au propriétaire :** (1) option A, B ou C ? (2) `shared_at` vous convient-il, ou préférez-vous
 `is_public` booléen ? (3) feu vert pour appliquer la migration, puis la PR de code ?
