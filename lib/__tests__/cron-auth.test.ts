@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { assertCronAuth } from "../cron-auth";
+import { assertCronAuth, isCronRequest } from "../cron-auth";
 
 const original = process.env.CRON_SECRET;
 afterEach(() => {
@@ -34,5 +34,24 @@ describe("assertCronAuth — FAIL-CLOSED", () => {
   it("authorizes (null) the correct secret", () => {
     process.env.CRON_SECRET = "s3cret";
     expect(assertCronAuth(req("Bearer s3cret"))).toBeNull();
+  });
+});
+
+describe("isCronRequest — FAIL-CLOSED boolean", () => {
+  it("is false when CRON_SECRET is missing", () => {
+    delete process.env.CRON_SECRET;
+    expect(isCronRequest(req("Bearer "))).toBe(false);
+    expect(isCronRequest(req("Bearer undefined"))).toBe(false);
+  });
+
+  it("is false for a wrong or missing bearer", () => {
+    process.env.CRON_SECRET = "s3cret";
+    expect(isCronRequest(req("Bearer nope"))).toBe(false);
+    expect(isCronRequest(req())).toBe(false);
+  });
+
+  it("is true only for the exact bearer", () => {
+    process.env.CRON_SECRET = "s3cret";
+    expect(isCronRequest(req("Bearer s3cret"))).toBe(true);
   });
 });

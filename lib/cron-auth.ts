@@ -31,3 +31,14 @@ export function assertCronAuth(req: Request): NextResponse | null {
   }
   return null;
 }
+
+/**
+ * Boolean variant for routes that serve BOTH end users and the cron poller
+ * (e.g. GET /api/jobs/[id], which /api/cron/evolink-poll self-calls to advance
+ * the job state machine). Fail-closed: false when CRON_SECRET is unset.
+ */
+export function isCronRequest(req: Request): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
+  return req.headers.get("authorization") === `Bearer ${secret}`;
+}

@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { isCronRequest } from "@/lib/cron-auth";
+import { isAdminEmail } from "@/lib/flags";
 import { NextResponse } from "next/server";
 import {
   isEvoLinkEngine,
@@ -102,7 +104,7 @@ interface SceneRow {
  * finishes well under maxDuration.
  */
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -110,6 +112,23 @@ export async function GET(
 
     if (!id) {
       return NextResponse.json({ error: "Job ID is required" }, { status: 400 });
+    }
+
+    // ── Access control (BEFORE any data is returned or any state transition
+    // is attempted). Two legitimate callers:
+    //   - the job owner (or an admin) from the result page (session cookie);
+    //   - the cron poller /api/cron/evolink-poll, which self-calls this route
+    //     with `Authorization: Bearer $CRON_SECRET` to advance closed-tab jobs.
+    // Anyone else gets 401 (anonymous) / 403 (another user's job).
+    const machineCaller = isCronRequest(req);
+    let viewer: { id: string; email?: string | null } | null = null;
+    if (!machineCaller) {
+      const supabaseAuth = await createClient();
+      const { data: { user } } = await supabaseAuth.auth.getUser();
+      if (!user) {
+        return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+      }
+      viewer = user;
     }
 
     const supabase = createServiceClient();
@@ -122,6 +141,10 @@ export async function GET(
 
     if (selectError || !job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    if (viewer && job.user_id !== viewer.id && !isAdminEmail(viewer.email)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const isEvoLink = isEvoLinkEngine(job.engine_used ?? "");
