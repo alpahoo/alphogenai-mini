@@ -1586,3 +1586,7 @@ Réfs : revue Codex 2026-07-16 ; `agent/log.md` (entrée durcissement).
 - User-authorized implementation: PR #90 CI verification, then private admin H3 path from PR #89.
 - Scope: versioned API graphs/manifest, bounded admission, private storage, admin form/API, separate Modal app, free tests and draft code PR. No merge, production mutation, deployment or paid call.
 - Acceptance: preserve validated H3 settings and raw MP4; advance audio 0.4s; reject non-admin/unknown parameters; one explicitly authorized GPU execution permit; no public media URLs; mock integration and regression tests.
+
+## MOSS-CAPACITY-WAIT — 2026-11-09 — owner: codex — code_ready
+- User explicitly authorizes repairing the MOSS scheduling window after the failed EU L40S pilot. Isolated branch; no deploy, merge, permit change or paid run.
+- Scope: MOSS start deadline 300s, collection 660s, outer CPU broker 720s; preserve H3 start/collection/GPU limits and the SQL 900s deadline. Tests simulate delayed capacity without sleeping or invoking Modal.

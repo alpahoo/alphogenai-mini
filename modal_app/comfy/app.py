@@ -32,6 +32,12 @@ gpu_image = (modal.Image.debian_slim(python_version="3.12")
              .add_local_dir("workflows/comfy/runtimes", "/opt/comfy-catalog"))
 broker_secret = modal.Secret.from_name("alphogenai-comfy-broker")
 
+# Capacity queue + GPU execution + transfer margin, all below the SQL 15-minute deadline.
+# Queue time is not part of Modal's GPU execution timeout. H3 keeps its existing limits.
+MOSS_START_WINDOW_SECONDS = 300
+MOSS_COLLECT_TIMEOUT_SECONDS = 660
+BROKER_TIMEOUT_SECONDS = 720
+
 
 @app.function(image=gpu_image, gpu="H100", cpu=(2, 2), memory=(65536, 65536),
               volumes={"/models": volume.with_mount_options(read_only=True)},
@@ -67,7 +73,7 @@ def execute_image_graph(graph: dict, start_before: float):
     yield from output_frames(execute(graph, None, runtime="moss-image@1"))
 
 
-@app.function(image=cpu_image, secrets=[broker_secret], timeout=420, retries=0, max_containers=1, region=REGION)
+@app.function(image=cpu_image, secrets=[broker_secret], timeout=BROKER_TIMEOUT_SECONDS, retries=0, max_containers=1, region=REGION)
 def broker(run_id: str):
     from modal_app.comfy.broker import database, run
 
@@ -81,8 +87,8 @@ def broker(run_id: str):
             if runtime == "moss-image@1":
                 if reference is not None:
                     raise ValueError("REFERENCE_NOT_SUPPORTED")
-                stream = execute_image_graph.remote_gen.aio(graph, time.time() + 110)
-                budget = 390
+                stream = execute_image_graph.remote_gen.aio(graph, time.time() + MOSS_START_WINDOW_SECONDS)
+                budget = MOSS_COLLECT_TIMEOUT_SECONDS
             else:
                 stream = execute_graph.remote_gen.aio(graph, reference, time.time() + 110)
                 budget = 310

@@ -42,6 +42,68 @@ async def agen(items):
 
 
 class MossRuntimeTests(unittest.TestCase):
+    def test_capacity_wait_preserves_runtime_deadlines_and_cancellation(self):
+        import importlib
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+        with patch.dict("os.environ", {"H3_MODAL_REGION": "eu"}):
+            app_module = importlib.import_module("modal_app.comfy.app")
+        # Simulate wall-clock queue delay, without sleeping or invoking a remote function.
+        for runtime, delay, allowed, collect_budget in (
+            ("moss-image@1", 210, True, 660),
+            ("moss-image@1", 299, True, 660),
+            ("moss-image@1", 300, False, 660),
+            ("h3-video@1", 109, True, 310),
+            ("h3-video@1", 110, False, 310),
+            ("h3-video@1", 210, False, 310),
+        ):
+            with self.subTest(runtime=runtime, delay=delay):
+                clock = [1000.0]
+                call_id = "fc-capacity-test"
+                executor = app_module.execute_image_graph if runtime == "moss-image@1" else app_module.execute_graph
+                expected = {"png": make_png(1, 1), "generation_seconds": 1} if runtime == "moss-image@1" else {
+                    "mp4": b"\x00\x00\x00\x18ftyp" + b"test-video", "generation_seconds": 1}
+                deadlines = []
+                async def stream(*args):
+                    deadlines.append(args[-1])
+                    clock[0] += delay
+                    for item in executor.local(*args):
+                        yield item
+                def invoke_run(run_id, invoke):
+                    if allowed:
+                        self.assertEqual(invoke({}, None, run_id, runtime=runtime), expected)
+                    else:
+                        with self.assertRaisesRegex(TimeoutError, "EXECUTOR_START_EXPIRED"):
+                            invoke({}, None, run_id, runtime=runtime)
+                cancel = AsyncMock()
+                with patch.object(executor, "remote_gen", SimpleNamespace(aio=stream)), \
+                     patch("time.time", side_effect=lambda: clock[0]), \
+                     patch("modal.current_function_call_id", return_value=call_id), \
+                     patch("modal.FunctionCall.from_id", return_value=SimpleNamespace(cancel=SimpleNamespace(aio=cancel))), \
+                     patch("modal_app.comfy.executor.execute", return_value=expected) as execute, \
+                     patch("modal_app.comfy.broker.database", return_value=MagicMock()), \
+                     patch("modal_app.comfy.broker.run", side_effect=invoke_run), \
+                     patch("asyncio.timeout", wraps=asyncio.timeout) as timeout:
+                    app_module.broker.local("00000000-0000-4000-8000-000000000000")
+                self.assertEqual(deadlines, [1300 if runtime == "moss-image@1" else 1110])
+                timeout.assert_called_once_with(collect_budget)
+                self.assertEqual(execute.call_count, int(allowed))
+                cancel.assert_awaited_once_with(terminate_containers=True)
+
+    def test_capacity_windows_fit_broker_and_sql_deadline(self):
+        import importlib
+        from unittest.mock import patch
+        with patch.dict("os.environ", {"H3_MODAL_REGION": "eu"}):
+            module = importlib.import_module("modal_app.comfy.app")
+        tree = ast.parse((ROOT / "modal_app/comfy/app.py").read_text())
+        gpu = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "execute_image_graph")
+        settings = {kw.arg: kw.value for kw in gpu.decorator_list[0].keywords}
+        self.assertEqual(ast.literal_eval(settings["timeout"]), 300)
+        self.assertEqual(ast.literal_eval(settings["gpu"]), "L40S")
+        self.assertEqual(module.MOSS_START_WINDOW_SECONDS + 300 + 60, module.MOSS_COLLECT_TIMEOUT_SECONDS)
+        self.assertLess(module.MOSS_COLLECT_TIMEOUT_SECONDS + 30, module.BROKER_TIMEOUT_SECONDS)
+        self.assertLess(module.BROKER_TIMEOUT_SECONDS, 900)
+
     def test_graph_is_core_only_and_matches_catalog(self):
         graph = json.loads(GRAPH.read_text())
         catalog = json.loads(CATALOG.read_text())
