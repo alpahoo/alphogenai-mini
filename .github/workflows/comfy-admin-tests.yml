@@ -41,7 +41,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install av==17.0.0 numpy imageio-ffmpeg requests==2.32.5 modal==1.6.3 supabase==2.28.0 fastapi==0.121.1
-      - run: python -m unittest modal_app.comfy.test_runtime modal_app.comfy.test_moss_runtime modal_app.comfy.test_moss_queue -v
+      - run: python -m unittest modal_app.comfy.test_runtime modal_app.comfy.test_moss_runtime modal_app.comfy.test_moss_queue modal_app.comfy.test_moss_executor_select -v
       - name: Load Modal definitions without deployment or execution
         env:
           H3_MODAL_REGION: eu

@@ -10,11 +10,30 @@ import modal
 REGION = os.environ.get("H3_MODAL_REGION")
 if not REGION:
     raise RuntimeError("Set H3_MODAL_REGION to the privately approved compute region before loading this app")
+
+
+# MOSS executor GPU, chosen explicitly at deploy time. L40S by default; H100 only when selected.
+# Any other value stops the app from loading (no deploy, no GPU). There is no fallback between GPUs:
+# the broker submits only to the selected executor. H3 (execute_graph) is not affected.
+MOSS_EXECUTOR_GPUS = ("L40S", "H100")
+
+
+def select_moss_executor_gpu(value: str | None) -> str:
+    if value is None or value == "":
+        return "L40S"
+    if value not in MOSS_EXECUTOR_GPUS:
+        raise RuntimeError("MOSS_EXECUTOR_GPU must be L40S or H100")
+    return value
+
+
+MOSS_EXECUTOR_GPU = select_moss_executor_gpu(os.environ.get("MOSS_EXECUTOR_GPU"))
 app = modal.App("alphogenai-comfy")
 runtime_environment = {
     "H3_MODAL_REGION": REGION,
     "H3_SOURCE_ENVIRONMENT": os.environ.get("H3_SOURCE_ENVIRONMENT", "main"),
     "H3_MODELS_VOLUME": os.environ.get("H3_MODELS_VOLUME", "alphogenai-comfy-models"),
+    # Same selection inside the deployed containers as at deploy time.
+    "MOSS_EXECUTOR_GPU": MOSS_EXECUTOR_GPU,
 }
 volume = modal.Volume.from_name(os.environ.get("H3_MODELS_VOLUME", "alphogenai-comfy-models"), create_if_missing=False)
 cpu_image = (modal.Image.debian_slim(python_version="3.12").apt_install("ffmpeg")
@@ -73,6 +92,29 @@ def execute_image_graph(graph: dict, start_before: float):
     yield from output_frames(execute(graph, None, runtime="moss-image@1"))
 
 
+# MOSS-Image on H100: identical to execute_image_graph except the GPU type. Same isolation, same
+# 300 s executor timeout and late-start guard, same region. Invoked only when MOSS_EXECUTOR_GPU=H100.
+@app.function(image=gpu_image, gpu="H100", cpu=(2, 2), memory=(32768, 32768),
+              volumes={"/models": volume.with_mount_options(read_only=True)},
+              secrets=[], block_network=True, restrict_modal_access=True,
+              single_use_containers=True, min_containers=0, max_containers=1,
+              timeout=300, startup_timeout=120, region=REGION)
+def execute_image_graph_h100(graph: dict, start_before: float):
+    import time
+    from modal_app.comfy.executor import execute
+    from modal_app.comfy.transfer import output_frames
+    yield {"call_id": modal.current_function_call_id()}
+    if time.time() >= start_before:
+        raise TimeoutError("EXECUTOR_START_EXPIRED")
+    yield from output_frames(execute(graph, None, runtime="moss-image@1"))
+
+
+def moss_executor(gpu: str | None = None):
+    """The single MOSS executor for the deployed selection. Never another GPU, never H3's executor."""
+    gpu = select_moss_executor_gpu(MOSS_EXECUTOR_GPU if gpu is None else gpu)
+    return {"L40S": execute_image_graph, "H100": execute_image_graph_h100}[gpu]
+
+
 @app.function(image=cpu_image, secrets=[broker_secret], timeout=BROKER_TIMEOUT_SECONDS, retries=0, max_containers=1, region=REGION)
 def broker(run_id: str):
     from modal_app.comfy.broker import database, run
@@ -88,7 +130,7 @@ def broker(run_id: str):
                 raise ValueError("REFERENCE_NOT_SUPPORTED")
             def save_call_id(call_id):
                 database().table("comfy_runs").update({"modal_call_id": call_id}).eq("id", run_id).execute()
-            return asyncio.run(collect_moss(execute_image_graph, graph, save_call_id,
+            return asyncio.run(collect_moss(moss_executor(), graph, save_call_id,
                                            MOSS_START_WINDOW_SECONDS, MOSS_COLLECT_TIMEOUT_SECONDS))
 
         async def collect():
