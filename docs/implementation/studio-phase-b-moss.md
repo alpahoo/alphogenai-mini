@@ -93,6 +93,21 @@ MOSS stays unusable until the owner confirms the licence and opens its own serve
 
 ## Tests
 
+### EU L40S capacity wait
+
+- MOSS may start up to 300 seconds after submission (previously 110). The GPU execution timeout stays
+  300 seconds; collection allows 660 seconds (queue + execution + 60 seconds for transfer).
+- The shared CPU broker hard timeout is 720 seconds; H3 still uses its original 110-second start window,
+  310-second collection budget and unchanged H100 executor. The SQL execution deadline stays 15 minutes.
+- No retry, alternate GPU, region expansion, permit reopening or automatic deployment is introduced.
+  L40S availability within five minutes is not guaranteed. Deploy only with owner approval, after active
+  H3 runs finish. Reuse the verified models; preparation does not need to run again.
+- GPU execution time is not extended. Extra broker waiting is CPU-billable; the $0.20 reservation remains
+  an application provision, not a billing cap. Reconcile the failed run separately; this change does not
+  release its reservation or authorize a second GPU run.
+- Free regression tests simulate a 210-second queue, the 300-second MOSS boundary, unchanged H3 limits
+  and executor cancellation; no sleeping, remote invocation or GPU is used.
+
 - Vitest: MOSS binding (declared inputs only, defaults, bounds, unknown keys, references refused), routing,
   admission route (own flag, own gate, never the H3 function), readiness, media conversion, Studio helpers.
 - `tools/test-comfy-moss-admission.mjs` (local PostgreSQL): closed gate, licence gate, owner only,

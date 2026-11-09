@@ -395,3 +395,7 @@ Audit + actions 2026-06-09 (go Paul) sur les 4 items de durcissement restants :
 - The user's current request explicitly authorizes preparing auth/service-role, additive migrations, Modal and CI code in a reviewable PR. Applying migrations, deployment, merge and paid execution remain unauthorized.
 - First slice is admin-only; no public moderation claim, publication, Studio or MOSS implementation. Private outputs never enter legacy R2 or public jobs URLs. Production activation needs private rights confirmation and a single execution permit.
 - PR #90 Actions: 15 focused tests passed on 3fd751d. Existing /v and R2 exposure remains outside that fix. H3 branches from #90 so the API privacy dependency is visible.
+
+## MOSS capacity repair — 2026-11-09 — Codex
+- Explicit user request authorizes this targeted Modal code repair despite the generic role restriction in AGENTS.md. Production deployment and GPU remain unauthorized.
+- Shared CPU broker hard timeout must cover the MOSS window; H3 keeps its 110s start and 310s collection limit. Waiting for capacity can still fail after 5 minutes; no retry/fallback or region change. Longer broker waiting consumes CPU; $0.20 is an admission provision, not a Modal invoice cap.
