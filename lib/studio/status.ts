@@ -23,6 +23,11 @@ export function statusView(status: string): StatusView {
 }
 
 const ERROR_MESSAGES: Record<string, string> = {
+  GPU_START_TIMEOUT: "No GPU start was confirmed within 5 minutes. The pending call was cancelled. There is no automatic retry.",
+  GPU_EXECUTION_TIMEOUT: "The GPU executor exceeded its result deadline. No result was delivered.",
+  GPU_CANCELLATION_FAILED: "Stopping the GPU call could not be confirmed. Ask an administrator to check before another attempt.",
+  GPU_SUBMISSION_FAILED: "GPU submission could not be confirmed. Ask an administrator to check before another attempt.",
+  GPU_SDK_UNSUPPORTED: "The GPU adapter needs an administrator update. No GPU request was submitted.",
   TIMEOUT: "The run exceeded its execution deadline.",
   AUTHORIZATION_EXPIRED: "The GPU authorization expired before the run started.",
   MISSING_OUTPUTS: "The executor did not return both files.",

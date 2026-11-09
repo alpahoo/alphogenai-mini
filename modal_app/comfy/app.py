@@ -18,7 +18,7 @@ runtime_environment = {
 }
 volume = modal.Volume.from_name(os.environ.get("H3_MODELS_VOLUME", "alphogenai-comfy-models"), create_if_missing=False)
 cpu_image = (modal.Image.debian_slim(python_version="3.12").apt_install("ffmpeg")
-             .pip_install("supabase==2.28.0", "requests==2.32.5", "fastapi==0.121.1", "av==17.0.0")
+             .pip_install("supabase==2.28.0", "requests==2.32.5", "fastapi==0.121.1", "av==17.0.0", "modal==1.6.3")
              .env(runtime_environment)
              .add_local_python_source("modal_app.comfy")
              .add_local_dir("workflows/comfy/runtimes", "/opt/comfy-catalog"))
@@ -82,16 +82,19 @@ def broker(run_id: str):
         import time
         from modal_app.comfy.transfer import receive_output
 
+        if runtime == "moss-image@1":
+            from modal_app.comfy.moss_queue import collect_moss
+            if reference is not None:
+                raise ValueError("REFERENCE_NOT_SUPPORTED")
+            def save_call_id(call_id):
+                database().table("comfy_runs").update({"modal_call_id": call_id}).eq("id", run_id).execute()
+            return asyncio.run(collect_moss(execute_image_graph, graph, save_call_id,
+                                           MOSS_START_WINDOW_SECONDS, MOSS_COLLECT_TIMEOUT_SECONDS))
+
         async def collect():
             call = None
-            if runtime == "moss-image@1":
-                if reference is not None:
-                    raise ValueError("REFERENCE_NOT_SUPPORTED")
-                stream = execute_image_graph.remote_gen.aio(graph, time.time() + MOSS_START_WINDOW_SECONDS)
-                budget = MOSS_COLLECT_TIMEOUT_SECONDS
-            else:
-                stream = execute_graph.remote_gen.aio(graph, reference, time.time() + 110)
-                budget = 310
+            stream = execute_graph.remote_gen.aio(graph, reference, time.time() + 110)
+            budget = 310
             try:
                 async with asyncio.timeout(budget):
                     header = await anext(stream)

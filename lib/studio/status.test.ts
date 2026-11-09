@@ -19,4 +19,11 @@ describe("Studio run status", () => {
     expect(errorMessage("TIMEOUT")).toMatch(/deadline/);
     expect(errorMessage(null)).toBeNull();
   });
+  it("explains start timeout separately from an unconfirmed cancellation", () => {
+    expect(errorMessage("GPU_START_TIMEOUT")).toMatch(/5 minutes.*cancelled/);
+    expect(errorMessage("GPU_CANCELLATION_FAILED")).toMatch(/could not be confirmed/);
+    expect(errorMessage("GPU_SUBMISSION_FAILED")).toMatch(/before another attempt/);
+    expect(errorMessage("GPU_SDK_UNSUPPORTED")).toMatch(/No GPU request was submitted/);
+    expect(errorMessage("GPU_EXECUTION_TIMEOUT")).toMatch(/result deadline/);
+  });
 });

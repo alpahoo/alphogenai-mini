@@ -11,6 +11,7 @@ from supabase import create_client
 from modal_app.comfy.executor import canonical_hash
 from modal_app.comfy.postprocess import shift_audio
 from modal_app.comfy.transfer import PNG_SIGNATURE
+from modal_app.comfy.moss_queue import MossQueueError
 
 SUPPORTED_RUNTIMES = ("h3-video@1", "moss-image@1")
 MAX_PNG_BYTES = 40 * 1024 * 1024
@@ -145,6 +146,7 @@ def run(run_id: str, invoke) -> None:
         return
     uploaded = []
     finished = False
+    runtime = None
     try:
         row = db.table("comfy_runs").select("*").eq("id", run_id).single().execute().data
         graph = db.table("comfy_run_graphs").select("resolved_graph").eq("run_id", run_id).single().execute().data["resolved_graph"]
@@ -171,9 +173,11 @@ def run(run_id: str, invoke) -> None:
         # Success RPC may fence a late worker into failed. Such files must be removed.
         status = db.table("comfy_runs").select("status").eq("id",run_id).single().execute().data["status"]
         finished = finished and status == "done"
-    except Exception:
+    except Exception as error:
         # Raw errors, prompts and storage tokens must never appear in a public response/log.
-        db.rpc("finish_comfy_admin_run", {"p_run": run_id, "p_success": False, "p_error": "GENERATION_FAILED", "p_seconds": None}).execute()
+        code = error.code if runtime == "moss-image@1" and isinstance(error, MossQueueError) else "GENERATION_FAILED"
+        print(f"comfy_run_failed run={run_id} code={code}")
+        db.rpc("finish_comfy_admin_run", {"p_run": run_id, "p_success": False, "p_error": code, "p_seconds": None}).execute()
     finally:
         if not finished:
             if uploaded:
