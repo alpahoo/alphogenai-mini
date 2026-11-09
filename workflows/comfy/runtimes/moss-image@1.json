@@ -1,0 +1,44 @@
+{
+  "runtime": "moss-image@1",
+  "comfyui": "v0.42.0",
+  "gpu": "L40S",
+  "custom_nodes": [],
+  "models": [
+    {
+      "repo": "Comfy-Org/MOSS-Image",
+      "revision": "2929efe3cdd506c0a430bcfca70a9a8d805cc095",
+      "source": "diffusion_models/moss_image_sft_int8_convrot.safetensors",
+      "path": "diffusion_models/moss_image_sft_int8_convrot.safetensors",
+      "sha256": "b4d1475bc7eeffd7b809e82ea13a1fba1fb85c4e18365af3813722faa5c0fe4f",
+      "bytes": 5413698958,
+      "license": "apache-2.0",
+      "upstream": "OpenMOSS-Team/MOSS-Image-SFT (apache-2.0)"
+    },
+    {
+      "repo": "Comfy-Org/MOSS-Image",
+      "revision": "2929efe3cdd506c0a430bcfca70a9a8d805cc095",
+      "source": "text_encoders/qwen3.5_9b_int8_convrot.safetensors",
+      "path": "text_encoders/qwen3.5_9b_int8_convrot.safetensors",
+      "sha256": "32e3787472f708fa5f83624acbf5ef23f7fc89c439e05065ea57cfe5a97f025a",
+      "bytes": 9748121532,
+      "license": "apache-2.0",
+      "upstream": "Qwen/Qwen3.5-9B (apache-2.0)"
+    },
+    {
+      "repo": "Comfy-Org/MOSS-Image",
+      "revision": "2929efe3cdd506c0a430bcfca70a9a8d805cc095",
+      "source": "vae/flux2-vae_small.safetensors",
+      "path": "vae/flux2-vae_small.safetensors",
+      "sha256": "d8d52ba036475f5fb07c8b435e176d3d97ebfa82f0d1a1c317f9cc1e25bd013b",
+      "bytes": 249521340,
+      "license": "apache-2.0",
+      "upstream": "black-forest-labs/FLUX.2-small-decoder diffusion_pytorch_model.safetensors (apache-2.0, identical SHA-256)"
+    }
+  ],
+  "excluded": [
+    {"path": "vae/flux2-vae.safetensors", "reason": "Same file also published under a non-commercial FLUX.2 licence; written confirmation pending"},
+    {"path": "loras/moss_image_color_depth_control.safetensors", "reason": "Training data produced with Depth Anything V2 Large (CC-BY-NC-4.0); legal clarification pending"},
+    {"path": "loras/moss_image_edit_lora_rank_64_bf16.safetensors", "reason": "No licence declared upstream"},
+    {"path": "Qwen3.5-9B-abliterated*", "reason": "Safety-removed encoder from the community workflow; incompatible with moderation commitments"}
+  ]
+}

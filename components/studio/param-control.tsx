@@ -31,7 +31,8 @@ export function Segmented({ options, value, onChange, labelFor, supported, disab
   supported?: (o: string) => boolean; disabled?: boolean; name: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={name} className="grid auto-cols-fr grid-flow-col gap-1 rounded-xl border border-border/60 bg-muted/40 p-1">
+    <div role="radiogroup" aria-label={name} className="grid gap-1 rounded-xl border border-border/60 bg-muted/40 p-1"
+      style={{ gridTemplateColumns: options.length <= 3 ? `repeat(${options.length}, minmax(0, 1fr))` : "repeat(auto-fit, minmax(6.5rem, 1fr))" }}>
       {options.map(option => {
         const ok = supported ? supported(option) : true;
         const active = value === option;
@@ -39,7 +40,7 @@ export function Segmented({ options, value, onChange, labelFor, supported, disab
           <button key={option} type="button" role="radio" aria-checked={active} disabled={disabled || !ok}
             title={ok ? undefined : "No validated workflow for this combination"}
             onClick={() => onChange(option)}
-            className={cn("rounded-lg px-2.5 py-1.5 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            className={cn("truncate rounded-lg px-2.5 py-1.5 text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               active ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground",
               !ok && "cursor-not-allowed line-through decoration-muted-foreground/40 opacity-40")}>
             {labelFor(option)}
@@ -57,6 +58,18 @@ export function ParamControl({ param, value, error, onChange, isOptionSupported,
       <FieldShell label={param.label} help={param.help} error={error}>
         <Segmented name={param.label} options={param.options} value={String(value ?? "")} onChange={onChange}
           labelFor={o => optionLabel(param, o)} supported={isOptionSupported} disabled={disabled} />
+      </FieldShell>
+    );
+  }
+  if (param.widget === "text") {
+    const text = String(value ?? "");
+    const max = param.maxLength ?? 2000;
+    return (
+      <FieldShell label={param.label} help={param.help} error={error} htmlFor={id}
+        aside={<span className="font-mono text-[11px] tabular-nums text-muted-foreground/70">{text.length}/{max}</span>}>
+        <textarea id={id} rows={3} value={text} disabled={disabled} maxLength={max + 100}
+          onChange={e => onChange(e.target.value)}
+          className="block w-full resize-y rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-sm leading-relaxed outline-none transition focus:border-primary/60 focus:ring-2 focus:ring-primary/20" />
       </FieldShell>
     );
   }

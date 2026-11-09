@@ -2,6 +2,8 @@ import h3Manifest from "@/workflows/comfy/templates/minimax-h3/manifest.json";
 import h3T2v from "@/workflows/comfy/templates/minimax-h3/graph.t2v.api.json";
 import h3T2vFull from "@/workflows/comfy/templates/minimax-h3/graph.t2v_full.api.json";
 import h3I2v from "@/workflows/comfy/templates/minimax-h3/graph.i2v.api.json";
+import mossManifest from "@/workflows/comfy/templates/moss-image/manifest.json";
+import mossT2i from "@/workflows/comfy/templates/moss-image/graph.t2i.api.json";
 import type { StudioManifest } from "./manifest";
 
 export type OutputKind = "video" | "image";
@@ -12,8 +14,10 @@ export interface StudioModel {
   title: string;
   kind: OutputKind;
   tagline: string;
-  /** "available" = wired end to end. "pending" = listed, never runnable from the UI. */
+  /** "available" = wired end to end (still subject to the server gate). "pending" = listed, never runnable. */
   availability: "available" | "pending";
+  /** Needs an owner licence confirmation in the server gate before any run. */
+  requiresValidation?: boolean;
   pendingReason?: string;
   manifest?: StudioManifest;
   graphs?: Record<string, Graph>;
@@ -41,15 +45,25 @@ export const STUDIO_MODELS: StudioModel[] = [
     slug: "moss-image",
     title: "MOSS-Image",
     kind: "image",
-    tagline: "Text to image",
-    availability: "pending",
-    pendingReason: "Licence, file hashes and cost validation are pending. Not runnable yet.",
-    capabilities: ["Text to image"],
+    tagline: "Text to image · 1 MP",
+    availability: "available",
+    requiresValidation: true,
+    manifest: mossManifest as unknown as StudioManifest,
+    graphs: { t2i: mossT2i as Graph },
+    reservationUsd: 0.20,
+    costNote: "Estimated $0.03–0.10 per image on L40S (not measured yet; invoice reconciliation pending).",
+    capabilities: ["Text to image", "Seven aspect ratios", "PNG, JPEG, WebP downloads"],
   },
 ];
 
 export function findModel(slug: string | null | undefined): StudioModel | undefined {
   return STUDIO_MODELS.find(m => m.slug === slug);
+}
+
+/** Client-safe mapping from a run's `template_version` (e.g. "moss-image@1") to its Studio model. */
+export function modelForTemplateVersion(version: string | null | undefined): StudioModel {
+  const slug = version?.split("@")[0];
+  return STUDIO_MODELS.find(m => m.slug === slug && m.manifest) ?? STUDIO_MODELS[0];
 }
 
 export function modelsFor(kind: OutputKind): StudioModel[] {
@@ -65,6 +79,9 @@ const LOCKED_READERS: Record<string, (inputs: Record<string, unknown>) => Locked
   CreateVideo: i => [{ label: "Frame rate", value: `${i.fps} fps` }],
   CLIPLoader: i => [{ label: "Text encoder", value: String(i.clip_name).replace(/\.safetensors$/, "") }],
   UNETLoader: i => [{ label: "Diffusion model", value: String(i.unet_name).replace(/\.safetensors$/, "") }],
+  VAELoader: i => [{ label: "VAE", value: String(i.vae_name).replace(/\.safetensors$/, "") }],
+  KSampler: i => [{ label: "Denoise", value: String(i.denoise) }],
+  EmptyFlux2LatentImage: i => [{ label: "Batch size", value: String(i.batch_size) }],
 };
 
 /** Read-only values that come from the exported graph of the chosen variant (never written by the Studio). */

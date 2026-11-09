@@ -4,8 +4,9 @@ import { Clapperboard, Image as ImageIcon, Loader2, SlidersHorizontal, Sparkles 
 import { cn } from "@/lib/utils";
 import { modelsFor, type OutputKind } from "@/lib/studio/catalog";
 import { optionSupported, paramsByTier, referenceSupported } from "@/lib/studio/manifest";
-import { ParamControl, Segmented } from "./param-control";
+import { ParamControl } from "./param-control";
 import { ReferenceDrop } from "./reference-drop";
+import { AspectPicker } from "./aspect-picker";
 import type { StudioState } from "./use-studio";
 
 export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioState; onOpenAdvanced: () => void; advancedOpen: boolean }) {
@@ -49,7 +50,8 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2 text-sm font-medium">{m.title}
-                      {m.availability === "pending" && <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-px text-[10px] font-medium text-amber-500">Pending validation</span>}
+                      {(m.availability === "pending" || (m.requiresValidation && !(active && s.readiness.licence_confirmed))) &&
+                        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-px text-[10px] font-medium text-amber-500">Validation pending</span>}
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">{m.tagline}</span>
                   </span>
@@ -90,8 +92,8 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
               p.key === "aspect" && p.options ? (
                 <div key={p.key} className="space-y-2">
                   <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">{p.label}</p>
-                  <Segmented name={p.label} options={p.options} value={String(values[p.key] ?? "")} onChange={v => s.setValue(p.key, v)}
-                    labelFor={o => o} />
+                  <AspectPicker options={p.options} value={String(values[p.key] ?? "")} onChange={v => s.setValue(p.key, v)}
+                    labels={p.optionLabels} sizes={manifest.resolutions} />
                   <p className="text-xs text-muted-foreground/80">{p.optionLabels?.[String(values[p.key])]} · {manifest.resolutions?.[String(values[p.key])]?.join(" × ")} px</p>
                 </div>
               ) : (

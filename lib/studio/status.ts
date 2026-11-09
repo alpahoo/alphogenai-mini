@@ -14,7 +14,7 @@ export function statusView(status: string): StatusView {
     case "loading": return { label: "Loading", tone: "muted", description: "Opening this private run…" };
     case "queued": return { label: "Queued", tone: "neutral", description: "Reserved and waiting for the GPU executor." };
     case "running": return { label: "Generating", tone: "progress", description: "Loading models, generating and post-processing on the GPU." };
-    case "done": return { label: "Completed", tone: "success", description: "Original and corrected files are stored privately." };
+    case "done": return { label: "Completed", tone: "success", description: "Outputs are stored privately." };
     case "failed": return { label: "Failed", tone: "danger", description: "The generation did not complete." };
     case "expired": return { label: "Expired", tone: "danger", description: "No result before the execution deadline." };
     case "cancelled": return { label: "Cancelled", tone: "muted", description: "The run was cancelled." };

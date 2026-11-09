@@ -69,9 +69,72 @@ describe("Studio manifest helpers (H3)", () => {
     expect(h3Frames(7)).toBe(175);
   });
 
-  it("never lists a pending model as runnable", () => {
+  it("MOSS is wired but always behind its licence and GPU gate", () => {
     const moss = STUDIO_MODELS.find(x => x.slug === "moss-image")!;
-    expect(moss.availability).toBe("pending");
-    expect(moss.manifest).toBeUndefined();
+    expect(moss.availability).toBe("available");
+    expect(moss.requiresValidation).toBe(true);
+    expect(moss.reservationUsd).toBe(0.2);
+  });
+});
+
+describe("Studio manifest helpers (MOSS)", () => {
+  const moss = findModel("moss-image")!;
+  const mm = moss.manifest as StudioManifest;
+  it("single-graph template resolves to t2i without variant axes", () => {
+    expect(resolveVariant(mm, defaultValues(mm), false)).toBe("t2i");
+    expect(referenceSupported(mm, defaultValues(mm))).toBe(false);
+  });
+  it("puts sampling controls in Advanced and allows an empty negative prompt", () => {
+    expect(paramsByTier(mm, "simple").map(p => p.key)).toEqual(["aspect"]);
+    expect(paramsByTier(mm, "advanced").map(p => p.key)).toEqual(["negative_prompt", "seed", "steps", "cfg", "sampler_name", "scheduler"]);
+    expect(validateValues(mm, { ...defaultValues(mm), prompt: "A red bicycle", negative_prompt: "" })).toEqual({});
+  });
+  it("locks only model files and fixed graph values", () => {
+    const locked = Object.fromEntries(lockedSettings(moss, "t2i").map(l => [l.label, l.value]));
+    expect(locked).toMatchObject({ "Diffusion model": "moss_image_sft_int8_convrot", VAE: "flux2-vae_small", Denoise: "1", "Batch size": "1" });
+    expect(locked.Steps).toBeUndefined();
+  });
+  it("submission is accepted by the server binder", async () => {
+    const { TEMPLATES } = await import("@/lib/comfy/templates");
+    const body = submissionParams(mm, { ...defaultValues(mm), prompt: "A lighthouse at dawn", aspect: "9:16" }, null);
+    expect(() => TEMPLATES["moss-image"].resolve(body, owner)).not.toThrow();
+  });
+  describe("negative prompt round trip (client body -> server graph -> recorded params)", () => {
+    const run = async (values: Record<string, string | number | undefined>) => {
+      const { TEMPLATES } = await import("@/lib/comfy/templates");
+      const body = submissionParams(mm, { ...defaultValues(mm), prompt: "A lighthouse at dawn", ...values }, null);
+      const r = TEMPLATES["moss-image"].resolve(body, owner);
+      return { body, graphNegative: r.graph["5"].inputs.text, recorded: r.params.negative_prompt, seed: r.params.seed };
+    };
+    it("cleared negative prompt is sent as an empty string and applied as empty", async () => {
+      const { body, graphNegative, recorded } = await run({ negative_prompt: "" });
+      expect(body).toHaveProperty("negative_prompt", "");
+      expect(graphNegative).toBe("");
+      expect(recorded).toBe("");
+    });
+    it("custom negative prompt is kept", async () => {
+      const { body, graphNegative, recorded } = await run({ negative_prompt: "blurry, text" });
+      expect(body.negative_prompt).toBe("blurry, text");
+      expect(graphNegative).toBe("blurry, text");
+      expect(recorded).toBe("blurry, text");
+    });
+    it("omitted negative prompt falls back to the manifest default (documented)", async () => {
+      const { TEMPLATES } = await import("@/lib/comfy/templates");
+      const def = mm.params.find(p => p.key === "negative_prompt")!.default;
+      const r = TEMPLATES["moss-image"].resolve({ prompt: "A lighthouse at dawn", aspect: "1:1" }, owner);
+      expect(r.graph["5"].inputs.text).toBe(def);
+      expect(r.params.negative_prompt).toBe(def);
+    });
+    it("empty seed is still omitted and randomised server side", async () => {
+      const { body, seed } = await run({ seed: "" });
+      expect(body).not.toHaveProperty("seed");
+      expect(typeof seed).toBe("number");
+    });
+    it("H3 body unchanged: required prompt, no empty keys added", () => {
+      const body = submissionParams(m, { ...defaultValues(m), prompt: "A cinematic scene", seed: "" }, null);
+      expect(Object.values(body)).not.toContain("");
+      expect(body).not.toHaveProperty("seed");
+      expect(() => resolveTemplate(body, owner)).not.toThrow();
+    });
   });
 });

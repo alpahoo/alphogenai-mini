@@ -29,3 +29,26 @@ export async function pilotState(userId: string) {
   } : null;
   return {ready,reason:ready?"Authorized GPU runs are available":"Activation, rights confirmation or GPU authorization is pending",manifest,allowance};
 }
+
+/** Readiness for runtimes admitted through `comfy_runtime_gates` (not the H3 pilot gate). */
+export async function runtimeGateState(userId: string, runtime: string, enabledEnv: string) {
+  const db = createServiceClient();
+  const {data:gate,error} = await db.from("comfy_runtime_gates")
+    .select("enabled,licence_confirmed_at,allowed_user_id,expires_at,remaining_runs,budget_usd,committed_usd,reserve_usd")
+    .eq("runtime",runtime).maybeSingle();
+  if (error || !gate) return {ready:false, reason:"Runtime migration or licence validation is pending", allowance:null, licence_confirmed:false};
+  const reserve = Number(gate.reserve_usd);
+  const ready = process.env[enabledEnv]==="true" && !!process.env.COMFY_DISPATCH_URL && !!process.env.COMFY_DISPATCH_SECRET &&
+    gate.enabled && gate.allowed_user_id===userId && !!gate.licence_confirmed_at && !!gate.expires_at && Date.parse(gate.expires_at)>Date.now() &&
+    gate.remaining_runs>0 && Number(gate.budget_usd)-Number(gate.committed_usd)>=reserve;
+  const allowance = gate.allowed_user_id===userId ? {
+    remaining_runs: gate.remaining_runs,
+    available_usd: Math.max(0, Number(gate.budget_usd)-Number(gate.committed_usd)),
+    committed_usd: Number(gate.committed_usd),
+    expires_at: gate.expires_at,
+    reserve_usd: reserve,
+  } : null;
+  const reason = ready ? "Authorized GPU runs are available"
+    : !gate.licence_confirmed_at ? "Licence validation is pending" : "GPU authorization is pending";
+  return {ready, reason, allowance, licence_confirmed: !!gate.licence_confirmed_at};
+}

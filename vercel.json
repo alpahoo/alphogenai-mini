@@ -1,5 +1,5 @@
 {
-  "git": { "deploymentEnabled": { "codex/h3-admin": false, "feat/studio-phase-a": false } },
+  "git": { "deploymentEnabled": { "codex/h3-admin": false, "feat/studio-phase-a": false, "feat/studio-phase-b-moss": false } },
   "crons": [
     {
       "path": "/api/cron/publish-scheduled",

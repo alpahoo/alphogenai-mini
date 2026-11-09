@@ -9,7 +9,7 @@ export async function GET(_req:Request,{params}:{params:Promise<{id:string}>}) {
   const db=createServiceClient();
   const {error:expiryError}=await db.rpc("expire_comfy_admin_run",{p_run:id,p_user:auth.user.id});
   if(expiryError)return NextResponse.json({error:"Run status unavailable"},{status:503});
-  const {data:run,error}=await db.from("comfy_runs").select("id,job_id,status,error_code,generation_seconds,params_effective,created_at,finance_status")
+  const {data:run,error}=await db.from("comfy_runs").select("id,job_id,status,error_code,generation_seconds,params_effective,created_at,finance_status,template_version,runtime")
     .eq("id",id).eq("user_id",auth.user.id).single();
   if(error || !run)return NextResponse.json({error:"Run not found"},{status:404});
   const {data:assets,error:assetError}=await db.from("comfy_assets").select("id,role,mime").eq("run_id",id).is("withdrawn_at",null);
