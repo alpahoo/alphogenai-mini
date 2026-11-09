@@ -10,12 +10,13 @@ import {
   Images,
   Paintbrush,
   Shield,
+  Sparkles,
   UserRoundCog,
   Users,
 } from "lucide-react";
 
 const NAV_ITEMS = [
-  { href: "/admin/workflows/minimax-h3", label: "MiniMax H3", icon: Film },
+  { href: "/admin/studio", label: "Studio", icon: Sparkles },
   { href: "/admin", label: "Dashboard", icon: BarChart3 },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/jobs", label: "Jobs", icon: Film },
@@ -39,7 +40,7 @@ export function AdminSidebar({ email }: { email: string }) {
       {/* Navigation */}
       <nav className="flex-1 space-y-0.5 px-3">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href;
+          const active = pathname === href || (href === "/admin/studio" && pathname.startsWith("/admin/studio"));
           return (
             <Link
               key={href}

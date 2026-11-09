@@ -88,3 +88,25 @@
   pointer-events: none;
   height: 0;
 }
+
+/* ── Admin Studio ─────────────────────────────────────────────── */
+.studio-stage {
+  background:
+    radial-gradient(60% 50% at 50% 0%, hsl(var(--primary) / 0.08), transparent 70%),
+    hsl(var(--background));
+}
+.studio-shimmer {
+  background: linear-gradient(110deg, transparent 30%, hsl(var(--primary) / 0.10) 50%, transparent 70%);
+  background-size: 250% 100%;
+  animation: studio-shimmer 2.4s ease-in-out infinite;
+}
+@keyframes studio-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@media (prefers-reduced-motion: reduce) { .studio-shimmer { animation: none; } }
+.studio-range { -webkit-appearance: none; appearance: none; height: 1.25rem; background: transparent; cursor: pointer; }
+.studio-range::-webkit-slider-runnable-track { height: 4px; border-radius: 999px; background: hsl(var(--muted)); }
+.studio-range::-moz-range-track { height: 4px; border-radius: 999px; background: hsl(var(--muted)); }
+.studio-range::-webkit-slider-thumb { -webkit-appearance: none; margin-top: -6px; width: 16px; height: 16px; border-radius: 999px; background: hsl(var(--primary)); box-shadow: 0 0 0 4px hsl(var(--primary) / 0.18); }
+.studio-range::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 999px; background: hsl(var(--primary)); box-shadow: 0 0 0 4px hsl(var(--primary) / 0.18); }
+.studio-range:focus-visible { outline: none; }
+.studio-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 6px hsl(var(--primary) / 0.35); }
+.studio-range:disabled { opacity: 0.5; cursor: not-allowed; }

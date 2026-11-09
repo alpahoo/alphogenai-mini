@@ -18,5 +18,6 @@ describe("H3 private media",()=>{
   it("denies non-admins before signing",async()=>{vi.mocked(requireAdmin).mockResolvedValue({response:new Response("Denied",{status:403}) as never});expect((await get()).status).toBe(403);expect(sign).not.toHaveBeenCalled();});
   it("scopes assets to the caller and excludes withdrawals",async()=>{const res=await get();expect(res.status).toBe(200);expect(filters).toContain("owner_id=owner");expect(filters).toContain("withdrawn_at=null");expect(sign).toHaveBeenCalledWith("private/run/final.mp4",600);expect(res.headers.get("cache-control")).toContain("no-store");});
   it("does not sign a withdrawn/missing asset",async()=>{asset=null;expect((await get()).status).toBe(404);expect(sign).not.toHaveBeenCalled();});
+  it("signs an attachment with a server-built file name on download",async()=>{const res=await GET(new Request("http://localhost?download=1"),{params:Promise.resolve({id:"asset"})});expect(res.status).toBe(200);expect(sign).toHaveBeenCalledWith("private/run/final.mp4",600,{download:"alphogen-run-corrected.mp4"});});
   it.each(["queued","running","failed","cancelled","expired"])("does not sign a %s run",async state=>{status=state;expect((await get()).status).toBe(404);expect(sign).not.toHaveBeenCalled();});
 });
