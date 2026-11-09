@@ -399,3 +399,8 @@ Audit + actions 2026-06-09 (go Paul) sur les 4 items de durcissement restants :
 ## MOSS capacity repair — 2026-11-09 — Codex
 - Explicit user request authorizes this targeted Modal code repair despite the generic role restriction in AGENTS.md. Production deployment and GPU remain unauthorized.
 - Shared CPU broker hard timeout must cover the MOSS window; H3 keeps its 110s start and 310s collection limit. Waiting for capacity can still fail after 5 minutes; no retry/fallback or region change. Longer broker waiting consumes CPU; $0.20 is an admission provision, not a Modal invoice cap.
+
+## MOSS queued-call cancellation — 2026-11-09 — Codex
+- User explicitly authorizes targeted Modal corrections and necessary tests/config despite generic role restrictions. No production action authorized by this request.
+- SDK 1.6.3 refuses public spawn on generators and its deployed input-plane generator API exposes no pre-start call ID. Reuse the native control-plane submission used by SDK spawn via a small, explicitly private/version-locked adapter; keep native generator frame decoding. Test with actual SDK and mocked transport. Fail closed on version mismatch. Do not rely on best-effort call-graph discovery.
+- Cancellation acknowledgement can fail under network/service outage: expose GPU_CANCELLATION_FAILED, preserve reservation, never claim success or retry automatically. Submission response loss also remains an explicitly uncertain state. Availability within 5 minutes cannot be guaranteed by code.

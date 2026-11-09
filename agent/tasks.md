@@ -1590,3 +1590,7 @@ Réfs : revue Codex 2026-07-16 ; `agent/log.md` (entrée durcissement).
 ## MOSS-CAPACITY-WAIT — 2026-11-09 — owner: codex — code_ready
 - User explicitly authorizes repairing the MOSS scheduling window after the failed EU L40S pilot. Isolated branch; no deploy, merge, permit change or paid run.
 - Scope: MOSS start deadline 300s, collection 660s, outer CPU broker 720s; preserve H3 start/collection/GPU limits and the SQL 900s deadline. Tests simulate delayed capacity without sleeping or invoking Modal.
+
+## MOSS-QUEUE-CANCEL — 2026-11-09 — owner: codex — code_ready
+- Explicit user request: fix queued MOSS calls surviving broker timeout. Branch codex/moss-queue-cancellation; no merge, deploy, permit or paid GPU authorized.
+- Scope: capture native SDK invocation ID before GPU start; persist and cancel on 300s start timeout; separate total result deadline; safe error codes/UI; free SDK/RPC and broker regressions. H3 stream and both GPU definitions remain unchanged.

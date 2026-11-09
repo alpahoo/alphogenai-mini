@@ -42,7 +42,7 @@ async def agen(items):
 
 
 class MossRuntimeTests(unittest.TestCase):
-    def test_capacity_wait_preserves_runtime_deadlines_and_cancellation(self):
+    def test_h3_capacity_wait_preserves_deadlines_and_cancellation(self):
         import importlib
         from types import SimpleNamespace
         from unittest.mock import AsyncMock, patch
@@ -50,9 +50,6 @@ class MossRuntimeTests(unittest.TestCase):
             app_module = importlib.import_module("modal_app.comfy.app")
         # Simulate wall-clock queue delay, without sleeping or invoking a remote function.
         for runtime, delay, allowed, collect_budget in (
-            ("moss-image@1", 210, True, 660),
-            ("moss-image@1", 299, True, 660),
-            ("moss-image@1", 300, False, 660),
             ("h3-video@1", 109, True, 310),
             ("h3-video@1", 110, False, 310),
             ("h3-video@1", 210, False, 310),

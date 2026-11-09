@@ -93,6 +93,31 @@ MOSS stays unusable until the owner confirms the licence and opens its own serve
 
 ## Tests
 
+### Cancellation before a MOSS GPU starts
+
+- `moss_queue.py` submits through Modal 1.6.3's native control-plane generator path and stores the
+  invocation ID immediately, before consuming any GPU output. The executor's first frame must match that ID.
+- The five-minute start window is now an actual broker-side timeout for the first frame, independent of
+  the 660-second total result deadline. A queued call is explicitly cancelled with
+  `terminate_containers=True` even if it has never yielded a frame. Reservations are never released here.
+- Cancellation acknowledgement is bounded to 20 seconds; local stream closure to five. Failure to confirm
+  cancellation closes the business run with `GPU_CANCELLATION_FAILED` and delivers no output. Submission
+  uncertainty is `GPU_SUBMISSION_FAILED`; neither case is automatically retried or reported as a confirmed stop.
+- `GPU_START_TIMEOUT`, `GPU_EXECUTION_TIMEOUT` and `GPU_SDK_UNSUPPORTED` have distinct safe Studio messages.
+  Business logs contain only the run UUID and fixed code, never raw provider errors, prompts or graphs.
+- **SDK dependency:** public `spawn()` rejects generators, and input-plane `remote_gen()` does not return
+  an early call ID. The small adapter reuses private SDK submission/handle helpers and the SDK's native
+  generator decoder, with the same `SYNC_LEGACY` mode as control-plane `remote_gen()`. It does not use
+  best-effort call-graph polling or a new transfer protocol. CPU images pin Modal to 1.6.3; other versions
+  fail closed before submission. Any SDK upgrade requires updating the adapter and running its real-SDK
+  mocked-transport tests. The server interaction still needs confirmation during the next explicitly
+  authorized pilot; local tests do not prove remote GPU compatibility.
+- H3 keeps its existing invocation/stream path. No GPU definitions, models, SQL gates or budgets change.
+  These changes stop unnecessary waiting and make errors actionable; they cannot guarantee EU L40S capacity.
+- Rollout: merge and deploy only after owner approval, with no active H3 run; reuse existing models, keep
+  the MOSS gate closed, deploy web for the new messages and the Modal app for cancellation. Do not reopen a
+  permit or rerun either failed job automatically. Keep the prior Modal version available for rollback.
+
 ### EU L40S capacity wait
 
 - MOSS may start up to 300 seconds after submission (previously 110). The GPU execution timeout stays
