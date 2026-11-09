@@ -12,15 +12,140 @@
     "present|full": null
   },
   "params": [
-    {"key":"prompt","label":"Prompt","widget":"text","required":true,"maxLength":2000,"target":{"node":"6","input":"prompt"}},
-    {"key":"seconds","label":"Duration (seconds)","widget":"number","min":2,"max":10,"step":1,"default":5,"derived":"frames_from_seconds"},
-    {"key":"aspect","label":"Format","widget":"select","options":["9:16","16:9","1:1"],"default":"9:16"},
-    {"key":"seed","label":"Seed","widget":"number","min":0,"max":9007199254740991,"step":1,"target":{"node":"8","input":"noise_seed"}},
-    {"key":"quality","label":"Quality","widget":"select","options":["turbo","full"],"default":"turbo"},
-    {"key":"audio_shift_s","label":"Advance audio (seconds)","widget":"number","min":0,"max":0.6,"step":0.01,"default":0.4}
+    {
+      "key": "prompt",
+      "label": "Prompt",
+      "widget": "text",
+      "required": true,
+      "maxLength": 2000,
+      "target": {
+        "node": "6",
+        "input": "prompt"
+      },
+      "tier": "simple",
+      "help": "Describe the scene, action, dialogue and soundscape."
+    },
+    {
+      "key": "seconds",
+      "label": "Duration (seconds)",
+      "widget": "number",
+      "min": 2,
+      "max": 10,
+      "step": 1,
+      "default": 5,
+      "derived": "frames_from_seconds",
+      "tier": "simple",
+      "unit": "s",
+      "help": "Keep enough time for dialogue: about 2.5 words per second plus 1.5 seconds."
+    },
+    {
+      "key": "aspect",
+      "label": "Format",
+      "widget": "select",
+      "options": [
+        "9:16",
+        "16:9",
+        "1:1"
+      ],
+      "default": "9:16",
+      "tier": "simple",
+      "optionLabels": {
+        "9:16": "Portrait",
+        "16:9": "Landscape",
+        "1:1": "Square"
+      }
+    },
+    {
+      "key": "seed",
+      "label": "Seed",
+      "widget": "number",
+      "min": 0,
+      "max": 9007199254740991,
+      "step": 1,
+      "target": {
+        "node": "8",
+        "input": "noise_seed"
+      },
+      "tier": "advanced",
+      "help": "Leave empty for a random seed. Lock it to reproduce a result."
+    },
+    {
+      "key": "quality",
+      "label": "Quality",
+      "widget": "select",
+      "options": [
+        "turbo",
+        "full"
+      ],
+      "default": "turbo",
+      "tier": "simple",
+      "optionLabels": {
+        "turbo": "Turbo",
+        "full": "Full quality"
+      },
+      "help": "Turbo uses the validated 8-step LoRA. Full quality has no image-to-video graph."
+    },
+    {
+      "key": "audio_shift_s",
+      "label": "Advance audio (seconds)",
+      "widget": "number",
+      "min": 0,
+      "max": 0.6,
+      "step": 0.01,
+      "default": 0.4,
+      "tier": "advanced",
+      "unit": "s",
+      "help": "Post-processing only. The original file is always preserved."
+    }
   ],
-  "resolutions":{"9:16":[480,832],"16:9":[832,480],"1:1":[640,640]},
-  "locked":["steps","sampler_name","scheduler","lora_strength","text_encoder"],
-  "outputs":[{"node":"15","kind":"video","mime":"video/mp4"}],
-  "preserve_raw":true
+  "resolutions": {
+    "9:16": [
+      480,
+      832
+    ],
+    "16:9": [
+      832,
+      480
+    ],
+    "1:1": [
+      640,
+      640
+    ]
+  },
+  "locked": [
+    "steps",
+    "sampler_name",
+    "scheduler",
+    "lora_strength",
+    "text_encoder"
+  ],
+  "outputs": [
+    {
+      "node": "15",
+      "kind": "video",
+      "mime": "video/mp4"
+    }
+  ],
+  "preserve_raw": true,
+  "studio": {
+    "kind": "video",
+    "modes": [
+      "text-to-video",
+      "image-to-video"
+    ],
+    "reference": {
+      "param": "first_frame_path",
+      "label": "First frame",
+      "accept": [
+        "image/png",
+        "image/jpeg",
+        "image/webp"
+      ],
+      "maxBytes": 10485760
+    },
+    "variant_axes": [
+      "reference",
+      "quality"
+    ]
+  }
 }

@@ -20,5 +20,12 @@ export async function pilotState(userId: string) {
   const ready = process.env.COMFY_ADMIN_ENABLED === "true" && !!process.env.COMFY_DISPATCH_URL && !!process.env.COMFY_DISPATCH_SECRET &&
     gate.enabled && gate.allowed_user_id===userId && !!gate.rights_confirmed_at && Date.parse(gate.expires_at)>Date.now() &&
     gate.remaining_runs>0 && Number(gate.budget_usd)-Number(gate.committed_usd)>=0.75;
-  return {ready,reason:ready?"One authorized private test is available":"Activation, rights confirmation or GPU authorization is pending",manifest};
+  // Admin-only budget view; reservations are commitments, not invoiced cost.
+  const allowance = gate.allowed_user_id===userId ? {
+    remaining_runs: gate.remaining_runs,
+    available_usd: Math.max(0, Number(gate.budget_usd)-Number(gate.committed_usd)),
+    committed_usd: Number(gate.committed_usd),
+    expires_at: gate.expires_at,
+  } : null;
+  return {ready,reason:ready?"Authorized GPU runs are available":"Activation, rights confirmation or GPU authorization is pending",manifest,allowance};
 }
