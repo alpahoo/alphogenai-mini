@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   const limit = Math.min(MAX_LIMIT, Math.max(1, Number.parseInt(url.searchParams.get("limit") ?? "30", 10) || 30));
   const db = createServiceClient();
   const { data: runs, error } = await db.from("comfy_runs")
-    .select("id,job_id,status,error_code,generation_seconds,params_effective,created_at,finished_at,template_version")
+    .select("id,job_id,status,error_code,generation_seconds,params_effective,created_at,finished_at,template_version,runtime")
     .eq("user_id", auth.user.id).order("created_at", { ascending: false }).limit(limit);
   if (error) return NextResponse.json({ error: "History unavailable" }, { status: 503, headers: privateHeaders });
   const ids = (runs ?? []).map(r => r.id);

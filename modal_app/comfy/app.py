@@ -50,20 +50,44 @@ def execute_graph(graph: dict, reference: bytes | None, start_before: float):
     yield from output_frames(execute(graph, reference))
 
 
+# MOSS-Image text to image. Same isolation as H3: no secrets, no network, read-only verified volume,
+# single-use container, one at a time. Separate function so the H3 executor definition stays unchanged.
+@app.function(image=gpu_image, gpu="L40S", cpu=(2, 2), memory=(32768, 32768),
+              volumes={"/models": volume.with_mount_options(read_only=True)},
+              secrets=[], block_network=True, restrict_modal_access=True,
+              single_use_containers=True, min_containers=0, max_containers=1,
+              timeout=300, startup_timeout=120, region=REGION)
+def execute_image_graph(graph: dict, start_before: float):
+    import time
+    from modal_app.comfy.executor import execute
+    from modal_app.comfy.transfer import output_frames
+    yield {"call_id": modal.current_function_call_id()}
+    if time.time() >= start_before:
+        raise TimeoutError("EXECUTOR_START_EXPIRED")
+    yield from output_frames(execute(graph, None, runtime="moss-image@1"))
+
+
 @app.function(image=cpu_image, secrets=[broker_secret], timeout=420, retries=0, max_containers=1, region=REGION)
 def broker(run_id: str):
     from modal_app.comfy.broker import database, run
 
-    def invoke(graph, reference, run_id):
+    def invoke(graph, reference, run_id, runtime="h3-video@1"):
         import asyncio
         import time
         from modal_app.comfy.transfer import receive_output
 
         async def collect():
             call = None
-            stream = execute_graph.remote_gen.aio(graph, reference, time.time() + 110)
+            if runtime == "moss-image@1":
+                if reference is not None:
+                    raise ValueError("REFERENCE_NOT_SUPPORTED")
+                stream = execute_image_graph.remote_gen.aio(graph, time.time() + 110)
+                budget = 390
+            else:
+                stream = execute_graph.remote_gen.aio(graph, reference, time.time() + 110)
+                budget = 310
             try:
-                async with asyncio.timeout(310):
+                async with asyncio.timeout(budget):
                     header = await anext(stream)
                     if not isinstance(header, dict) or not str(header.get("call_id", "")).startswith("fc-"):
                         raise ValueError("INVALID_EXECUTOR_HANDLE")
@@ -111,4 +135,21 @@ def prepare_models():
     from pathlib import Path
     from modal_app.comfy.models import prepare
     prepare(Path("/lab-models"), Path("/models"), Path("/opt/comfy-catalog/h3-video@1.json"))
+    volume.commit()
+
+
+@app.function(image=cpu_image, timeout=3600, retries=0, region=REGION, volumes={"/models": volume})
+def prepare_moss_models():
+    """Paid CPU operation and ~15.4 GB download: requires separate owner approval; never called by dispatch.
+    Downloads each catalogued file at its pinned revision, verifies size and SHA-256, then writes the marker."""
+    from pathlib import Path
+    import requests
+    from modal_app.comfy.models import download
+
+    def fetch(url):
+        with requests.get(url, stream=True, timeout=60, allow_redirects=True) as response:
+            response.raise_for_status()
+            yield from response.iter_content(8 * 1024 * 1024)
+
+    download(Path("/models"), Path("/opt/comfy-catalog/moss-image@1.json"), fetch)
     volume.commit()

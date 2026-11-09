@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Copy, Download, Film, Loader2, Play, RefreshCw, Shuffle, SplitSquareHorizontal } from "lucide-react";
+import { AlertTriangle, Copy, Download, Film, Image as ImageIcon, Loader2, Play, RefreshCw, Shuffle, SplitSquareHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { errorMessage, formatElapsed, isActive, statusView } from "@/lib/studio/status";
+import { modelForTemplateVersion } from "@/lib/studio/catalog";
+import { ImageCompare, ImageDownloads, PrivateImage } from "./image-result";
 import type { StudioAsset, StudioRun } from "./types";
 import type { StudioState } from "./use-studio";
 
@@ -62,7 +64,7 @@ export function ResultStage({ s }: { s: StudioState }) {
       <div className="flex h-full flex-col items-center justify-center px-6 text-center">
         <div className="relative mb-6">
           <div className="absolute inset-0 -z-10 rounded-full bg-primary/20 blur-3xl" />
-          <div className="grid h-16 w-16 place-items-center rounded-3xl border border-border/60 bg-card/60"><Film className="h-7 w-7 text-primary" /></div>
+          <div className="grid h-16 w-16 place-items-center rounded-3xl border border-border/60 bg-card/60">{s.model.kind === "image" ? <ImageIcon className="h-7 w-7 text-primary" /> : <Film className="h-7 w-7 text-primary" />}</div>
         </div>
         <h2 className="text-xl font-semibold tracking-tight">Your canvas is empty</h2>
         <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">Write a prompt, pick a format and generate. Every result stays private and appears in your history.</p>
@@ -82,6 +84,9 @@ export function ResultStage({ s }: { s: StudioState }) {
   const view_ = statusView(run.status);
   const err = errorMessage(run.error_code);
 
+  const runModel = modelForTemplateVersion(run.template_version);
+  const isImage = runModel.kind === "image";
+
   const playBoth = () => {
     for (const v of [left.current, right.current]) if (v) { v.currentTime = 0; void v.play().catch(() => undefined); }
   };
@@ -95,7 +100,8 @@ export function ResultStage({ s }: { s: StudioState }) {
             {isActive(run.status) && run.created_at ? `${formatElapsed(run.created_at, now)} elapsed` : run.generation_seconds ? `${Math.round(run.generation_seconds)} s generation` : null}
           </span>
         </div>
-        {run.status === "done" && (
+        {run.status === "done" && isImage && <ImageTabs s={s} run={run} />}
+        {run.status === "done" && !isImage && (
           <div className="flex items-center gap-1 rounded-xl border border-border/60 bg-muted/40 p-1" role="tablist" aria-label="Result version">
             {(["final", "raw", "compare"] as const).filter(v => v !== "compare" || (final && raw)).map(v => (
               <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)}
@@ -108,7 +114,10 @@ export function ResultStage({ s }: { s: StudioState }) {
       </div>
 
       <div className="flex min-h-0 flex-1 items-center justify-center p-5">
-        {run.status === "done" && assets.length > 0 ? (
+        {run.status === "done" && assets.length > 0 && isImage ? (
+          s.compareWith && raw ? <ImageCompare s={s} run={run} />
+            : raw ? <PrivateImage asset={raw} s={s} sizes={runModel.manifest?.resolutions} aspect={aspect} className="max-h-full max-w-full rounded-2xl shadow-2xl shadow-black/40" /> : null
+        ) : run.status === "done" && assets.length > 0 ? (
           view === "compare" && final && raw ? (
             <div className="flex h-full w-full flex-col items-center justify-center gap-3">
               <div className="grid h-full max-h-[70vh] w-full grid-cols-2 gap-3">
@@ -127,7 +136,8 @@ export function ResultStage({ s }: { s: StudioState }) {
         ) : run.status === "loading" ? (
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Loading run" />
         ) : isActive(run.status) ? (
-          <div className={cn("relative flex max-h-full w-auto items-center justify-center overflow-hidden rounded-2xl border border-border/50 bg-card/40", ratio, "h-[min(70vh,640px)]")}>
+          <div className={cn("relative flex max-h-full w-auto items-center justify-center overflow-hidden rounded-2xl border border-border/50 bg-card/40", !isImage && ratio, "h-[min(70vh,640px)]")}
+            style={isImage ? { aspectRatio: (runModel.manifest?.resolutions?.[aspect] ?? [1, 1]).join("/") } : undefined}>
             <div className="studio-shimmer absolute inset-0" aria-hidden />
             <div className="relative space-y-2 px-6 text-center">
               <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
@@ -149,8 +159,9 @@ export function ResultStage({ s }: { s: StudioState }) {
         <p className="line-clamp-2 min-w-0 flex-1 text-sm text-muted-foreground" title={String(params.prompt ?? "")}>{String(params.prompt ?? "")}</p>
         <div className="flex flex-wrap items-center gap-1.5">
           {run.status === "queued" && <ActionButton icon={RefreshCw} label="Retry dispatch" onClick={() => void s.retryDispatch(run.id)} />}
-          {run.status === "done" && final && <ActionButton icon={Download} label="Corrected" onClick={() => void s.download(final.id)} />}
-          {run.status === "done" && raw && <ActionButton icon={Download} label="Original" onClick={() => void s.download(raw.id)} />}
+          {run.status === "done" && isImage && raw && <ImageDownloads s={s} run={run} asset={raw} />}
+          {run.status === "done" && !isImage && final && <ActionButton icon={Download} label="Corrected" onClick={() => void s.download(final.id)} />}
+          {run.status === "done" && !isImage && raw && <ActionButton icon={Download} label="Original" onClick={() => void s.download(raw.id)} />}
           {run.status !== "loading" && <>
             <ActionButton icon={Copy} label="Reuse settings" onClick={() => s.reuse(run as StudioRun, true)} />
             <ActionButton icon={Shuffle} label="New seed" onClick={() => s.reuse(run as StudioRun, false)} />
@@ -161,7 +172,22 @@ export function ResultStage({ s }: { s: StudioState }) {
   );
 }
 
-function ActionButton({ icon: Icon, label, onClick }: { icon: React.ComponentType<{ className?: string }>; label: string; onClick: () => void }) {
+function ImageTabs({ s, run }: { s: StudioState; run: StudioRun }) {
+  const others = s.compareCandidates(run.id);
+  const tab = (active: boolean) => cn("inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition", active ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground");
+  return (
+    <div className="flex items-center gap-1 rounded-xl border border-border/60 bg-muted/40 p-1" role="tablist" aria-label="Result view">
+      <button type="button" role="tab" aria-selected={!s.compareWith} onClick={() => s.setCompareWith(null)} className={tab(!s.compareWith)}>Image</button>
+      <button type="button" role="tab" aria-selected={!!s.compareWith} disabled={others.length === 0}
+        title={others.length ? undefined : "Generate another image to compare"}
+        onClick={() => s.setCompareWith(s.compareWith ?? others[0].id)} className={cn(tab(!!s.compareWith), "disabled:opacity-40")}>
+        <SplitSquareHorizontal className="h-3.5 w-3.5" />Compare
+      </button>
+    </div>
+  );
+}
+
+export function ActionButton({ icon: Icon, label, onClick }: { icon: React.ComponentType<{ className?: string }>; label: string; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} className="inline-flex items-center gap-1.5 rounded-xl border border-border/60 px-2.5 py-1.5 text-xs text-muted-foreground transition hover:bg-muted/50 hover:text-foreground">
       <Icon className="h-3.5 w-3.5" />{label}

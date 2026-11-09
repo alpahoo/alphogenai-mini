@@ -8,18 +8,25 @@ import requests
 
 MAX_OUTPUT_BYTES = 80 * 1024 * 1024
 
+# Per-runtime execution facts. Graphs never choose these; the broker passes the runtime stored at admission.
+RUNTIMES = {
+    "h3-video@1": {"catalog": "h3-video@1.json", "marker": ".h3-verified.json", "output_node": "15", "key": "mp4", "deadline_s": 165},
+    "moss-image@1": {"catalog": "moss-image@1.json", "marker": ".moss-image-verified.json", "output_node": "9", "key": "png", "deadline_s": 240},
+}
 
-def execute(graph: dict, reference: bytes | None, models: str = "/models") -> dict:
+
+def execute(graph: dict, reference: bytes | None, models: str = "/models", runtime: str = "h3-video@1") -> dict:
+    spec = RUNTIMES[runtime]
     root = Path("/root/ComfyUI")
     work = Path("/tmp/comfy-run")
     for folder in ("input", "output", "temp"):
         (work / folder).mkdir(parents=True, exist_ok=True)
     # The volume was verified by the CPU preparation command; never download on GPU.
-    marker = Path(models) / ".h3-verified.json"
+    marker = Path(models) / spec["marker"]
     if not marker.is_file():
         raise RuntimeError("MODELS_NOT_VERIFIED")
     import hashlib
-    catalog_path = Path("/opt/comfy-catalog/h3-video@1.json")
+    catalog_path = Path("/opt/comfy-catalog") / spec["catalog"]
     if json.loads(marker.read_text()).get("catalog_sha256") != hashlib.sha256(catalog_path.read_bytes()).hexdigest():
         raise RuntimeError("MODEL_CATALOG_CHANGED")
     for model in json.loads(catalog_path.read_text())["models"]:
@@ -29,6 +36,8 @@ def execute(graph: dict, reference: bytes | None, models: str = "/models") -> di
     config = work / "models.yaml"
     config.write_text(f"approved:\n  base_path: {models}\n  diffusion_models: diffusion_models\n"
                       "  text_encoders: text_encoders\n  vae: vae\n  loras: loras\n")
+    if reference and runtime != "h3-video@1":
+        raise ValueError("REFERENCE_NOT_SUPPORTED")
     if reference:
         if len(reference) > 10 * 1024 * 1024:
             raise ValueError("INPUT_TOO_LARGE")
@@ -49,7 +58,7 @@ def execute(graph: dict, reference: bytes | None, models: str = "/models") -> di
     ], cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     base = "http://127.0.0.1:8188"
     started = time.monotonic()
-    deadline = started + 165
+    deadline = started + spec["deadline_s"]
     try:
         while time.monotonic() < min(deadline, started + 60):
             if process.poll() is not None:
@@ -73,7 +82,7 @@ def execute(graph: dict, reference: bytes | None, models: str = "/models") -> di
             if entry:
                 if entry.get("status", {}).get("status_str") != "success":
                     raise RuntimeError("COMFY_EXECUTION_FAILED")
-                output = entry["outputs"]["15"]
+                output = entry["outputs"][spec["output_node"]]
                 items = output.get("images") or output.get("videos") or output.get("gifs")
                 if not items or len(items) != 1:
                     raise RuntimeError("UNEXPECTED_OUTPUT")
@@ -88,7 +97,7 @@ def execute(graph: dict, reference: bytes | None, models: str = "/models") -> di
                         if size > MAX_OUTPUT_BYTES:
                             raise ValueError("OUTPUT_TOO_LARGE")
                         chunks.append(chunk)
-                return {"mp4": b"".join(chunks), "generation_seconds": round(time.monotonic() - started, 2)}
+                return {spec["key"]: b"".join(chunks), "generation_seconds": round(time.monotonic() - started, 2)}
             time.sleep(1)
         requests.post(f"{base}/api/jobs/{prompt_id}/cancel", timeout=5)
         raise TimeoutError("TIMEOUT")

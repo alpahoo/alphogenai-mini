@@ -1,6 +1,8 @@
 "use client";
 
-import { Clapperboard, History, RefreshCw } from "lucide-react";
+import { Clapperboard, History, Image as ImageIcon, RefreshCw } from "lucide-react";
+import { modelForTemplateVersion } from "@/lib/studio/catalog";
+import { PrivateImage } from "./image-result";
 import { cn } from "@/lib/utils";
 import { StatusPill } from "./result-stage";
 import type { StudioState } from "./use-studio";
@@ -30,16 +32,21 @@ export function HistoryRail({ s, layout = "row" }: { s: StudioState; layout?: "r
           {items.map(run => {
             const active = s.current?.id === run.id;
             const p = run.params_effective ?? {};
+            const isImage = modelForTemplateVersion(run.template_version).kind === "image";
+            const thumb = isImage && run.status === "done" ? run.assets?.find(a => a.role === "raw") : undefined;
             return (
               <li key={run.id} className={layout === "row" ? "w-60 shrink-0" : ""}>
                 <button type="button" onClick={() => void s.openRun(run.id)} aria-current={active}
                   className={cn("flex w-full gap-3 rounded-2xl border p-2.5 text-left transition",
                     active ? "border-primary/50 bg-primary/[0.07]" : "border-border/50 hover:border-foreground/20 hover:bg-muted/30")}>
-                  <span className="grid h-12 w-9 shrink-0 place-items-center rounded-lg bg-muted/60 text-muted-foreground"><Clapperboard className="h-4 w-4" /></span>
+                  <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted/60 text-muted-foreground">
+                    {thumb ? <PrivateImage asset={thumb} s={s} alt="" className="h-12 w-12 object-cover" />
+                      : isImage ? <ImageIcon className="h-4 w-4" /> : <Clapperboard className="h-4 w-4" />}
+                  </span>
                   <span className="min-w-0 flex-1 space-y-1">
                     <span className="line-clamp-1 text-xs text-foreground">{String(p.prompt ?? "Untitled")}</span>
                     <span className="flex items-center gap-2"><StatusPill status={run.status} /></span>
-                    <span className="block truncate font-mono text-[10px] text-muted-foreground">{[p.aspect, p.seconds && `${p.seconds}s`, p.quality, when(run.created_at)].filter(Boolean).join(" · ")}</span>
+                    <span className="block truncate font-mono text-[10px] text-muted-foreground">{[modelForTemplateVersion(run.template_version).title, p.aspect, p.seconds && `${p.seconds}s`, p.quality, when(run.created_at)].filter(Boolean).join(" · ")}</span>
                   </span>
                 </button>
               </li>

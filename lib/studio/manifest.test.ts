@@ -69,9 +69,34 @@ describe("Studio manifest helpers (H3)", () => {
     expect(h3Frames(7)).toBe(175);
   });
 
-  it("never lists a pending model as runnable", () => {
+  it("MOSS is wired but always behind its licence and GPU gate", () => {
     const moss = STUDIO_MODELS.find(x => x.slug === "moss-image")!;
-    expect(moss.availability).toBe("pending");
-    expect(moss.manifest).toBeUndefined();
+    expect(moss.availability).toBe("available");
+    expect(moss.requiresValidation).toBe(true);
+    expect(moss.reservationUsd).toBe(0.2);
+  });
+});
+
+describe("Studio manifest helpers (MOSS)", () => {
+  const moss = findModel("moss-image")!;
+  const mm = moss.manifest as StudioManifest;
+  it("single-graph template resolves to t2i without variant axes", () => {
+    expect(resolveVariant(mm, defaultValues(mm), false)).toBe("t2i");
+    expect(referenceSupported(mm, defaultValues(mm))).toBe(false);
+  });
+  it("puts sampling controls in Advanced and allows an empty negative prompt", () => {
+    expect(paramsByTier(mm, "simple").map(p => p.key)).toEqual(["aspect"]);
+    expect(paramsByTier(mm, "advanced").map(p => p.key)).toEqual(["negative_prompt", "seed", "steps", "cfg", "sampler_name", "scheduler"]);
+    expect(validateValues(mm, { ...defaultValues(mm), prompt: "A red bicycle", negative_prompt: "" })).toEqual({});
+  });
+  it("locks only model files and fixed graph values", () => {
+    const locked = Object.fromEntries(lockedSettings(moss, "t2i").map(l => [l.label, l.value]));
+    expect(locked).toMatchObject({ "Diffusion model": "moss_image_sft_int8_convrot", VAE: "flux2-vae_small", Denoise: "1", "Batch size": "1" });
+    expect(locked.Steps).toBeUndefined();
+  });
+  it("submission is accepted by the server binder", async () => {
+    const { TEMPLATES } = await import("@/lib/comfy/templates");
+    const body = submissionParams(mm, { ...defaultValues(mm), prompt: "A lighthouse at dawn", aspect: "9:16" }, null);
+    expect(() => TEMPLATES["moss-image"].resolve(body, owner)).not.toThrow();
   });
 });

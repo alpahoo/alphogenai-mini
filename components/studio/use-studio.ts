@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { findModel, STUDIO_MODELS, type StudioModel } from "@/lib/studio/catalog";
+import { findModel, modelForTemplateVersion, STUDIO_MODELS, type StudioModel } from "@/lib/studio/catalog";
 import { defaultValues, resolveVariant, submissionParams, validateValues, valuesFromRun, type ParamValues } from "@/lib/studio/manifest";
 import { RunSelection } from "@/lib/studio/run-selection";
 import { isActive, pollDelay } from "@/lib/studio/status";
@@ -35,13 +35,21 @@ export function useStudio() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const pendingKey = useRef<string | null>(null);
+  const [compareWith, setCompareWith] = useState<string | null>(null);
+  const modelRef = useRef(model);
+  modelRef.current = model;
 
+  // Readiness is per template: each runtime has its own server gate.
   const refreshReadiness = useCallback(async () => {
+    const slug = model.slug;
+    if (!model.manifest) { setReadiness({ ready: false, reason: model.pendingReason ?? "Not available", allowance: null, loaded: true }); return; }
     try {
-      const d = await json<{ ready: boolean; reason?: string; error?: string; allowance?: Readiness["allowance"] }>(await fetch("/api/admin/comfy/runs", { cache: "no-store" }));
-      setReadiness({ ready: d.ready === true, reason: d.reason ?? d.error ?? "", allowance: d.allowance ?? null, loaded: true });
+      const d = await json<{ ready: boolean; reason?: string; error?: string; allowance?: Readiness["allowance"]; licence_confirmed?: boolean }>(
+        await fetch(`/api/admin/comfy/runs?template=${encodeURIComponent(slug)}`, { cache: "no-store" }));
+      if (modelRef.current.slug !== slug) return;
+      setReadiness({ ready: d.ready === true, reason: d.reason ?? d.error ?? "", allowance: d.allowance ?? null, loaded: true, licence_confirmed: d.licence_confirmed });
     } catch { setReadiness({ ready: false, reason: "GPU authorization status unavailable", allowance: null, loaded: true }); }
-  }, []);
+  }, [model]);
 
   const refreshHistory = useCallback(async () => {
     try {
@@ -70,7 +78,15 @@ export function useStudio() {
     selection.select(id);
     // Placeholder for the newly selected run: no media or download of the previous run stays on screen.
     setCurrent(c => c?.id === id ? c : { id, status: "loading", error_code: null, generation_seconds: null, assets: [] });
-    await loadRun(id, () => { setCurrent(null); setError("This private run is unavailable."); });
+    const run = await loadRun(id, () => { setCurrent(null); setError("This private run is unavailable."); });
+    // Opening a run from another model switches the Create panel to that model.
+    if (run) {
+      const target = modelForTemplateVersion(run.template_version);
+      if (target.slug !== modelRef.current.slug && target.manifest) {
+        setModelState(target); setQuery({ model: target.slug });
+        setValues(defaultValues(target.manifest)); setReference(null);
+      }
+    }
   }, [loadRun, selection]);
 
   // Initial load: model, run from URL (keeps the old /admin/workflows/minimax-h3?run= links working).
@@ -80,8 +96,13 @@ export function useStudio() {
     if (m?.manifest) { setModelState(m); setValues(defaultValues(m.manifest)); }
     const run = q.get("run");
     if (run) void openRun(run);
-    void refreshReadiness(); void refreshHistory();
-  }, [openRun, refreshHistory, refreshReadiness]);
+    void refreshHistory();
+  }, [openRun, refreshHistory]);
+
+  useEffect(() => {
+    setReadiness(r => ({ ...r, ready: false, loaded: false, reason: "Checking GPU authorization…" }));
+    void refreshReadiness();
+  }, [refreshReadiness]);
 
   // Poll only the active run, only while the tab is visible.
   useEffect(() => {
@@ -105,7 +126,7 @@ export function useStudio() {
   }, []);
 
   const selectModel = useCallback((slug: string) => {
-    const m = findModel(slug); if (!m) return;
+    const m = findModel(slug); if (!m || m.slug === modelRef.current.slug) return;
     setModelState(m); setQuery({ model: slug });
     if (m.manifest) setValues(defaultValues(m.manifest));
     setReference(null); setError("");
@@ -137,11 +158,11 @@ export function useStudio() {
     try {
       const d = await json<{ run_id: string; dispatched: boolean }>(await fetch("/api/admin/comfy/runs", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idempotency_key: pendingKey.current, params: submissionParams(manifest, values, reference?.path ?? null) }),
+        body: JSON.stringify({ template: model.slug, idempotency_key: pendingKey.current, params: submissionParams(manifest, values, reference?.path ?? null) }),
       }));
       pendingKey.current = null;
       selection.select(d.run_id);
-      setCurrent({ id: d.run_id, status: "queued", error_code: null, generation_seconds: null, created_at: new Date().toISOString(), params_effective: values, assets: [] });
+      setCurrent({ id: d.run_id, status: "queued", error_code: null, generation_seconds: null, created_at: new Date().toISOString(), params_effective: values, assets: [], template_version: `${model.slug}@${manifest.version}` });
       setQuery({ run: d.run_id });
       if (!d.dispatched) setNotice("Run reserved. Dispatch is pending — use Retry dispatch; no new run is created.");
       void refreshHistory(); void refreshReadiness();
@@ -149,7 +170,7 @@ export function useStudio() {
       setError(e instanceof Error ? e.message : "Generation unavailable");
       if (e instanceof Error && /refused|Invalid|policy|supported/i.test(e.message)) pendingKey.current = null;
     } finally { setBusy("idle"); }
-  }, [canGenerate, manifest, reference, refreshHistory, refreshReadiness, selection, values]);
+  }, [canGenerate, manifest, model.slug, reference, refreshHistory, refreshReadiness, selection, values]);
 
   const retryDispatch = useCallback(async (id: string) => {
     setError("");
@@ -202,6 +223,16 @@ export function useStudio() {
     setNotice(keepSeed ? "Settings and seed loaded. Generate to create a new run." : "Settings loaded with a new random seed.");
   }, [manifest]);
 
+  // Comparison is per displayed run: switching runs resets it.
+  useEffect(() => setCompareWith(null), [current?.id]);
+
+  /** Completed runs of the same template, with an original, other than `runId`. */
+  const compareCandidates = useCallback((runId: string) => {
+    const template = (history ?? []).find(r => r.id === runId)?.template_version ?? current?.template_version;
+    return (history ?? []).filter(r => r.id !== runId && r.status === "done" && r.template_version === template
+      && (r.assets ?? []).some(a => a.role === "raw"));
+  }, [current?.template_version, history]);
+
   const applyValues = useCallback((next: ParamValues) => setValues(v => ({ ...v, ...next })), []);
 
   return {
@@ -209,7 +240,7 @@ export function useStudio() {
     reference, uploadReference, clearReference,
     readiness, history, historyError, refreshHistory, current, openRun, activeRun,
     generate, canGenerate, blockers, busy, error, setError, notice, setNotice, retryDispatch,
-    media, signMedia, download, reuse,
+    media, signMedia, download, reuse, compareWith, setCompareWith, compareCandidates,
   };
 }
 

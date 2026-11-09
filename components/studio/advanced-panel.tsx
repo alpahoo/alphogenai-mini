@@ -62,8 +62,8 @@ export function AdvancedPanel({ s, onClose }: { s: StudioState; onClose?: () => 
           <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground"><Lock className="h-3 w-3" />Locked by the validated workflow</h3>
           {locked.length === 0 ? <p className="text-xs text-red-400">No validated workflow for this combination.</p> : (
             <dl className="divide-y divide-border/40 rounded-2xl border border-border/50">
-              {locked.map(l => (
-                <div key={l.label} className="flex items-center justify-between gap-4 px-3.5 py-2 text-sm">
+              {locked.map((l, i) => (
+                <div key={`${l.label}-${i}`} className="flex items-center justify-between gap-4 px-3.5 py-2 text-sm">
                   <dt className="shrink-0 whitespace-nowrap text-muted-foreground">{l.label}</dt><dd className="min-w-0 truncate font-mono text-xs" title={l.value}>{l.value}</dd>
                 </div>
               ))}

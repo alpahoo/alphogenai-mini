@@ -25,6 +25,7 @@ export interface ManifestParam {
   optionLabels?: Record<string, string>;
   target?: { node: string; input: string };
   derived?: string;
+  required?: boolean;
 }
 
 export interface StudioReference {
@@ -67,7 +68,11 @@ export function paramsByTier(manifest: StudioManifest, tier: Tier): ManifestPara
 /** Variant key for the H3-style axes `reference|quality`. Unknown axes → null (fail closed). */
 export function variantKey(manifest: StudioManifest, values: ParamValues, hasReference: boolean): string | null {
   const axes = manifest.studio?.variant_axes ?? [];
-  if (axes.length === 0) return null;
+  if (axes.length === 0) {
+    // Single-graph templates: exactly one declared variant, or nothing.
+    const keys = Object.keys(manifest.variants).filter(k => manifest.variants[k]);
+    return keys.length === 1 ? keys[0] : null;
+  }
   const parts = axes.map(axis => axis === "reference" ? (hasReference ? "present" : "absent") : String(values[axis] ?? ""));
   return parts.join("|");
 }
@@ -100,6 +105,7 @@ export function validateValues(manifest: StudioManifest, values: ParamValues): R
     if (p.widget === "text") {
       const s = typeof v === "string" ? v.trim() : "";
       const max = p.maxLength ?? 2000;
+      if (p.required === false) { if (s.length > max) errors[p.key] = `Maximum ${max} characters`; continue; }
       if (s.length === 0) errors[p.key] = "Write a prompt to generate";
       else if (s.length < 3) errors[p.key] = "Write at least 3 characters";
       else if (s.length > max) errors[p.key] = `Maximum ${max} characters`;
