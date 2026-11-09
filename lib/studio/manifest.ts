@@ -128,6 +128,9 @@ export function submissionParams(manifest: StudioManifest, values: ParamValues, 
   const out: Record<string, string | number> = {};
   for (const p of manifest.params) {
     const v = values[p.key];
+    // An optional text field cleared on purpose is sent as "" so the server does not restore its default.
+    if (v === "" && p.widget === "text" && p.required === false) { out[p.key] = ""; continue; }
+    // Empty seed (and any other empty value) is omitted: the server picks a random seed / default.
     if (v === undefined || v === "") continue;
     out[p.key] = p.widget === "number" ? Number(v) : v;
   }

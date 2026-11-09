@@ -26,8 +26,11 @@ MOSS stays unusable until the owner confirms the licence and opens its own serve
   max one container, read-only verified volume, 300 s timeout, never receives an image input.
 - Executor and stream are runtime-aware (output node, catalog, marker, PNG signature, per-runtime deadline).
   The H3 code path keeps the same values and its stream frames are byte-identical (tested).
-- Broker: checks the stored runtime, refuses references for MOSS, validates the PNG signature and that its
-  IHDR dimensions equal the frozen graph's latent size, stores `raw.png` privately (`image/png`).
+- Broker: checks the stored runtime, refuses references for MOSS, fully validates the PNG before publishing
+  (every chunk CRC, IHDR first, contiguous IDAT, final IEND, no unknown critical chunk, 8-bit RGB/RGBA,
+  non-interlaced, bounded incremental inflate to exactly one scanline per row with valid filter types,
+  ≤ 40 MB and ≤ 4 MP, dimensions equal to the frozen graph's latent size), then stores `raw.png` privately.
+  Nothing is uploaded or recorded when validation fails.
 - `prepare_moss_models` (CPU, explicit, owner-approved only): downloads each catalogued file from Hugging Face at
   the pinned revision into a `.partial` file, verifies size and SHA-256, then moves it into place; refuses
   non-Apache entries and custom nodes; writes the verification marker only when every file matches.
@@ -49,7 +52,10 @@ MOSS stays unusable until the owner confirms the licence and opens its own serve
   `COMFY_MOSS_ENABLED=true` (separate from `COMFY_ADMIN_ENABLED`) and goes through `admit_comfy_runtime_run`.
 - `GET /api/admin/comfy/runs?template=moss-image` reads the MOSS gate (licence state included).
 - Media route: PNG signed download with a server-built name; `?format=jpeg|webp` converts on the server with
-  sharp (stored original never modified, 40 MB cap, no-store).
+  sharp (stored original never modified, 40 MB and 16 MP caps, `failOn: warning`, no-store). A corrupted or
+  truncated original returns a generic 422 JSON error, never a partial file or decoder details.
+- Studio: a negative prompt cleared on purpose is sent as `""` and applied as empty; an omitted negative
+  prompt uses the manifest default; an empty seed is still omitted (random server-side).
 
 **Studio**
 - MOSS selectable under Image with a "Validation pending" badge until the licence is confirmed in the gate.
@@ -65,7 +71,8 @@ MOSS stays unusable until the owner confirms the licence and opens its own serve
    environment (≈15.4 GB download into `alphogenai-comfy-models`).
 4. Redeploy `alphogenai-comfy` (CPU deploy; it also redeploys the H3 functions with the shared code above).
 5. Deploy web with `COMFY_MOSS_ENABLED=false`, then open the gate for one image: `licence_confirmed_at`,
-   allowed admin UUID, short `expires_at`, `remaining_runs=1`, `budget_usd=0.20`, and set the flag to true.
+   allowed admin UUID, short `expires_at`, `remaining_runs=1`, `budget_usd=0.20` (application reservation,
+   see Costs), and set the flag to true. A separate Modal spending envelope must already be approved.
 6. One 1:1 image with default settings. Record actual Modal usage, then close the gate.
 
 ## Costs (estimates, not authorizations)
@@ -73,7 +80,14 @@ MOSS stays unusable until the owner confirms the licence and opens its own serve
 - Preparation: CPU download, about $0.01–0.05. Volume storage 15.4 GB at $0.09/GB-month ≈ $1.39/month
   (Modal advertises a free allowance; not assumed).
 - One image on L40S: GPU $0.000542/s + 2 cores + 32 GiB ≈ $0.00064/s. Cold start, ComfyUI start, model load
-  (~15 GB) and 25 steps: about 60–120 s → **$0.04–0.08**. The $0.20 reserve covers the 300 s hard timeout.
+  (~15 GB) and 25 steps: about 60–120 s → estimated GPU cost **$0.04–0.08**.
+- **The $0.20 is an application reservation, not a Modal billing cap.** The admission function holds $0.20 of
+  the internal gate budget per run so the gate cannot admit more runs than its budget. Modal bills actual usage
+  independently of that number: container start-up, image pulls, volume reads, the CPU broker, the CPU
+  preparation function and any retried or overlapping container are not measured yet and are not bounded by
+  the reservation. A real run **can cost more than the $0.20 provision**.
+- Before the first authorized test, a separate Modal spending envelope must be approved by the owner (Modal
+  workspace budget or alert set in the Modal dashboard). This PR changes no real budget, cap or gate.
 - Not measured yet: L40S compatibility of the int8 checkpoints is expected (same loader as H3) but unverified;
   fallback is H100 at about twice the GPU price.
 
@@ -87,3 +101,11 @@ MOSS stays unusable until the owner confirms the licence and opens its own serve
 - `modal_app/comfy/test_moss_runtime.py`: core-node graph = catalog files, pinned Apache catalog, PNG stream
   round trip with H3 header unchanged, dimension check, broker routing, download hash/partial/licence,
   executor isolation flags.
+
+## Review fixes (Codex review of #95)
+
+1. Empty negative prompt: `submissionParams` sends `""` for optional text fields; the binder keeps it, the
+   graph receives it and `params_effective` records it. Seed and required fields unchanged.
+2. PNG validation: `validate_png` in the broker (stdlib only, no new dependency, H3 MP4 path untouched).
+3. Sharp errors: controlled 422, no internal details, original untouched, no partial success.
+4. Costs: the $0.20 reservation is documented as an application provision, not a billing cap.

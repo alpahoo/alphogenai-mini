@@ -3,6 +3,7 @@ import os
 import struct
 import tempfile
 import uuid
+import zlib
 from pathlib import Path
 
 from supabase import create_client
@@ -13,6 +14,10 @@ from modal_app.comfy.transfer import PNG_SIGNATURE
 
 SUPPORTED_RUNTIMES = ("h3-video@1", "moss-image@1")
 MAX_PNG_BYTES = 40 * 1024 * 1024
+# MOSS renders about 1 MP; 4 MP leaves room for every declared aspect and bounds memory (<= ~16 MiB raw).
+MAX_PNG_PIXELS = 4 * 1024 * 1024
+MIN_PNG_BYTES = 8 + 25 + 12 + 12  # signature + IHDR + empty IDAT + IEND
+CHANNELS = {2: 3, 6: 4}  # 8-bit RGB / RGBA, what ComfyUI SaveImage writes
 
 
 def database():
@@ -26,14 +31,88 @@ def png_size(raw: bytes) -> tuple[int, int]:
     return struct.unpack(">II", raw[16:24])
 
 
+def validate_png(raw: bytes, expected: tuple[int, int]) -> None:
+    """Fully check a PNG before it is published, with bounded memory.
+
+    Walks every chunk (length, type, CRC), requires IHDR first, contiguous IDAT and a final IEND with nothing
+    after it, refuses unknown critical chunks, then inflates the image stream incrementally with a hard output
+    cap and checks it is exactly one filtered scanline per row with valid filter types. A truncated or
+    corrupted file fails one of these checks. Dimensions must equal the frozen graph's latent size.
+    """
+    if not isinstance(raw, bytes) or not MIN_PNG_BYTES <= len(raw) <= MAX_PNG_BYTES or raw[:8] != PNG_SIGNATURE:
+        raise ValueError("INVALID_OUTPUT")
+    pos, header, idat, idat_closed, ended = 8, None, [], False, False
+    while pos < len(raw):
+        if pos + 12 > len(raw):
+            raise ValueError("INVALID_OUTPUT")
+        length = struct.unpack(">I", raw[pos:pos + 4])[0]
+        kind = raw[pos + 4:pos + 8]
+        end = pos + 12 + length
+        if length > 0x7FFFFFFF or end > len(raw) or not kind.isalpha():
+            raise ValueError("INVALID_OUTPUT")
+        data = raw[pos + 8:pos + 8 + length]
+        if struct.unpack(">I", raw[end - 4:end])[0] != zlib.crc32(kind + data):
+            raise ValueError("INVALID_OUTPUT")
+        if header is None and kind != b"IHDR":
+            raise ValueError("INVALID_OUTPUT")
+        if kind == b"IHDR":
+            if header is not None or length != 13:
+                raise ValueError("INVALID_OUTPUT")
+            header = struct.unpack(">IIBBBBB", data)
+        elif kind == b"IDAT":
+            if idat_closed:
+                raise ValueError("INVALID_OUTPUT")  # IDAT chunks must be consecutive
+            idat.append(data)
+        elif kind == b"IEND":
+            if length != 0 or end != len(raw):
+                raise ValueError("INVALID_OUTPUT")
+            ended = True
+        elif kind[0:1].isupper():
+            raise ValueError("INVALID_OUTPUT")  # PLTE or unknown critical chunk: not a SaveImage output
+        elif idat:
+            idat_closed = True  # an ancillary chunk after IDAT ends the IDAT run
+        pos = end
+    if not ended or header is None or not idat:
+        raise ValueError("INVALID_OUTPUT")
+    width, height, depth, color, compression, filtering, interlace = header
+    if width == 0 or height == 0 or width * height > MAX_PNG_PIXELS:
+        raise ValueError("UNEXPECTED_DIMENSIONS")
+    if (width, height) != tuple(expected):
+        raise ValueError("UNEXPECTED_DIMENSIONS")
+    if depth != 8 or color not in CHANNELS or (compression, filtering, interlace) != (0, 0, 0):
+        raise ValueError("INVALID_OUTPUT")
+    stride = 1 + width * CHANNELS[color]
+    expected_size = stride * height
+    inflater, produced, row_pos = zlib.decompressobj(), 0, 0
+    try:
+        for part in idat:
+            pending = part
+            while pending:
+                out = inflater.decompress(pending, expected_size - produced + 1)
+                pending = inflater.unconsumed_tail
+                produced += len(out)
+                if produced > expected_size or (inflater.eof and (pending or inflater.unused_data)):
+                    raise ValueError("INVALID_OUTPUT")
+                # Every scanline starts with a filter type 0..4.
+                while row_pos < produced:
+                    offset = row_pos - (produced - len(out))
+                    if out[offset] > 4:
+                        raise ValueError("INVALID_OUTPUT")
+                    row_pos += stride
+                if not out and pending:
+                    raise ValueError("INVALID_OUTPUT")
+        tail = inflater.flush()
+    except zlib.error as error:
+        raise ValueError("INVALID_OUTPUT") from error
+    if tail or not inflater.eof or inflater.unused_data or produced != expected_size:
+        raise ValueError("INVALID_OUTPUT")
+
+
 def store_image(db, row: dict, run_id: str, graph: dict, result: dict, uploaded: list) -> None:
     raw = result.get("png")
-    if not isinstance(raw, bytes) or len(raw) > MAX_PNG_BYTES:
-        raise ValueError("INVALID_OUTPUT")
-    width, height = png_size(raw)
     latent = graph["6"]["inputs"]
-    if (width, height) != (latent["width"], latent["height"]):
-        raise ValueError("UNEXPECTED_DIMENSIONS")
+    # Validated completely before any upload or asset row: a failure publishes nothing.
+    validate_png(raw, (latent["width"], latent["height"]))
     key = f"{row['user_id']}/{run_id}/raw.png"
     db.storage.from_("comfy-outputs").upload(key, raw,
         {"content-type": "image/png", "cache-control": "no-store", "upsert": "false"})

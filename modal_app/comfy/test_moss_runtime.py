@@ -10,7 +10,7 @@ import zlib
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from modal_app.comfy.broker import png_size, run, store_image
+from modal_app.comfy.broker import MAX_PNG_BYTES, png_size, run, store_image, store_video, validate_png
 from modal_app.comfy.executor import RUNTIMES, canonical_hash
 from modal_app.comfy.models import download, pinned_url
 from modal_app.comfy.transfer import PNG_SIGNATURE, output_frames, receive_output
@@ -21,12 +21,19 @@ GRAPH = ROOT / "workflows/comfy/templates/moss-image/graph.t2i.api.json"
 CORE_NODES = {"UNETLoader", "CLIPLoader", "VAELoader", "CLIPTextEncode", "EmptyFlux2LatentImage", "KSampler", "VAEDecode", "SaveImage"}
 
 
-def make_png(width: int, height: int) -> bytes:
-    def chunk(kind, data):
-        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+def chunk(kind, data):
+    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+
+def make_png(width: int, height: int, rows: bytes | None = None, split: int = 1, text: bool = False) -> bytes:
     ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
-    rows = b"".join(b"\x00" + b"\x00" * width * 3 for _ in range(height))
-    return PNG_SIGNATURE + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
+    if rows is None:
+        rows = b"".join(bytes([y % 5]) + bytes((x * 7 + y) % 256 for x in range(width * 3)) for y in range(height))
+    stream = zlib.compress(rows)
+    size = -(-len(stream) // split)
+    idat = b"".join(chunk(b"IDAT", stream[i:i + size]) for i in range(0, len(stream), size))
+    meta = chunk(b"tEXt", b"prompt\x00{}") if text else b""
+    return PNG_SIGNATURE + chunk(b"IHDR", ihdr) + meta + idat + chunk(b"IEND", b"")
 
 
 async def agen(items):
@@ -149,6 +156,120 @@ class MossRuntimeTests(unittest.TestCase):
         # Image executor never receives a reference image argument.
         self.assertEqual([a.arg for a in fn.args.args], ["graph", "start_before"])
 
+
+
+class PngValidationTest(unittest.TestCase):
+    """Correction 2 (review of #95): a PNG is fully checked before anything is published."""
+
+    def setUp(self):
+        self.graph = json.loads(GRAPH.read_text())
+
+    def store(self, png):
+        db, uploaded = MagicMock(), []
+        try:
+            store_image(db, {"user_id": "u1"}, "r1", self.graph, {"png": png, "generation_seconds": 1}, uploaded)
+            return True, db, uploaded
+        except ValueError:
+            return False, db, uploaded
+
+    def assert_rejected(self, png):
+        ok, db, uploaded = self.store(png)
+        self.assertFalse(ok)
+        self.assertEqual(uploaded, [])
+        db.storage.from_.assert_not_called()
+        db.table.assert_not_called()
+
+    def test_valid_png_accepted_with_metadata_and_split_idat(self):
+        validate_png(make_png(64, 32), (64, 32))
+        validate_png(make_png(64, 32, split=4, text=True), (64, 32))
+        ok, _, uploaded = self.store(make_png(1024, 1024, split=3, text=True))
+        self.assertTrue(ok)
+        self.assertEqual(uploaded, ["u1/r1/raw.png"])
+
+    def test_truncated_33_bytes_refused(self):
+        png = make_png(1024, 1024)[:33]
+        self.assertEqual(png_size(png), (1024, 1024))  # the IHDR check alone would have accepted it
+        self.assert_rejected(png)
+
+    def test_truncated_anywhere_refused(self):
+        png = make_png(1024, 1024)
+        for cut in (45, len(png) // 2, len(png) - 12, len(png) - 1):
+            self.assert_rejected(png[:cut])
+
+    def test_corrupted_refused(self):
+        png = bytearray(make_png(1024, 1024))
+        png[60] ^= 0xFF  # inside IDAT: CRC mismatch
+        self.assert_rejected(bytes(png))
+        ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", 64, 32, 8, 2, 0, 0, 0))
+        iend = chunk(b"IEND", b"")
+        cases = {
+            "invalid zlib with valid CRC": PNG_SIGNATURE + ihdr + chunk(b"IDAT", b"\x78\x9c" + b"\xff" * 40) + iend,
+            "bad filter type": make_png(64, 32, rows=b"".join(b"\x09" + b"\x00" * 192 for _ in range(32))),
+            "missing scanline": make_png(64, 32, rows=b"".join(b"\x00" + b"\x00" * 192 for _ in range(31))),
+            "data after IEND": make_png(64, 32) + b"trailing",
+            "unknown critical chunk": make_png(64, 32).replace(iend, chunk(b"ABCD", b"x") + iend),
+            "IDAT not first after IHDR order": PNG_SIGNATURE + chunk(b"IDAT", b"") + ihdr + iend,
+            "16-bit depth": make_png(64, 32).replace(ihdr, chunk(b"IHDR", struct.pack(">IIBBBBB", 64, 32, 16, 2, 0, 0, 0))),
+        }
+        for name, data in cases.items():
+            with self.subTest(name), self.assertRaises(ValueError):
+                validate_png(data, (64, 32))
+        split = make_png(64, 32, split=3)
+        first_end = split.index(b"IDAT") + 4 + struct.unpack(">I", split[split.index(b"IDAT") - 4:split.index(b"IDAT")])[0] + 4
+        broken_run = split[:first_end] + chunk(b"tEXt", b"a\x00b") + split[first_end:]
+        with self.assertRaises(ValueError):
+            validate_png(broken_run, (64, 32))  # IDAT chunks must be consecutive
+
+    def test_wrong_dimensions_refused(self):
+        self.assert_rejected(make_png(512, 512))
+        self.assert_rejected(make_png(1024, 1023))
+
+    def test_valid_dimensions_and_content_accepted(self):
+        moss = json.loads((ROOT / "workflows/comfy/templates/moss-image/manifest.json").read_text())
+        for aspect, (width, height) in moss["resolutions"].items():
+            with self.subTest(aspect):
+                graph = json.loads(GRAPH.read_text())
+                graph["6"]["inputs"].update(width=width, height=height)
+                db, uploaded = MagicMock(), []
+                store_image(db, {"user_id": "u1"}, "r1", graph, {"png": make_png(width, height), "generation_seconds": 1}, uploaded)
+                self.assertEqual(uploaded, ["u1/r1/raw.png"])
+
+    def test_oversized_refused_before_inflating(self):
+        with self.assertRaises(ValueError):
+            validate_png(PNG_SIGNATURE + b"\x00" * MAX_PNG_BYTES, (1024, 1024))
+        ihdr = struct.pack(">IIBBBBB", 4096, 4096, 8, 2, 0, 0, 0)
+        huge = PNG_SIGNATURE + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(b"\x00" * 1000)) + chunk(b"IEND", b"")
+        with self.assertRaises(ValueError):
+            validate_png(huge, (4096, 4096))  # over the pixel cap even when it matches
+        # Decompression bomb: inflation stops at the expected size + 1 byte.
+        bomb = PNG_SIGNATURE + chunk(b"IHDR", struct.pack(">IIBBBBB", 64, 32, 8, 2, 0, 0, 0)) + \
+            chunk(b"IDAT", zlib.compress(b"\x00" * 50_000_000)) + chunk(b"IEND", b"")
+        with self.assertRaises(ValueError):
+            validate_png(bomb, (64, 32))
+
+    def test_no_asset_published_after_failed_validation_in_run(self):
+        graph = self.graph
+        row = {"id": "x", "user_id": "u1", "runtime": "moss-image@1", "resolved_graph_sha256": canonical_hash(graph),
+               "reference_path": None, "params_effective": {}}
+        db = MagicMock()
+        db.rpc.return_value.execute.return_value.data = True
+        single = db.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value
+        single.data = {**row, "resolved_graph": graph, "status": "done"}
+        from unittest.mock import patch
+        with patch("modal_app.comfy.broker.database", return_value=db):
+            run("00000000-0000-4000-8000-000000000000",
+                lambda g, ref, rid, runtime="h3-video@1": {"png": make_png(1024, 1024)[:33], "generation_seconds": 3})
+        finish = [c for c in db.rpc.call_args_list if c[0][0] == "finish_comfy_admin_run"]
+        self.assertEqual(finish[-1][0][1]["p_success"], False)
+        db.storage.from_.return_value.upload.assert_not_called()
+        db.table.return_value.insert.assert_not_called()
+
+    def test_h3_video_path_does_not_use_png_validation(self):
+        from unittest.mock import patch
+        with patch("modal_app.comfy.broker.validate_png") as checker, self.assertRaises(ValueError):
+            store_video(MagicMock(), {"user_id": "u1", "params_effective": {"audio_shift_s": 0.4}}, "r1",
+                        {"mp4": b"not an mp4", "generation_seconds": 1}, [])
+        checker.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()

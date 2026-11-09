@@ -99,4 +99,42 @@ describe("Studio manifest helpers (MOSS)", () => {
     const body = submissionParams(mm, { ...defaultValues(mm), prompt: "A lighthouse at dawn", aspect: "9:16" }, null);
     expect(() => TEMPLATES["moss-image"].resolve(body, owner)).not.toThrow();
   });
+  describe("negative prompt round trip (client body -> server graph -> recorded params)", () => {
+    const run = async (values: Record<string, string | number | undefined>) => {
+      const { TEMPLATES } = await import("@/lib/comfy/templates");
+      const body = submissionParams(mm, { ...defaultValues(mm), prompt: "A lighthouse at dawn", ...values }, null);
+      const r = TEMPLATES["moss-image"].resolve(body, owner);
+      return { body, graphNegative: r.graph["5"].inputs.text, recorded: r.params.negative_prompt, seed: r.params.seed };
+    };
+    it("cleared negative prompt is sent as an empty string and applied as empty", async () => {
+      const { body, graphNegative, recorded } = await run({ negative_prompt: "" });
+      expect(body).toHaveProperty("negative_prompt", "");
+      expect(graphNegative).toBe("");
+      expect(recorded).toBe("");
+    });
+    it("custom negative prompt is kept", async () => {
+      const { body, graphNegative, recorded } = await run({ negative_prompt: "blurry, text" });
+      expect(body.negative_prompt).toBe("blurry, text");
+      expect(graphNegative).toBe("blurry, text");
+      expect(recorded).toBe("blurry, text");
+    });
+    it("omitted negative prompt falls back to the manifest default (documented)", async () => {
+      const { TEMPLATES } = await import("@/lib/comfy/templates");
+      const def = mm.params.find(p => p.key === "negative_prompt")!.default;
+      const r = TEMPLATES["moss-image"].resolve({ prompt: "A lighthouse at dawn", aspect: "1:1" }, owner);
+      expect(r.graph["5"].inputs.text).toBe(def);
+      expect(r.params.negative_prompt).toBe(def);
+    });
+    it("empty seed is still omitted and randomised server side", async () => {
+      const { body, seed } = await run({ seed: "" });
+      expect(body).not.toHaveProperty("seed");
+      expect(typeof seed).toBe("number");
+    });
+    it("H3 body unchanged: required prompt, no empty keys added", () => {
+      const body = submissionParams(m, { ...defaultValues(m), prompt: "A cinematic scene", seed: "" }, null);
+      expect(Object.values(body)).not.toContain("");
+      expect(body).not.toHaveProperty("seed");
+      expect(() => resolveTemplate(body, owner)).not.toThrow();
+    });
+  });
 });

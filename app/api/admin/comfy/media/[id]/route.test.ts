@@ -30,6 +30,28 @@ describe("H3 private media",()=>{
     expect(res.headers.get("content-disposition")).toBe(`attachment; filename="alphogen-run12345-original.${format==="jpeg"?"jpg":"webp"}"`);
     expect(res.headers.get("cache-control")).toContain("no-store");expect(sign).not.toHaveBeenCalled();
   });
+  it.each([["truncated",(png:Buffer)=>png.subarray(0,Math.floor(png.length/2))],["corrupted",(png:Buffer)=>{const b=Buffer.from(png);b.fill(0xab,40,b.length-12);return b;}],["not an image",()=>Buffer.from("plain text")]])(
+    "returns a controlled 422 for a %s original, without details or a partial file",async(_name,damage)=>{
+    const sharp=(await import("sharp")).default;
+    const png=await sharp({create:{width:64,height:64,channels:3,background:"#3355ff"}}).png({compressionLevel:0}).toBuffer();
+    const stored=damage(png);const before=Buffer.from(stored);
+    asset={storage_key:"private/run/raw.png",run_id:"run12345",role:"raw",mime:"image/png"};
+    download.mockResolvedValue({data:new Blob([new Uint8Array(stored)]),error:null});
+    const warn=vi.spyOn(console,"warn").mockImplementation(()=>{});
+    for(const format of ["jpeg","webp"]){
+      const res=await GET(new Request(`http://localhost?format=${format}`),{params:Promise.resolve({id:"asset"})});
+      expect(res.status).toBe(422);
+      expect(res.headers.get("content-type")).toContain("application/json");
+      expect(res.headers.get("content-disposition")).toBeNull();
+      expect(res.headers.get("cache-control")).toContain("no-store");
+      const body=await res.json();
+      expect(body).toEqual({error:"Image could not be converted"});
+    }
+    expect(Buffer.compare(stored,before)).toBe(0);
+    expect(sign).not.toHaveBeenCalled();
+    expect(JSON.stringify(warn.mock.calls)).not.toMatch(/vips|libspng|png:|Input buffer/i);
+    warn.mockRestore();
+  });
   it("refuses format conversion of videos and unknown formats",async()=>{
     expect((await GET(new Request("http://localhost?format=webp"),{params:Promise.resolve({id:"asset"})})).status).toBe(400);
     asset={storage_key:"k",run_id:"run",role:"raw",mime:"image/png"};
