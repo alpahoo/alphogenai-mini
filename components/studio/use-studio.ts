@@ -5,6 +5,7 @@ import { findModel, modelForTemplateVersion, STUDIO_MODELS, type StudioModel } f
 import { defaultValues, resolveVariant, submissionParams, validateValues, valuesFromRun, type ParamValues } from "@/lib/studio/manifest";
 import { RunSelection } from "@/lib/studio/run-selection";
 import { isActive, pollDelay } from "@/lib/studio/status";
+import { anySignal, startRunPolling } from "@/lib/studio/run-poller";
 import type { Readiness, ReferenceImage, SignedMedia, StudioAsset, StudioRun } from "./types";
 
 async function json<T>(res: Response): Promise<T> {
@@ -61,17 +62,19 @@ export function useStudio() {
   // The selected run (URL ?run=) is the only one whose responses may update the screen.
   const selection = useRef(new RunSelection<StudioRun>()).current;
 
+  const applyRun = useCallback((run: StudioRun) => {
+    setCurrent(run);
+    setHistory(h => h?.some(r => r.id === run.id) ? h.map(r => r.id === run.id ? { ...r, ...run } : r) : h);
+  }, []);
+
   /** Fetch a run; applied only while it is still selected (stale responses and errors are dropped). */
   const loadRun = useCallback((id: string, onError: (e: unknown) => void) => selection.load(id,
     async (runId, signal) => {
       const d = await json<{ run: StudioRun; assets: StudioAsset[] }>(await fetch(`/api/admin/comfy/runs/${encodeURIComponent(runId)}`, { cache: "no-store", signal }));
       return { ...d.run, assets: d.assets ?? [] };
     },
-    run => {
-      setCurrent(run);
-      setHistory(h => h?.some(r => r.id === run.id) ? h.map(r => r.id === run.id ? { ...r, ...run } : r) : h);
-    },
-    onError), [selection]);
+    applyRun,
+    onError), [selection, applyRun]);
 
   const openRun = useCallback(async (id: string) => {
     setError(""); setQuery({ run: id });
@@ -104,26 +107,46 @@ export function useStudio() {
     void refreshReadiness();
   }, [refreshReadiness]);
 
-  // Poll only the active run, only while the tab is visible.
+  // Poll only the selected active run, only while the tab is visible, until a terminal state.
+  // The loop owns its timer (lib/studio/run-poller.ts): a stale response, a hung request or a
+  // hidden tab can no longer leave the screen on "Generating" after the run has failed.
+  const currentId = current?.id ?? null;
+  const currentActive = !!current && isActive(current.status);
+  const currentRef = useRef(current);
+  currentRef.current = current;
+  const pollError = useRef(false);
   useEffect(() => {
-    if (!current || !isActive(current.status)) return;
-    const age = current.created_at ? Date.now() - Date.parse(current.created_at) : 0;
-    const delay = pollDelay(current.status, age);
-    if (delay === null) return;
-    const timer = window.setTimeout(async () => {
-      if (document.visibilityState !== "visible") { setCurrent(c => c ? { ...c } : c); return; }
-      const id = current.id;
-      const run = await loadRun(id, () => { setError("Status temporarily unavailable. Retrying…"); setCurrent(c => c?.id === id ? { ...c } : c); });
-      if (run && !isActive(run.status)) { void refreshHistory(); void refreshReadiness(); }
-    }, delay);
-    return () => window.clearTimeout(timer);
-  }, [current, loadRun, refreshHistory, refreshReadiness]);
-
-  useEffect(() => {
-    const onVisible = () => { if (document.visibilityState === "visible") setCurrent(c => c ? { ...c } : c); };
+    const run = currentRef.current;
+    if (!currentId || !currentActive || !run || run.id !== currentId) return;
+    const clearPollError = () => { if (pollError.current) { pollError.current = false; setError(""); } };
+    const poller = startRunPolling<StudioRun>({
+      run,
+      fetchRun: (id, timeoutSignal) => new Promise<StudioRun | null>((resolve, reject) => {
+        void selection.load(id,
+          async (runId, signal) => {
+            const d = await json<{ run: StudioRun; assets: StudioAsset[] }>(await fetch(`/api/admin/comfy/runs/${encodeURIComponent(runId)}`,
+              { cache: "no-store", signal: anySignal(signal, timeoutSignal) }));
+            return { ...d.run, assets: d.assets ?? [] };
+          },
+          applyRun,
+          e => reject(e),
+        ).then(resolve, reject);
+      }),
+      isActive, delay: pollDelay,
+      onUpdate: clearPollError,
+      onTerminal: () => { clearPollError(); void refreshHistory(); void refreshReadiness(); },
+      onTransientError: () => { pollError.current = true; setError("Status temporarily unavailable. Retrying…"); },
+      onStop: reason => {
+        if (reason === "errors" || reason === "max_age") {
+          pollError.current = true;
+          setError("Automatic status checks stopped. Reload the page to check this run again.");
+        }
+      },
+    });
+    const onVisible = () => { if (document.visibilityState === "visible") poller.wake(); };
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, []);
+    return () => { document.removeEventListener("visibilitychange", onVisible); poller.stop(); };
+  }, [currentId, currentActive, selection, applyRun, refreshHistory, refreshReadiness]);
 
   const selectModel = useCallback((slug: string) => {
     const m = findModel(slug); if (!m || m.slug === modelRef.current.slug) return;
