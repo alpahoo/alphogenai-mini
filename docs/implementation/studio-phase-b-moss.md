@@ -149,3 +149,16 @@ MOSS stays unusable until the owner confirms the licence and opens its own serve
 2. PNG validation: `validate_png` in the broker (stdlib only, no new dependency, H3 MP4 path untouched).
 3. Sharp errors: controlled 422, no internal details, original untouched, no partial success.
 4. Costs: the $0.20 reservation is documented as an application provision, not a billing cap.
+
+### MOSS executor GPU selection (`MOSS_EXECUTOR_GPU`, not deployed)
+- Deploy-time variable, read when `modal_app/comfy/app.py` loads and copied into the container image environment.
+  Unset or `L40S` → `execute_image_graph` (L40S, unchanged). `H100` → `execute_image_graph_h100`. Any other value
+  (case, spaces, other GPUs, lists) stops the app from loading: no deploy, no GPU request.
+- `execute_image_graph_h100` is the L40S definition with only `gpu` changed (enforced by an AST test): no secrets,
+  `block_network`, `restrict_modal_access`, single-use container, `max_containers=1`, 300 s timeout, `region=REGION`.
+- The broker submits only to the selected executor. No fallback between GPUs, no automatic retry; the 300 s start
+  window, the call ID saved before waiting and the cancellation on expiry are the same `collect_moss` path.
+- H3 (`execute_graph`, H100, 180 s) and its gate are untouched.
+- Provisions (owner decision, applied only when a trial is authorized): MOSS gate total budget $1.05, reserve $0.45
+  per H100 run. The three historical reservations ($0.60) stay as they are. These are application provisions, not
+  Modal billing limits; the real Modal envelope for the pilot stays $1 including previous spend.
