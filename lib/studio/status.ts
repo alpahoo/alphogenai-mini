@@ -11,6 +11,7 @@ export interface StatusView { label: string; tone: "neutral" | "progress" | "suc
 
 export function statusView(status: string): StatusView {
   switch (status) {
+    case "loading": return { label: "Loading", tone: "muted", description: "Opening this private run…" };
     case "queued": return { label: "Queued", tone: "neutral", description: "Reserved and waiting for the GPU executor." };
     case "running": return { label: "Generating", tone: "progress", description: "Loading models, generating and post-processing on the GPU." };
     case "done": return { label: "Completed", tone: "success", description: "Original and corrected files are stored privately." };

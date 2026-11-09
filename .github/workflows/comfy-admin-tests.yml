@@ -10,6 +10,7 @@ on:
       - "components/studio/**"
       - "components/admin/admin-sidebar.tsx"
       - "lib/studio/**"
+      - "lib/admin/**"
       - "modal_app/comfy/**"
       - "modal_app/engines/router.py"
       - "workflows/comfy/**"

@@ -1,8 +1,12 @@
 import { Studio } from "@/components/studio/studio";
+import { requireAdminPage } from "@/lib/admin/require-admin-page";
 
 export const metadata = { title: "Studio · AlphoGen admin" };
+// Per-request session check: never prerendered or cached.
+export const dynamic = "force-dynamic";
 
-/** Private admin Studio. Every data call goes through `requireAdmin` API routes. */
-export default function StudioPage() {
+/** Private admin Studio. Admin role verified on the server before rendering; every data call is also guarded. */
+export default async function StudioPage() {
+  await requireAdminPage();
   return <Studio />;
 }

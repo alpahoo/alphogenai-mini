@@ -124,6 +124,8 @@ export function ResultStage({ s }: { s: StudioState }) {
           ) : (
             (() => { const a = view === "raw" ? raw : final ?? raw; return a ? <PrivateVideo asset={a} s={s} className={cn("max-h-full w-auto max-w-full rounded-2xl shadow-2xl shadow-black/40", ratio, "h-full")} /> : null; })()
           )
+        ) : run.status === "loading" ? (
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Loading run" />
         ) : isActive(run.status) ? (
           <div className={cn("relative flex max-h-full w-auto items-center justify-center overflow-hidden rounded-2xl border border-border/50 bg-card/40", ratio, "h-[min(70vh,640px)]")}>
             <div className="studio-shimmer absolute inset-0" aria-hidden />
@@ -149,8 +151,10 @@ export function ResultStage({ s }: { s: StudioState }) {
           {run.status === "queued" && <ActionButton icon={RefreshCw} label="Retry dispatch" onClick={() => void s.retryDispatch(run.id)} />}
           {run.status === "done" && final && <ActionButton icon={Download} label="Corrected" onClick={() => void s.download(final.id)} />}
           {run.status === "done" && raw && <ActionButton icon={Download} label="Original" onClick={() => void s.download(raw.id)} />}
-          <ActionButton icon={Copy} label="Reuse settings" onClick={() => s.reuse(run as StudioRun, true)} />
-          <ActionButton icon={Shuffle} label="New seed" onClick={() => s.reuse(run as StudioRun, false)} />
+          {run.status !== "loading" && <>
+            <ActionButton icon={Copy} label="Reuse settings" onClick={() => s.reuse(run as StudioRun, true)} />
+            <ActionButton icon={Shuffle} label="New seed" onClick={() => s.reuse(run as StudioRun, false)} />
+          </>}
         </div>
       </div>
     </div>

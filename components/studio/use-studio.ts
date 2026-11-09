@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { findModel, STUDIO_MODELS, type StudioModel } from "@/lib/studio/catalog";
 import { defaultValues, resolveVariant, submissionParams, validateValues, valuesFromRun, type ParamValues } from "@/lib/studio/manifest";
+import { RunSelection } from "@/lib/studio/run-selection";
 import { isActive, pollDelay } from "@/lib/studio/status";
 import type { Readiness, ReferenceImage, SignedMedia, StudioAsset, StudioRun } from "./types";
 
@@ -49,18 +50,28 @@ export function useStudio() {
     } catch (e) { setHistory(h => h ?? []); setHistoryError(e instanceof Error ? e.message : "History unavailable"); }
   }, []);
 
-  const loadRun = useCallback(async (id: string) => {
-    const d = await json<{ run: StudioRun; assets: StudioAsset[] }>(await fetch(`/api/admin/comfy/runs/${encodeURIComponent(id)}`, { cache: "no-store" }));
-    const run = { ...d.run, assets: d.assets ?? [] };
-    setCurrent(run);
-    setHistory(h => h?.some(r => r.id === run.id) ? h.map(r => r.id === run.id ? { ...r, ...run } : r) : h);
-    return run;
-  }, []);
+  // The selected run (URL ?run=) is the only one whose responses may update the screen.
+  const selection = useRef(new RunSelection<StudioRun>()).current;
+
+  /** Fetch a run; applied only while it is still selected (stale responses and errors are dropped). */
+  const loadRun = useCallback((id: string, onError: (e: unknown) => void) => selection.load(id,
+    async (runId, signal) => {
+      const d = await json<{ run: StudioRun; assets: StudioAsset[] }>(await fetch(`/api/admin/comfy/runs/${encodeURIComponent(runId)}`, { cache: "no-store", signal }));
+      return { ...d.run, assets: d.assets ?? [] };
+    },
+    run => {
+      setCurrent(run);
+      setHistory(h => h?.some(r => r.id === run.id) ? h.map(r => r.id === run.id ? { ...r, ...run } : r) : h);
+    },
+    onError), [selection]);
 
   const openRun = useCallback(async (id: string) => {
     setError(""); setQuery({ run: id });
-    try { await loadRun(id); } catch { setCurrent(null); setError("This private run is unavailable."); }
-  }, [loadRun]);
+    selection.select(id);
+    // Placeholder for the newly selected run: no media or download of the previous run stays on screen.
+    setCurrent(c => c?.id === id ? c : { id, status: "loading", error_code: null, generation_seconds: null, assets: [] });
+    await loadRun(id, () => { setCurrent(null); setError("This private run is unavailable."); });
+  }, [loadRun, selection]);
 
   // Initial load: model, run from URL (keeps the old /admin/workflows/minimax-h3?run= links working).
   useEffect(() => {
@@ -80,10 +91,9 @@ export function useStudio() {
     if (delay === null) return;
     const timer = window.setTimeout(async () => {
       if (document.visibilityState !== "visible") { setCurrent(c => c ? { ...c } : c); return; }
-      try {
-        const run = await loadRun(current.id);
-        if (!isActive(run.status)) { void refreshHistory(); void refreshReadiness(); }
-      } catch { setError("Status temporarily unavailable. Retrying…"); setCurrent(c => c ? { ...c } : c); }
+      const id = current.id;
+      const run = await loadRun(id, () => { setError("Status temporarily unavailable. Retrying…"); setCurrent(c => c?.id === id ? { ...c } : c); });
+      if (run && !isActive(run.status)) { void refreshHistory(); void refreshReadiness(); }
     }, delay);
     return () => window.clearTimeout(timer);
   }, [current, loadRun, refreshHistory, refreshReadiness]);
@@ -130,6 +140,7 @@ export function useStudio() {
         body: JSON.stringify({ idempotency_key: pendingKey.current, params: submissionParams(manifest, values, reference?.path ?? null) }),
       }));
       pendingKey.current = null;
+      selection.select(d.run_id);
       setCurrent({ id: d.run_id, status: "queued", error_code: null, generation_seconds: null, created_at: new Date().toISOString(), params_effective: values, assets: [] });
       setQuery({ run: d.run_id });
       if (!d.dispatched) setNotice("Run reserved. Dispatch is pending — use Retry dispatch; no new run is created.");
@@ -138,12 +149,12 @@ export function useStudio() {
       setError(e instanceof Error ? e.message : "Generation unavailable");
       if (e instanceof Error && /refused|Invalid|policy|supported/i.test(e.message)) pendingKey.current = null;
     } finally { setBusy("idle"); }
-  }, [canGenerate, manifest, reference, refreshHistory, refreshReadiness, values]);
+  }, [canGenerate, manifest, reference, refreshHistory, refreshReadiness, selection, values]);
 
   const retryDispatch = useCallback(async (id: string) => {
     setError("");
     const res = await fetch(`/api/admin/comfy/runs/${encodeURIComponent(id)}`, { method: "POST" });
-    if (res.ok) { setNotice("Dispatch sent."); void loadRun(id); } else setError("Dispatch still unavailable. The reservation is preserved.");
+    if (res.ok) { setNotice("Dispatch sent."); void loadRun(id, () => undefined); } else setError("Dispatch still unavailable. The reservation is preserved.");
   }, [loadRun]);
 
   const uploadReference = useCallback(async (file: File) => {

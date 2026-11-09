@@ -29,6 +29,17 @@ Admin-only. No engine, graph, migration, deployment or GPU change. Built on the 
 - Admin layout is now usable on mobile (menu drawer). Other admin pages keep their layout from `md` up.
 - `/admin/workflows/minimax-h3?run=<id>` redirects to the same run in the Studio (existing links keep working).
 
+## Review fixes (Codex review of 47ac9d2)
+
+- **Server-side admin gate.** `/admin/studio` now calls `requireAdminPage()` (`lib/admin/require-admin-page.ts`)
+  before rendering. It reuses the API guard `requireAdmin` (server-verified Supabase session + server-side
+  admin allowlist). Anonymous → `/login`, authenticated non-admin → `/home`. The page is `force-dynamic`.
+  The client layout check stays as a UX layer only; other admin pages are unchanged.
+- **Stale network responses.** `lib/studio/run-selection.ts` ties every run fetch (open and polling) to the
+  selected run. Responses and errors for a run that is no longer selected, or whose payload id differs, are
+  dropped; the previous request is aborted, but the identity check is the guarantee. Selecting a run shows a
+  neutral "Loading" placeholder, so media and download buttons of the previous run never remain on screen.
+
 ## Unchanged on purpose
 
 - Admission, SQL gate, dispatch, executor, graphs, postprocess (0.4 s default), private bucket, retention.
