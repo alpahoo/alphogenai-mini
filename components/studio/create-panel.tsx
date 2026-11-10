@@ -7,6 +7,8 @@ import { optionSupported, paramsByTier, referenceSupported } from "@/lib/studio/
 import { ParamControl } from "./param-control";
 import { ReferenceDrop } from "./reference-drop";
 import { AspectPicker } from "./aspect-picker";
+import { CostSummary, GenerationPreviewCard } from "./generation-preview";
+import { generationPreview } from "@/lib/studio/preview";
 import type { StudioState } from "./use-studio";
 
 export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioState; onOpenAdvanced: () => void; advancedOpen: boolean }) {
@@ -19,6 +21,7 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
   const refOk = manifest ? referenceSupported(manifest, values) : false;
   const generating = s.busy === "submitting";
   const advancedCount = manifest ? paramsByTier(manifest, "advanced").length : 0;
+  const preview = manifest && model.availability === "available" ? generationPreview(model, manifest, values, s.reference) : null;
 
   return (
     <form className="flex h-full flex-col" onSubmit={e => { e.preventDefault(); void s.generate(); }}>
@@ -108,6 +111,8 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
               <span className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4" />Advanced settings</span>
               <span className="text-xs">{advancedCount} settings · presets</span>
             </button>
+
+            {preview && <GenerationPreviewCard preview={preview} />}
           </>
         )}
       </div>
@@ -115,9 +120,13 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
       {/* Sticky generate bar */}
       <div className="border-t border-border/50 bg-background/80 px-5 py-4 backdrop-blur">
         {model.availability === "available" && (
-          <div className="mb-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-            <span>Reserves <span className="font-medium text-foreground">${model.reservationUsd?.toFixed(2)}</span> per run</span>
-            {s.readiness.allowance && <span>{s.readiness.allowance.remaining_runs} run{s.readiness.allowance.remaining_runs === 1 ? "" : "s"} · ${s.readiness.allowance.available_usd.toFixed(2)} left</span>}
+          <div className="mb-3 space-y-2">
+            <CostSummary cost={s.readiness.cost} loaded={s.readiness.loaded} />
+            {s.readiness.allowance && (
+              <p className="text-right text-xs text-muted-foreground">
+                Authorization: {s.readiness.allowance.remaining_runs} run{s.readiness.allowance.remaining_runs === 1 ? "" : "s"} · ${s.readiness.allowance.available_usd.toFixed(2)} unreserved
+              </p>
+            )}
           </div>
         )}
         <button type="submit" disabled={!s.canGenerate}
@@ -127,7 +136,9 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
           <kbd className="ml-1 hidden rounded-md border border-white/20 px-1.5 py-0.5 font-mono text-[10px] font-normal opacity-70 sm:inline">Ctrl ↵</kbd>
         </button>
         {s.blockers.length > 0 && s.busy === "idle" && <p className="mt-2 text-center text-xs text-muted-foreground">{s.blockers[0]}</p>}
-        {model.costNote && model.availability === "available" && <p className="mt-1 text-center text-[11px] text-muted-foreground/70">{model.costNote}</p>}
+        {model.availability === "available" && s.readiness.cost?.estimate && (
+          <p className="mt-1 text-center text-[11px] text-muted-foreground/70">{s.readiness.cost.estimate.basis} Reservations are application provisions, not Modal billing limits.</p>
+        )}
       </div>
     </form>
   );

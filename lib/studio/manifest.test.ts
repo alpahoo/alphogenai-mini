@@ -73,7 +73,8 @@ describe("Studio manifest helpers (H3)", () => {
     const moss = STUDIO_MODELS.find(x => x.slug === "moss-image")!;
     expect(moss.availability).toBe("available");
     expect(moss.requiresValidation).toBe(true);
-    expect(moss.reservationUsd).toBe(0.2);
+    // Reservation and cost now come from the server gate and executor config (lib/comfy/executor-info.ts), never from the catalog.
+    expect(moss).not.toHaveProperty("reservationUsd");
   });
 });
 

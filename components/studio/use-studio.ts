@@ -45,10 +45,10 @@ export function useStudio() {
     const slug = model.slug;
     if (!model.manifest) { setReadiness({ ready: false, reason: model.pendingReason ?? "Not available", allowance: null, loaded: true }); return; }
     try {
-      const d = await json<{ ready: boolean; reason?: string; error?: string; allowance?: Readiness["allowance"]; licence_confirmed?: boolean }>(
+      const d = await json<{ ready: boolean; reason?: string; error?: string; allowance?: Readiness["allowance"]; licence_confirmed?: boolean; cost?: Readiness["cost"] }>(
         await fetch(`/api/admin/comfy/runs?template=${encodeURIComponent(slug)}`, { cache: "no-store" }));
       if (modelRef.current.slug !== slug) return;
-      setReadiness({ ready: d.ready === true, reason: d.reason ?? d.error ?? "", allowance: d.allowance ?? null, loaded: true, licence_confirmed: d.licence_confirmed });
+      setReadiness({ ready: d.ready === true, reason: d.reason ?? d.error ?? "", allowance: d.allowance ?? null, loaded: true, licence_confirmed: d.licence_confirmed, cost: d.cost ?? null });
     } catch { setReadiness({ ready: false, reason: "GPU authorization status unavailable", allowance: null, loaded: true }); }
   }, [model]);
 

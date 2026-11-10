@@ -21,10 +21,6 @@ export interface StudioModel {
   pendingReason?: string;
   manifest?: StudioManifest;
   graphs?: Record<string, Graph>;
-  /** Server reservation per run, mirrored from the admission SQL (not an invoice). */
-  reservationUsd?: number;
-  /** Measured or estimated cost, always labelled as such. */
-  costNote?: string;
   capabilities: string[];
 }
 
@@ -37,8 +33,6 @@ export const STUDIO_MODELS: StudioModel[] = [
     availability: "available",
     manifest: h3Manifest as unknown as StudioManifest,
     graphs: { t2v: h3T2v as Graph, t2v_full: h3T2vFull as Graph, i2v: h3I2v as Graph },
-    reservationUsd: 0.75,
-    costNote: "Estimated $0.15–0.30 for a 5 s turbo clip (first pilot; invoice not yet reconciled).",
     capabilities: ["Text to video", "Image to video (turbo)", "Native audio", "Original + audio-corrected outputs"],
   },
   {
@@ -50,8 +44,6 @@ export const STUDIO_MODELS: StudioModel[] = [
     requiresValidation: true,
     manifest: mossManifest as unknown as StudioManifest,
     graphs: { t2i: mossT2i as Graph },
-    reservationUsd: 0.20,
-    costNote: "Estimated $0.03–0.10 per image on L40S (not measured yet; invoice reconciliation pending).",
     capabilities: ["Text to image", "Seven aspect ratios", "PNG, JPEG, WebP downloads"],
   },
 ];

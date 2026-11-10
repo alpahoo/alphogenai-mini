@@ -5,6 +5,7 @@ import { screenPrompt } from "@/lib/content-policy";
 import { InputError } from "@/lib/comfy/template";
 import { TEMPLATES, templateFor } from "@/lib/comfy/templates";
 import { dispatchRun, pilotState, privateHeaders, runtimeGateState } from "@/lib/comfy/admin";
+import { executorInfo } from "@/lib/comfy/executor-info";
 
 export async function GET(req:Request) {
   const auth=await requireAdmin(); if(auth.response)return auth.response;
@@ -13,9 +14,11 @@ export async function GET(req:Request) {
   const entry=TEMPLATES[slug];
   try {
     const state=entry.admission==="h3_pilot" ? await pilotState(auth.user.id) : await runtimeGateState(auth.user.id,entry.runtime,entry.enabledEnv);
-    return NextResponse.json({...state,template:slug},{headers:privateHeaders});
+    // Admin cost panel: configured GPU + labelled estimate (server sources only) and the real gate reservation.
+    const cost={...executorInfo(slug),reservation_usd:("reservation_usd" in state ? state.reservation_usd : null) ?? null};
+    return NextResponse.json({...state,cost,template:slug},{headers:privateHeaders});
   }
-  catch {return NextResponse.json({ready:false,reason:"Runtime is not configured",template:slug},{headers:privateHeaders});}
+  catch {return NextResponse.json({ready:false,reason:"Runtime is not configured",cost:{...executorInfo(slug),reservation_usd:null},template:slug},{headers:privateHeaders});}
 }
 export async function POST(req:Request) {
   const auth=await requireAdmin(); if(auth.response)return auth.response;

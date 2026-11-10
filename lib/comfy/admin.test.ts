@@ -60,6 +60,10 @@ describe("runtimeGateState budget readiness (integer cents)", () => {
     mockGate("comfy_runtime_gates", mossGate("0.60", "0.40"));
     expect((await runtimeGateState(USER, "moss-image@1", "COMFY_MOSS_ENABLED")).ready).toBe(true);
   });
+  it("returns the per-run reservation read from the gate row", async () => {
+    mockGate("comfy_runtime_gates", { ...mossGate(1.05, 0.6), reserve_usd: "0.45" });
+    expect((await runtimeGateState(USER, "moss-image@1", "COMFY_MOSS_ENABLED")).reservation_usd).toBe(0.45);
+  });
   it("only reads the gate: reservations are never rewritten", async () => {
     const { update } = mockGate("comfy_runtime_gates", mossGate(0.6, 0.4));
     await runtimeGateState(USER, "moss-image@1", "COMFY_MOSS_ENABLED");
@@ -83,6 +87,10 @@ describe("pilotState (H3, 0.75 reserve) budget readiness", () => {
   it("is ready with exactly one 0.75 reserve left (2.25 - 1.50)", async () => {
     mockGate("comfy_admin_gate", h3Gate(2.25, 1.5));
     expect((await pilotState(USER)).ready).toBe(true);
+  });
+  it("returns the H3 per-run reservation mirrored from SQL (0.75)", async () => {
+    mockGate("comfy_admin_gate", h3Gate(2.25, 1.5));
+    expect((await pilotState(USER)).reservation_usd).toBe(0.75);
   });
   it("is not ready with 0.74 left", async () => {
     mockGate("comfy_admin_gate", h3Gate(2.24, 1.5));
