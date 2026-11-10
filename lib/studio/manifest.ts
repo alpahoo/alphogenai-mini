@@ -103,12 +103,14 @@ export function validateValues(manifest: StudioManifest, values: ParamValues): R
   for (const p of manifest.params) {
     const v = values[p.key];
     if (p.widget === "text") {
-      const s = typeof v === "string" ? v.trim() : "";
+      // Like the server binders: minimum on the trimmed text, maximum on the raw text as submitted.
+      const raw = typeof v === "string" ? v : "";
+      const s = raw.trim();
       const max = p.maxLength ?? 2000;
-      if (p.required === false) { if (s.length > max) errors[p.key] = `Maximum ${max} characters`; continue; }
+      if (p.required === false) { if (raw.length > max) errors[p.key] = `Maximum ${max} characters`; continue; }
       if (s.length === 0) errors[p.key] = "Write a prompt to generate";
       else if (s.length < 3) errors[p.key] = "Write at least 3 characters";
-      else if (s.length > max) errors[p.key] = `Maximum ${max} characters`;
+      else if (raw.length > max) errors[p.key] = `Maximum ${max} characters`;
     } else if (p.widget === "number") {
       if (v === undefined || v === "") { if (p.default !== undefined) errors[p.key] = "Required"; continue; }
       const n = Number(v);

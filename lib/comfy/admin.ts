@@ -33,7 +33,9 @@ export async function pilotState(userId: string) {
     committed_usd: centsToUsd(usdToCents(gate.committed_usd, "ceil")),
     expires_at: gate.expires_at,
   } : null;
-  return {ready,reason:ready?"Authorized GPU runs are available":"Activation, rights confirmation or GPU authorization is pending",manifest,allowance};
+  // Per-run application reservation, mirrored from admit_comfy_admin_run (not an invoice, not a Modal limit).
+  const reservation_usd = centsToUsd(usdToCents(H3_RESERVE_USD, "ceil"));
+  return {ready,reason:ready?"Authorized GPU runs are available":"Activation, rights confirmation or GPU authorization is pending",manifest,allowance,reservation_usd};
 }
 
 /** Readiness for runtimes admitted through `comfy_runtime_gates` (not the H3 pilot gate). */
@@ -58,5 +60,8 @@ export async function runtimeGateState(userId: string, runtime: string, enabledE
   } : null;
   const reason = ready ? "Authorized GPU runs are available"
     : !gate.licence_confirmed_at ? "Licence validation is pending" : "GPU authorization is pending";
-  return {ready, reason, allowance, licence_confirmed: !!gate.licence_confirmed_at};
+  // Per-run application reservation, read from the gate row (not an invoice, not a Modal limit).
+  const reserveCents = usdToCents(gate.reserve_usd, "ceil");
+  const reservation_usd = reserveCents === null ? null : centsToUsd(reserveCents);
+  return {ready, reason, allowance, licence_confirmed: !!gate.licence_confirmed_at, reservation_usd};
 }

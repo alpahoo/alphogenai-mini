@@ -26,6 +26,25 @@ describe("private admin H3 admission",()=>{
     expect(dispatchRun).toHaveBeenCalledWith("run-1");expect(await response.json()).toEqual({run_id:"run-1",dispatched:true});
   });
   it("preserves the durable run on dispatch failure",async()=>{vi.mocked(dispatchRun).mockRejectedValue(Error("offline"));const response=await POST(request());expect(response.status).toBe(202);expect((await response.json()).dispatched).toBe(false);expect(rpc).toHaveBeenCalledTimes(1);});
+  it("readiness carries the real reservation and the server-configured MOSS GPU (no guessed value)",async()=>{
+    vi.mocked(runtimeGateState).mockResolvedValue({ready:false,reason:"GPU authorization is pending",allowance:null,licence_confirmed:true,reservation_usd:0.45});
+    vi.stubEnv("COMFY_MOSS_EXECUTOR_GPU","");
+    let body=await (await GET(new Request("http://localhost/api/admin/comfy/runs?template=moss-image"))).json();
+    expect(body.cost).toEqual({gpu:null,gpu_source:null,estimate:null,reservation_usd:0.45});
+    vi.stubEnv("COMFY_MOSS_EXECUTOR_GPU","H100");
+    body=await (await GET(new Request("http://localhost/api/admin/comfy/runs?template=moss-image"))).json();
+    expect(body.cost).toMatchObject({gpu:"H100",gpu_source:"server_config",reservation_usd:0.45,estimate:{measured:true}});
+  });
+  it("H3 readiness: fixed H100 executor and its 0.75 reservation",async()=>{
+    vi.mocked(pilotState).mockResolvedValue({ready:false,reason:"pending",manifest:(await import("@/lib/comfy/template")).manifest,allowance:null,reservation_usd:0.75});
+    const body=await (await GET(new Request("http://localhost/api/admin/comfy/runs?template=minimax-h3"))).json();
+    expect(body.cost).toMatchObject({gpu:"H100",gpu_source:"executor_code",reservation_usd:0.75});
+  });
+  it("readiness failure keeps the GPU info but no reservation",async()=>{
+    vi.mocked(runtimeGateState).mockRejectedValue(new Error("db down"));vi.stubEnv("COMFY_MOSS_EXECUTOR_GPU","H100");
+    const body=await (await GET(new Request("http://localhost/api/admin/comfy/runs?template=moss-image"))).json();
+    expect(body.ready).toBe(false);expect(body.cost).toMatchObject({gpu:"H100",reservation_usd:null});
+  });
   it("serves readiness only through the admin guard",async()=>{vi.mocked(pilotState).mockResolvedValue({ready:false,reason:"pending",manifest:(await import("@/lib/comfy/template")).manifest});expect((await GET(new Request("http://localhost/api/admin/comfy/runs"))).status).toBe(200);expect(pilotState).toHaveBeenCalledWith("admin-1");});
 });
 const mossRequest=(params:unknown={prompt:"A red bicycle",seed:1},extra:Record<string,unknown>={})=>new Request("http://localhost/api/admin/comfy/runs",{method:"POST",body:JSON.stringify({template:"moss-image",params,idempotency_key:"b3263425-3a14-4170-a22c-8959566db7ac",...extra})});

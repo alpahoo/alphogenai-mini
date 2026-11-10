@@ -16,7 +16,15 @@ export interface StudioRun {
 
 export interface Allowance { remaining_runs: number; available_usd: number; committed_usd: number; expires_at: string | null; reserve_usd?: number }
 
-export interface Readiness { ready: boolean; reason: string; allowance: Allowance | null; loaded: boolean; licence_confirmed?: boolean }
+/** Admin cost panel from the server: real gate reservation, configured GPU and a labelled estimate. */
+export interface CostInfo {
+  reservation_usd: number | null;
+  gpu: "L40S" | "H100" | null;
+  gpu_source: "server_config" | "executor_code" | null;
+  estimate: { low_usd: number; high_usd: number; measured: boolean; basis: string } | null;
+}
+
+export interface Readiness { ready: boolean; reason: string; allowance: Allowance | null; loaded: boolean; licence_confirmed?: boolean; cost?: CostInfo | null }
 
 export interface ReferenceImage { path: string; previewUrl: string; name: string }
 
