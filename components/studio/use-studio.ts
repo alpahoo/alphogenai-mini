@@ -7,6 +7,7 @@ import { RunSelection } from "@/lib/studio/run-selection";
 import { isActive, pollDelay } from "@/lib/studio/status";
 import { anySignal, startRunPolling } from "@/lib/studio/run-poller";
 import type { Readiness, ReferenceImage, SignedMedia, StudioAsset, StudioRun } from "./types";
+import { useStudioAssistant } from "./use-assistant";
 
 async function json<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
@@ -257,6 +258,14 @@ export function useStudio() {
   }, [current?.template_version, history]);
 
   const applyValues = useCallback((next: ParamValues) => setValues(v => ({ ...v, ...next })), []);
+  /** Full replacement (assistant accept): a cleared seed must disappear, not be merged back. */
+  const replaceValues = useCallback((next: ParamValues) => setValues({ ...next }), []);
+
+  // C2a assistant: proposals over the current form only; accepting never generates.
+  const assistantCtx = useMemo(() => manifest && model.availability === "available"
+    ? { model, manifest, values, hasReference: !!reference, referenceName: reference?.name ?? null } : null,
+  [manifest, model, reference, values]);
+  const assistant = useStudioAssistant(assistantCtx, replaceValues);
 
   return {
     model, manifest, values, setValue, applyValues, selectModel, errors, variant,
@@ -264,6 +273,7 @@ export function useStudio() {
     readiness, history, historyError, refreshHistory, current, openRun, activeRun,
     generate, canGenerate, blockers, busy, error, setError, notice, setNotice, retryDispatch,
     media, signMedia, download, reuse, compareWith, setCompareWith, compareCandidates,
+    assistant,
   };
 }
 

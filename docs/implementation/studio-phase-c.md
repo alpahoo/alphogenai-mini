@@ -44,7 +44,7 @@ user message ─► C2b LLM route (admin, server) ─► tool calls ─► C2a e
                                     "Review before generating" (C1a) ─► user clicks Generate
 ```
 
-**C2a engine, no LLM (next PR):**
+**C2a engine, no LLM (implemented, `lib/studio/agent/`):**
 - **Tools derived from each manifest:**
   - `get_config`: current values, variant and constraints;
   - `describe_param`: label, help, bounds, options;
@@ -60,3 +60,28 @@ user message ─► C2b LLM route (admin, server) ─► tool calls ─► C2a e
 **C2b, the conversational agent (after budget approval):**
 - Admin route with an economical LLM; Qwen3 is the candidate under evaluation. Nothing is activated before price, budget and data residency are approved: user prompts would be sent to the provider.
 - Server-side tool loop limited to the C2a tools, with token and call limits. The model sees manifests, never graphs.
+
+## C2a: what is implemented
+- `lib/studio/agent/patch.ts`:
+  - `proposePatch` refuses, in order:
+    - a non-object or empty patch, or one with too many keys;
+    - unknown keys (including `__proto__` and graph-like keys);
+    - locked graph inputs (`manifest.locked`) and the private reference;
+    - wrong types (no string-to-number coercion);
+    - values outside the manifest bounds, steps or options;
+    - combinations without a workflow, and no-op patches.
+
+    `null` only clears a parameter that has no default (seed → random). One forbidden key rejects the whole patch.
+  - `acceptProposal` re-validates against the *current* form. It refuses `stale` (form or reference changed), `wrong_template` and `invalid` (tampered
+    proposal). It returns form values only.
+- `lib/studio/agent/tools.ts`: `get_config`, `describe_param` and `propose_patch`, with JSON schemas derived from the
+  manifest (closed objects). `runTool` refuses unknown tools and unexpected inputs. There is no generate, submit, dispatch, file or
+  graph tool.
+- `lib/studio/agent/history.ts`: accepted and rejected proposals, newest first, at most 20, per template, in `localStorage`
+  only. Values are truncated to 200 characters, and malformed or foreign entries are dropped on load.
+- UI in the existing panel (`assistant-proposal.tsx`, `use-assistant.ts`):
+  - proposal card (changes, rationale, workflow) with "Apply to settings" and "Reject";
+  - list of refusal reasons;
+  - collapsible history.
+
+  Nothing in the UI creates proposals yet. The C2b chat will call `runTool`, which feeds `assistant.propose`.
