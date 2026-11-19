@@ -26,6 +26,11 @@ export interface StudioContext {
   values: ParamValues;
   /** Whether a private reference image is attached (it changes the workflow variant). */
   hasReference: boolean;
+  /**
+   * Stable identity of the attached reference: its private storage path (or internal id), NEVER a
+   * signed URL (those change on every signature). Replacing reference A by B makes proposals stale.
+   */
+  referenceId?: string | null;
   referenceName?: string | null;
 }
 
@@ -53,10 +58,10 @@ export function templateId(manifest: StudioManifest): string {
   return `${manifest.slug}@${manifest.version}`;
 }
 
-/** Stable fingerprint of the form (key order independent) plus the reference flag. */
-export function fingerprint(values: ParamValues, hasReference: boolean): string {
+/** Stable fingerprint of the form (key order independent), the reference flag and the reference identity. */
+export function fingerprint(values: ParamValues, hasReference: boolean, referenceId: string | null = null): string {
   const entries = Object.keys(values).sort().map(k => [k, values[k]]);
-  return JSON.stringify([entries, hasReference]);
+  return JSON.stringify([entries, hasReference, hasReference ? referenceId : null]);
 }
 
 function isPlainObject(x: unknown): x is Record<string, unknown> {
@@ -137,7 +142,7 @@ export function proposePatch(
     proposal: {
       id: opts.id ?? (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `p-${Date.now()}`),
       template: templateId(manifest),
-      base: fingerprint(ctx.values, ctx.hasReference),
+      base: fingerprint(ctx.values, ctx.hasReference, ctx.referenceId ?? null),
       patch, before: { ...ctx.values }, after, changes,
       preview: generationPreview(ctx.model, manifest, after, ctx.referenceName ? { name: ctx.referenceName } : ctx.hasReference ? { name: "reference" } : null),
       rationale: opts.rationale?.trim() || null,
@@ -152,7 +157,7 @@ export function proposePatch(
  */
 export function acceptProposal(ctx: StudioContext, proposal: Proposal): AcceptResult {
   if (proposal.template !== templateId(ctx.manifest)) return { ok: false, code: "wrong_template" };
-  if (proposal.base !== fingerprint(ctx.values, ctx.hasReference)) return { ok: false, code: "stale" };
+  if (proposal.base !== fingerprint(ctx.values, ctx.hasReference, ctx.referenceId ?? null)) return { ok: false, code: "stale" };
   const again = proposePatch(ctx, proposal.patch, { id: proposal.id, rationale: proposal.rationale });
   if (!again.ok) return { ok: false, code: "invalid", errors: again.errors };
   return { ok: true, values: again.proposal.after };

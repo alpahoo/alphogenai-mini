@@ -263,7 +263,7 @@ export function useStudio() {
 
   // C2a assistant: proposals over the current form only; accepting never generates.
   const assistantCtx = useMemo(() => manifest && model.availability === "available"
-    ? { model, manifest, values, hasReference: !!reference, referenceName: reference?.name ?? null } : null,
+    ? { model, manifest, values, hasReference: !!reference, referenceId: reference?.path ?? null, referenceName: reference?.name ?? null } : null,
   [manifest, model, reference, values]);
   const assistant = useStudioAssistant(assistantCtx, replaceValues);
 

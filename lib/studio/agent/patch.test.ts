@@ -132,6 +132,19 @@ describe("acceptProposal: returns form values only, never generates", () => {
     expect(acceptProposal({ ...ctx, hasReference: true }, r.proposal)).toEqual({ ok: false, code: "stale" });
   });
 
+  it("is refused as stale when reference A is replaced by reference B (hasReference stays true)", () => {
+    const ctxA: StudioContext = { ...h3Ctx(true), referenceId: "owner/ref-a.png", referenceName: "a.png" };
+    const r = proposePatch(ctxA, { seconds: 8 });
+    if (!r.ok) throw new Error("expected ok");
+    const ctxB: StudioContext = { ...ctxA, referenceId: "owner/ref-b.png", referenceName: "b.png" };
+    expect(ctxB.hasReference).toBe(true);
+    expect(acceptProposal(ctxB, r.proposal)).toEqual({ ok: false, code: "stale" });
+    // Same reference A: still accepted (the display name alone does not matter, the stable id does).
+    expect(acceptProposal({ ...ctxA, referenceName: "renamed.png" }, r.proposal).ok).toBe(true);
+    // Removing the reference is also stale.
+    expect(acceptProposal({ ...ctxA, hasReference: false, referenceId: null }, r.proposal)).toEqual({ ok: false, code: "stale" });
+  });
+
   it("is refused for another template", () => {
     const r = proposePatch(mossCtx(), { steps: 30 });
     if (!r.ok) throw new Error("expected ok");
@@ -156,5 +169,8 @@ describe("acceptProposal: returns form values only, never generates", () => {
   it("fingerprint ignores key order", () => {
     expect(fingerprint({ a: 1, b: "x" }, false)).toBe(fingerprint({ b: "x", a: 1 }, false));
     expect(fingerprint({ a: 1 }, false)).not.toBe(fingerprint({ a: 1 }, true));
+    expect(fingerprint({ a: 1 }, true, "p/a.png")).not.toBe(fingerprint({ a: 1 }, true, "p/b.png"));
+    // Without a reference, a leftover id is ignored.
+    expect(fingerprint({ a: 1 }, false, "p/a.png")).toBe(fingerprint({ a: 1 }, false, null));
   });
 });
