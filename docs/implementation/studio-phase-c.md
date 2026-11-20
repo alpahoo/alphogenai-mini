@@ -85,3 +85,83 @@ user message ─► C2b LLM route (admin, server) ─► tool calls ─► C2a e
   - collapsible history.
 
   Nothing in the UI creates proposals yet. The C2b chat will call `runTool`, which feeds `assistant.propose`.
+
+## C2b: conversational assistant (draft, no provider connected)
+
+The administrator chats with the assistant in an **Assistant** section of the existing Create panel. The assistant explains
+settings and proposes changes; proposals appear in the existing C2a card ("Apply to settings" / "Reject"). Only the
+administrator's Generate button starts a generation. No node editor, no graph, no JSON shown to the user.
+
+**No language model is connected in this PR.** `ADAPTERS` in `lib/studio/agent/provider.ts` is empty, so the route answers
+503 and no prompt can leave the server, whatever the environment variables say. Connecting a provider is a separate,
+reviewed PR after the owner approves the provider, its prices, its data policy and a test budget.
+
+### What is implemented
+- `app/api/admin/studio/assistant/route.ts`:
+  - `requireAdmin` on GET (readiness, limits; no provider name, key or price) and POST.
+  - POST validates the request, rate-limits, runs the tool loop, and logs counters only: no prompt, reply or values.
+  - It writes nothing to the database and calls no generation API.
+- `lib/studio/agent/conversation.ts`, the request contract:
+  - Fields: template slug, current form values, `has_reference` / `reference_id`, and text turns.
+  - The server rebuilds the context from the manifest. Only declared keys survive, and the reference parameter is dropped.
+  - The private reference path and file name are never sent to the model; it only sees `reference_attached`.
+  - Turns must alternate and start and end with the user. Roles other than user/assistant and extra fields are refused.
+  - The system prompt states the assistant's limits. Text inside settings (the prompt) is data, never instructions.
+- `lib/studio/agent/loop.ts`, the server-side tool loop:
+  - The model can only call the three C2a tools, executed by `runTool` against the server context. Any other tool name is answered with `unknown_tool` and never executed.
+  - A valid `propose_patch` is returned to the browser, which re-validates it with `proposePatch` against the current form before showing the card. Refusals go back to the model so it can correct itself.
+  - Stop causes: answered, tool_rounds, budget, input_too_large, max_tokens, refusal, timeout, provider_error. Fallback messages never include provider error text.
+- `lib/studio/agent/provider.ts`: provider-neutral interface. The assistant is enabled only if `STUDIO_ASSISTANT_ENABLED=true`, an approved adapter is named by `STUDIO_ASSISTANT_PROVIDER`, and that adapter declares prices.
+- UI:
+  - `components/studio/assistant-chat.tsx` and `use-assistant-chat.ts`: collapsed section, conversation in memory only, "New conversation" button, reset on model switch.
+  - No Generate call and no runs API.
+
+### Limits (`lib/studio/agent/limits.ts`, enforced on the server)
+| Limit | Value |
+|---|---|
+| Messages per conversation / characters per message / total characters | 20 / 2,000 / 16,000 |
+| Request body | 64 KB |
+| Model calls per user message | 1 + 4 tool rounds |
+| Tool calls per model response | 4 (extra calls answered with an error) |
+| Output tokens per call | 700 |
+| Estimated input tokens per call | 12,000 (checked before calling) |
+| Cost per user message | $0.02 worst case, checked **before** each call from the adapter's prices |
+| Per admin | 20 requests/hour and $0.50/day, in memory per server instance (best effort) |
+| Whole loop timeout | 45 s |
+
+The in-memory daily cap does not survive restarts or span instances. The **durable** cap must be the provider's own spending
+limit on a dedicated key or workspace, set before activation. A persisted ledger would need a migration; it is out of scope.
+
+### Tests (no LLM, no network)
+- A scripted fake provider (`fake-provider.ts`) covers:
+  - answer, read-then-propose, and refused patches fed back to the model;
+  - unknown tools (generate, graph, files), the round and per-turn call limits;
+  - the cost cap before the first call and mid-conversation, and the daily allowance;
+  - oversized input, refusal, max_tokens, provider errors without leaks, timeout;
+  - the reference path never sent to the model.
+- Request validation, the provider gate (off by default, empty adapter list, refused without prices), the rate limiter and the browser helpers.
+- Route: admin required, 503 while no provider, validation before any call, reply + patch + usage, logs without content, 429.
+- UI: section rendered in the Create panel, no generation path, conversation not stored.
+
+### LLM provider recommendation (prices checked 2026-11-20 on the official pages)
+Typical answer: 2 model calls, about 3,000 input and 300 output tokens each.
+
+| Option | Price per million tokens (input / output) | Typical answer | Data |
+|---|---|---|---|
+| **Claude Haiku 5.5** (Anthropic API), recommended | $0.10 / $0.50 (prompts up to 100k tokens) | ≈ $0.001 | API data not used for training by default. Deleted within 30 days (zero retention by agreement). First-party routing is global or US only (×1.1 for US). EU-regional only through Bedrock or Google Cloud (+10%). |
+| Mistral Small 4 (La Plateforme), EU alternative | $0.15 / $0.60 | ≈ $0.0013 | Hosted in the EU by default. The commercial terms exclude training on customer data, except opt-in features, feedback and Labs/Preview models. |
+| Qwen Flash (Alibaba Model Studio, international) | Not verified on an official page (aggregators: about $0.05 / $0.40) | Not verified | International endpoint in Singapore. Not recommended until prices and data terms are confirmed. |
+
+Recommendation:
+- Use **Claude Haiku 5.5** for tool-use reliability at the lowest verified price. The adapter must use the official SDK (`@anthropic-ai/sdk`), with low effort and `strict` tools.
+- Choose **Mistral Small 4** instead if EU data residency is required.
+- The prompt typed in the Studio (generation text) is sent to the provider as part of `get_config`. The reference image and its path are never sent.
+
+Proposed test budget, separate from the GPU budget: **$2**, about 2,000 answers. It should be enforced by a spending limit on a dedicated provider key or workspace.
+
+### Activation checklist (owner approval at each step)
+1. Choose the provider and confirm its data terms for ASTUCA OÜ.
+2. Create a dedicated key with its own spending limit. Never reuse a production key.
+3. Review and merge the adapter PR. It adds the SDK dependency and one `ADAPTERS` entry with the verified prices.
+4. Set the server-only env vars in Vercel (`STUDIO_ASSISTANT_ENABLED`, `STUDIO_ASSISTANT_PROVIDER`, the key) and redeploy.
+5. Run a short manual test from the Studio, then read the logged counters and the provider's usage page.

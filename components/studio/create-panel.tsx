@@ -9,6 +9,7 @@ import { ReferenceDrop } from "./reference-drop";
 import { AspectPicker } from "./aspect-picker";
 import { CostSummary, GenerationPreviewCard } from "./generation-preview";
 import { AssistantHistory, ProposalCard, ProposalErrors } from "./assistant-proposal";
+import { AssistantChat } from "./assistant-chat";
 import { generationPreview } from "@/lib/studio/preview";
 import type { StudioState } from "./use-studio";
 
@@ -112,6 +113,8 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
               <span className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4" />Advanced settings</span>
               <span className="text-xs">{advancedCount} settings · presets</span>
             </button>
+
+            <AssistantChat s={s} />
 
             {s.assistant.proposal && (
               <ProposalCard proposal={s.assistant.proposal} decisionError={s.assistant.decisionError}

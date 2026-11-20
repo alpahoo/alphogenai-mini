@@ -4,6 +4,7 @@ on:
     paths:
       - "lib/comfy/**"
       - "app/api/admin/comfy/**"
+      - "app/api/admin/studio/**"
       - "app/(admin)/admin/workflows/**"
       - "app/(admin)/admin/studio/**"
       - "app/(admin)/layout.tsx"
