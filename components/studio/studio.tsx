@@ -62,7 +62,7 @@ export function Studio() {
           <div role={s.error ? "alert" : "status"} className={cn("flex items-start justify-between gap-3 border-b px-5 py-2.5 text-sm",
             s.error ? "border-red-500/20 bg-red-500/[0.07] text-red-300" : "border-primary/20 bg-primary/[0.06] text-foreground")}>
             <span>{s.error || s.notice}</span>
-            <button type="button" aria-label="Dismiss" onClick={() => { s.setError(""); s.setNotice(""); }} className="shrink-0 opacity-70 hover:opacity-100"><X className="h-4 w-4" /></button>
+            <button type="button" aria-label="Dismiss" onClick={() => { s.setError(""); s.setNotice(""); }} className="-my-2 -mr-2 grid h-11 w-11 shrink-0 place-items-center opacity-70 hover:opacity-100 lg:-my-1 lg:-mr-1 lg:h-8 lg:w-8"><X className="h-4 w-4" /></button>
           </div>
         )}
 

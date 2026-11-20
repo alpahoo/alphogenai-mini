@@ -11,6 +11,7 @@ import { CostSummary, GenerationPreviewCard } from "./generation-preview";
 import { AppliedNotice, AssistantHistory, ProposalCard, ProposalErrors } from "./assistant-proposal";
 import { GenerateBlockers } from "./generate-blockers";
 import { AssistantChat } from "./assistant-chat";
+import { PresetPicker } from "./preset-picker";
 import { generationPreview } from "@/lib/studio/preview";
 import type { StudioState } from "./use-studio";
 
@@ -74,6 +75,8 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
           </div>
         ) : (
           <>
+            <PresetPicker slug={model.slug} onApply={s.applyPreset} />
+
             {/* Prompt */}
             <div className="space-y-2">
               <div className="flex items-baseline justify-between">

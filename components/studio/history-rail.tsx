@@ -19,7 +19,7 @@ export function HistoryRail({ s, layout = "row" }: { s: StudioState; layout?: "r
     <section aria-label="Generation history" className={cn(layout === "row" ? "border-t border-border/50" : "h-full overflow-y-auto")}>
       <div className="flex items-center justify-between px-5 pb-2 pt-3">
         <h2 className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground"><History className="h-3.5 w-3.5" />History</h2>
-        <button type="button" onClick={() => void s.refreshHistory()} aria-label="Refresh history" className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground"><RefreshCw className="h-3.5 w-3.5" /></button>
+        <button type="button" onClick={() => void s.refreshHistory()} aria-label="Refresh history" className="grid h-11 w-11 place-items-center lg:h-7 lg:w-7 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground"><RefreshCw className="h-3.5 w-3.5" /></button>
       </div>
       {items === null ? (
         <div className={cn("gap-3 px-5 pb-4", layout === "row" ? "flex" : "grid")}>
