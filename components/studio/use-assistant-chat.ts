@@ -1,85 +1,61 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { buildAssistantBody, parseAssistantAnswer, type AssistantReadiness } from "@/lib/studio/agent/client";
-import type { ChatTurn } from "@/lib/studio/agent/conversation";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { AssistantReadiness } from "@/lib/studio/agent/client";
+import { AssistantChatSession, type AssistantFetcher, type LiveStudio } from "@/lib/studio/agent/chat-session";
 import type { StudioState } from "./use-studio";
 
-export interface ChatEntry extends ChatTurn { id: string; note?: string }
+export type { ChatEntry } from "@/lib/studio/agent/chat-session";
+
+const ENDPOINT = "/api/admin/studio/assistant";
+
+const fetcher: AssistantFetcher = async (body, signal) => {
+  const res = await fetch(ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json" }, signal, body });
+  return { ok: res.ok, data: await res.json().catch(() => null) };
+};
 
 /**
  * C2b conversation state. The conversation lives in this component only (no storage, no database).
- * A proposal from the server goes through `s.assistant.propose`, i.e. the C2a engine and the existing
- * proposal card. This hook never calls `generate`.
+ * Late answers are handled by `AssistantChatSession`: it reads the Studio as it is when the answer
+ * arrives (model, form, reference), and a proposal only reaches the C2a engine (`s.assistant.propose`)
+ * and its proposal card. This hook never calls `generate`.
  */
 export function useAssistantChat(s: StudioState) {
   const [readiness, setReadiness] = useState<AssistantReadiness | null>(null);
-  const [entries, setEntries] = useState<ChatEntry[]>([]);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
-  const abort = useRef<AbortController | null>(null);
   const template = s.model.slug;
 
+  // Latest Studio state, read by the session when an answer arrives (never the state at send time).
+  const live = useRef<LiveStudio | null>(null);
+  live.current = { template, values: s.values, referencePath: s.reference?.path ?? null, propose: s.assistant.propose };
+
+  const sessionRef = useRef<AssistantChatSession | null>(null);
+  if (!sessionRef.current) sessionRef.current = new AssistantChatSession(fetcher, () => live.current);
+  const session = sessionRef.current;
+  const view = useSyncExternalStore(session.subscribe, session.getView, session.getView);
+
   useEffect(() => {
-    let live = true;
-    fetch("/api/admin/studio/assistant", { cache: "no-store" })
+    let alive = true;
+    fetch(ENDPOINT, { cache: "no-store" })
       .then(r => r.ok ? r.json() : { enabled: false, reason: "The assistant is unavailable." })
-      .then(d => { if (live) setReadiness(d as AssistantReadiness); })
-      .catch(() => { if (live) setReadiness({ enabled: false, reason: "The assistant is unavailable." }); });
-    return () => { live = false; };
+      .then(d => { if (alive) setReadiness(d as AssistantReadiness); })
+      .catch(() => { if (alive) setReadiness({ enabled: false, reason: "The assistant is unavailable." }); });
+    return () => { alive = false; };
   }, []);
 
-  // One conversation per model: switching model starts a new one.
-  const reset = useCallback(() => {
-    abort.current?.abort(); abort.current = null;
-    setEntries([]); setPending(false); setError("");
-  }, []);
-  useEffect(() => { reset(); }, [template, reset]);
-  useEffect(() => () => abort.current?.abort(), []);
+  // One conversation per model: switching model starts a new one and ignores any answer in flight.
+  useEffect(() => { session.reset(); }, [template, session]);
+  useEffect(() => () => session.dispose(), [session]);
 
   const maxMessages = readiness?.limits?.max_messages ?? 20;
   const maxChars = readiness?.limits?.max_message_chars ?? 2000;
-  const full = entries.length + 1 >= maxMessages;
+  const enabled = !!readiness?.enabled;
 
-  const send = useCallback(async (text: string) => {
-    const content = text.trim();
-    if (!content || pending || !readiness?.enabled || full || content.length > maxChars) return false;
-    const userEntry: ChatEntry = { id: `u-${Date.now()}`, role: "user", content };
-    const turns = [...entries, userEntry];
-    setEntries(turns); setPending(true); setError("");
-    const controller = new AbortController();
-    abort.current?.abort(); abort.current = controller;
-    try {
-      const res = await fetch("/api/admin/studio/assistant", {
-        method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
-        body: buildAssistantBody({ template, values: s.values, referencePath: s.reference?.path ?? null, turns }),
-      });
-      const data = await res.json().catch(() => null);
-      if (controller.signal.aborted) return false;
-      if (!res.ok) {
-        setEntries(entries); // the failed question is not kept in the conversation
-        setError(typeof data?.error === "string" ? data.error : "The assistant did not answer.");
-        return false;
-      }
-      const answer = parseAssistantAnswer(data);
-      if (!answer) { setEntries(entries); setError("The assistant sent an unreadable answer."); return false; }
-      let note: string | undefined;
-      if (answer.proposal) {
-        // Re-validated against the current form by the C2a engine; refusals show in the existing error list.
-        const shown = s.assistant.propose(answer.proposal.patch, answer.proposal.rationale);
-        note = shown ? "Proposal ready below. Nothing changes until you apply it." : "The proposal no longer fits your current settings.";
-      }
-      setEntries([...turns, { id: `a-${Date.now()}`, role: "assistant", content: answer.reply, note }]);
-      return true;
-    } catch {
-      if (!controller.signal.aborted) { setEntries(entries); setError("The assistant did not answer."); }
-      return false;
-    } finally {
-      if (abort.current === controller) { abort.current = null; setPending(false); }
-    }
-  }, [entries, full, maxChars, pending, readiness?.enabled, s.assistant, s.reference?.path, s.values, template]);
+  const send = useCallback(async (text: string) =>
+    (await session.send(text, { enabled, maxChars, maxMessages })) === "answered",
+  [enabled, maxChars, maxMessages, session]);
+  const reset = useCallback(() => session.reset(), [session]);
 
-  return { readiness, entries, pending, error, send, reset, full, maxChars };
+  return { readiness, entries: view.entries, pending: view.pending, error: view.error, send, reset, full: session.isFull(maxMessages), maxChars };
 }
 
 export type AssistantChatState = ReturnType<typeof useAssistantChat>;

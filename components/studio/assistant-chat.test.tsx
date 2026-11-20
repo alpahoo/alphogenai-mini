@@ -24,19 +24,21 @@ describe("Studio assistant chat (C2b)", () => {
   });
 
   it("has no path to generation: no Generate call, no runs API, proposals go through C2a", () => {
-    for (const f of ["assistant-chat.tsx", "use-assistant-chat.ts"]) {
+    for (const f of ["assistant-chat.tsx", "use-assistant-chat.ts", "../../lib/studio/agent/chat-session.ts"]) {
       const src = read(f);
       expect(src).not.toMatch(/\bs\.generate\b|\bgenerate\(/);
       expect(src).not.toContain("/api/admin/comfy/runs");
       expect(src).not.toMatch(/dispatch|graph/i);
     }
     const hook = read("use-assistant-chat.ts");
-    expect(hook).toContain("s.assistant.propose(answer.proposal.patch, answer.proposal.rationale)");
+    expect(hook).toMatch(/propose: s\.assistant\.propose/);
     expect(hook).toContain("/api/admin/studio/assistant");
+    expect(read("../../lib/studio/agent/chat-session.ts")).toContain("now.propose(answer.proposal.patch, answer.proposal.rationale)");
   });
 
   it("keeps the conversation in memory only (no storage)", () => {
-    const hook = read("use-assistant-chat.ts");
-    expect(hook).not.toMatch(/localStorage|sessionStorage|indexedDB/);
+    for (const f of ["use-assistant-chat.ts", "../../lib/studio/agent/chat-session.ts"]) {
+      expect(read(f)).not.toMatch(/localStorage|sessionStorage|indexedDB/);
+    }
   });
 });
