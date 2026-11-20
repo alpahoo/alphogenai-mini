@@ -28,7 +28,8 @@ export interface GenerationPreview {
   valid: boolean;
 }
 
-function display(p: ManifestParam, v: string | number | undefined): string {
+/** Human-readable value, shared by the review card and the assistant proposals. */
+export function display(p: ManifestParam, v: string | number | undefined): string {
   if (v === undefined || v === "") {
     if (p.key === "seed") return "Random (chosen by the server)";
     if (p.widget === "text") return p.required === false ? "(empty)" : "";
@@ -39,7 +40,8 @@ function display(p: ManifestParam, v: string | number | undefined): string {
   return String(v);
 }
 
-function same(p: ManifestParam, a: string | number | undefined, b: string | number | undefined): boolean {
+/** Equality as submitted: numbers compared numerically, empty values equal to each other. */
+export function same(p: ManifestParam, a: string | number | undefined, b: string | number | undefined): boolean {
   const empty = (x: unknown) => x === undefined || x === "";
   if (empty(a) || empty(b)) return empty(a) && empty(b);
   return p.widget === "number" ? Number(a) === Number(b) : String(a) === String(b);
@@ -84,4 +86,13 @@ export function generationPreview(
     reference: reference?.name ?? null,
     valid: variant !== null && Object.keys(errors).length === 0,
   };
+}
+
+export interface ValueChange { key: string; label: string; from: string; to: string }
+
+/** Parameters whose submitted value differs between two value sets (manifest order). */
+export function diffValues(manifest: StudioManifest, before: ParamValues, after: ParamValues): ValueChange[] {
+  return manifest.params
+    .filter(p => !same(p, before[p.key], after[p.key]))
+    .map(p => ({ key: p.key, label: p.label, from: display(p, before[p.key]), to: display(p, after[p.key]) }));
 }
