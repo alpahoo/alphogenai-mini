@@ -8,6 +8,8 @@ vi.mock("@/lib/supabase/service", () => ({ createServiceClient: vi.fn() }));
 const calls: string[] = [];
 const rpcCalls: { fn: string; args: unknown }[] = [];
 let overdue: { id: string }[] = [];
+let rpcFails = false;
+let overdueReadFails = false;
 let outbox: { run_id: string; delivered_at: string | null }[] = [];
 let runs: unknown[] = [];
 let assets: unknown[] = [];
@@ -17,9 +19,9 @@ beforeEach(() => {
   runs = [{ id: "r1", status: "done", params_effective: { prompt: "a" } }, { id: "r2", status: "failed", params_effective: {} }];
   assets = [{ id: "a1", run_id: "r1", role: "final", mime: "video/mp4" }, { id: "a2", run_id: "r2", role: "raw", mime: "video/mp4" }];
   vi.mocked(requireAdmin).mockResolvedValue({ user: { id: "owner", email: "admin@example.com" } });
-  rpcCalls.length = 0; overdue = []; outbox = [];
+  rpcCalls.length = 0; overdue = []; outbox = []; rpcFails = false; overdueReadFails = false;
   vi.mocked(createServiceClient).mockReturnValue({
-    rpc: (fn: string, args: unknown) => { rpcCalls.push({ fn, args }); return Promise.resolve({ error: null }); },
+    rpc: (fn: string, args: unknown) => { rpcCalls.push({ fn, args }); return Promise.resolve({ error: rpcFails ? { message: "rpc down" } : null }); },
     from: (table: string) => {
       let lte = false;
       const q = {
@@ -28,7 +30,7 @@ beforeEach(() => {
         is: (k: string) => { calls.push(`${table}.${k}=null`); return q; },
         lte: () => { lte = true; return q; },
         limit: (n: number) => { limitSeen = n; return Promise.resolve({ data: runs, error: null }); },
-        then: (resolve: (v: unknown) => void) => resolve({ data: lte ? overdue : table === "comfy_dispatch_outbox" ? outbox : assets, error: null }),
+        then: (resolve: (v: unknown) => void) => resolve(lte && overdueReadFails ? { data: null, error: { message: "read down" } } : { data: lte ? overdue : table === "comfy_dispatch_outbox" ? outbox : assets, error: null }),
       };
       return q;
     } } as unknown as ReturnType<typeof createServiceClient>);
@@ -74,5 +76,16 @@ describe("Studio history", () => {
     expect(JSON.stringify(body)).not.toMatch(/fc-|modal_call_id/);
     expect(body.items[0]).toMatchObject({ dispatched: true, executor_started: true, finance_status: "reserved" });
     expect(body.items[1]).toMatchObject({ dispatched: false, executor_started: true });
+  });
+  it("fails explicitly, without listing possibly stale runs, when the expiry call fails", async () => {
+    overdue = [{ id: "r-old" }]; rpcFails = true;
+    const res = await get();
+    expect(res.status).toBe(503); expect((await res.json()).error).toBe("History unavailable");
+    expect(res.headers.get("cache-control")).toContain("no-store");
+  });
+  it("fails explicitly when the overdue runs cannot be read", async () => {
+    overdueReadFails = true;
+    const res = await get();
+    expect(res.status).toBe(503); expect(rpcCalls).toEqual([]);
   });
 });

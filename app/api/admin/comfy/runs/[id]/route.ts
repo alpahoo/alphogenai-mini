@@ -25,7 +25,9 @@ export async function POST(_req:Request,{params}:{params:Promise<{id:string}>}) 
   const {id}=await params;
   const db=createServiceClient();
   // A run past its deadline is expired first: it must never be dispatched again.
-  await db.rpc("expire_comfy_admin_run",{p_run:id,p_user:auth.user.id});
+  // If the expiry cannot be confirmed, nothing is dispatched: the run might be overdue.
+  const {error:expiryError}=await db.rpc("expire_comfy_admin_run",{p_run:id,p_user:auth.user.id});
+  if(expiryError)return NextResponse.json({error:"Run status unavailable; nothing was dispatched"},{status:503,headers:privateHeaders});
   const {data:run}=await db.from("comfy_runs").select("id,status,template_version,runtime").eq("id",id).eq("user_id",auth.user.id).single();
   if(!run || run.status!=="queued")return NextResponse.json({error:"Run is not queued"},{status:409});
   // The switch of the run's own model: a MOSS retry must not depend on the H3 switch, nor the reverse.

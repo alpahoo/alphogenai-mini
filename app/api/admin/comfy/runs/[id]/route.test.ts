@@ -8,17 +8,18 @@ vi.mock("@/lib/supabase/service", () => ({ createServiceClient: vi.fn() }));
 vi.mock("@/lib/comfy/admin", () => ({ dispatchRun: vi.fn(), privateHeaders: { "Cache-Control": "private, no-store" } }));
 
 const rpcCalls: string[] = [];
+let expiryFails = false;
 let run: Record<string, unknown> | null = null;
 let delivered = false;
 const ctx = { params: Promise.resolve({ id: "run-1" }) };
 beforeEach(() => {
-  vi.clearAllMocks(); rpcCalls.length = 0; delivered = false;
+  vi.clearAllMocks(); rpcCalls.length = 0; delivered = false; expiryFails = false;
   run = { id: "run-1", status: "queued", template_version: "minimax-h3@1", runtime: "h3-video@1", modal_call_id: null, finance_status: "reserved" };
   vi.stubEnv("COMFY_ADMIN_ENABLED", ""); vi.stubEnv("COMFY_MOSS_ENABLED", "");
   vi.mocked(requireAdmin).mockResolvedValue({ user: { id: "admin-1", email: "a@example.com" } });
   vi.mocked(dispatchRun).mockResolvedValue(undefined);
   vi.mocked(createServiceClient).mockReturnValue({
-    rpc: (fn: string) => { rpcCalls.push(fn); return Promise.resolve({ error: null }); },
+    rpc: (fn: string) => { rpcCalls.push(fn); return Promise.resolve({ error: expiryFails ? { message: "rpc down" } : null }); },
     from: (table: string) => {
       const q = {
         select: () => q, eq: () => q, is: () => q, in: () => q,
@@ -56,6 +57,12 @@ describe("Retry dispatch", () => {
     vi.stubEnv("COMFY_ADMIN_ENABLED", "true");
     run = { ...run, status: "expired" };
     expect((await post()).status).toBe(409); expect(rpcCalls[0]).toBe("expire_comfy_admin_run"); expect(dispatchRun).not.toHaveBeenCalled();
+  });
+  it("does not dispatch when the expiry check fails, and says so", async () => {
+    vi.stubEnv("COMFY_ADMIN_ENABLED", "true"); expiryFails = true;
+    const res = await post();
+    expect(res.status).toBe(503); expect((await res.json()).error).toMatch(/nothing was dispatched/);
+    expect(dispatchRun).not.toHaveBeenCalled();
   });
   it("refuses a run that is already running", async () => {
     vi.stubEnv("COMFY_ADMIN_ENABLED", "true"); run = { ...run, status: "running" };

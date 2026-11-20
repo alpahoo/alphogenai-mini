@@ -13,7 +13,8 @@ export async function GET(req: Request) {
   const limit = Math.min(MAX_LIMIT, Math.max(1, Number.parseInt(url.searchParams.get("limit") ?? "30", 10) || 30));
   const db = createServiceClient();
   // An abandoned run past its deadline must not stay active (it would keep Generate disabled and the job slot taken).
-  await expireOverdueRuns(db, auth.user.id);
+  // If overdue runs cannot be checked, a stale "active" run could be shown as live: fail explicitly, never silently.
+  if (!(await expireOverdueRuns(db, auth.user.id))) return NextResponse.json({ error: "History unavailable" }, { status: 503, headers: privateHeaders });
   const { data: runs, error } = await db.from("comfy_runs")
     .select("id,job_id,status,error_code,generation_seconds,params_effective,created_at,finished_at,template_version,runtime,finance_status,modal_call_id")
     .eq("user_id", auth.user.id).order("created_at", { ascending: false }).limit(limit);
