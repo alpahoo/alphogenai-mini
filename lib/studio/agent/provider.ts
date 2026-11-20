@@ -8,6 +8,7 @@
  */
 import type { ToolDefinition } from "./tools";
 import { validPricing, type ProviderPricing } from "./limits";
+import { groqQwenProvider } from "./groq";
 
 /** Provider-neutral conversation used inside one request. */
 export type LoopMessage =
@@ -46,8 +47,10 @@ export interface AssistantProvider {
 type Env = Record<string, string | undefined>;
 type AdapterFactory = (env: Env) => AssistantProvider | null;
 
-/** Approved adapters. Intentionally empty in C2b: see the recommendation in docs/implementation/studio-phase-c.md. */
-export const ADAPTERS: Record<string, AdapterFactory> = {};
+/** Single approved adapter, still fail-closed until the server enable flag and dedicated key are present. */
+export const ADAPTERS: Record<string, AdapterFactory> = {
+  groq: env => env.GROQ_API_KEY?.trim() ? groqQwenProvider(env.GROQ_API_KEY) : null,
+};
 
 export type ProviderStatus =
   | { enabled: true; provider: AssistantProvider }
