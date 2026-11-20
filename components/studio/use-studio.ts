@@ -9,6 +9,7 @@ import { anySignal, startRunPolling } from "@/lib/studio/run-poller";
 import type { Readiness, ReferenceImage, SignedMedia, StudioAsset, StudioRun } from "./types";
 import { parseServerBlockers, studioBlockers } from "@/lib/studio/blockers";
 import { useStudioAssistant } from "./use-assistant";
+import { applyBuiltinPreset, presetNotice, type BuiltinPreset } from "@/lib/studio/builtin-presets";
 
 async function json<T>(res: Response): Promise<T> {
   const data = await res.json().catch(() => ({}));
@@ -265,6 +266,15 @@ export function useStudio() {
   /** Full replacement (assistant accept): a cleared seed must disappear, not be merged back. */
   const replaceValues = useCallback((next: ParamValues) => setValues({ ...next }), []);
 
+  /** Built-in preset: settings the model declares, prompt only when empty. Form change only, never a generation. */
+  const applyPreset = useCallback((preset: BuiltinPreset) => {
+    if (!manifest) return;
+    const result = applyBuiltinPreset(manifest, values, preset, !!reference);
+    setValues(result.values);
+    setError("");
+    setNotice(presetNotice(manifest, preset, result));
+  }, [manifest, values, reference]);
+
   // C2a assistant: proposals over the current form only; accepting never generates.
   const assistantCtx = useMemo(() => manifest && model.availability === "available"
     ? { model, manifest, values, hasReference: !!reference, referenceId: reference?.path ?? null, referenceName: reference?.name ?? null } : null,
@@ -272,7 +282,7 @@ export function useStudio() {
   const assistant = useStudioAssistant(assistantCtx, replaceValues);
 
   return {
-    model, manifest, values, setValue, applyValues, selectModel, errors, variant,
+    model, manifest, values, setValue, applyValues, applyPreset, selectModel, errors, variant,
     reference, uploadReference, clearReference,
     readiness, history, historyError, refreshHistory, current, openRun, activeRun,
     generate, canGenerate, blockers, blockerList, busy, error, setError, notice, setNotice, retryDispatch,

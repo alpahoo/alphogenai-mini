@@ -69,11 +69,11 @@ export function AssistantChat({ s }: { s: StudioState }) {
                   className="block w-full resize-y rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-sm outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/20" />
                 <div className="flex items-center justify-between gap-2">
                   <button type="button" onClick={chat.reset} disabled={chat.pending || chat.entries.length === 0}
-                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-40">
+                    className="flex min-h-11 items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 lg:min-h-0">
                     <RotateCcw className="h-3.5 w-3.5" />New conversation
                   </button>
                   <button type="button" onClick={() => void submit()} disabled={chat.pending || chat.full || !draft.trim()}
-                    className="flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-40">
+                    className="flex min-h-11 items-center gap-1.5 rounded-xl bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:brightness-110 disabled:opacity-40 lg:min-h-0 lg:px-3">
                     <Send className="h-3.5 w-3.5" />Send
                   </button>
                 </div>
