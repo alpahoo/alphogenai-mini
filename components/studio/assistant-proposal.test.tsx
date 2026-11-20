@@ -26,6 +26,16 @@ describe("assistant proposal UI", () => {
     expect(t).not.toMatch(/\bGenerate\b/);
   });
 
+  it("keeps long generated prompts within the narrow panel", () => {
+    const longPrompt = "rainy cinematic Paris night ".repeat(35);
+    const r = proposePatch(ctx, { prompt: longPrompt }, { rationale: "Detailed composition" });
+    if (!r.ok) throw new Error("expected valid prompt patch");
+    const html = renderToStaticMarkup(<ProposalCard proposal={r.proposal} onAccept={() => {}} onReject={() => {}} />);
+    expect(html).toContain("max-w-full overflow-hidden");
+    expect(html).toContain("break-words");
+    expect(html).toContain("Apply to settings");
+  });
+
   it("explains refusals", () => {
     const r = proposePatch(ctx, { unet_name: "x" });
     if (r.ok) throw new Error("expected refusal");
