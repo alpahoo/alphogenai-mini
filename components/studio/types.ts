@@ -11,6 +11,10 @@ export interface StudioRun {
   finished_at?: string | null;
   template_version?: string | null;
   runtime?: string | null;
+  /** Server-derived: outbox acknowledged, Modal call confirmed, billing state. No ids or secrets. */
+  dispatched?: boolean;
+  executor_started?: boolean;
+  finance_status?: string | null;
   assets?: StudioAsset[];
 }
 
