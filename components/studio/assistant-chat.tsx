@@ -25,7 +25,7 @@ export function AssistantChat({ s }: { s: StudioState }) {
 
   return (
     <section aria-label="Studio assistant" className="rounded-2xl border border-border/60">
-      <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+      <button type="button" onClick={() => { if (open) chat.reset(); setOpen(!open); }} aria-expanded={open}
         className="flex w-full items-center justify-between px-4 py-3 text-sm text-muted-foreground hover:text-foreground">
         <span className="flex items-center gap-2"><MessageSquare className="h-4 w-4" />Assistant</span>
         <span className="text-xs">{chat.readiness === null ? "…" : enabled ? "Ask about settings" : "Off"}</span>
