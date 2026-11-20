@@ -92,9 +92,8 @@ The administrator chats with the assistant in an **Assistant** section of the ex
 settings and proposes changes; proposals appear in the existing C2a card ("Apply to settings" / "Reject"). Only the
 administrator's Generate button starts a generation. No node editor, no graph, no JSON shown to the user.
 
-**No language model is connected in this PR.** `ADAPTERS` in `lib/studio/agent/provider.ts` is empty, so the route answers
-503 and no prompt can leave the server, whatever the environment variables say. Connecting a provider is a separate,
-reviewed PR after the owner approves the provider, its prices, its data policy and a test budget.
+**At the time of the C2b base PR no language model was connected.** The later Groq adapter is registered, but the route still answers
+503 until the owner explicitly enables the provider and configures its dedicated server-side key. No key has been added here.
 
 ### What is implemented
 - `app/api/admin/studio/assistant/route.ts`:
@@ -143,7 +142,7 @@ limit on a dedicated key or workspace, set before activation. A persisted ledger
 - Route: admin required, 503 while no provider, validation before any call, reply + patch + usage, logs without content, 429.
 - UI: section rendered in the Create panel, no generation path, conversation not stored.
 
-### LLM provider recommendation (prices checked 2026-11-20 on the official pages)
+### Historical LLM comparison (superseded by Groq/Qwen selection on 2026-11-20)
 Typical answer: 2 model calls, about 3,000 input and 300 output tokens each.
 
 | Option | Price per million tokens (input / output) | Typical answer | Data |
@@ -152,7 +151,7 @@ Typical answer: 2 model calls, about 3,000 input and 300 output tokens each.
 | Mistral Small 4 (La Plateforme), EU alternative | $0.15 / $0.60 | ≈ $0.0013 | Hosted in the EU by default. The commercial terms exclude training on customer data, except opt-in features, feedback and Labs/Preview models. |
 | Qwen Flash (Alibaba Model Studio, international) | Not verified on an official page (aggregators: about $0.05 / $0.40) | Not verified | International endpoint in Singapore. Not recommended until prices and data terms are confirmed. |
 
-Recommendation:
+Historical recommendation (superseded; see Groq adapter below):
 - Use **Claude Haiku 5.5** for tool-use reliability at the lowest verified price. The adapter must use the official SDK (`@anthropic-ai/sdk`), with low effort and `strict` tools.
 - Choose **Mistral Small 4** instead if EU data residency is required.
 - The prompt typed in the Studio (generation text) is sent to the provider as part of `get_config`. The reference image and its path are never sent.
