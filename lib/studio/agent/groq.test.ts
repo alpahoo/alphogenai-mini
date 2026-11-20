@@ -45,7 +45,10 @@ describe("Groq Qwen adapter (fully offline)", () => {
   });
 
   it("sends a fixed model, hidden reasoning, no streaming, and only declared tools", async () => {
-    const mock = vi.fn(async (_url: unknown, _init?: RequestInit) => new Response(JSON.stringify(answer()), { status: 200 }));
+    const mock = vi.fn(async (...args: [unknown, RequestInit?]) => {
+      expect(args[0]).toBe("https://api.groq.com/openai/v1/chat/completions");
+      return new Response(JSON.stringify(answer()), { status: 200 });
+    });
     const p = groqQwenProvider("test-key", mock as typeof fetch);
     const result = await p.complete(req());
     expect(result).toEqual({ text: "Bonjour", stop: "end", toolCalls: [], usage: { inputTokens: 1000, outputTokens: 90 } });
