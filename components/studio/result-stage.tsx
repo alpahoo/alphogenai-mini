@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Copy, Download, Film, Image as ImageIcon, Loader2, Play, RefreshCw, Shuffle, SplitSquareHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { errorMessage, formatElapsed, isActive, statusView } from "@/lib/studio/status";
+import { errorMessage, formatElapsed, isActive } from "@/lib/studio/status";
+import { financeView, stageView, type StageInput } from "@/lib/studio/stage";
 import { modelForTemplateVersion } from "@/lib/studio/catalog";
 import { ImageCompare, ImageDownloads, PrivateImage } from "./image-result";
 import type { StudioAsset, StudioRun } from "./types";
@@ -11,8 +12,8 @@ import type { StudioState } from "./use-studio";
 
 const ROLE_LABEL: Record<string, string> = { final: "Corrected", raw: "Original" };
 
-export function StatusPill({ status }: { status: string }) {
-  const v = statusView(status);
+export function StatusPill({ status, run }: { status: string; run?: Omit<StageInput, "status"> }) {
+  const v = stageView({ ...run, status });
   return (
     <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
       v.tone === "progress" && "bg-primary/15 text-primary", v.tone === "neutral" && "bg-sky-500/10 text-sky-400",
@@ -81,7 +82,8 @@ export function ResultStage({ s }: { s: StudioState }) {
   const params = run.params_effective ?? {};
   const aspect = String(params.aspect ?? "9:16");
   const ratio = aspect === "16:9" ? "aspect-video" : aspect === "1:1" ? "aspect-square" : "aspect-[9/16]";
-  const view_ = statusView(run.status);
+  const view_ = stageView(run);
+  const finance = run.status === "loading" ? null : financeView(run.finance_status);
   const err = errorMessage(run.error_code);
 
   const runModel = modelForTemplateVersion(run.template_version);
@@ -95,7 +97,7 @@ export function ResultStage({ s }: { s: StudioState }) {
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5">
         <div className="flex min-w-0 items-center gap-3">
-          <StatusPill status={run.status} />
+          <StatusPill status={run.status} run={run} />
           <span className="text-xs text-muted-foreground">
             {isActive(run.status) && run.created_at ? `${formatElapsed(run.created_at, now)} elapsed` : run.generation_seconds ? `${Math.round(run.generation_seconds)} s generation` : null}
           </span>
@@ -155,6 +157,7 @@ export function ResultStage({ s }: { s: StudioState }) {
         )}
       </div>
 
+      {finance && <p className="px-5 pb-2 text-xs text-muted-foreground" title={finance.description}>{finance.label}: {finance.description}</p>}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/50 px-5 py-3">
         <p className="line-clamp-2 min-w-0 flex-1 text-sm text-muted-foreground" title={String(params.prompt ?? "")}>{String(params.prompt ?? "")}</p>
         <div className="flex flex-wrap items-center gap-1.5">

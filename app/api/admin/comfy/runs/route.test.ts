@@ -25,6 +25,15 @@ describe("private admin H3 admission",()=>{
     expect(rpc).toHaveBeenCalledWith("admit_comfy_admin_run",expect.objectContaining({p_user:"admin-1",p_hash:expect.stringMatching(/^[a-f0-9]{64}$/),p_graph:expect.any(Object)}));
     expect(dispatchRun).toHaveBeenCalledWith("run-1");expect(await response.json()).toEqual({run_id:"run-1",dispatched:true});
   });
+  it("a repeated request with the same key goes through SQL admission with that key, which returns the same run (no second permit here)",async()=>{
+    await POST(request());await POST(request());
+    expect(rpc).toHaveBeenCalledTimes(2);
+    for(const call of rpc.mock.calls)expect(call[1]).toMatchObject({p_key:"a3263425-3a14-4170-a22c-8959566db7ac",p_user:"admin-1"});
+  });
+  it("a failed dispatch never triggers a second admission",async()=>{
+    vi.mocked(dispatchRun).mockRejectedValue(Error("offline"));await POST(request());
+    expect(rpc.mock.calls.filter(c=>String(c[0]).startsWith("admit_"))).toHaveLength(1);
+  });
   it("preserves the durable run on dispatch failure",async()=>{vi.mocked(dispatchRun).mockRejectedValue(Error("offline"));const response=await POST(request());expect(response.status).toBe(202);expect((await response.json()).dispatched).toBe(false);expect(rpc).toHaveBeenCalledTimes(1);});
   it("readiness carries the real reservation and the server-configured MOSS GPU (no guessed value)",async()=>{
     vi.mocked(runtimeGateState).mockResolvedValue({ready:false,blockers:[],reason:"GPU authorization is pending",allowance:null,licence_confirmed:true,reservation_usd:0.45});

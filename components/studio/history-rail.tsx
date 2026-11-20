@@ -45,7 +45,7 @@ export function HistoryRail({ s, layout = "row" }: { s: StudioState; layout?: "r
                   </span>
                   <span className="min-w-0 flex-1 space-y-1">
                     <span className="line-clamp-1 text-xs text-foreground">{String(p.prompt ?? "Untitled")}</span>
-                    <span className="flex items-center gap-2"><StatusPill status={run.status} /></span>
+                    <span className="flex items-center gap-2"><StatusPill status={run.status} run={run} /></span>
                     <span className="block truncate font-mono text-[10px] text-muted-foreground">{[modelForTemplateVersion(run.template_version).title, p.aspect, p.seconds && `${p.seconds}s`, p.quality, when(run.created_at)].filter(Boolean).join(" · ")}</span>
                   </span>
                 </button>

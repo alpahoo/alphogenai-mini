@@ -58,7 +58,8 @@ export function useStudio() {
     try {
       const d = await json<{ items: StudioRun[] }>(await fetch("/api/admin/comfy/history?limit=30", { cache: "no-store" }));
       setHistory(d.items); setHistoryError("");
-    } catch (e) { setHistory(h => h ?? []); setHistoryError(e instanceof Error ? e.message : "History unavailable"); }
+      return d.items;
+    } catch (e) { setHistory(h => h ?? []); setHistoryError(e instanceof Error ? e.message : "History unavailable"); return null; }
   }, []);
 
   // The selected run (URL ?run=) is the only one whose responses may update the screen.
@@ -101,8 +102,14 @@ export function useStudio() {
     if (m?.manifest) { setModelState(m); setValues(defaultValues(m.manifest)); }
     const run = q.get("run");
     if (run) void openRun(run);
-    void refreshHistory();
-  }, [openRun, refreshHistory]);
+    // No run in the URL: reopen the most recent still-active run so it is polled (and expired by the server if abandoned)
+    // instead of silently keeping Generate disabled. Reopening only reads status; it never dispatches or reserves.
+    void refreshHistory().then(items => {
+      if (run || !items || selection.current) return;
+      const active = items.find(r => isActive(r.status));
+      if (active) void openRun(active.id);
+    });
+  }, [openRun, refreshHistory, selection]);
 
   useEffect(() => {
     setReadiness(r => ({ ...r, ready: false, loaded: false, reason: "Checking GPU authorization…" }));
@@ -183,7 +190,7 @@ export function useStudio() {
       }));
       pendingKey.current = null;
       selection.select(d.run_id);
-      setCurrent({ id: d.run_id, status: "queued", error_code: null, generation_seconds: null, created_at: new Date().toISOString(), params_effective: values, assets: [], template_version: `${model.slug}@${manifest.version}` });
+      setCurrent({ id: d.run_id, status: "queued", dispatched: d.dispatched, error_code: null, generation_seconds: null, created_at: new Date().toISOString(), params_effective: values, assets: [], template_version: `${model.slug}@${manifest.version}` });
       setQuery({ run: d.run_id });
       if (!d.dispatched) setNotice("Run reserved. Dispatch is pending — use Retry dispatch; no new run is created.");
       void refreshHistory(); void refreshReadiness();
