@@ -7,6 +7,7 @@ import { RunSelection } from "@/lib/studio/run-selection";
 import { isActive, pollDelay } from "@/lib/studio/status";
 import { anySignal, startRunPolling } from "@/lib/studio/run-poller";
 import type { Readiness, ReferenceImage, SignedMedia, StudioAsset, StudioRun } from "./types";
+import { parseServerBlockers, studioBlockers } from "@/lib/studio/blockers";
 import { useStudioAssistant } from "./use-assistant";
 
 async function json<T>(res: Response): Promise<T> {
@@ -46,10 +47,10 @@ export function useStudio() {
     const slug = model.slug;
     if (!model.manifest) { setReadiness({ ready: false, reason: model.pendingReason ?? "Not available", allowance: null, loaded: true }); return; }
     try {
-      const d = await json<{ ready: boolean; reason?: string; error?: string; allowance?: Readiness["allowance"]; licence_confirmed?: boolean; cost?: Readiness["cost"] }>(
+      const d = await json<{ ready: boolean; reason?: string; error?: string; blockers?: unknown; allowance?: Readiness["allowance"]; licence_confirmed?: boolean; cost?: Readiness["cost"] }>(
         await fetch(`/api/admin/comfy/runs?template=${encodeURIComponent(slug)}`, { cache: "no-store" }));
       if (modelRef.current.slug !== slug) return;
-      setReadiness({ ready: d.ready === true, reason: d.reason ?? d.error ?? "", allowance: d.allowance ?? null, loaded: true, licence_confirmed: d.licence_confirmed, cost: d.cost ?? null });
+      setReadiness({ ready: d.ready === true, reason: d.reason ?? d.error ?? "", blockers: parseServerBlockers(d.blockers), allowance: d.allowance ?? null, loaded: true, licence_confirmed: d.licence_confirmed, cost: d.cost ?? null });
     } catch { setReadiness({ ready: false, reason: "GPU authorization status unavailable", allowance: null, loaded: true }); }
   }, [model]);
 
@@ -162,16 +163,12 @@ export function useStudio() {
   const variant = manifest ? resolveVariant(manifest, values, !!reference) : null;
   const activeRun = current && isActive(current.status) ? current : (history ?? []).find(r => isActive(r.status)) ?? null;
 
-  const blockers: string[] = [];
-  if (model.availability !== "available" || !manifest) blockers.push(model.pendingReason ?? "This model is not available yet.");
-  else {
-    if (!readiness.ready) blockers.push(readiness.loaded ? readiness.reason || "GPU authorization pending" : "Checking GPU authorization…");
-    if (activeRun) blockers.push("A generation is already in progress.");
-    if (!variant) blockers.push("This combination has no validated workflow.");
-    const errKeys = Object.keys(errors);
-    if (errKeys.length === 1 && errKeys[0] === "prompt") blockers.push(errors.prompt);
-    else if (errKeys.length) blockers.push("Fix the highlighted settings.");
-  }
+  // Every reason Generate is disabled, grouped by who can fix it (form, wait, owner).
+  const blockerList = studioBlockers({
+    modelAvailable: model.availability === "available" && !!manifest, pendingReason: model.pendingReason,
+    readiness, activeRun: !!activeRun, hasVariant: !!variant, errors,
+  });
+  const blockers = blockerList.map(b => b.message);
   const canGenerate = blockers.length === 0 && busy === "idle";
 
   const generate = useCallback(async () => {
@@ -271,7 +268,7 @@ export function useStudio() {
     model, manifest, values, setValue, applyValues, selectModel, errors, variant,
     reference, uploadReference, clearReference,
     readiness, history, historyError, refreshHistory, current, openRun, activeRun,
-    generate, canGenerate, blockers, busy, error, setError, notice, setNotice, retryDispatch,
+    generate, canGenerate, blockers, blockerList, busy, error, setError, notice, setNotice, retryDispatch,
     media, signMedia, download, reuse, compareWith, setCompareWith, compareCandidates,
     assistant,
   };

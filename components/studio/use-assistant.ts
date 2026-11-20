@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { acceptProposal, proposePatch, templateId, type PatchError, type Proposal, type StudioContext } from "@/lib/studio/agent/patch";
 import { addEntry, historyEntry, loadHistory, saveHistory, type HistoryEntry } from "@/lib/studio/agent/history";
 import type { ParamValues } from "@/lib/studio/manifest";
@@ -18,12 +18,23 @@ export function useStudioAssistant(ctx: StudioContext | null, replaceValues: (va
   const [errors, setErrors] = useState<PatchError[]>([]);
   const [decisionError, setDecisionError] = useState("");
   const [log, setLog] = useState<HistoryEntry[]>([]);
+  /** True right after Apply: the panel tells the admin to review the form (it never generates). */
+  const [applied, setApplied] = useState(false);
 
   // A proposal belongs to one template: switching model drops it and loads that template's history.
   useEffect(() => {
-    setProposal(null); setErrors([]); setDecisionError("");
+    setProposal(null); setErrors([]); setDecisionError(""); setApplied(false);
     setLog(template ? loadHistory(storage(), template) : []);
   }, [template]);
+
+  // Replacing, attaching or removing the reference makes the shown proposal stale: drop it at once
+  // (Apply would refuse it anyway through the fingerprint) instead of leaving a dead card on screen.
+  const referenceKey = ctx ? `${ctx.hasReference}|${ctx.hasReference ? ctx.referenceId ?? "" : ""}` : "";
+  const firstReference = useRef(true);
+  useEffect(() => {
+    if (firstReference.current) { firstReference.current = false; return; }
+    setProposal(null); setDecisionError(""); setApplied(false);
+  }, [referenceKey]);
 
   const record = useCallback((p: Proposal, decision: "accepted" | "rejected") => {
     setLog(prev => { const next = addEntry(prev, historyEntry(p, decision)); saveHistory(storage(), p.template, next); return next; });
@@ -33,7 +44,7 @@ export function useStudioAssistant(ctx: StudioContext | null, replaceValues: (va
     if (!ctx) return null;
     const r = proposePatch(ctx, raw, { rationale });
     setDecisionError("");
-    if (r.ok) { setProposal(r.proposal); setErrors([]); return r.proposal; }
+    if (r.ok) { setProposal(r.proposal); setErrors([]); setApplied(false); return r.proposal; }
     setErrors(r.errors); return null;
   }, [ctx]);
 
@@ -46,7 +57,7 @@ export function useStudioAssistant(ctx: StudioContext | null, replaceValues: (va
     }
     replaceValues(r.values);
     record(proposal, "accepted");
-    setProposal(null); setDecisionError("");
+    setProposal(null); setDecisionError(""); setApplied(true);
   }, [ctx, proposal, record, replaceValues]);
 
   const reject = useCallback(() => {
@@ -55,7 +66,9 @@ export function useStudioAssistant(ctx: StudioContext | null, replaceValues: (va
     setProposal(null); setDecisionError("");
   }, [proposal, record]);
 
-  return { proposal, errors, decisionError, history: log, propose, accept, reject };
+  const dismissApplied = useCallback(() => setApplied(false), []);
+
+  return { proposal, errors, decisionError, history: log, applied, dismissApplied, propose, accept, reject };
 }
 
 export type AssistantState = ReturnType<typeof useStudioAssistant>;

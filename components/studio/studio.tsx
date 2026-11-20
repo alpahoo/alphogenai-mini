@@ -32,7 +32,7 @@ export function Studio() {
 
   return (
     <div className={cn(dark && "dark", "h-full")}>
-      <div className="studio-root relative flex h-full min-w-0 flex-col overflow-x-hidden bg-background text-foreground">
+      <div className="studio-root relative flex h-full min-w-0 flex-col overflow-clip bg-background text-foreground">
         <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border/50 px-4 lg:px-5">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-primary to-fuchsia-500 text-white shadow-md shadow-primary/30"><Sparkles className="h-4 w-4" /></span>
@@ -76,11 +76,11 @@ export function Studio() {
           ))}
         </nav>
 
-        <div className={cn("grid min-h-0 min-w-0 flex-1 overflow-x-hidden", advanced ? "lg:grid-cols-[minmax(340px,400px)_minmax(0,1fr)_340px]" : "lg:grid-cols-[minmax(340px,400px)_minmax(0,1fr)]")}>
-          <aside className={cn("min-h-0 min-w-0 overflow-hidden border-border/50 lg:block lg:border-r", tab === "create" ? "block" : "hidden")}>
+        <div className={cn("grid min-h-0 min-w-0 flex-1 overflow-clip", advanced ? "lg:grid-cols-[minmax(340px,400px)_minmax(0,1fr)_340px]" : "lg:grid-cols-[minmax(340px,400px)_minmax(0,1fr)]")}>
+          <aside className={cn("min-h-0 min-w-0 overflow-clip border-border/50 lg:block lg:border-r", tab === "create" ? "block" : "hidden")}>
             <CreatePanel s={s} advancedOpen={advanced} onOpenAdvanced={() => setAdvanced(a => !a)} />
           </aside>
-          <section className={cn("min-h-0 min-w-0 flex-col overflow-hidden lg:flex", tab === "result" ? "flex" : "hidden")}>
+          <section className={cn("min-h-0 min-w-0 flex-col overflow-clip lg:flex", tab === "result" ? "flex" : "hidden")}>
             <div className="studio-stage min-h-0 flex-1"><ResultStage s={s} /></div>
             <div className="hidden lg:block"><HistoryRail s={s} /></div>
           </section>

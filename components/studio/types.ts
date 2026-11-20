@@ -24,7 +24,7 @@ export interface CostInfo {
   estimate: { low_usd: number; high_usd: number; measured: boolean; basis: string } | null;
 }
 
-export interface Readiness { ready: boolean; reason: string; allowance: Allowance | null; loaded: boolean; licence_confirmed?: boolean; cost?: CostInfo | null }
+export interface Readiness { ready: boolean; reason: string; blockers?: { code: string; message: string }[]; allowance: Allowance | null; loaded: boolean; licence_confirmed?: boolean; cost?: CostInfo | null }
 
 export interface ReferenceImage { path: string; previewUrl: string; name: string }
 
