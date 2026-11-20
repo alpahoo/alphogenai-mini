@@ -92,9 +92,8 @@ The administrator chats with the assistant in an **Assistant** section of the ex
 settings and proposes changes; proposals appear in the existing C2a card ("Apply to settings" / "Reject"). Only the
 administrator's Generate button starts a generation. No node editor, no graph, no JSON shown to the user.
 
-**No language model is connected in this PR.** `ADAPTERS` in `lib/studio/agent/provider.ts` is empty, so the route answers
-503 and no prompt can leave the server, whatever the environment variables say. Connecting a provider is a separate,
-reviewed PR after the owner approves the provider, its prices, its data policy and a test budget.
+**At the time of the C2b base PR no language model was connected.** The later Groq adapter is registered, but the route still answers
+503 until the owner explicitly enables the provider and configures its dedicated server-side key. No key has been added here.
 
 ### What is implemented
 - `app/api/admin/studio/assistant/route.ts`:
@@ -143,7 +142,7 @@ limit on a dedicated key or workspace, set before activation. A persisted ledger
 - Route: admin required, 503 while no provider, validation before any call, reply + patch + usage, logs without content, 429.
 - UI: section rendered in the Create panel, no generation path, conversation not stored.
 
-### LLM provider recommendation (prices checked 2026-11-20 on the official pages)
+### Historical LLM comparison (superseded by Groq/Qwen selection on 2026-11-20)
 Typical answer: 2 model calls, about 3,000 input and 300 output tokens each.
 
 | Option | Price per million tokens (input / output) | Typical answer | Data |
@@ -152,7 +151,7 @@ Typical answer: 2 model calls, about 3,000 input and 300 output tokens each.
 | Mistral Small 4 (La Plateforme), EU alternative | $0.15 / $0.60 | ≈ $0.0013 | Hosted in the EU by default. The commercial terms exclude training on customer data, except opt-in features, feedback and Labs/Preview models. |
 | Qwen Flash (Alibaba Model Studio, international) | Not verified on an official page (aggregators: about $0.05 / $0.40) | Not verified | International endpoint in Singapore. Not recommended until prices and data terms are confirmed. |
 
-Recommendation:
+Historical recommendation (superseded; see Groq adapter below):
 - Use **Claude Haiku 5.5** for tool-use reliability at the lowest verified price. The adapter must use the official SDK (`@anthropic-ai/sdk`), with low effort and `strict` tools.
 - Choose **Mistral Small 4** instead if EU data residency is required.
 - The prompt typed in the Studio (generation text) is sent to the provider as part of `get_config`. The reference image and its path are never sent.
@@ -165,3 +164,28 @@ Proposed test budget, separate from the GPU budget: **$2**, about 2,000 answers.
 3. Review and merge the adapter PR. It adds the SDK dependency and one `ADAPTERS` entry with the verified prices.
 4. Set the server-only env vars in Vercel (`STUDIO_ASSISTANT_ENABLED`, `STUDIO_ASSISTANT_PROVIDER`, the key) and redeploy.
 5. Run a short manual test from the Studio, then read the logged counters and the provider's usage page.
+
+
+## C2b Groq/Qwen adapter — candidate, owner approval required before activation (2026-11-20)
+
+A single Groq adapter is registered in `lib/studio/agent/provider.ts`. It calls the official Groq **OpenAI-compatible REST Chat Completions API** using server-side `fetch`, rather than adding a JavaScript SDK dependency. This keeps package-lock unchanged. Review this implementation independently; the model cannot call anything beyond the existing three C2a tools.
+
+- **Fixed model:** `qwen/qwen3.8-27b` (Preview; may be withdrawn at short notice).
+- **Official quoted paid API tariff (check again before enabling):** USD $0.80 per million input tokens / $4.00 per million output tokens. These tariffs are used conservatively for local pre-call cost estimates even on a free plan.
+- **Owner-confirmed organization AND Default Project quotas:** 30 RPM, 1,000 RPD, 8,000 TPM, 200,000 TPD. These are rate limits, **not a billing guarantee**. Multiple tool rounds per question consume multiple API calls and tokens.
+- **Tool protocol:** `reasoning_format: "hidden"`, `reasoning_effort: "none"`, `parallel_tool_calls: false`, `stream: false`. No `json_schema` structured response mode while using tools. Every patch still passes the C2a strict allowlist.
+- **Data handling:** the current generation prompt and chat messages go to Groq in the US when enabled. Reference image paths and file names stay out of provider messages; do not enable for personal/sensitive prompts without reviewing Groq's terms. Groq Data Controls has an optional Zero Data Retention setting; verify account policy independently.
+- **Unavailability:** Groq errors/429 are not retried here (avoid accidental loops/costs), no error bodies or keys are surfaced to browsers/logs. The Studio will show a generic provider error via the existing route. A disabled/missing key returns 503 before any external API call.
+- **Activation remains forbidden in this PR:** do not place a live key or enable a provider before explicit approval. The application-level rate limiter is **per Vercel instance** and not a durable charge cap. Check the Groq account's plan, billing status, whether a strict provider-side charge limit exists, and the relevant privacy terms.
+
+### Required Vercel server secrets when owner approves the test
+
+```text
+GROQ_API_KEY=<dedicated secret configured in Vercel, never commit or paste into chat>
+STUDIO_ASSISTANT_PROVIDER=groq
+STUDIO_ASSISTANT_ENABLED=true   # set only after owner explicitly authorizes an external test
+```
+
+Leave `STUDIO_ASSISTANT_ENABLED` **unset/false** for now. Never add a `NEXT_PUBLIC_` prefix. Do not reuse any production key.
+
+Official references: https://console.groq.com/docs/models ; https://console.groq.com/docs/tool-use/overview ; https://console.groq.com/docs/reasoning ; https://console.groq.com/docs/rate-limits

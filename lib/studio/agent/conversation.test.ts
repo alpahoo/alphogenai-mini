@@ -59,12 +59,13 @@ describe("assistant request validation", () => {
 });
 
 describe("assistant provider gate", () => {
-  it("is off by default and has no approved adapter in this PR", async () => {
+  it("is off by default and only the approved Groq adapter is registered", async () => {
     expect(getAssistantProvider({})).toEqual({ enabled: false, reason: "disabled" });
     expect(getAssistantProvider({ STUDIO_ASSISTANT_ENABLED: "true", STUDIO_ASSISTANT_PROVIDER: "anything" }))
       .toEqual({ enabled: false, reason: "no_provider" });
     const { ADAPTERS } = await import("./provider");
-    expect(Object.keys(ADAPTERS)).toEqual([]);
+    expect(Object.keys(ADAPTERS)).toEqual(["groq"]);
+    expect(getAssistantProvider({ STUDIO_ASSISTANT_ENABLED: "true", STUDIO_ASSISTANT_PROVIDER: "groq" })).toEqual({ enabled: false, reason: "no_provider" });
   });
 
   it("refuses an adapter without verified pricing, accepts one with prices", () => {
