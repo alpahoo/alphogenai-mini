@@ -36,6 +36,13 @@ describe("Studio assistant chat (C2b)", () => {
     expect(read("../../lib/studio/agent/chat-session.ts")).toContain("now.propose(answer.proposal.patch, answer.proposal.rationale)");
   });
 
+  it("collapsing the assistant panel resets its session (ignores late replies)", () => {
+    // The session unit tests exercise reset() while the underlying fetch ignores abort.
+    // This UI wiring assertion ensures the actual collapse button calls reset(), not only unmount.
+    const src = read("assistant-chat.tsx");
+    expect(src).toMatch(/onClick=\{\(\) => \{ if \(open\) chat\.reset\(\); setOpen\(!open\); \}\}/);
+  });
+
   it("keeps the conversation in memory only (no storage)", () => {
     for (const f of ["use-assistant-chat.ts", "../../lib/studio/agent/chat-session.ts"]) {
       expect(read(f)).not.toMatch(/localStorage|sessionStorage|indexedDB/);
