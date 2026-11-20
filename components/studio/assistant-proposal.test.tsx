@@ -6,7 +6,7 @@ import { findModel } from "@/lib/studio/catalog";
 import { defaultValues, type StudioManifest } from "@/lib/studio/manifest";
 import { proposePatch } from "@/lib/studio/agent/patch";
 import { historyEntry } from "@/lib/studio/agent/history";
-import { AssistantHistory, ProposalCard, ProposalErrors } from "./assistant-proposal";
+import { AppliedNotice, AssistantHistory, ProposalCard, ProposalErrors } from "./assistant-proposal";
 
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 const moss = findModel("moss-image")!; const mm = moss.manifest as StudioManifest;
@@ -24,6 +24,38 @@ describe("assistant proposal UI", () => {
     expect(t).toContain("nothing is generated");
     expect(t).toContain("Apply to settings");
     expect(t).not.toMatch(/\bGenerate\b/);
+  });
+
+  it("keeps long generated prompts within the narrow panel", () => {
+    const longPrompt = "rainy cinematic Paris night ".repeat(35);
+    const r = proposePatch(ctx, { prompt: longPrompt }, { rationale: "Detailed composition" });
+    if (!r.ok) throw new Error("expected valid prompt patch");
+    const html = renderToStaticMarkup(<ProposalCard proposal={r.proposal} onAccept={() => {}} onReject={() => {}} />);
+    expect(html).toContain("max-w-full overflow-hidden");
+    expect(html).toContain("break-words");
+    expect(html).toContain("Apply to settings");
+  });
+
+  it("shows a long prompt in full in a readable scrollable block, the old one clamped", () => {
+    const longPrompt = "Cinematic wide shot of Paris at night, rain on the cobblestones, neon reflections. ".repeat(12);
+    const r = proposePatch(ctx, { prompt: longPrompt });
+    if (!r.ok) throw new Error("expected valid prompt patch");
+    const html = renderToStaticMarkup(<ProposalCard proposal={r.proposal} onAccept={() => {}} onReject={() => {}} />);
+    expect(html).toContain("data-long-value");
+    expect(html).toContain("max-h-48 overflow-y-auto whitespace-pre-wrap break-words");
+    expect(html).toContain("line-clamp-2");
+    expect(text(html)).toContain(longPrompt.trim());
+  });
+
+  it("never presents Apply as a generation authorization", () => {
+    const r = proposePatch(ctx, { steps: 30 });
+    if (!r.ok) throw new Error("expected ok");
+    const t = text(renderToStaticMarkup(<ProposalCard proposal={r.proposal} onAccept={() => {}} onReject={() => {}} />));
+    expect(t).toContain("no GPU run is authorized");
+    expect(t).toContain("You can still edit every value afterwards");
+    const notice = text(renderToStaticMarkup(<AppliedNotice onDismiss={() => {}} />));
+    expect(notice).toContain("Settings updated from the proposal");
+    expect(notice).toContain("still needs GPU authorization");
   });
 
   it("explains refusals", () => {

@@ -8,7 +8,8 @@ import { ParamControl } from "./param-control";
 import { ReferenceDrop } from "./reference-drop";
 import { AspectPicker } from "./aspect-picker";
 import { CostSummary, GenerationPreviewCard } from "./generation-preview";
-import { AssistantHistory, ProposalCard, ProposalErrors } from "./assistant-proposal";
+import { AppliedNotice, AssistantHistory, ProposalCard, ProposalErrors } from "./assistant-proposal";
+import { GenerateBlockers } from "./generate-blockers";
 import { AssistantChat } from "./assistant-chat";
 import { generationPreview } from "@/lib/studio/preview";
 import type { StudioState } from "./use-studio";
@@ -26,8 +27,8 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
   const preview = manifest && model.availability === "available" ? generationPreview(model, manifest, values, s.reference) : null;
 
   return (
-    <form className="flex h-full flex-col" onSubmit={e => { e.preventDefault(); void s.generate(); }}>
-      <div className="flex-1 space-y-6 overflow-y-auto px-5 pb-6 pt-5">
+    <form className="flex h-full min-h-0 min-w-0 flex-col overflow-clip" onSubmit={e => { e.preventDefault(); void s.generate(); }}>
+      <div className="min-h-0 min-w-0 flex-1 space-y-6 overflow-x-hidden overflow-y-auto px-5 pb-6 pt-5">
         {/* Output type */}
         <div className="grid grid-cols-2 gap-1 rounded-2xl border border-border/60 bg-muted/40 p-1" role="tablist" aria-label="Output type">
           {([["video", "Video", Clapperboard], ["image", "Image", ImageIcon]] as const).map(([k, label, Icon]) => (
@@ -79,11 +80,11 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
                 <label htmlFor="studio-prompt" className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">Prompt</label>
                 <span className={cn("font-mono text-[11px] tabular-nums", promptValue.length > maxLen ? "text-red-400" : "text-muted-foreground/70")}>{promptValue.length}/{maxLen}</span>
               </div>
-              <textarea id="studio-prompt" value={promptValue} rows={4} maxLength={maxLen + 200}
+              <textarea id="studio-prompt" value={promptValue} rows={Math.min(12, Math.max(4, Math.ceil(promptValue.length / 48)))} maxLength={maxLen + 200}
                 onChange={e => s.setValue("prompt", e.target.value)}
                 onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); void s.generate(); } }}
                 placeholder={prompt?.help ?? "Describe what you want to create…"}
-                className="block w-full resize-y rounded-2xl border border-border/60 bg-background/60 px-4 py-3 text-[15px] leading-relaxed outline-none transition placeholder:text-muted-foreground/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20" />
+                className="block min-w-0 w-full resize-y rounded-2xl border border-border/60 bg-background/60 px-4 py-3 text-[15px] leading-relaxed outline-none transition placeholder:text-muted-foreground/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20" />
               {s.errors.prompt && promptValue.length > 0 && <p className="text-xs text-red-400">{s.errors.prompt}</p>}
             </div>
 
@@ -120,6 +121,7 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
               <ProposalCard proposal={s.assistant.proposal} decisionError={s.assistant.decisionError}
                 onAccept={s.assistant.accept} onReject={s.assistant.reject} />
             )}
+            {s.assistant.applied && !s.assistant.proposal && <AppliedNotice onDismiss={s.assistant.dismissApplied} />}
             <ProposalErrors errors={s.assistant.errors} />
 
             {preview && <GenerationPreviewCard preview={preview} />}
@@ -130,7 +132,7 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
       </div>
 
       {/* Sticky generate bar */}
-      <div className="border-t border-border/50 bg-background/80 px-5 py-4 backdrop-blur">
+      <div className="min-w-0 shrink-0 border-t border-border/50 bg-background/80 px-5 py-4 backdrop-blur">
         {model.availability === "available" && (
           <div className="mb-3 space-y-2">
             <CostSummary cost={s.readiness.cost} loaded={s.readiness.loaded} />
@@ -147,7 +149,7 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
           {generating ? "Reserving…" : "Generate"}
           <kbd className="ml-1 hidden rounded-md border border-white/20 px-1.5 py-0.5 font-mono text-[10px] font-normal opacity-70 sm:inline">Ctrl ↵</kbd>
         </button>
-        {s.blockers.length > 0 && s.busy === "idle" && <p className="mt-2 text-center text-xs text-muted-foreground">{s.blockers[0]}</p>}
+        {s.blockerList.length > 0 && s.busy === "idle" && <GenerateBlockers blockers={s.blockerList} />}
         {model.availability === "available" && s.readiness.cost?.estimate && (
           <p className="mt-1 text-center text-[11px] text-muted-foreground/70">{s.readiness.cost.estimate.basis} Reservations are application provisions, not Modal billing limits.</p>
         )}

@@ -96,4 +96,26 @@ describe("pilotState (H3, 0.75 reserve) budget readiness", () => {
     mockGate("comfy_admin_gate", h3Gate(2.24, 1.5));
     expect((await pilotState(USER)).ready).toBe(false);
   });
+  it("explains the current production lock (gate off, expired, no runs, fully reserved) without user ids", async () => {
+    // Snapshot of the real H3 gate on 2026-11-20 (read-only): the 3 pilot runs reserved the whole 2.25.
+    mockGate("comfy_admin_gate", { ...h3Gate(2.25, 2.25), enabled: false, remaining_runs: 0, expires_at: "2026-11-09T00:05:10Z" });
+    const st = await pilotState(USER);
+    expect(st.ready).toBe(false);
+    expect(st.blockers.map(b => b.code)).toEqual(["gate_disabled", "expired", "no_runs_left", "budget_insufficient"]);
+    expect(st.reason).toBe("GPU authorization is off.");
+    expect(st.blockers.find(b => b.code === "expired")?.message).toContain("2026-11-09");
+    expect(st.blockers.find(b => b.code === "budget_insufficient")?.message).toBe("Not enough unreserved budget for one run (one run reserves $0.75, $0.00 left).");
+    expect(JSON.stringify(st.blockers)).not.toContain(USER);
+  });
+  it("names server switches without exposing their values", async () => {
+    delete process.env.COMFY_ADMIN_ENABLED; delete process.env.COMFY_DISPATCH_SECRET;
+    mockGate("comfy_admin_gate", h3Gate(2.25, 1.5));
+    const st = await pilotState(USER);
+    expect(st.blockers.map(b => b.code)).toEqual(["runtime_off", "executor_unconfigured"]);
+    expect(JSON.stringify(st)).not.toContain("dispatch.example.com");
+  });
+  it("has no blocker when ready", async () => {
+    mockGate("comfy_admin_gate", h3Gate(2.25, 1.5));
+    expect((await pilotState(USER)).blockers).toEqual([]);
+  });
 });
