@@ -53,7 +53,7 @@ describe("Groq Qwen adapter (fully offline)", () => {
     const [url, init] = mock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://api.groq.com/openai/v1/chat/completions");
     expect(init.headers).toMatchObject({ Authorization: "Bearer test-key" });
-    expect(init.signal).toBe(req().signal === init.signal ? init.signal : init.signal);
+    expect(init.signal).toBeDefined();
     const payload = JSON.parse(String(init.body));
     expect(payload).toMatchObject({ model: GROQ_QWEN_MODEL, stream: false, reasoning_format: "hidden", reasoning_effort: "none", parallel_tool_calls: false, max_completion_tokens: 700 });
     expect(payload.tools.map((x: { function: { name: string } }) => x.function.name)).toEqual(["get_config"]);
