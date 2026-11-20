@@ -2,9 +2,8 @@
  * C2b: the LLM provider seam. The tool loop (`loop.ts`) only talks to this interface, so the provider can
  * be chosen (and priced, and approved) separately from the Studio code.
  *
- * NO ADAPTER IS REGISTERED. Until the owner approves a provider, its prices, its data policy and a test
- * budget, `getAssistantProvider()` returns null and the route answers 503: no prompt can leave the server.
- * Adding a provider = one adapter file + one entry in `ADAPTERS`, reviewed in its own PR.
+ * The Groq/Qwen adapter is registered but disabled by default. Without the explicit owner enable flag
+ * AND a dedicated server-only key, `getAssistantProvider()` returns disabled and no prompt leaves the server.
  */
 import type { ToolDefinition } from "./tools";
 import { validPricing, type ProviderPricing } from "./limits";
