@@ -10,16 +10,16 @@ export function ProposalCard({ proposal, decisionError, onAccept, onReject }: {
   proposal: Proposal; decisionError?: string; onAccept: () => void; onReject: () => void;
 }) {
   return (
-    <section aria-label="Assistant proposal" className="rounded-2xl border border-primary/40 bg-primary/[0.05] p-4 text-sm">
+    <section aria-label="Assistant proposal" className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-primary/40 bg-primary/[0.05] p-4 text-sm">
       <p className="flex items-center gap-2 font-medium text-foreground"><Sparkles className="h-4 w-4 text-primary" />Proposed settings</p>
-      {proposal.rationale && <p className="mt-1 text-xs text-muted-foreground">{proposal.rationale}</p>}
+      {proposal.rationale && <p className="mt-1 break-words text-xs text-muted-foreground">{proposal.rationale}</p>}
       <ul className="mt-3 space-y-1 text-xs">
         {proposal.changes.map(c => (
           <li key={c.key} className="flex flex-wrap items-baseline gap-x-1.5">
             <span className="text-muted-foreground">{c.label}:</span>
-            <span className="text-muted-foreground/70 line-through">{c.from || "—"}</span>
+            <span className="min-w-0 break-words text-muted-foreground/70 line-through">{c.from || "—"}</span>
             <span aria-hidden>→</span>
-            <span className="font-medium text-foreground">{c.to || "—"}</span>
+            <span className="min-w-0 break-words font-medium text-foreground">{c.to || "—"}</span>
           </li>
         ))}
       </ul>
@@ -71,7 +71,7 @@ export function AssistantHistory({ entries }: { entries: HistoryEntry[] }) {
               </span>
               <time className="text-muted-foreground/70" dateTime={e.at}>{new Date(e.at).toLocaleString()}</time>
             </p>
-            <p className="text-muted-foreground">{e.changes.map(c => `${c.label}: ${c.from || "—"} → ${c.to || "—"}`).join(" · ")}</p>
+            <p className="break-words text-muted-foreground">{e.changes.map(c => `${c.label}: ${c.from || "—"} → ${c.to || "—"}`).join(" · ")}</p>
           </li>
         ))}
       </ul>
