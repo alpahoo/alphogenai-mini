@@ -165,3 +165,28 @@ Proposed test budget, separate from the GPU budget: **$2**, about 2,000 answers.
 3. Review and merge the adapter PR. It adds the SDK dependency and one `ADAPTERS` entry with the verified prices.
 4. Set the server-only env vars in Vercel (`STUDIO_ASSISTANT_ENABLED`, `STUDIO_ASSISTANT_PROVIDER`, the key) and redeploy.
 5. Run a short manual test from the Studio, then read the logged counters and the provider's usage page.
+
+
+## C2b Groq/Qwen adapter — candidate, owner approval required before activation (2026-11-20)
+
+A single Groq adapter is registered in `lib/studio/agent/provider.ts`. It calls the official Groq **OpenAI-compatible REST Chat Completions API** using server-side `fetch`, rather than adding a JavaScript SDK dependency. This keeps package-lock unchanged. Review this implementation independently; the model cannot call anything beyond the existing three C2a tools.
+
+- **Fixed model:** `qwen/qwen3.8-27b` (Preview; may be withdrawn at short notice).
+- **Official quoted paid API tariff (check again before enabling):** USD $0.80 per million input tokens / $4.00 per million output tokens. These tariffs are used conservatively for local pre-call cost estimates even on a free plan.
+- **Owner-confirmed organization AND Default Project quotas:** 30 RPM, 1,000 RPD, 8,000 TPM, 200,000 TPD. These are rate limits, **not a billing guarantee**. Multiple tool rounds per question consume multiple API calls and tokens.
+- **Tool protocol:** `reasoning_format: "hidden"`, `reasoning_effort: "none"`, `parallel_tool_calls: false`, `stream: false`. No `json_schema` structured response mode while using tools. Every patch still passes the C2a strict allowlist.
+- **Data handling:** the current generation prompt and chat messages go to Groq in the US when enabled. Reference image paths and file names stay out of provider messages; do not enable for personal/sensitive prompts without reviewing Groq's terms. Groq Data Controls has an optional Zero Data Retention setting; verify account policy independently.
+- **Unavailability:** Groq errors/429 are not retried here (avoid accidental loops/costs), no error bodies or keys are surfaced to browsers/logs. The Studio will show a generic provider error via the existing route. A disabled/missing key returns 503 before any external API call.
+- **Activation remains forbidden in this PR:** do not place a live key or enable a provider before explicit approval. The application-level rate limiter is **per Vercel instance** and not a durable charge cap. Check the Groq account's plan, billing status, whether a strict provider-side charge limit exists, and the relevant privacy terms.
+
+### Required Vercel server secrets when owner approves the test
+
+```text
+GROQ_API_KEY=<dedicated secret configured in Vercel, never commit or paste into chat>
+STUDIO_ASSISTANT_PROVIDER=groq
+STUDIO_ASSISTANT_ENABLED=true   # set only after owner explicitly authorizes an external test
+```
+
+Leave `STUDIO_ASSISTANT_ENABLED` **unset/false** for now. Never add a `NEXT_PUBLIC_` prefix. Do not reuse any production key.
+
+Official references: https://console.groq.com/docs/models ; https://console.groq.com/docs/tool-use/overview ; https://console.groq.com/docs/reasoning ; https://console.groq.com/docs/rate-limits
