@@ -26,8 +26,8 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
   const preview = manifest && model.availability === "available" ? generationPreview(model, manifest, values, s.reference) : null;
 
   return (
-    <form className="flex h-full flex-col" onSubmit={e => { e.preventDefault(); void s.generate(); }}>
-      <div className="flex-1 space-y-6 overflow-y-auto px-5 pb-6 pt-5">
+    <form className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden" onSubmit={e => { e.preventDefault(); void s.generate(); }}>
+      <div className="min-h-0 min-w-0 flex-1 space-y-6 overflow-x-hidden overflow-y-auto px-5 pb-6 pt-5">
         {/* Output type */}
         <div className="grid grid-cols-2 gap-1 rounded-2xl border border-border/60 bg-muted/40 p-1" role="tablist" aria-label="Output type">
           {([["video", "Video", Clapperboard], ["image", "Image", ImageIcon]] as const).map(([k, label, Icon]) => (
@@ -83,7 +83,7 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
                 onChange={e => s.setValue("prompt", e.target.value)}
                 onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); void s.generate(); } }}
                 placeholder={prompt?.help ?? "Describe what you want to create…"}
-                className="block w-full resize-y rounded-2xl border border-border/60 bg-background/60 px-4 py-3 text-[15px] leading-relaxed outline-none transition placeholder:text-muted-foreground/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20" />
+                className="block min-w-0 w-full resize-y rounded-2xl border border-border/60 bg-background/60 px-4 py-3 text-[15px] leading-relaxed outline-none transition placeholder:text-muted-foreground/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20" />
               {s.errors.prompt && promptValue.length > 0 && <p className="text-xs text-red-400">{s.errors.prompt}</p>}
             </div>
 
@@ -130,7 +130,7 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
       </div>
 
       {/* Sticky generate bar */}
-      <div className="border-t border-border/50 bg-background/80 px-5 py-4 backdrop-blur">
+      <div className="min-w-0 shrink-0 border-t border-border/50 bg-background/80 px-5 py-4 backdrop-blur">
         {model.availability === "available" && (
           <div className="mb-3 space-y-2">
             <CostSummary cost={s.readiness.cost} loaded={s.readiness.loaded} />
