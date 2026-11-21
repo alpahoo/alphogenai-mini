@@ -95,6 +95,21 @@ export function referenceSupported(manifest: StudioManifest, values: ParamValues
 }
 
 /**
+ * A reference can be attached now or by changing one variant setting (for example full -> turbo for H3).
+ * Attaching switches that setting explicitly, so the picker must stay usable in that case.
+ */
+export function referenceReachable(manifest: StudioManifest, values: ParamValues): boolean {
+  if (!manifest.studio?.reference) return false;
+  if (referenceSupported(manifest, values)) return true;
+  for (const axis of manifest.studio.variant_axes ?? []) {
+    if (axis === "reference") continue;
+    const options = manifest.params.find(p => p.key === axis)?.options ?? [];
+    if (options.some(o => resolveVariant(manifest, { ...values, [axis]: o }, true) !== null)) return true;
+  }
+  return false;
+}
+
+/**
  * Client-side mirror of the server checks, for immediate feedback only.
  * Returns an error message per invalid key.
  */
