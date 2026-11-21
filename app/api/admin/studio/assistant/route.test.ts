@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { requireAdmin } from "@/app/api/admin/middleware";
 import { getAssistantProvider } from "@/lib/studio/agent/provider";
+import { groqQwenProvider } from "@/lib/studio/agent/groq";
 import { call, scriptedProvider } from "@/lib/studio/agent/fake-provider";
 import { assistantRateLimiter } from "@/lib/studio/agent/rate-limit";
 import { GET, POST } from "./route";
@@ -61,6 +62,72 @@ describe("POST /api/admin/studio/assistant", () => {
     expect(data.usage).toMatchObject({ model_calls: 2, tool_calls: 1 });
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
+  });
+
+
+  it.each([
+    ["portrait", "Prepare an artistic portrait of a fictional adult.", "Fine-art portrait of a fictional adult, soft window light."],
+    ["figure study", "Prepare a non-sexual, non-explicit nude study of a fictional adult.", "Non-explicit fine-art nude figure study of a fictional adult, classical sculpture composition."],
+    ["fashion", "Prepare an editorial fashion photograph.", "Editorial fashion photograph, tailored coat, directional studio lighting."],
+    ["cinematic", "Prepare a cinematic still with an adult actor.", "Cinematic still of an adult actor at an empty station, soft dawn light."],
+  ])("forwards the %s request and validates the proposed settings", async (_label, content, prompt) => {
+    const requestFetch = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({
+        choices: [{
+          finish_reason: "tool_calls",
+          message: {
+            tool_calls: [{
+              id: "call_a",
+              function: { name: "propose_patch", arguments: JSON.stringify({ changes: { prompt, steps: 40 } }) },
+            }],
+          },
+        }],
+      }))
+      .mockResolvedValueOnce(Response.json({ choices: [{ finish_reason: "stop", message: { content: "Proposal ready." } }] }));
+    vi.mocked(getAssistantProvider).mockReturnValue({ enabled: true, provider: groqQwenProvider("test-key", requestFetch) });
+
+    const res = await post({ ...valid, messages: [{ role: "user", content }] });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      stop: "answered", proposal: { patch: { prompt, steps: 40 } }, refused: [],
+    });
+    expect(requestFetch).toHaveBeenCalledTimes(2);
+    const payload = JSON.parse(String(requestFetch.mock.calls[0][1]?.body));
+    expect(payload.messages[0].content).toContain("MOSS-Image");
+    expect(payload.messages[1]).toEqual({ role: "user", content });
+    expect(payload.tools.map((tool: { function: { name: string } }) => tool.function.name))
+      .toEqual(["get_config", "describe_param", "propose_patch"]);
+  });
+
+  // Category labels only. These cases test refusal handling, not the model's classification.
+  it.each([
+    ["[sexual exploitation of minors]", "stop", { content: "I can't help with that request." }, "answered"],
+    ["[non-consensual intimate imagery]", "content_filter", {}, "refusal"],
+    ["[illegal sexual content]", "stop", { refusal: "Refused" }, "refusal"],
+  ] as const)("returns a simulated refusal for %s without a proposal", async (content, finish, message, stop) => {
+    const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(Response.json({
+      choices: [{ finish_reason: finish, message }],
+    }));
+    vi.mocked(getAssistantProvider).mockReturnValue({ enabled: true, provider: groqQwenProvider("test-key", requestFetch) });
+
+    const res = await post({ ...valid, messages: [{ role: "user", content }] });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      reply: "I can't help with that request.", stop, proposal: null, refused: [],
+    });
+    expect(requestFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a Groq HTTP error separately from a refusal", async () => {
+    const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(new Response("private provider details", { status: 429 }));
+    vi.mocked(getAssistantProvider).mockReturnValue({ enabled: true, provider: groqQwenProvider("test-key", requestFetch) });
+
+    const res = await post(valid);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      reply: "The assistant is unavailable right now.", stop: "provider_error", proposal: null, refused: [],
+    });
+    expect(requestFetch).toHaveBeenCalledTimes(1);
   });
 
   it("logs counters only, never the conversation or the values", async () => {
