@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { dispatchRun, privateHeaders } from "@/lib/comfy/admin";
 import { TEMPLATES, slugForTemplateVersion } from "@/lib/comfy/templates";
 import { deliveredRunIds, publicRun } from "@/lib/comfy/run-state";
+import { deleteRun } from "@/lib/comfy/delete-run";
 
 export async function GET(_req:Request,{params}:{params:Promise<{id:string}>}) {
   const auth=await requireAdmin(); if(auth.response)return auth.response;
@@ -35,4 +36,13 @@ export async function POST(_req:Request,{params}:{params:Promise<{id:string}>}) 
   if(process.env[entry.enabledEnv]!=="true")return NextResponse.json({error:entry.runtime==="h3-video@1"?"H3 pilot is disabled":"This runtime is disabled"},{status:503});
   try{await dispatchRun(id);return NextResponse.json({dispatched:true});}
   catch{return NextResponse.json({error:"Dispatch unavailable; reservation preserved"},{status:503});}
+}
+// Permanent deletion of one finished run of the signed-in administrator (files and records). Read-only toward
+// gates, budgets and reservations. The UI asks for confirmation first.
+export async function DELETE(_req:Request,{params}:{params:Promise<{id:string}>}) {
+  const auth=await requireAdmin(); if(auth.response)return auth.response;
+  const {id}=await params;
+  const result=await deleteRun(createServiceClient(),auth.user.id,id);
+  if(!result.ok)return NextResponse.json({error:result.error},{status:result.status,headers:privateHeaders});
+  return NextResponse.json({deleted:true},{headers:privateHeaders});
 }

@@ -229,6 +229,22 @@ export function useStudio() {
 
   const clearReference = useCallback(() => setReference(prev => { if (prev) URL.revokeObjectURL(prev.previewUrl); return null; }), []);
 
+  /** Permanent deletion of a finished generation (files and records). Gates, budgets and reservations are untouched. */
+  const removeRun = useCallback(async (id: string): Promise<boolean> => {
+    setError("");
+    try {
+      const res = await fetch(`/api/admin/comfy/runs/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(d.error ?? "Delete failed");
+      }
+      if (selection.current === id) { selection.select(null); setCurrent(null); setQuery({ run: null }); }
+      setNotice("Generation deleted.");
+      await refreshHistory();
+      return true;
+    } catch (e) { setError(e instanceof Error ? e.message : "Delete failed"); return false; }
+  }, [refreshHistory, selection]);
+
   const signMedia = useCallback(async (assetId: string, opts?: { download?: boolean; force?: boolean }) => {
     const cached = media[assetId];
     if (!opts?.download && !opts?.force && cached && cached.expiresAt - Date.now() > 60_000) return cached.url;
@@ -285,7 +301,7 @@ export function useStudio() {
     model, manifest, values, setValue, applyValues, applyPreset, selectModel, errors, variant,
     reference, uploadReference, clearReference,
     readiness, history, historyError, refreshHistory, current, openRun, activeRun,
-    generate, canGenerate, blockers, blockerList, busy, error, setError, notice, setNotice, retryDispatch,
+    generate, canGenerate, blockers, blockerList, busy, error, setError, notice, setNotice, retryDispatch, removeRun,
     media, signMedia, download, reuse, compareWith, setCompareWith, compareCandidates,
     assistant,
   };
