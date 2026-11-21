@@ -6,6 +6,7 @@ import { modelsFor, type OutputKind } from "@/lib/studio/catalog";
 import { optionSupported, paramsByTier, referenceReachable, referenceSupported } from "@/lib/studio/manifest";
 import { ParamControl } from "./param-control";
 import { ReferenceDrop } from "./reference-drop";
+import { ReferenceLibrary } from "./reference-library";
 import { AspectPicker } from "./aspect-picker";
 import { CostSummary, GenerationPreviewCard } from "./generation-preview";
 import { AppliedNotice, AssistantHistory, ProposalCard, ProposalErrors } from "./assistant-proposal";
@@ -98,6 +99,7 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
                 note={refOk && !refNow && !s.reference ? "Adding a first frame switches quality to Turbo" : undefined}
                 onFile={f => void s.uploadReference(f)} onClear={s.clearReference} />
             )}
+            {ref && <ReferenceLibrary s={s} label={ref.label} enabled={refOk || !!s.reference} />}
 
             {paramsByTier(manifest, "simple").map(p => (
               p.key === "aspect" && p.options ? (

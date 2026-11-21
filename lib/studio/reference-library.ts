@@ -28,7 +28,6 @@ const fromHex = (h: string) => new TextDecoder("utf-8", { fatal: true }).decode(
 export function cleanName(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const name = raw.replace(/\s+/g, " ").trim();
-  // eslint-disable-next-line no-control-regex
   if (!name || name.length > MAX_NAME_LENGTH || /[\u0000-\u001f\u007f]/.test(name)) return null;
   return name;
 }

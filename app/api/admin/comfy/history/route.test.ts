@@ -56,6 +56,10 @@ describe("Studio history", () => {
     // Outputs of non-completed runs are not listed.
     expect(body.items[1].assets).toEqual([]);
   });
+  it("leaves deleted generations (tombstones) out of the history", async () => {
+    await get();
+    expect(calls).toContain("comfy_runs.params_effective->>deleted_at=null");
+  });
   it("caps the page size", async () => {
     await get("?limit=5000"); expect(limitSeen).toBe(50);
     await get("?limit=abc"); expect(limitSeen).toBe(30);
