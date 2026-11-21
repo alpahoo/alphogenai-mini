@@ -3,6 +3,7 @@ import { requireAdmin } from "@/app/api/admin/middleware";
 import { createServiceClient } from "@/lib/supabase/service";
 import { privateHeaders } from "@/lib/comfy/admin";
 import { deliveredRunIds, expireOverdueRuns, publicRun } from "@/lib/comfy/run-state";
+import { TOMBSTONE_FILTER } from "@/lib/comfy/tombstone";
 
 const MAX_LIMIT = 50;
 
@@ -17,7 +18,7 @@ export async function GET(req: Request) {
   if (!(await expireOverdueRuns(db, auth.user.id))) return NextResponse.json({ error: "History unavailable" }, { status: 503, headers: privateHeaders });
   const { data: runs, error } = await db.from("comfy_runs")
     .select("id,job_id,status,error_code,generation_seconds,params_effective,created_at,finished_at,template_version,runtime,finance_status,modal_call_id")
-    .eq("user_id", auth.user.id).order("created_at", { ascending: false }).limit(limit);
+    .eq("user_id", auth.user.id).is(TOMBSTONE_FILTER, null).order("created_at", { ascending: false }).limit(limit);
   if (error) return NextResponse.json({ error: "History unavailable" }, { status: 503, headers: privateHeaders });
   const ids = (runs ?? []).map(r => r.id);
   let assets: { id: string; run_id: string; role: string; mime: string }[] = [];

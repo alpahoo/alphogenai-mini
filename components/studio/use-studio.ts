@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { findModel, modelForTemplateVersion, STUDIO_MODELS, type StudioModel } from "@/lib/studio/catalog";
 import { defaultValues, resolveVariant, submissionParams, validateValues, valuesFromRun, type ParamValues } from "@/lib/studio/manifest";
 import { RunSelection } from "@/lib/studio/run-selection";
+import { referenceAfterRunDelete } from "@/lib/studio/reference-library";
 import { isActive, pollDelay } from "@/lib/studio/status";
 import { anySignal, startRunPolling } from "@/lib/studio/run-poller";
 import type { Readiness, ReferenceImage, SignedMedia, StudioAsset, StudioRun } from "./types";
@@ -197,6 +198,8 @@ export function useStudio() {
       void refreshHistory(); void refreshReadiness();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Generation unavailable");
+      // The server checks that the attached image still exists: if it does not, detach it so the next try cannot repeat the error.
+      if (e instanceof Error && /no longer exists/i.test(e.message)) setReference(null);
       if (e instanceof Error && /refused|Invalid|policy|supported/i.test(e.message)) pendingKey.current = null;
     } finally { setBusy("idle"); }
   }, [canGenerate, manifest, model.slug, reference, refreshHistory, refreshReadiness, selection, values]);
@@ -206,6 +209,15 @@ export function useStudio() {
     const res = await fetch(`/api/admin/comfy/runs/${encodeURIComponent(id)}`, { method: "POST" });
     if (res.ok) { setNotice("Dispatch sent."); void loadRun(id, () => undefined); } else setError("Dispatch still unavailable. The reservation is preserved.");
   }, [loadRun]);
+
+  /** Attach a private reference. Image-to-video exists only in turbo: switch explicitly and say so. */
+  const attachReference = useCallback((path: string, previewUrl: string, name: string) => {
+    setReference(prev => { if (prev?.previewUrl.startsWith("blob:")) URL.revokeObjectURL(prev.previewUrl); return { path, previewUrl, name }; });
+    if (manifest && !resolveVariant(manifest, values, true)) {
+      const quality = manifest.params.find(p => p.key === "quality")?.options?.find(o => resolveVariant(manifest, { ...values, quality: o }, true));
+      if (quality) { setValues(v => ({ ...v, quality })); setNotice(`Quality switched to ${quality}: it is the only validated image-to-video workflow.`); }
+    }
+  }, [manifest, values]);
 
   const uploadReference = useCallback(async (file: File) => {
     const ref = manifest?.studio?.reference;
@@ -217,17 +229,37 @@ export function useStudio() {
     try {
       const form = new FormData(); form.append("file", file);
       const d = await json<{ storage_path: string }>(await fetch("/api/upload?bucket=references", { method: "POST", body: form }));
-      setReference(prev => { if (prev) URL.revokeObjectURL(prev.previewUrl); return { path: d.storage_path, previewUrl, name: file.name }; });
-      // Image-to-video exists only in turbo: switch explicitly and say so.
-      if (manifest && !resolveVariant(manifest, values, true)) {
-        const quality = manifest.params.find(p => p.key === "quality")?.options?.find(o => resolveVariant(manifest, { ...values, quality: o }, true));
-        if (quality) { setValues(v => ({ ...v, quality })); setNotice(`Quality switched to ${quality}: it is the only validated image-to-video workflow.`); }
-      }
+      attachReference(d.storage_path, previewUrl, file.name);
     } catch (e) { URL.revokeObjectURL(previewUrl); setError(e instanceof Error ? e.message : "Upload failed"); }
     finally { setBusy("idle"); }
-  }, [manifest, values]);
+  }, [manifest, attachReference]);
+
+  /** A reference chosen from the permanent library: same attach path as an upload, nothing is uploaded or generated. */
+  const selectLibraryReference = useCallback((item: { path: string; name: string; thumb_url: string | null }) => {
+    if (!manifest?.studio?.reference) return;
+    setError("");
+    attachReference(item.path, item.thumb_url ?? "", item.name);
+  }, [manifest, attachReference]);
 
   const clearReference = useCallback(() => setReference(prev => { if (prev) URL.revokeObjectURL(prev.previewUrl); return null; }), []);
+
+  /** Permanent deletion of a finished generation (files and records). Gates, budgets and reservations are untouched. */
+  const removeRun = useCallback(async (id: string): Promise<boolean> => {
+    setError("");
+    try {
+      const res = await fetch(`/api/admin/comfy/runs/${encodeURIComponent(id)}`, { method: "DELETE" });
+      const d = await res.json().catch(() => ({})) as { error?: string; reference_removed?: string | null };
+      if (!res.ok) throw new Error(d.error ?? "Delete failed");
+      // A one-off upload deleted with its run must not stay attached: it no longer exists in storage.
+      // A library reference is never reported as removed, so it stays.
+      const removed = d.reference_removed;
+      if (removed) setReference(prev => { const next = referenceAfterRunDelete(prev, removed); if (prev && !next && prev.previewUrl.startsWith("blob:")) URL.revokeObjectURL(prev.previewUrl); return next; });
+      if (selection.current === id) { selection.select(null); setCurrent(null); setQuery({ run: null }); }
+      setNotice("Generation deleted.");
+      await refreshHistory();
+      return true;
+    } catch (e) { setError(e instanceof Error ? e.message : "Delete failed"); return false; }
+  }, [refreshHistory, selection]);
 
   const signMedia = useCallback(async (assetId: string, opts?: { download?: boolean; force?: boolean }) => {
     const cached = media[assetId];
@@ -283,9 +315,9 @@ export function useStudio() {
 
   return {
     model, manifest, values, setValue, applyValues, applyPreset, selectModel, errors, variant,
-    reference, uploadReference, clearReference,
+    reference, uploadReference, selectLibraryReference, clearReference,
     readiness, history, historyError, refreshHistory, current, openRun, activeRun,
-    generate, canGenerate, blockers, blockerList, busy, error, setError, notice, setNotice, retryDispatch,
+    generate, canGenerate, blockers, blockerList, busy, error, setError, notice, setNotice, retryDispatch, removeRun,
     media, signMedia, download, reuse, compareWith, setCompareWith, compareCandidates,
     assistant,
   };

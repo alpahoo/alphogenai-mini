@@ -4,6 +4,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { dispatchRun, privateHeaders } from "@/lib/comfy/admin";
 import { TEMPLATES, slugForTemplateVersion } from "@/lib/comfy/templates";
 import { deliveredRunIds, publicRun } from "@/lib/comfy/run-state";
+import { deleteRun } from "@/lib/comfy/delete-run";
+import { TOMBSTONE_FILTER } from "@/lib/comfy/tombstone";
 
 export async function GET(_req:Request,{params}:{params:Promise<{id:string}>}) {
   const auth=await requireAdmin(); if(auth.response)return auth.response;
@@ -12,7 +14,7 @@ export async function GET(_req:Request,{params}:{params:Promise<{id:string}>}) {
   const {error:expiryError}=await db.rpc("expire_comfy_admin_run",{p_run:id,p_user:auth.user.id});
   if(expiryError)return NextResponse.json({error:"Run status unavailable"},{status:503});
   const {data:run,error}=await db.from("comfy_runs").select("id,job_id,status,error_code,generation_seconds,params_effective,created_at,finished_at,finance_status,template_version,runtime,modal_call_id")
-    .eq("id",id).eq("user_id",auth.user.id).single();
+    .eq("id",id).eq("user_id",auth.user.id).is(TOMBSTONE_FILTER,null).single();
   if(error || !run)return NextResponse.json({error:"Run not found"},{status:404});
   const {data:assets,error:assetError}=await db.from("comfy_assets").select("id,role,mime").eq("run_id",id).is("withdrawn_at",null);
   if(assetError)return NextResponse.json({error:"Outputs unavailable"},{status:503});
@@ -35,4 +37,13 @@ export async function POST(_req:Request,{params}:{params:Promise<{id:string}>}) 
   if(process.env[entry.enabledEnv]!=="true")return NextResponse.json({error:entry.runtime==="h3-video@1"?"H3 pilot is disabled":"This runtime is disabled"},{status:503});
   try{await dispatchRun(id);return NextResponse.json({dispatched:true});}
   catch{return NextResponse.json({error:"Dispatch unavailable; reservation preserved"},{status:503});}
+}
+// Permanent deletion of one finished run of the signed-in administrator (files and records). Read-only toward
+// gates, budgets and reservations. The UI asks for confirmation first.
+export async function DELETE(_req:Request,{params}:{params:Promise<{id:string}>}) {
+  const auth=await requireAdmin(); if(auth.response)return auth.response;
+  const {id}=await params;
+  const result=await deleteRun(createServiceClient(),auth.user.id,id);
+  if(!result.ok)return NextResponse.json({error:result.error},{status:result.status,headers:privateHeaders});
+  return NextResponse.json({deleted:true,reference_removed:result.reference_removed},{headers:privateHeaders});
 }
