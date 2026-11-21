@@ -207,6 +207,15 @@ export function useStudio() {
     if (res.ok) { setNotice("Dispatch sent."); void loadRun(id, () => undefined); } else setError("Dispatch still unavailable. The reservation is preserved.");
   }, [loadRun]);
 
+  /** Attach a private reference. Image-to-video exists only in turbo: switch explicitly and say so. */
+  const attachReference = useCallback((path: string, previewUrl: string, name: string) => {
+    setReference(prev => { if (prev?.previewUrl.startsWith("blob:")) URL.revokeObjectURL(prev.previewUrl); return { path, previewUrl, name }; });
+    if (manifest && !resolveVariant(manifest, values, true)) {
+      const quality = manifest.params.find(p => p.key === "quality")?.options?.find(o => resolveVariant(manifest, { ...values, quality: o }, true));
+      if (quality) { setValues(v => ({ ...v, quality })); setNotice(`Quality switched to ${quality}: it is the only validated image-to-video workflow.`); }
+    }
+  }, [manifest, values]);
+
   const uploadReference = useCallback(async (file: File) => {
     const ref = manifest?.studio?.reference;
     if (!ref) return;
@@ -217,15 +226,17 @@ export function useStudio() {
     try {
       const form = new FormData(); form.append("file", file);
       const d = await json<{ storage_path: string }>(await fetch("/api/upload?bucket=references", { method: "POST", body: form }));
-      setReference(prev => { if (prev) URL.revokeObjectURL(prev.previewUrl); return { path: d.storage_path, previewUrl, name: file.name }; });
-      // Image-to-video exists only in turbo: switch explicitly and say so.
-      if (manifest && !resolveVariant(manifest, values, true)) {
-        const quality = manifest.params.find(p => p.key === "quality")?.options?.find(o => resolveVariant(manifest, { ...values, quality: o }, true));
-        if (quality) { setValues(v => ({ ...v, quality })); setNotice(`Quality switched to ${quality}: it is the only validated image-to-video workflow.`); }
-      }
+      attachReference(d.storage_path, previewUrl, file.name);
     } catch (e) { URL.revokeObjectURL(previewUrl); setError(e instanceof Error ? e.message : "Upload failed"); }
     finally { setBusy("idle"); }
-  }, [manifest, values]);
+  }, [manifest, attachReference]);
+
+  /** A reference chosen from the permanent library: same attach path as an upload, nothing is uploaded or generated. */
+  const selectLibraryReference = useCallback((item: { path: string; name: string; thumb_url: string | null }) => {
+    if (!manifest?.studio?.reference) return;
+    setError("");
+    attachReference(item.path, item.thumb_url ?? "", item.name);
+  }, [manifest, attachReference]);
 
   const clearReference = useCallback(() => setReference(prev => { if (prev) URL.revokeObjectURL(prev.previewUrl); return null; }), []);
 
@@ -299,7 +310,7 @@ export function useStudio() {
 
   return {
     model, manifest, values, setValue, applyValues, applyPreset, selectModel, errors, variant,
-    reference, uploadReference, clearReference,
+    reference, uploadReference, selectLibraryReference, clearReference,
     readiness, history, historyError, refreshHistory, current, openRun, activeRun,
     generate, canGenerate, blockers, blockerList, busy, error, setError, notice, setNotice, retryDispatch, removeRun,
     media, signMedia, download, reuse, compareWith, setCompareWith, compareCandidates,

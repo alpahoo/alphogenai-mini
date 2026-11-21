@@ -5,6 +5,7 @@ import { dispatchRun, privateHeaders } from "@/lib/comfy/admin";
 import { TEMPLATES, slugForTemplateVersion } from "@/lib/comfy/templates";
 import { deliveredRunIds, publicRun } from "@/lib/comfy/run-state";
 import { deleteRun } from "@/lib/comfy/delete-run";
+import { TOMBSTONE_FILTER } from "@/lib/comfy/tombstone";
 
 export async function GET(_req:Request,{params}:{params:Promise<{id:string}>}) {
   const auth=await requireAdmin(); if(auth.response)return auth.response;
@@ -13,7 +14,7 @@ export async function GET(_req:Request,{params}:{params:Promise<{id:string}>}) {
   const {error:expiryError}=await db.rpc("expire_comfy_admin_run",{p_run:id,p_user:auth.user.id});
   if(expiryError)return NextResponse.json({error:"Run status unavailable"},{status:503});
   const {data:run,error}=await db.from("comfy_runs").select("id,job_id,status,error_code,generation_seconds,params_effective,created_at,finished_at,finance_status,template_version,runtime,modal_call_id")
-    .eq("id",id).eq("user_id",auth.user.id).single();
+    .eq("id",id).eq("user_id",auth.user.id).is(TOMBSTONE_FILTER,null).single();
   if(error || !run)return NextResponse.json({error:"Run not found"},{status:404});
   const {data:assets,error:assetError}=await db.from("comfy_assets").select("id,role,mime").eq("run_id",id).is("withdrawn_at",null);
   if(assetError)return NextResponse.json({error:"Outputs unavailable"},{status:503});
