@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { findModel, modelForTemplateVersion, STUDIO_MODELS, type StudioModel } from "@/lib/studio/catalog";
 import { defaultValues, resolveVariant, submissionParams, validateValues, valuesFromRun, type ParamValues } from "@/lib/studio/manifest";
 import { RunSelection } from "@/lib/studio/run-selection";
+import { referenceAfterRunDelete } from "@/lib/studio/reference-library";
 import { isActive, pollDelay } from "@/lib/studio/status";
 import { anySignal, startRunPolling } from "@/lib/studio/run-poller";
 import type { Readiness, ReferenceImage, SignedMedia, StudioAsset, StudioRun } from "./types";
@@ -197,6 +198,8 @@ export function useStudio() {
       void refreshHistory(); void refreshReadiness();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Generation unavailable");
+      // The server checks that the attached image still exists: if it does not, detach it so the next try cannot repeat the error.
+      if (e instanceof Error && /no longer exists/i.test(e.message)) setReference(null);
       if (e instanceof Error && /refused|Invalid|policy|supported/i.test(e.message)) pendingKey.current = null;
     } finally { setBusy("idle"); }
   }, [canGenerate, manifest, model.slug, reference, refreshHistory, refreshReadiness, selection, values]);
@@ -245,10 +248,12 @@ export function useStudio() {
     setError("");
     try {
       const res = await fetch(`/api/admin/comfy/runs/${encodeURIComponent(id)}`, { method: "DELETE" });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(d.error ?? "Delete failed");
-      }
+      const d = await res.json().catch(() => ({})) as { error?: string; reference_removed?: string | null };
+      if (!res.ok) throw new Error(d.error ?? "Delete failed");
+      // A one-off upload deleted with its run must not stay attached: it no longer exists in storage.
+      // A library reference is never reported as removed, so it stays.
+      const removed = d.reference_removed;
+      if (removed) setReference(prev => { const next = referenceAfterRunDelete(prev, removed); if (prev && !next && prev.previewUrl.startsWith("blob:")) URL.revokeObjectURL(prev.previewUrl); return next; });
       if (selection.current === id) { selection.select(null); setCurrent(null); setQuery({ run: null }); }
       setNotice("Generation deleted.");
       await refreshHistory();

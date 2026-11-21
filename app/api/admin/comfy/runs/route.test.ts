@@ -80,3 +80,30 @@ describe("private admin MOSS admission",()=>{
     expect(pilotState).not.toHaveBeenCalled();
   });
 });
+
+describe("a reference that no longer exists never reaches admission",()=>{
+  const path="admin-1/11111111-1111-4111-8111-111111111111.png";
+  const withReference=(exists:boolean)=>{
+    const createSignedUrl=vi.fn().mockResolvedValue(exists?{data:{signedUrl:"https://signed"},error:null}:{data:null,error:{message:"Object not found"}});
+    vi.mocked(createServiceClient).mockReturnValue({rpc,storage:{from:()=>({createSignedUrl})}} as unknown as ReturnType<typeof createServiceClient>);
+    return createSignedUrl;
+  };
+  const withFrame=()=>request({prompt:"A cinematic sunset",seed:1,quality:"turbo",first_frame_path:path});
+  it("refuses a missing reference: nothing is reserved, nothing is dispatched",async()=>{
+    const probe=withReference(false);
+    const res=await POST(withFrame());
+    expect(res.status).toBe(400);expect((await res.json()).error).toMatch(/no longer exists/);
+    expect(probe).toHaveBeenCalledWith(path,60);
+    expect(rpc).not.toHaveBeenCalled();expect(dispatchRun).not.toHaveBeenCalled();
+  });
+  it("admits normally when the reference exists",async()=>{
+    withReference(true);
+    expect((await POST(withFrame())).status).toBe(202);
+    expect(rpc).toHaveBeenCalledWith("admit_comfy_admin_run",expect.objectContaining({p_reference:path}));
+  });
+  it("does not look for a file when the run has no reference",async()=>{
+    const probe=withReference(true);
+    expect((await POST(request())).status).toBe(202);
+    expect(probe).not.toHaveBeenCalled();
+  });
+});

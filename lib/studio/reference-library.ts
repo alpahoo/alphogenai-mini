@@ -49,3 +49,13 @@ export function isLibraryPath(userId: string, path: string | null | undefined): 
 }
 
 export interface LibraryItem { id: string; name: string; path: string; thumb_url: string | null; created_at: string | null }
+
+/**
+ * The reference still attached to the form after a generation was deleted. Only the one-off upload that was
+ * removed from storage is detached. A library reference is never detached by a deletion, whatever the server says.
+ */
+export function referenceAfterRunDelete<T extends { path: string }>(current: T | null, removedPath: string | null | undefined): T | null {
+  if (!current || !removedPath) return current;
+  if (removedPath.includes(`/${LIBRARY_DIR}/`)) return current;
+  return current.path === removedPath ? null : current;
+}

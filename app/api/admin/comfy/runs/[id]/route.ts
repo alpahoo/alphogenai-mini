@@ -45,5 +45,5 @@ export async function DELETE(_req:Request,{params}:{params:Promise<{id:string}>}
   const {id}=await params;
   const result=await deleteRun(createServiceClient(),auth.user.id,id);
   if(!result.ok)return NextResponse.json({error:result.error},{status:result.status,headers:privateHeaders});
-  return NextResponse.json({deleted:true},{headers:privateHeaders});
+  return NextResponse.json({deleted:true,reference_removed:result.reference_removed},{headers:privateHeaders});
 }

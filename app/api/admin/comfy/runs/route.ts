@@ -37,6 +37,12 @@ export async function POST(req:Request) {
     const policy=screenPrompt(String(resolved.params.prompt));
     if(policy.blocked)return NextResponse.json({error:"Prompt does not meet the current content policy"},{status:400});
     const db=createServiceClient();
+    // A reference deleted since it was attached (one-off upload removed with its run, or library image deleted)
+    // must never reach admission: nothing is reserved and no GPU call can start with a missing file.
+    if(resolved.referencePath){
+      const {data:probe,error:probeError}=await db.storage.from("references").createSignedUrl(resolved.referencePath,60);
+      if(probeError || !probe?.signedUrl)return NextResponse.json({error:"Invalid reference: this image no longer exists. Remove it or choose another one."},{status:400});
+    }
     const {data:runId,error}=entry.admission==="h3_pilot"
       ? await db.rpc("admit_comfy_admin_run",{p_user:auth.user.id,p_key:body.idempotency_key,
           p_prompt:resolved.params.prompt,p_params:resolved.params,p_graph:resolved.graph,p_hash:resolved.hash,p_reference:resolved.referencePath})

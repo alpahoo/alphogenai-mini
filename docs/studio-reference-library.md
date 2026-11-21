@@ -14,7 +14,9 @@ Kept as a tombstone, because accounting, security and quotas need it:
 
 Never touched: gates, budgets, reservations, `committed_usd`, finance status, any RPC. A run waiting for invoice reconciliation can be deleted: it keeps its accounting row. The confirmation says so.
 
-The steps are not one transaction (Supabase client, no migration). Files go first; if that fails nothing else changes. If a later step fails, a message says so and the same delete can be run again.
+Recoverable, not transactional (Supabase client, no migration). Order: media files, one-off reference, content records, job prompt, then the tombstone. The tombstone is the single commit point: until it is written the generation is still listed and can be deleted again, and every step is safe to repeat. Any failed step returns an error ("not fully deleted: delete it again to finish") and the interface never says "Generation deleted" in that case. Tested with a failure injected at each of the nine steps, then a retry that reaches the same final state.
+
+One-off reference of a deleted generation: the server reports which upload it removed, and the Create form detaches it if it is still attached. A library reference is never reported as removed and stays attached. Independently, the admission route checks that the attached image still exists before reserving anything: a missing file returns an "Invalid reference" error, nothing is reserved, no GPU call can start, and the form detaches the image.
 
 ## 2. Reference library
 
@@ -46,6 +48,12 @@ Today a reference is the first frame of an H3 video. A character reference (a fu
 
 A table (id, name, role, tags, created_at) with row-level security would replace the file-name encoding and allow renaming, roles and several images per character. It is not needed for one recurring character and was left out to avoid a migration.
 
+## Remaining limits
+
+- A failed deletion leaves the generation listed (without its files) until the delete is repeated.
+- The existence check uses a signed-link probe, so a missing file is detected at generation time, not while browsing.
+- Names live in file names; a table would allow renaming, roles and several images per character.
+
 ## Checks
 
-Vitest 1509, `tsc`, ESLint (0 errors), `next build`. Chromium with mocked APIs at 375, 768 and 1440 px: library usable with Full quality selected, save with a name, choose, remove from the generation (image stays), delete with cancel then confirm, no horizontal overflow, MOSS shows no library, only the expected API calls (no generation request).
+Vitest (full suite), `tsc`, ESLint (0 errors), `next build`. Chromium with mocked APIs at 375, 768 and 1440 px: library usable with Full quality selected, save with a name, choose, remove from the generation (image stays), delete with cancel then confirm, no horizontal overflow, MOSS shows no library, only the expected API calls (no generation request).
