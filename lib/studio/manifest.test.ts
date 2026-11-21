@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveTemplate } from "@/lib/comfy/template";
 import { findModel, h3Frames, lockedSettings, STUDIO_MODELS } from "./catalog";
-import { defaultValues, optionSupported, paramsByTier, referenceSupported, resolveVariant, submissionParams, validateValues, valuesFromRun, type StudioManifest } from "./manifest";
+import { defaultValues, optionSupported, paramsByTier, referenceReachable, referenceSupported, resolveVariant, submissionParams, validateValues, valuesFromRun, type StudioManifest } from "./manifest";
 
 const h3 = findModel("minimax-h3")!;
 const m = h3.manifest as StudioManifest;
@@ -31,6 +31,16 @@ describe("Studio manifest helpers (H3)", () => {
     expect(optionSupported(m, v, false, "quality", "full")).toBe(true);
     expect(referenceSupported(m, { ...v, quality: "full" })).toBe(false);
     expect(referenceSupported(m, { ...v, quality: "turbo" })).toBe(true);
+  });
+
+  it("keeps the first-frame picker usable while Full is selected (attaching switches to Turbo)", () => {
+    const v = defaultValues(m);
+    expect(referenceReachable(m, { ...v, quality: "full" })).toBe(true);
+    expect(referenceReachable(m, { ...v, quality: "turbo" })).toBe(true);
+    expect(referenceReachable({ ...m, studio: { ...m.studio, reference: undefined } } as StudioManifest, v)).toBe(false);
+    // A template whose variants never allow a reference stays unavailable.
+    const none = { ...m, variants: { ...m.variants, "present|turbo": null } } as StudioManifest;
+    expect(referenceReachable(none, v)).toBe(false);
   });
 
   it("validates like the server for common mistakes", () => {

@@ -5,9 +5,9 @@ import { ImagePlus, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ReferenceImage } from "./types";
 
-export function ReferenceDrop({ label, accept, reference, uploading, supported, unsupportedReason, onFile, onClear }: {
+export function ReferenceDrop({ label, accept, reference, uploading, supported, unsupportedReason, note, onFile, onClear }: {
   label: string; accept: readonly string[]; reference: ReferenceImage | null; uploading: boolean;
-  supported: boolean; unsupportedReason: string; onFile: (f: File) => void; onClear: () => void;
+  supported: boolean; unsupportedReason: string; note?: string; onFile: (f: File) => void; onClear: () => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -42,7 +42,7 @@ export function ReferenceDrop({ label, accept, reference, uploading, supported, 
       </span>
       <span className="min-w-0">
         <span className="block text-sm text-foreground">{uploading ? "Uploading privately…" : `Add ${label.toLowerCase()}`}</span>
-        <span className="block truncate text-xs text-muted-foreground">{supported ? "Drop or browse · PNG, JPEG, WebP · 10 MB" : unsupportedReason}</span>
+        <span className="block truncate text-xs text-muted-foreground">{supported ? `Drop or browse · PNG, JPEG, WebP · 10 MB${note ? ` · ${note}` : ""}` : unsupportedReason}</span>
       </span>
       <input ref={input} type="file" hidden accept={accept.join(",")} onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }} />
     </button>

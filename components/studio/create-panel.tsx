@@ -3,7 +3,7 @@
 import { Clapperboard, Image as ImageIcon, Loader2, SlidersHorizontal, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { modelsFor, type OutputKind } from "@/lib/studio/catalog";
-import { optionSupported, paramsByTier, referenceSupported } from "@/lib/studio/manifest";
+import { optionSupported, paramsByTier, referenceReachable, referenceSupported } from "@/lib/studio/manifest";
 import { ParamControl } from "./param-control";
 import { ReferenceDrop } from "./reference-drop";
 import { AspectPicker } from "./aspect-picker";
@@ -22,7 +22,8 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
   const promptValue = String(values.prompt ?? "");
   const maxLen = prompt?.maxLength ?? 2000;
   const ref = manifest?.studio?.reference;
-  const refOk = manifest ? referenceSupported(manifest, values) : false;
+  const refNow = manifest ? referenceSupported(manifest, values) : false;
+  const refOk = manifest ? referenceReachable(manifest, values) : false;
   const generating = s.busy === "submitting";
   const advancedCount = manifest ? paramsByTier(manifest, "advanced").length : 0;
   const preview = manifest && model.availability === "available" ? generationPreview(model, manifest, values, s.reference) : null;
@@ -94,6 +95,7 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
             {ref && (
               <ReferenceDrop label={ref.label} accept={ref.accept} reference={s.reference} uploading={s.busy === "uploading"}
                 supported={refOk || !!s.reference} unsupportedReason="Not available with the current settings"
+                note={refOk && !refNow && !s.reference ? "Adding a first frame switches quality to Turbo" : undefined}
                 onFile={f => void s.uploadReference(f)} onClear={s.clearReference} />
             )}
 
