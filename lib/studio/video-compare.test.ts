@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
-  durationNote, formatFact, mutedFor, primaryVideoAsset, runFacts, speechAtStartCaution, videoCompareCandidates, createSeekMirror, nextAudibleOnVolumeChange,
+  durationNote, formatFact, mutedFor, primaryVideoAsset, runFacts, speechAtStartCaution, videoCompareCandidates, createSeekMirror, nextAudibleOnVolumeChange, shouldResumePlayer,
 } from "./video-compare";
 import type { StudioRun } from "@/components/studio/types";
 
@@ -145,5 +145,15 @@ describe("native volume controls", () => {
     expect(ui.match(/onVolumeChange=\{video => onVolumeChange\(side, video\)\}/g)).toHaveLength(2);
     expect(ui).toMatch(/other\.muted = true/);
     expect(player).toMatch(/onVolumeChange=\{e => onVolumeChange\?\.\(e\.currentTarget\)\}/);
+  });
+});
+
+describe("resume after unequal-duration playback", () => {
+  it("only resumes a paused player that has not already ended", () => {
+    expect(shouldResumePlayer({paused:true,ended:false})).toBe(true);
+    expect(shouldResumePlayer({paused:true,ended:true})).toBe(false);
+    expect(shouldResumePlayer({paused:false,ended:false})).toBe(false);
+    const ui=readFileSync("components/studio/video-compare.tsx","utf8");
+    expect(ui).toMatch(/vs\.filter\(shouldResumePlayer\)/);
   });
 });

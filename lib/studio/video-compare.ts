@@ -125,3 +125,8 @@ export function createSeekMirror() {
 export function nextAudibleOnVolumeChange(current: AudibleTrack, side: "a" | "b", muted: boolean): AudibleTrack {
   return muted ? (current === side ? "off" : current) : side;
 }
+
+/** A completed shorter clip must remain at its last frame on Pause/Resume. */
+export function shouldResumePlayer(video: Pick<HTMLVideoElement, "ended" | "paused">): boolean {
+  return video.paused && !video.ended;
+}

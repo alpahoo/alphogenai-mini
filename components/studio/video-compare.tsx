@@ -5,7 +5,7 @@ import { ArrowLeft, Info, Pause, Play, TriangleAlert, Volume2 } from "lucide-rea
 import { cn } from "@/lib/utils";
 import {
   AUDIO_EXPLANATION, FACT_ROWS, audioShiftCautionText, durationNote, formatFact, mutedFor, primaryVideoAsset,
-  runFacts, speechAtStartCaution, videoCompareCandidates, createSeekMirror, nextAudibleOnVolumeChange, type AudibleTrack,
+  runFacts, speechAtStartCaution, videoCompareCandidates, createSeekMirror, nextAudibleOnVolumeChange, shouldResumePlayer, type AudibleTrack,
 } from "@/lib/studio/video-compare";
 import { PrivateVideo } from "./private-video";
 import type { StudioRun } from "./types";
@@ -43,7 +43,7 @@ export function useMirroredPlayers() {
   }, []);
   const toggle = useCallback(() => {
     const vs = [a.current, b.current].filter(Boolean) as HTMLVideoElement[];
-    if (vs.some(v => !v.paused)) vs.forEach(v => v.pause()); else vs.forEach(v => void v.play().catch(() => undefined));
+    if (vs.some(v => !v.paused)) vs.forEach(v => v.pause()); else vs.filter(shouldResumePlayer).forEach(v => void v.play().catch(() => undefined));
   }, []);
   return { a, b, playing, playBothFromStart, toggle };
 }
