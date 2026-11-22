@@ -132,9 +132,15 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
       { action: "shot.preview", shot_id: shot.id, expected_version: saved.version });
     setPreview(p => ({ ...p, [shot.id]: d.preview }));
     if (!generate) return;
-    const price = s.readiness.cost?.reservation_usd;
-    const cost = typeof price === "number" ? "Estimated reservation: $" + price.toFixed(2) + ". " : "";
-    if (!window.confirm(cost + "Start ONE paid H3 generation for this plan? Other plans and their selected takes stay unchanged.")) return;
+    // The regular Studio may currently be displaying MOSS. Always quote and gate H3 itself.
+    const gate = await expectJson<{ ready: boolean; reason?: string; cost?: { reservation_usd: number | null } }>(
+      await fetch("/api/admin/comfy/runs?template=minimax-h3", { cache: "no-store" }));
+    if (!gate.ready) throw new Error(gate.reason || "H3 is not currently authorized.");
+    const price = gate.cost?.reservation_usd;
+    if (typeof price !== "number" || !Number.isFinite(price) || price <= 0)
+      throw new Error("H3 reservation price unavailable; paid generation not started.");
+    if (!window.confirm("H3 reservation: $" + price.toFixed(2) +
+      ". Start ONE paid generation for this plan? Other plans and selected takes remain unchanged.")) return;
     // Reuse the same key on a technical retry. The H3 admission RPC is idempotent.
     const key = "alphogen-cinema:" + saved.id + ":" + saved.version;
     let requestKey = keys.current.get(key);
