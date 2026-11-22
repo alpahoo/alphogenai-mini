@@ -162,6 +162,7 @@ describe("seek back into shorter finished clip", () => {
  it("resumes the shorter clip only after seeking it inside its playable time", () => {
   const a={paused:false};
   expect(shouldResumeMirroredTarget(a,{paused:true,ended:false,currentTime:2,duration:4})).toBe(true);
+  expect(shouldResumeMirroredTarget(a,{paused:true,ended:true,currentTime:2,duration:4})).toBe(true); // ended may be stale during seek
   expect(shouldResumeMirroredTarget(a,{paused:true,ended:true,currentTime:4,duration:4})).toBe(false);
   expect(shouldResumeMirroredTarget(a,{paused:true,ended:false,currentTime:4,duration:4})).toBe(false);
   expect(shouldResumeMirroredTarget({paused:true},{paused:true,ended:false,currentTime:2,duration:4})).toBe(false);

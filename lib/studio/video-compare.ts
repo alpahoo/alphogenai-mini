@@ -136,6 +136,7 @@ export function shouldResumeMirroredTarget(
   source: Pick<HTMLVideoElement, "paused">,
   target: Pick<HTMLVideoElement, "paused" | "ended" | "currentTime" | "duration">,
 ): boolean {
-  return !source.paused && target.paused && !target.ended &&
-    (!Number.isFinite(target.duration) || target.currentTime < target.duration);
+  // 'ended' may remain true until the seeked event settles. Position inside duration is decisive.
+  return !source.paused && target.paused &&
+    (!Number.isFinite(target.duration) || target.currentTime < target.duration - SYNC_TOLERANCE_S);
 }
