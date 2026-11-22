@@ -49,9 +49,15 @@ describe("Cinema drafts survive unrelated reloads",()=>{
   expect(result.two.action).toBe("New B");
   expect(result.two.duration).toBe(10);
  });
+  it("keeps the edited plan when a save refreshes without a reset marker",()=>{
+    const drafts={one:{action:"Typed while saving",duration:10,first_frame_path:""}};
+    const result=reconcileShotDrafts(db,drafts,new Set(["one"]));
+    expect(result.one).toEqual(drafts.one);
+  });
  it("replaces only clean drafts with fresh server values",()=>{
   const r=reconcileShotDrafts(db,{},new Set());
   expect(r.one).toEqual({action:"Saved A",duration:5,first_frame_path:""});
   expect(r.two).toEqual({action:"Saved B",duration:5,first_frame_path:""});
  });
 });
+

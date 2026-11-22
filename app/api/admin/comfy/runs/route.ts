@@ -31,12 +31,26 @@ export async function POST(req:Request) {
     const slug=templateFor(body.template);
     if(!slug)throw new InputError("Unknown template");
     const entry=TEMPLATES[slug];
+    const db=createServiceClient();
+    // Recovering an admission that already exists is not a new generation.
+    // Look it up before the gate/quota checks so a lost POST response can be
+    // retried after the remaining quota or budget has reached zero. The key
+    // and owner are both required; new keys still go through every gate below.
+    const {data:existing,error:existingError}=await db.from("comfy_runs")
+      .select("id").eq("user_id",auth.user.id).eq("idempotency_key",body.idempotency_key).maybeSingle();
+    if(existingError)return NextResponse.json({error:"Admission recovery unavailable"},{status:503,headers:privateHeaders});
+    if(existing?.id){
+      let dispatched=true;
+      const {data:outbox}=await db.from("comfy_dispatch_outbox").select("delivered_at")
+        .eq("run_id",existing.id).maybeSingle();
+      if(!outbox?.delivered_at){try{await dispatchRun(existing.id);}catch{dispatched=false;}}
+      return NextResponse.json({run_id:existing.id,dispatched,recovered:true},{status:202,headers:privateHeaders});
+    }
     if(process.env[entry.enabledEnv]!=="true" || !process.env.COMFY_DISPATCH_URL || !process.env.COMFY_DISPATCH_SECRET)
       return NextResponse.json({error:slug==="minimax-h3"?"H3 pilot is disabled":"This runtime is disabled"},{status:503});
     const resolved=entry.resolve(body.params,auth.user.id);
     const policy=screenPrompt(String(resolved.params.prompt));
     if(policy.blocked)return NextResponse.json({error:"Prompt does not meet the current content policy"},{status:400});
-    const db=createServiceClient();
     // A reference deleted since it was attached (one-off upload removed with its run, or library image deleted)
     // must never reach admission: nothing is reserved and no GPU call can start with a missing file.
     if(resolved.referencePath){
@@ -55,3 +69,4 @@ export async function POST(req:Request) {
     return NextResponse.json({run_id:runId,dispatched},{status:202,headers:privateHeaders});
   }catch(error){return NextResponse.json({error:error instanceof InputError?error.message:"Invalid request"},{status:400});}
 }
+

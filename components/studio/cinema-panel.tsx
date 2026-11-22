@@ -61,6 +61,7 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
   const keys = useRef(new Map<string, string>());
   const dirtyShots = useRef(new Set<string>());
   const draftBaseVersions = useRef(new Map<string, number>());
+  const draftRevisions = useRef(new Map<string, number>());
   const currentlyOpenedProject = useRef<string | null>(null);
   const loadProjects = useCallback(async () => {
     const data = await expectJson<{ projects: Project[] }>(await fetch(API, { cache: "no-store" }));
@@ -75,13 +76,14 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
     if (currentlyOpenedProject.current !== id) {
       currentlyOpenedProject.current = id;
       setResult(null); setCompare(null);
-      dirtyShots.current.clear(); draftBaseVersions.current.clear();
+      dirtyShots.current.clear(); draftBaseVersions.current.clear(); draftRevisions.current.clear();
     }
     setStory(data); setProjectId(id);
     setEdits(previous => reconcileShotDrafts(data.shots, previous, dirtyShots.current, savedShotId));
     if (savedShotId) {
       dirtyShots.current.delete(savedShotId);
       draftBaseVersions.current.delete(savedShotId);
+      draftRevisions.current.delete(savedShotId);
     }
   }, []);
   useEffect(() => {
@@ -122,9 +124,29 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
       draftBaseVersions.current.delete(shot.id);
       return shot;
     }
-    const saved = await post<{ shot: Shot }>({ action: "shot.update", shot_id: shot.id, version: shot.version,
-      description: edit.action, duration: edit.duration, first_frame_path: newPath });
-    await loadProject(story.project.id, shot.id);
+    const revisionAtStart = draftRevisions.current.get(shot.id) ?? 0;
+    let saved: { shot: Shot };
+    try {
+      saved = await post<{ shot: Shot }>({ action: "shot.update", shot_id: shot.id, version: shot.version,
+        description: edit.action, duration: edit.duration, first_frame_path: newPath });
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("changed elsewhere")) {
+        // Keep the local draft and refresh only the server snapshot so the
+        // conflict is visible without destroying the user's edits.
+        await loadProject(story.project.id);
+        throw new Error("Ce plan a changé ailleurs. Le brouillon local est conservé; recharge ou réconcilie-le avant de sauvegarder.");
+      }
+      throw error;
+    }
+    const changedDuringSave = (draftRevisions.current.get(shot.id) ?? 0) !== revisionAtStart;
+    if (changedDuringSave) {
+      // Refresh server state, but reconcileShotDrafts keeps the newer local
+      // edits. They now build on the version returned by this successful save.
+      await loadProject(story.project.id);
+      draftBaseVersions.current.set(shot.id, saved.shot.version);
+    } else {
+      await loadProject(story.project.id, shot.id);
+    }
     return saved.shot;
   };
   const save = (shot: Shot) => void doWork("save:" + shot.id, async () => { await saveShot(shot); setNotice("Plan saved."); });
@@ -147,6 +169,29 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
       { action: "shot.preview", shot_id: shot.id, expected_version: saved.version });
     setPreview(p => ({ ...p, [shot.id]: d.preview }));
     if (!generate) return;
+    // Reuse the same key on a technical retry. The H3 admission RPC is idempotent.
+    const key = "alphogen-cinema:" + saved.id + ":" + saved.version;
+    let requestKey = keys.current.get(key);
+    if (!requestKey) {
+      try { requestKey = sessionStorage.getItem(key) || undefined; } catch { /* memory fallback */ }
+    }
+    // A prior admission may have succeeded while its response was lost. Try
+    // recovery first; this path does not create a new run or consume quota.
+    if (requestKey) {
+      const recovery = await fetch("/api/admin/comfy/runs", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template: "minimax-h3", idempotency_key: requestKey, params: d.preview.params }),
+      });
+      if (recovery.ok) {
+        const run = await expectJson<{ run_id: string }>(recovery);
+        await post({ action: "take.attach", shot_id: shot.id, run_id: run.run_id });
+        await loadProject(story.project.id);
+        keys.current.delete(key);
+        try { sessionStorage.removeItem(key); } catch { /* optional */ }
+        setNotice("Rendu H3 déjà admis récupéré; aucun nouveau quota consommé.");
+        return;
+      }
+    }
     // The regular Studio may currently be displaying MOSS. Always quote and gate H3 itself.
     const gate = await expectJson<{ ready: boolean; reason?: string; cost?: { reservation_usd: number | null } }>(
       await fetch("/api/admin/comfy/runs?template=minimax-h3", { cache: "no-store" }));
@@ -156,12 +201,6 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
       throw new Error("H3 reservation price unavailable; paid generation not started.");
     if (!window.confirm("H3 reservation: $" + price.toFixed(2) +
       ". Start ONE paid generation for this plan? Other plans and selected takes remain unchanged.")) return;
-    // Reuse the same key on a technical retry. The H3 admission RPC is idempotent.
-    const key = "alphogen-cinema:" + saved.id + ":" + saved.version;
-    let requestKey = keys.current.get(key);
-    if (!requestKey) {
-      try { requestKey = sessionStorage.getItem(key) || undefined; } catch { /* memory fallback */ }
-    }
     if (!requestKey) requestKey = crypto.randomUUID();
     keys.current.set(key, requestKey);
     try { sessionStorage.setItem(key, requestKey); } catch { /* optional */ }
@@ -198,6 +237,7 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
   const edit = (shot: Shot, k: keyof Edit, v: string | number) => {
     if (!dirtyShots.current.has(shot.id)) draftBaseVersions.current.set(shot.id, shot.version);
     dirtyShots.current.add(shot.id);
+    draftRevisions.current.set(shot.id, (draftRevisions.current.get(shot.id) ?? 0) + 1);
     setEdits(prev => ({ ...prev, [shot.id]: { ...prev[shot.id], [k]: v } }));
   };
   return (
@@ -309,3 +349,4 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
     </main>
   );
 }
+
