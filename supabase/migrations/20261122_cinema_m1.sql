@@ -1,5 +1,8 @@
 -- PREPARED ONLY: Cinema M1. Do not apply to production without owner approval.
 -- Adds admin-private project metadata; H3 and MOSS budgets, jobs and media are untouched.
+-- The only change to an existing table: a UNIQUE (id,user_id) on public.comfy_runs, a superset of its primary
+-- key, so cinema_takes can reference the run together with its owner. Additive, no data or gate change.
+alter table public.comfy_runs add constraint comfy_runs_id_user_key unique (id,user_id);
 create table public.cinema_projects (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id),
@@ -66,10 +69,14 @@ create table public.cinema_takes (
   user_id uuid not null references auth.users(id),
   project_id uuid not null,
   shot_id uuid not null,
-  run_id uuid not null references public.comfy_runs(id) on delete restrict,
+  run_id uuid not null,
   created_at timestamptz not null default now(),
   foreign key(project_id,user_id) references public.cinema_projects(id,user_id) on delete cascade,
   foreign key(shot_id,project_id,user_id) references public.cinema_shots(id,project_id,user_id) on delete cascade,
+  -- The run must belong to the same owner as the take, enforced by the database (also for the service role).
+  -- RESTRICT: a run referenced by a take is never hard-deleted (the Studio deletion keeps a tombstone row,
+  -- so the take stays visible as "unavailable"); deleting a project removes its takes and keeps every run.
+  foreign key(run_id,user_id) references public.comfy_runs(id,user_id) on delete restrict,
   unique(shot_id,run_id),
   unique(shot_id,id)
 );
