@@ -32,7 +32,11 @@ export type ElementKind = "character" | "location" | "prop";
 export interface Look { filmStock?: string; grade?: string; lensFamily?: string; lighting?: string }
 export interface Project { aspect: string; look: Look }
 /** Cast, place or prop. `refPaths` are private reference paths (library images), in the order of the fiche. */
-export interface Element { id: string; kind: ElementKind; name: string; description: string; refPaths: string[] }
+export interface Element {
+  id: string; kind: ElementKind; name: string; description: string; refPaths: string[];
+  /** How the element's reference images are framed, as a shot size id (Luz full-length image: "full"). Unknown when absent. */
+  refFraming?: string;
+}
 export interface Shot {
   action: string; size: string; angle: string; movement: string; lens: string; focus: string; lighting: string; mood: string;
   /** Planned seconds. */
@@ -53,7 +57,13 @@ export interface Composed {
   referencePath: string | null;
   /** Things the member may want to know: references left out, a ratio the model lacks... */
   notes: string[];
+  /** Non-blocking cautions that can spoil the result (a shot much tighter than the first frame). The prompt and values are not changed. */
+  warnings: string[];
+  /** Set with the first-frame framing warning, so a screen can offer the matching shot size. */
+  framingWarning: FramingWarning | null;
 }
+
+export interface FramingWarning { firstFrame: string; requested: string; suggestedSize: string }
 
 /** What a shot with nothing filled in sends as its prompt. */
 export const EMPTY_PROMPT = "A cinematic shot.";
@@ -147,6 +157,30 @@ function baseValues(view: ModelView, mode: Mode, project: Project, shot: Shot, h
   return values;
 }
 
+/**
+ * Shot sizes on a wide-to-tight scale. Insert, over-the-shoulder, point-of-view and two-shot are not on it.
+ * A first image fixes the framing of the first frame. When the shot asks for a much tighter size, the model has to
+ * leave that framing at the start. Observed once in the Luz pilot (22/11/2026): a medium shot started from a
+ * full-length image gave a double translucent silhouette; a full shot and a wide shot with the same image kept the
+ * image exactly. That is one observation, so the warning only fires on a clear gap and never blocks.
+ */
+export const FRAMING_SCALE = ["extreme-wide", "wide", "full", "medium-wide", "medium", "medium-close", "close-up", "extreme-close"] as const;
+/** Steps tighter than the first frame at which the caution appears (full -> medium is 2 steps). */
+export const TIGHTER_STEPS_WARNING = 2;
+
+export function framingStep(id: string | null | undefined): number | null {
+  const i = FRAMING_SCALE.indexOf(id as (typeof FRAMING_SCALE)[number]);
+  return i < 0 ? null : i;
+}
+
+const sizeLabel = (id: string) => (presetById(SHOT_SIZES, id)?.label ?? id).toLowerCase();
+
+function framingCaution(shotSize: string, firstFrameFraming: string | undefined): FramingWarning | null {
+  const first = framingStep(firstFrameFraming), asked = framingStep(shotSize);
+  if (first === null || asked === null || asked - first < TIGHTER_STEPS_WARNING) return null;
+  return { firstFrame: firstFrameFraming as string, requested: shotSize, suggestedSize: firstFrameFraming as string };
+}
+
 export function composeShot(opts: {
   userId: string; project: Project; shot: Shot; elements: Element[]; mode: Mode; model: StudioModel;
   /** Existence check for reference files, supplied by the caller (storage). Defaults to "exists". */
@@ -163,9 +197,17 @@ export function composeShot(opts: {
 
   const { usable, skipped } = gatherReferences(userId, shot, elements, opts.exists);
   let referencePath: string | null = null;
+  const warnings: string[] = [];
+  let framingWarning: FramingWarning | null = null;
   if (mode === "animate") {
     if (!usable.length) throw new CinemaError("no_first_frame", "This shot has no usable reference image for the first frame. Add one to the cast or the place.");
     referencePath = usable[0];
+    const owner = [...shot.castIds, ...(shot.locationId ? [shot.locationId] : [])].map(id => elements.find(e => e.id === id)).find(e => e?.refPaths.includes(usable[0]));
+    framingWarning = framingCaution(shot.size, owner?.refFraming);
+    if (framingWarning) {
+      const first = sizeLabel(framingWarning.firstFrame), asked = sizeLabel(framingWarning.requested);
+      warnings.push(`The first frame is a ${first} but this shot asks for a ${asked}. In a pilot test, a medium shot started from a full-length image gave a double silhouette. Ask for a ${first} with a slow push-in, or use a first image framed like the shot.`);
+    }
     const left = usable.length - 1, max = view.reference?.max ?? 1;
     if (left > 0) notes.push(`${view.title} takes ${max} reference image${max > 1 ? "s" : ""} (the ${view.reference?.label.toLowerCase() ?? "reference"}); ${left} other${left > 1 ? "s were" : " was"} left out.`);
   } else if (usable.length && mode === "text") {
@@ -190,7 +232,7 @@ export function composeShot(opts: {
     notes.push(`Quality set to ${q}: it is the only validated workflow with a first frame.`);
     values.quality = q;
   }
-  return { modelSlug: view.slug, mode, prompt, values, referencePath, notes };
+  return { modelSlug: view.slug, mode, prompt, values, referencePath, notes, warnings, framingWarning };
 }
 
 /** The parameter object the run API expects (`POST /api/admin/comfy/runs`, field `params`). */

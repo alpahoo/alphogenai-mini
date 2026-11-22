@@ -4,7 +4,7 @@ import { resolveTemplate } from "@/lib/comfy/template";
 import { STUDIO_MODELS } from "@/lib/studio/catalog";
 import { resolveVariant, validateValues, type StudioManifest } from "@/lib/studio/manifest";
 import { fileNameFor, libraryPath } from "@/lib/studio/reference-library";
-import { CinemaError, EMPTY_PROMPT, composePrompt, composeShot, gatherReferences, toRunParams, usableReferencePath, type Element, type Project, type Shot } from "./compose";
+import { CinemaError, EMPTY_PROMPT, FRAMING_SCALE, TIGHTER_STEPS_WARNING, composePrompt, composeShot, framingStep, gatherReferences, toRunParams, usableReferencePath, type Element, type Project, type Shot } from "./compose";
 import { modelView } from "./model-view";
 import { ANGLES, CATALOG, FILM_STOCKS, FOCUS, GRADES, LENSES, LENS_FAMILIES, LIGHTING_STYLES, MOODS, MOVEMENTS, SHOT_SIZES } from "./presets";
 
@@ -211,5 +211,61 @@ describe("the composer is pure and read only", () => {
   it("keeps the Parallax licence next to the ported code", () => {
     expect(readFileSync("lib/cinema/LICENSE-parallax.txt", "utf8")).toMatch(/MIT License[\s\S]*Copyright \(c\) 2026 Nick Vasilescu/);
     expect(readFileSync("lib/cinema/presets.ts", "utf8")).toMatch(/a98671e3c47fdb12c42789aee821268aa8f23f6c/);
+  });
+});
+
+describe("framing caution: a shot much tighter than the first frame (Luz pilot, 22/11/2026)", () => {
+  const luzFull: Element = { ...luz, refFraming: "full" };
+  const withSize = (size: string) => compose({ elements: [luzFull], shot: { ...shot, size } });
+
+  it("warns for the pilot case: a medium shot from the full-length Luz image", () => {
+    const out = withSize("medium");
+    expect(out.framingWarning).toEqual({ firstFrame: "full", requested: "medium", suggestedSize: "full" });
+    expect(out.warnings).toEqual([
+      "The first frame is a full but this shot asks for a medium. In a pilot test, a medium shot started from a full-length image gave a double silhouette. Ask for a full with a slow push-in, or use a first image framed like the shot.",
+    ]);
+  });
+
+  it("does not warn for what worked in the pilot: the same framing (full) or wider (wide)", () => {
+    expect(withSize("full").warnings).toEqual([]);
+    expect(withSize("wide").warnings).toEqual([]);
+    expect(withSize("extreme-wide").framingWarning).toBeNull();
+  });
+
+  it("warns from two steps tighter only: one step (medium wide) is untested, so it does not warn", () => {
+    expect(withSize("medium-wide").framingWarning).toBeNull();
+    for (const tight of ["medium", "medium-close", "close-up", "extreme-close"]) expect(withSize(tight).framingWarning?.requested).toBe(tight);
+  });
+
+  it("is silent when the framing of the image is unknown, when the size is off the scale or empty, and for stills or text video", () => {
+    expect(compose({ shot: { ...shot, size: "close-up" } }).warnings).toEqual([]);
+    for (const size of ["", "insert", "over-shoulder", "pov", "two-shot"]) expect(withSize(size).warnings).toEqual([]);
+    expect(compose({ elements: [luzFull], shot: { ...shot, size: "close-up" }, mode: "text" }).warnings).toEqual([]);
+    expect(composeShot({ userId: UID, project, shot: { ...shot, size: "close-up" }, elements: [luzFull], mode: "still", model: MOSS }).warnings).toEqual([]);
+  });
+
+  it("uses the framing of the element that owns the image actually sent", () => {
+    const other: Element = { id: "cel_face", kind: "character", name: "Face", description: "", refPaths: [lib("Face", 7)], refFraming: "close-up" };
+    // The first usable image belongs to the face element: a close-up shot matches it, so no caution.
+    const faceFirst = compose({ elements: [luzFull, other], shot: { ...shot, size: "close-up", castIds: ["cel_face", "cel_luz"] } });
+    expect(faceFirst.referencePath).toBe(lib("Face", 7));
+    expect(faceFirst.warnings).toEqual([]);
+    // Luz first: the same close-up shot is now far from the full-length image.
+    expect(compose({ elements: [luzFull, other], shot: { ...shot, size: "close-up", castIds: ["cel_luz", "cel_face"] } }).framingWarning).not.toBeNull();
+  });
+
+  it("never changes the prompt, the values or the selected image (non-blocking)", () => {
+    const withWarning = withSize("medium"), without = compose({ shot: { ...shot, size: "medium" } });
+    expect(withWarning.prompt).toBe(without.prompt);
+    expect(withWarning.values).toEqual(without.values);
+    expect(withWarning.referencePath).toBe(without.referencePath);
+    expect(without.warnings).toEqual([]);
+  });
+
+  it("the scale follows the preset order and covers the sizes the pilot used", () => {
+    const ids = SHOT_SIZES.map(s => s.id).filter(id => (FRAMING_SCALE as readonly string[]).includes(id));
+    expect(ids).toEqual([...FRAMING_SCALE]);
+    expect(TIGHTER_STEPS_WARNING).toBe(2);
+    expect(framingStep("full")).toBe(2); expect(framingStep("medium")).toBe(4); expect(framingStep("pov")).toBeNull(); expect(framingStep(undefined)).toBeNull();
   });
 });

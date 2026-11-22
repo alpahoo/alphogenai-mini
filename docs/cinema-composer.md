@@ -13,6 +13,10 @@ Source: Parallax (MIT, Copyright (c) 2026 Nick Vasilescu), commit `a98671e3c47fd
 - Starts from the manifest defaults like the Studio form (for H3 the validated 0.4 s audio advance), and keeps only declared overrides, never the prompt.
 - `toRunParams` builds the object the run API already validates (`first_frame_path` and the declared parameters), so the server remains the only authority.
 
+## Framing caution (non-blocking)
+
+An element can declare how its reference images are framed (`refFraming`, a shot size id; Luz full-length image: `full`). In animate mode, if the shot asks for a size at least two steps tighter than that framing, `warnings` and `framingWarning` are set (with the suggested size) and nothing else changes: same prompt, same values, same image. Source: the Luz pilot (22/11/2026), where a medium shot from the full-length image gave a double silhouette, while full and wide shots kept the image. One observation, so the threshold is two steps and one step (medium wide) does not warn. Unknown framing, off-scale sizes, stills and text video never warn.
+
 ## Proven by tests (Luz case, real library path)
 
 Exact prompt; parameters 9:16, 5 s, turbo; valid for the H3 manifest; variant `i2v`; the Luz library image selected among unusable and extra candidates; accepted by `resolveTemplate` (480 × 832, 124 frames, `first_frame.png`) and refused for another owner; deterministic; MOSS gets no reference; wrong combinations refused.
