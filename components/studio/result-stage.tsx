@@ -1,13 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Copy, Download, Film, Image as ImageIcon, Loader2, Play, RefreshCw, Shuffle, SplitSquareHorizontal } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AlertTriangle, Copy, Download, Film, Image as ImageIcon, Loader2, RefreshCw, Shuffle, SplitSquareHorizontal, Columns2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { errorMessage, formatElapsed, isActive } from "@/lib/studio/status";
 import { financeView, stageView, type StageInput } from "@/lib/studio/stage";
 import { modelForTemplateVersion } from "@/lib/studio/catalog";
 import { ImageCompare, ImageDownloads, PrivateImage } from "./image-result";
-import type { StudioAsset, StudioRun } from "./types";
+import { PrivateVideo } from "./private-video";
+import { AudioCaution, AudioInfo, VersionCompare, VideoRunCompare } from "./video-compare";
+import { videoCompareCandidates } from "@/lib/studio/video-compare";
+import type { StudioRun } from "./types";
 import type { StudioState } from "./use-studio";
 
 const ROLE_LABEL: Record<string, string> = { final: "Corrected", raw: "Original" };
@@ -31,33 +34,10 @@ function useNow(active: boolean) {
   return now;
 }
 
-/** Private video with signed-URL refresh when a link expires. */
-function PrivateVideo({ asset, s, videoRef, muted, className }: { asset: StudioAsset; s: StudioState; videoRef?: React.Ref<HTMLVideoElement>; muted?: boolean; className?: string }) {
-  const [url, setUrl] = useState<string | null>(s.media[asset.id]?.url ?? null);
-  const [failed, setFailed] = useState(false);
-  const retried = useRef(false);
-  const { signMedia } = s;
-  useEffect(() => {
-    let live = true; retried.current = false; setFailed(false);
-    signMedia(asset.id).then(u => { if (live) setUrl(u); }).catch(() => { if (live) setFailed(true); });
-    return () => { live = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sign once per asset; refresh handled on error
-  }, [asset.id]);
-  const onError = useCallback(async () => {
-    if (retried.current) { setFailed(true); return; }
-    retried.current = true;
-    try { setUrl(await signMedia(asset.id, { force: true })); } catch { setFailed(true); }
-  }, [asset.id, signMedia]);
-  if (failed) return <div className={cn("grid place-items-center bg-black/40 text-sm text-muted-foreground", className)}>Private link unavailable</div>;
-  if (!url) return <div className={cn("grid place-items-center bg-black/40", className)}><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
-  return <video ref={videoRef} key={url} src={url} controls playsInline muted={muted} preload="metadata" onError={onError} className={cn("bg-black object-contain", className)} />;
-}
-
 export function ResultStage({ s }: { s: StudioState }) {
   const run = s.current;
   const now = useNow(!!run && isActive(run.status));
-  const [view, setView] = useState<"final" | "raw" | "compare">("final");
-  const left = useRef<HTMLVideoElement>(null), right = useRef<HTMLVideoElement>(null);
+  const [view, setView] = useState<"final" | "raw" | "compare" | "runs">("final");
   useEffect(() => setView("final"), [run?.id]);
 
   if (!run) {
@@ -89,12 +69,14 @@ export function ResultStage({ s }: { s: StudioState }) {
   const runModel = modelForTemplateVersion(run.template_version);
   const isImage = runModel.kind === "image";
 
-  const playBoth = () => {
-    for (const v of [left.current, right.current]) if (v) { v.currentTime = 0; void v.play().catch(() => undefined); }
-  };
+  const singleVideo = run.status === "done" && !isImage && !!final && (view === "final" || view === "raw");
+  const videoDone = run.status === "done" && !isImage && assets.length > 0;
+  const comparing = videoDone && (view === "runs" || view === "compare");
+  const videoOthers = isImage ? [] : videoCompareCandidates(s.history, run.id);
+  const showView = (v: typeof view) => { setView(v); s.setCompareWith(v === "runs" ? (s.compareWith ?? videoOthers[0]?.id ?? null) : null); };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className={cn("flex h-full flex-col", videoDone && "max-lg:overflow-y-auto")}>
       <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5">
         <div className="flex min-w-0 items-center gap-3">
           <StatusPill status={run.status} run={run} />
@@ -105,36 +87,30 @@ export function ResultStage({ s }: { s: StudioState }) {
         {run.status === "done" && isImage && <ImageTabs s={s} run={run} />}
         {run.status === "done" && !isImage && (
           <div className="flex items-center gap-1 rounded-xl border border-border/60 bg-muted/40 p-1" role="tablist" aria-label="Result version">
-            {(["final", "raw", "compare"] as const).filter(v => v !== "compare" || (final && raw)).map(v => (
-              <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)}
-                className={cn("inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition", view === v ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground")}>
-                {v === "compare" && <SplitSquareHorizontal className="h-3.5 w-3.5" />}{v === "compare" ? "Compare" : ROLE_LABEL[v]}
-              </button>
-            ))}
+            {(["final", "raw", "compare", "runs"] as const).filter(v => v !== "compare" || (final && raw)).map(v => {
+              const noOther = v === "runs" && videoOthers.length === 0;
+              return (
+                <button key={v} type="button" role="tab" aria-selected={view === v} disabled={noOther} onClick={() => showView(v)}
+                  title={noOther ? "Generate another video to compare two runs" : v === "runs" ? "Compare with another generation" : v === "compare" ? "Original and Corrected side by side" : undefined}
+                  className={cn("inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition disabled:opacity-40 lg:min-h-7", view === v ? "bg-background text-foreground shadow-sm ring-1 ring-border" : "text-muted-foreground hover:text-foreground")}>
+                  {v === "compare" && <SplitSquareHorizontal className="h-3.5 w-3.5" />}{v === "runs" && <Columns2 className="h-3.5 w-3.5" />}
+                  {v === "compare" ? "Compare" : v === "runs" ? "Compare runs" : ROLE_LABEL[v]}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1 items-center justify-center p-5">
+      <div className={cn("flex min-h-0 flex-1 flex-col", videoDone && "lg:overflow-y-auto")}>
+      <div className={cn("flex flex-1 justify-center p-5", videoDone ? "min-h-[260px]" : "min-h-0", comparing ? "items-start" : "items-center")}>
         {run.status === "done" && assets.length > 0 && isImage ? (
           s.compareWith && raw ? <ImageCompare s={s} run={run} />
             : raw ? <PrivateImage asset={raw} s={s} sizes={runModel.manifest?.resolutions} aspect={aspect} className="max-h-full max-w-full rounded-2xl shadow-2xl shadow-black/40" /> : null
         ) : run.status === "done" && assets.length > 0 ? (
-          view === "compare" && final && raw ? (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-3">
-              <div className="grid h-full max-h-[70vh] w-full grid-cols-2 gap-3">
-                {[raw, final].map((a, i) => (
-                  <figure key={a.id} className="flex min-h-0 flex-col gap-2">
-                    <PrivateVideo asset={a} s={s} videoRef={i === 0 ? left : right} muted={i === 0} className="min-h-0 w-full flex-1 rounded-2xl" />
-                    <figcaption className="text-center text-xs text-muted-foreground">{ROLE_LABEL[a.role]}{i === 0 ? " · muted" : ""}</figcaption>
-                  </figure>
-                ))}
-              </div>
-              <button type="button" onClick={playBoth} className="inline-flex items-center gap-1.5 rounded-xl border border-border/60 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground"><Play className="h-3.5 w-3.5" />Play both from start</button>
-            </div>
-          ) : (
-            (() => { const a = view === "raw" ? raw : final ?? raw; return a ? <PrivateVideo asset={a} s={s} className={cn("max-h-full w-auto max-w-full rounded-2xl shadow-2xl shadow-black/40", ratio, "h-full")} /> : null; })()
-          )
+          view === "runs" ? <VideoRunCompare s={s} run={run as StudioRun} onClose={() => showView("final")} />
+          : view === "compare" && final && raw ? <VersionCompare s={s} run={run as StudioRun} />
+          : (() => { const a = view === "raw" ? raw : final ?? raw; return a ? <PrivateVideo asset={a} s={s} label={view === "raw" ? "Original" : "Corrected"} className={cn("max-h-full w-auto max-w-full rounded-2xl shadow-2xl shadow-black/40", ratio, "h-full")} /> : null; })()
         ) : run.status === "loading" ? (
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-label="Loading run" />
         ) : isActive(run.status) ? (
@@ -155,6 +131,11 @@ export function ResultStage({ s }: { s: StudioState }) {
             <p className="mt-3 text-xs text-muted-foreground/80">The reservation stays committed until invoice reconciliation. A new run needs a fresh authorization.</p>
           </div>
         )}
+      </div>
+
+      {singleVideo && (
+        <div className="space-y-2 px-5 pb-2"><AudioCaution run={run as StudioRun} /><AudioInfo /></div>
+      )}
       </div>
 
       {finance && <p className="px-5 pb-2 text-xs text-muted-foreground" title={finance.description}>{finance.label}: {finance.description}</p>}
