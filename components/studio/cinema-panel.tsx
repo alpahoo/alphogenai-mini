@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MAX_NAME_LENGTH as MONTAGE_NAME_LENGTH } from "@/lib/montage/files";
 import { reconcileShotDrafts, selectedRunsForMontage, type CinemaScene, type CinemaShot, type CinemaTake } from "@/lib/cinema/m1";
 import type { StudioState } from "./use-studio";
 
@@ -59,6 +60,8 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
   const [notice, setNotice] = useState("");
   const keys = useRef(new Map<string, string>());
   const dirtyShots = useRef(new Set<string>());
+  const draftBaseVersions = useRef(new Map<string, number>());
+  const currentlyOpenedProject = useRef<string | null>(null);
   const loadProjects = useCallback(async () => {
     const data = await expectJson<{ projects: Project[] }>(await fetch(API, { cache: "no-store" }));
     setProjects(data.projects);
@@ -69,9 +72,17 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
   }, []);
   const loadProject = useCallback(async (id: string, savedShotId?: string) => {
     const data = await expectJson<Storyboard>(await fetch(API + "?project=" + encodeURIComponent(id), { cache: "no-store" }));
+    if (currentlyOpenedProject.current !== id) {
+      currentlyOpenedProject.current = id;
+      setResult(null); setCompare(null);
+      dirtyShots.current.clear(); draftBaseVersions.current.clear();
+    }
     setStory(data); setProjectId(id);
     setEdits(previous => reconcileShotDrafts(data.shots, previous, dirtyShots.current, savedShotId));
-    if (savedShotId) dirtyShots.current.delete(savedShotId);
+    if (savedShotId) {
+      dirtyShots.current.delete(savedShotId);
+      draftBaseVersions.current.delete(savedShotId);
+    }
   }, []);
   useEffect(() => {
     void loadProjects().catch(e => setError(e instanceof Error ? e.message : "Projects unavailable"));
@@ -101,10 +112,14 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
   const saveShot = async (shot: Shot): Promise<Shot> => {
     const edit = edits[shot.id];
     if (!edit || !story) throw new Error("Plan is not loaded.");
+    const originalVersion = draftBaseVersions.current.get(shot.id);
+    if (originalVersion !== undefined && originalVersion !== shot.version)
+      throw new Error("This plan changed in another tab. Reload it before saving your draft.");
     const newPath = edit.first_frame_path || null;
     // A no-op save must not increment the generation version, or retries can get a new paid run key.
     if (shot.action === edit.action && shot.duration === edit.duration && shot.first_frame_path === newPath) {
       dirtyShots.current.delete(shot.id);
+      draftBaseVersions.current.delete(shot.id);
       return shot;
     }
     const saved = await post<{ shot: Shot }>({ action: "shot.update", shot_id: shot.id, version: shot.version,
@@ -168,7 +183,7 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
     const ordered = selectedRunsForMontage(story.scenes, story.shots, story.takes, completed);
     const d = await expectJson<{ item: { id: string; url: string | null }; duration_s: number }>(
       await fetch("/api/admin/studio/montages", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ run_ids: ordered, audio: "corrected", name: story.project.title + " final" }) }));
+        body: JSON.stringify({ run_ids: ordered, audio: "corrected", name: (story.project.title.slice(0, MONTAGE_NAME_LENGTH - 6).trim() || "Cinema") + " final" }) }));
     setResult({ ...d.item, duration_s: d.duration_s });
     setNotice("Montage created with Corrected audio. Source clips are kept.");
   });
@@ -181,6 +196,7 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
   const assetsByRun = new Map((story?.assets ?? []).filter(a => a.role === "final").map(a => [a.run_id, a]));
   const takesFor = (shot: Shot) => (story?.takes ?? []).filter(t => t.shot_id === shot.id);
   const edit = (shot: Shot, k: keyof Edit, v: string | number) => {
+    if (!dirtyShots.current.has(shot.id)) draftBaseVersions.current.set(shot.id, shot.version);
     dirtyShots.current.add(shot.id);
     setEdits(prev => ({ ...prev, [shot.id]: { ...prev[shot.id], [k]: v } }));
   };
@@ -195,7 +211,7 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
       <div className="flex flex-wrap gap-2">
         <label className="min-w-[10rem] flex-1 text-sm">Open project
           <select className={inputClass} value={projectId} onChange={e => void doWork("open", async () => {
-            if (e.target.value) await loadProject(e.target.value); else { setProjectId(""); setStory(null); }
+            if (e.target.value) await loadProject(e.target.value); else { setProjectId(""); setStory(null); setResult(null); setCompare(null); currentlyOpenedProject.current = null; dirtyShots.current.clear(); draftBaseVersions.current.clear(); }
           })}>
             <option value="">Choose a project</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
           </select>
