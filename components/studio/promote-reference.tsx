@@ -26,6 +26,7 @@ export function PromoteReference({ asset }: { asset: StudioAsset }) {
       const res = await fetch("/api/admin/studio/references/promote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ asset_id: asset.id, name: clean }) });
       const d = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(d.error ?? "Could not save the reference");
+      window.dispatchEvent(new Event("studio:reference-promoted"));
       setSaved(clean); setOpen(false); setName("");
     } catch (e) { setError(e instanceof Error ? e.message : "Could not save the reference"); }
     finally { setBusy(false); }
