@@ -19,16 +19,17 @@ import type { StudioState } from "./use-studio";
 export function useMirroredPlayers() {
   const a = useRef<HTMLVideoElement | null>(null), b = useRef<HTMLVideoElement | null>(null);
   const [playing, setPlaying] = useState(false);
+  // Persist across state-driven re-renders: a native seeked can arrive after effect reattachment.
+  const mirrorSeek = useRef(createSeekMirror());
 
   useEffect(() => {
     const va = a.current, vb = b.current;
     if (!va || !vb) return;
-    const mirrorSeek = createSeekMirror();
     const mirror = (src: HTMLVideoElement, dst: HTMLVideoElement) => {
       // Idempotent checks (not flags): applying a change to the other player re-fires its event, which then does nothing.
       const onPlay = () => { setPlaying(true); if (dst.paused && !dst.ended) void dst.play().catch(() => undefined); };
       const onPause = () => { if (src.ended) return; if (!dst.paused) dst.pause(); setPlaying(false); };
-      const onSeeked = () => mirrorSeek(src, dst);
+      const onSeeked = () => mirrorSeek.current(src, dst);
       src.addEventListener("play", onPlay); src.addEventListener("pause", onPause); src.addEventListener("seeked", onSeeked);
       return () => { src.removeEventListener("play", onPlay); src.removeEventListener("pause", onPause); src.removeEventListener("seeked", onSeeked); };
     };
