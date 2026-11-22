@@ -4,11 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, FolderOpen, Loader2, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MAX_NAME_LENGTH, cleanName, type LibraryItem } from "@/lib/studio/reference-library";
+import { MAX_INPUT_BYTES, fitImage, uploadFailureMessage } from "@/lib/studio/image-fit";
 import type { StudioState } from "./use-studio";
 
 async function api<T>(res: Response): Promise<T> {
   const d = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(d.error ?? "Reference library unavailable");
+  if (!res.ok) throw new Error(uploadFailureMessage(res.status, d.error, "Reference library unavailable"));
   return d;
 }
 
@@ -21,6 +22,7 @@ export function ReferenceLibrary({ s, label, enabled }: { s: StudioState; label:
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [max, setMax] = useState(60);
   const [error, setError] = useState("");
+  const [note, setNote] = useState("");
   const [confirming, setConfirming] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [pending, setPending] = useState<{ file: File; name: string } | null>(null);
@@ -39,11 +41,13 @@ export function ReferenceLibrary({ s, label, enabled }: { s: StudioState; label:
     if (!pending) return;
     const name = cleanName(pending.name);
     if (!name) { setError(`Give the reference a name (1 to ${MAX_NAME_LENGTH} characters)`); return; }
-    setBusy("save"); setError("");
+    setBusy("save"); setError(""); setNote("");
     try {
-      const form = new FormData(); form.append("file", pending.file); form.append("name", name);
+      // Above the hosting platform's request limit the image is resized here, never refused with an opaque 413.
+      const fitted = await fitImage(pending.file);
+      const form = new FormData(); form.append("file", fitted.file); form.append("name", name);
       const d = await api<{ item: LibraryItem }>(await fetch("/api/admin/studio/references", { method: "POST", body: form }));
-      setItems(prev => [d.item, ...(prev ?? [])]); setPending(null);
+      setItems(prev => [d.item, ...(prev ?? [])]); setPending(null); setNote(fitted.note ?? "");
     } catch (e) { setError(e instanceof Error ? e.message : "Upload failed"); }
     finally { setBusy(null); }
   };
@@ -68,8 +72,9 @@ export function ReferenceLibrary({ s, label, enabled }: { s: StudioState; label:
       </button>
       {open && (
         <div className="space-y-3 rounded-2xl border border-border/60 bg-muted/20 p-3">
-          <p className="text-xs text-muted-foreground">Saved images, kept until you delete them. Choose one as the {label.toLowerCase()}; it is not removed when a generation is deleted.</p>
+          <p className="text-xs text-muted-foreground">Saved images, kept until you delete them. Choose one as the {label.toLowerCase()}; it is not removed when a generation is deleted. Large images are resized automatically.</p>
           {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
+          {note && <p role="status" className="text-xs text-muted-foreground">{note}</p>}
           {items === null ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Loading library" />
             : items.length === 0 ? <p className="text-xs text-muted-foreground">No saved image yet.</p>
             : (
@@ -115,7 +120,11 @@ export function ReferenceLibrary({ s, label, enabled }: { s: StudioState; label:
             <button type="button" disabled={(items?.length ?? 0) >= max} onClick={() => input.current?.click()} className={btn}><Plus className="h-3.5 w-3.5" />Add to library</button>
           )}
           <input ref={input} type="file" hidden accept="image/png,image/jpeg,image/webp"
-            onChange={e => { const f = e.target.files?.[0]; if (f) setPending({ file: f, name: f.name.replace(/\.[^.]+$/, "").slice(0, MAX_NAME_LENGTH) }); e.target.value = ""; }} />
+            onChange={e => {
+              const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;
+              if (f.size > MAX_INPUT_BYTES) { setError(`Image must be ${MAX_INPUT_BYTES / 1024 / 1024} MB or less.`); return; }
+              setError(""); setNote(""); setPending({ file: f, name: f.name.replace(/\.[^.]+$/, "").slice(0, MAX_NAME_LENGTH) });
+            }} />
         </div>
       )}
     </div>

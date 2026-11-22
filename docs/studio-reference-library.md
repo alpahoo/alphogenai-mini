@@ -48,6 +48,10 @@ Today a reference is the first frame of an H3 video. A character reference (a fu
 
 A table (id, name, role, tags, created_at) with row-level security would replace the file-name encoding and allow renaming, roles and several images per character. It is not needed for one recurring character and was left out to avoid a migration.
 
+## Upload size (4.5 MB hosting limit)
+
+Vercel refuses a request body above 4.5 MB (413, before our route runs), so a 4.8 MB image failed although the route and the bucket allow 10 MB. Both reference uploads (library and one-off) now resize in the browser when the file is above 4.0 MB (`lib/studio/image-fit.ts`): same format, aspect ratio kept, never enlarged, steps of 85, 70, 55 and 45 percent, nothing below 1024 px on the long edge. A file under the budget is sent untouched. If it still does not fit, the administrator gets an explicit message and nothing is sent. A 413 from the platform is explained instead of showing a generic error. The server limits (10 MB, magic-byte checks) are unchanged. Other upload routes of the product (headshot packs, personas, legacy uploads) have the same platform limit and were not touched.
+
 ## Remaining limits
 
 - A failed deletion leaves the generation listed (without its files) until the delete is repeated.
