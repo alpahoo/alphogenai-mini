@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { CinemaSelectionError, selectedRunsForMontage, type CinemaScene, type CinemaShot, type CinemaTake } from "./m1";
+import { CinemaSelectionError, selectedRunsForMontage, reconcileShotDrafts, type CinemaScene, type CinemaShot, type CinemaTake } from "./m1";
 const scenes: CinemaScene[] = [{id:"s2",project_id:"p",position:1},{id:"s1",project_id:"p",position:0}];
 const shots: CinemaShot[] = [
   {id:"plan3",scene_id:"s2",project_id:"p",position:0,selected_take_id:"t3"},
@@ -37,5 +37,21 @@ describe("prepared migration review gates",()=>{
   expect(sql).toMatch(/grant select,insert,update,delete/);
   expect(sql).toMatch(/revoke all[\s\S]+authenticated/);
   expect(sql).toContain("foreign key(id,selected_take_id)");
+ });
+});
+
+describe("Cinema drafts survive unrelated reloads",()=>{
+ const db=[{id:"one",action:"Saved A",duration:5,first_frame_path:null},{id:"two",action:"Saved B",duration:5,first_frame_path:null}];
+ it("saving one plan preserves edits of another",()=>{
+  const drafts={one:{action:"New A",duration:10,first_frame_path:""},two:{action:"New B",duration:10,first_frame_path:""}};
+  const result=reconcileShotDrafts(db,drafts,new Set(["one","two"]),"one");
+  expect(result.one.action).toBe("Saved A");
+  expect(result.two.action).toBe("New B");
+  expect(result.two.duration).toBe(10);
+ });
+ it("replaces only clean drafts with fresh server values",()=>{
+  const r=reconcileShotDrafts(db,{},new Set());
+  expect(r.one).toEqual({action:"Saved A",duration:5,first_frame_path:""});
+  expect(r.two).toEqual({action:"Saved B",duration:5,first_frame_path:""});
  });
 });

@@ -26,3 +26,19 @@ export function selectedRunsForMontage(
   if (new Set(ids).size !== ids.length) throw new CinemaSelectionError("duplicate","The same video was selected for multiple plans.");
   return ids;
 }
+
+/** Preserve unsaved edits of other plans after a take is selected or one plan is saved. */
+export interface CinemaDraft { action: string; duration: number; first_frame_path: string }
+export function reconcileShotDrafts(
+  shots: { id: string; action: string; duration: number; first_frame_path: string | null }[],
+  prior: Record<string, CinemaDraft>,
+  dirty: ReadonlySet<string>,
+  resetId?: string,
+): Record<string, CinemaDraft> {
+  return Object.fromEntries(shots.map(shot => [
+    shot.id,
+    dirty.has(shot.id) && shot.id !== resetId && prior[shot.id]
+      ? prior[shot.id]
+      : { action: shot.action, duration: shot.duration, first_frame_path: shot.first_frame_path ?? "" },
+  ]));
+}
