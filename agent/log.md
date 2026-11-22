@@ -3472,3 +3472,11 @@ Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, po
 - Studio displays distinct start, execution, cancellation, submission and SDK errors; business logs include only UUID/fixed code. CI includes the new CPU suite.
 - Validation: 1,230 Vitest tests (113 files), 32 Python tests, TypeScript and production build PASS (existing lint warnings). Actual SDK with fake transport proves pre-start cancellation, input-plane metadata handling and >3MiB frame decoding. Regression covers no first frame, 210s/300s start guards, callback/database failure, wrong header, result timeout, cancellation failure and H3 behavior. Earlier fixture setup errors corrected before broad validation.
 - No merge, deploy, remote migration, model preparation, permit change or paid GPU. Next: review/merge and manual deploy only after owner approval; preserve closed gate and require separate approval for one real run.
+
+## 2026-11-22 - Claude - Cinema M1 local recipe (PR #119, draft)
+- Explicit owner request. Scope: PR branch feat/cinema-m1-persistence, local Supabase stack, CI. No cloud resource, Vercel change, paid generation, merge or production action.
+- Migration (still PREPARED ONLY): cinema_takes now references comfy_runs by (run_id,user_id) through a composite FK, backed by one additive UNIQUE (id,user_id) on comfy_runs. The database refuses a take bound to another owner's run, also for the service role. ON DELETE RESTRICT kept: the Studio tombstone keeps the take (shown as unavailable); deleting a project keeps its runs.
+- tools/test-cinema-migration.mjs (CI, PGlite) extended with the cross-owner, tombstone, restrict and project-deletion cases; verified red against the previous migration.
+- tools/cinema-local/* + docs/cinema-m1-local-recipe.md: reproducible local recipe (replay of the migrations with the five historical failures asserted, seed, locked and simulated-dispatcher dev server, issue #117 scenario).
+- Findings outside #119 (see agent/review.md): Studio delete vs jobs.prompt NOT NULL, montage audio shorter than video, framing caution unreachable in M1.
+- Tests: see the PR description for the final SHA verification.
