@@ -36,10 +36,11 @@ describe("fitImage: an image under the budget is never touched", () => {
     expect(codec.decode).not.toHaveBeenCalled();
   });
 
-  it("leaves a format it cannot fit to the server, which refuses it clearly", async () => {
+  it("rejects unsupported formats before decoding at either file size", async () => {
     const { codec } = fakeCodec(100, 100, 1);
-    const gif = file(UPLOAD_BUDGET_BYTES + 1, "image/gif", "x.gif");
-    expect((await fitImage(gif, { codec })).file).toBe(gif);
+    for (const size of [100, UPLOAD_BUDGET_BYTES + 1]) {
+      await expect(fitImage(file(size, "image/gif", "x.gif"), { codec })).rejects.toThrow(/PNG, JPEG or WebP/);
+    }
     expect(codec.decode).not.toHaveBeenCalled();
   });
 });
