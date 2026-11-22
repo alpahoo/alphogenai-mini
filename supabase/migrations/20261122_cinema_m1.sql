@@ -6,6 +6,7 @@ create table public.cinema_projects (
   title text not null check (char_length(title) between 1 and 120),
   logline text not null default '' check (char_length(logline) <= 600),
   aspect text not null default '9:16' check (aspect in ('9:16','16:9','1:1')),
+  look jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(id,user_id)

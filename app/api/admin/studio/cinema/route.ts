@@ -71,7 +71,9 @@ export async function POST(req: Request) {
   if (Number(req.headers.get("content-length") || 0) > 16_384) return json({ error: "Request too large" }, 413);
   let body: Record<string, unknown>;
   try {
-    const input: unknown = await req.json();
+    const raw = await req.text();
+    if (raw.length > 16_384) return json({ error: "Request too large" }, 413);
+    const input: unknown = JSON.parse(raw);
     if (!input || typeof input !== "object" || Array.isArray(input)) return json({ error: "Invalid request" }, 400);
     body = input as Record<string, unknown>;
   } catch { return json({ error: "Invalid JSON" }, 400); }
