@@ -7,6 +7,7 @@ import { errorMessage, formatElapsed, isActive } from "@/lib/studio/status";
 import { financeView, stageView, type StageInput } from "@/lib/studio/stage";
 import { modelForTemplateVersion } from "@/lib/studio/catalog";
 import { ImageCompare, ImageDownloads, PrivateImage } from "./image-result";
+import { PromoteReference } from "./promote-reference";
 import type { StudioAsset, StudioRun } from "./types";
 import type { StudioState } from "./use-studio";
 
@@ -163,6 +164,7 @@ export function ResultStage({ s }: { s: StudioState }) {
         <div className="flex flex-wrap items-center gap-1.5">
           {run.status === "queued" && <ActionButton icon={RefreshCw} label="Retry dispatch" onClick={() => void s.retryDispatch(run.id)} />}
           {run.status === "done" && isImage && raw && <ImageDownloads s={s} run={run} asset={raw} />}
+          {run.status === "done" && isImage && raw && <PromoteReference key={raw.id} asset={raw} />}
           {run.status === "done" && !isImage && final && <ActionButton icon={Download} label="Corrected" onClick={() => void s.download(final.id)} />}
           {run.status === "done" && !isImage && raw && <ActionButton icon={Download} label="Original" onClick={() => void s.download(raw.id)} />}
           {run.status !== "loading" && <>

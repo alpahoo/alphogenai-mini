@@ -48,6 +48,20 @@ Today a reference is the first frame of an H3 video. A character reference (a fu
 
 A table (id, name, role, tags, created_at) with row-level security would replace the file-name encoding and allow renaming, roles and several images per character. It is not needed for one recurring character and was left out to avoid a migration.
 
+## Use an image result as a reference
+
+A finished image result (for example from MOSS) can be copied into the library, then chosen as the first frame of a video model (H3 image-to-video). In the result screen of an image run: "Use as reference", a name, Save. Endpoint: `POST /api/admin/studio/references/promote { asset_id, name }`.
+
+Acceptance criteria and how each is met:
+- *Owner, format, size are checked.* The asset and its run must both belong to the signed-in administrator, the run must be finished and not deleted, the asset must not be withdrawn; anything else answers "Image not found" exactly like a missing one and no file is read. Only PNG, JPEG and WebP results are accepted (a video is refused before it is read). The file is capped at 10 MB and its magic bytes are checked again before it is stored.
+- *Stored under the administrator's own folder.* The path is built by the server (`<user>/library/<name hex>_<uuid>.<ext>`), never from the request.
+- *H3 accepts it.* The copy is an ordinary library image: the unchanged server validation accepts its path as `first_frame_path` and resolves the image-to-video workflow (tested).
+- *No gate, budget, reservation or generation.* The route reads one output file and writes one library image and its thumbnail. It calls no RPC, touches no gate table, starts nothing (guarded by a test). MOSS stays unchanged.
+- *Another administrator's result is refused.* Tested.
+- *Same deletion rules as library images.* It is a library image: unique name, 60 maximum, deleted only from the library with a confirmation, refused while a queued or running generation uses it, and never removed when its source run is deleted (it is an independent copy; the source file is only read).
+
+Shared code: listing and saving (magic bytes, name and count rules, thumbnail, no half-saved copy) moved to `lib/studio/reference-library-store.ts`, used by both the upload route and this one. Upload behaviour is unchanged (same tests).
+
 ## Remaining limits
 
 - A failed deletion leaves the generation listed (without its files) until the delete is repeated.
