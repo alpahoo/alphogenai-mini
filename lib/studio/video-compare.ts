@@ -130,3 +130,12 @@ export function nextAudibleOnVolumeChange(current: AudibleTrack, side: "a" | "b"
 export function shouldResumePlayer(video: Pick<HTMLVideoElement, "ended" | "paused">): boolean {
   return video.paused && !video.ended;
 }
+
+/** Unlike Pause/Resume, a seek back into the shorter clip may legitimately restart it. */
+export function shouldResumeMirroredTarget(
+  source: Pick<HTMLVideoElement, "paused">,
+  target: Pick<HTMLVideoElement, "paused" | "ended" | "currentTime" | "duration">,
+): boolean {
+  return !source.paused && target.paused && !target.ended &&
+    (!Number.isFinite(target.duration) || target.currentTime < target.duration);
+}

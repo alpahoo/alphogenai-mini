@@ -5,7 +5,7 @@ import { ArrowLeft, Info, Pause, Play, TriangleAlert, Volume2 } from "lucide-rea
 import { cn } from "@/lib/utils";
 import {
   AUDIO_EXPLANATION, FACT_ROWS, audioShiftCautionText, durationNote, formatFact, mutedFor, primaryVideoAsset,
-  runFacts, speechAtStartCaution, videoCompareCandidates, createSeekMirror, nextAudibleOnVolumeChange, shouldResumePlayer, type AudibleTrack,
+  runFacts, speechAtStartCaution, videoCompareCandidates, createSeekMirror, nextAudibleOnVolumeChange, shouldResumePlayer, shouldResumeMirroredTarget, type AudibleTrack,
 } from "@/lib/studio/video-compare";
 import { PrivateVideo } from "./private-video";
 import type { StudioRun } from "./types";
@@ -29,7 +29,11 @@ export function useMirroredPlayers() {
       // Idempotent checks (not flags): applying a change to the other player re-fires its event, which then does nothing.
       const onPlay = () => { setPlaying(true); if (dst.paused && !dst.ended) void dst.play().catch(() => undefined); };
       const onPause = () => { if (src.ended) return; if (!dst.paused) dst.pause(); setPlaying(false); };
-      const onSeeked = () => mirrorSeek.current(src, dst);
+      const onSeeked = () => {
+        mirrorSeek.current(src, dst);
+        // Seeking the playing long clip back into a finished short clip must resume the short one.
+        if (shouldResumeMirroredTarget(src, dst)) void dst.play().catch(() => undefined);
+      };
       src.addEventListener("play", onPlay); src.addEventListener("pause", onPause); src.addEventListener("seeked", onSeeked);
       return () => { src.removeEventListener("play", onPlay); src.removeEventListener("pause", onPause); src.removeEventListener("seeked", onSeeked); };
     };

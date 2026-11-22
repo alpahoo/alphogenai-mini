@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
-  durationNote, formatFact, mutedFor, primaryVideoAsset, runFacts, speechAtStartCaution, videoCompareCandidates, createSeekMirror, nextAudibleOnVolumeChange, shouldResumePlayer,
+  durationNote, formatFact, mutedFor, primaryVideoAsset, runFacts, speechAtStartCaution, videoCompareCandidates, createSeekMirror, nextAudibleOnVolumeChange, shouldResumePlayer, shouldResumeMirroredTarget,
 } from "./video-compare";
 import type { StudioRun } from "@/components/studio/types";
 
@@ -156,4 +156,18 @@ describe("resume after unequal-duration playback", () => {
     const ui=readFileSync("components/studio/video-compare.tsx","utf8");
     expect(ui).toMatch(/vs\.filter\(shouldResumePlayer\)/);
   });
+});
+
+describe("seek back into shorter finished clip", () => {
+ it("resumes the shorter clip only after seeking it inside its playable time", () => {
+  const a={paused:false};
+  expect(shouldResumeMirroredTarget(a,{paused:true,ended:false,currentTime:2,duration:4})).toBe(true);
+  expect(shouldResumeMirroredTarget(a,{paused:true,ended:true,currentTime:4,duration:4})).toBe(false);
+  expect(shouldResumeMirroredTarget(a,{paused:true,ended:false,currentTime:4,duration:4})).toBe(false);
+  expect(shouldResumeMirroredTarget({paused:true},{paused:true,ended:false,currentTime:2,duration:4})).toBe(false);
+ });
+ it("reconciles playback only after the mirrored position is set", () => {
+  const source=readFileSync("components/studio/video-compare.tsx","utf8");
+  expect(source.indexOf("mirrorSeek.current(src, dst);")).toBeLessThan(source.indexOf("if (shouldResumeMirroredTarget(src, dst))"));
+ });
 });
