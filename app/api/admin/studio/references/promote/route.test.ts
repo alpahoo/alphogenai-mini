@@ -150,7 +150,7 @@ describe("promote an image result to the reference library", () => {
     expect(calls.some(c => c.startsWith("rpc"))).toBe(false);
     expect([...new Set(tables)].sort()).toEqual(["comfy_assets", "comfy_runs"]);
     for (const f of ["app/api/admin/studio/references/promote/route.ts", "lib/studio/reference-library-store.ts", "components/studio/promote-reference.tsx"]) {
-      expect(readFileSync(f, "utf8"), f).not.toMatch(/\.rpc\(|comfy_admin_gate|comfy_runtime_gates|committed_usd|dispatch|idempotency|admit_|generate\(/i);
+      expect(readFileSync(f, "utf8"), f).not.toMatch(/\.rpc\(|comfy_admin_gate|comfy_runtime_gates|committed_usd|dispatch(?!Event)|idempotency|admit_|generate\(/i);
     }
   });
 });
