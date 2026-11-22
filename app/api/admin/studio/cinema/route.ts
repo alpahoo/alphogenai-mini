@@ -179,6 +179,8 @@ export async function POST(req: Request) {
   if (action === "shot.preview") {
     const shot = await ownedShot(db, user, body.shot_id);
     if (!shot) return json({ error: "Plan not found" }, 404);
+    if (!Number.isSafeInteger(body.expected_version) || body.expected_version !== shot.version)
+      return json({ error: "Plan changed elsewhere. Reload before generating." }, 409);
     const project = await ownedProject(db, user, shot.project_id);
     if (!project) return json({ error: "Project not found" }, 404);
     const model = STUDIO_MODELS.find(m => m.slug === "minimax-h3");
