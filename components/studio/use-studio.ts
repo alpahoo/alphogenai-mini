@@ -5,6 +5,7 @@ import { findModel, modelForTemplateVersion, STUDIO_MODELS, type StudioModel } f
 import { defaultValues, resolveVariant, submissionParams, validateValues, valuesFromRun, type ParamValues } from "@/lib/studio/manifest";
 import { RunSelection } from "@/lib/studio/run-selection";
 import { referenceAfterRunDelete } from "@/lib/studio/reference-library";
+import { FitError, MAX_INPUT_BYTES, fitImage, uploadFailureMessage } from "@/lib/studio/image-fit";
 import { isActive, pollDelay } from "@/lib/studio/status";
 import { anySignal, startRunPolling } from "@/lib/studio/run-poller";
 import type { Readiness, ReferenceImage, SignedMedia, StudioAsset, StudioRun } from "./types";
@@ -211,26 +212,37 @@ export function useStudio() {
   }, [loadRun]);
 
   /** Attach a private reference. Image-to-video exists only in turbo: switch explicitly and say so. */
-  const attachReference = useCallback((path: string, previewUrl: string, name: string) => {
+  const attachReference = useCallback((path: string, previewUrl: string, name: string, extraNote?: string | null) => {
     setReference(prev => { if (prev?.previewUrl.startsWith("blob:")) URL.revokeObjectURL(prev.previewUrl); return { path, previewUrl, name }; });
+    const notes: string[] = [];
     if (manifest && !resolveVariant(manifest, values, true)) {
       const quality = manifest.params.find(p => p.key === "quality")?.options?.find(o => resolveVariant(manifest, { ...values, quality: o }, true));
-      if (quality) { setValues(v => ({ ...v, quality })); setNotice(`Quality switched to ${quality}: it is the only validated image-to-video workflow.`); }
+      if (quality) { setValues(v => ({ ...v, quality })); notes.push(`Quality switched to ${quality}: it is the only validated image-to-video workflow.`); }
     }
+    if (extraNote) notes.push(extraNote);
+    if (notes.length) setNotice(notes.join(" "));
   }, [manifest, values]);
 
   const uploadReference = useCallback(async (file: File) => {
     const ref = manifest?.studio?.reference;
     if (!ref) return;
     if (!ref.accept.includes(file.type)) { setError("Use a PNG, JPEG or WebP image."); return; }
-    if (file.size > ref.maxBytes) { setError("Image must be 10 MB or less."); return; }
+    if (file.size > MAX_INPUT_BYTES) { setError(`Image must be ${MAX_INPUT_BYTES / 1024 / 1024} MB or less.`); return; }
     setBusy("uploading"); setError("");
-    const previewUrl = URL.createObjectURL(file);
+    let previewUrl = "";
     try {
-      const form = new FormData(); form.append("file", file);
-      const d = await json<{ storage_path: string }>(await fetch("/api/upload?bucket=references", { method: "POST", body: form }));
-      attachReference(d.storage_path, previewUrl, file.name);
-    } catch (e) { URL.revokeObjectURL(previewUrl); setError(e instanceof Error ? e.message : "Upload failed"); }
+      // Above the hosting platform's request limit the image is resized here, never refused with an opaque 413.
+      const fitted = await fitImage(file);
+      previewUrl = URL.createObjectURL(fitted.file);
+      const form = new FormData(); form.append("file", fitted.file);
+      const res = await fetch("/api/upload?bucket=references", { method: "POST", body: form });
+      if (res.status === 413) throw new Error(uploadFailureMessage(413));
+      const d = await json<{ storage_path: string }>(res);
+      attachReference(d.storage_path, previewUrl, file.name, fitted.note);
+    } catch (e) {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setError(e instanceof FitError || e instanceof Error ? e.message : "Upload failed");
+    }
     finally { setBusy("idle"); }
   }, [manifest, attachReference]);
 
