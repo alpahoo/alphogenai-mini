@@ -96,12 +96,16 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
     await post({ action: "shot.create", project_id: story.project.id, scene_id: scene.id, description: "Describe this shot" });
     await loadProject(story.project.id);
   });
-  const saveShot = async (shot: Shot): Promise<boolean> => {
-    const edit = edits[shot.id]; if (!edit || !story) return false;
-    await post({ action: "shot.update", shot_id: shot.id, version: shot.version,
-      description: edit.action, duration: edit.duration, first_frame_path: edit.first_frame_path || null });
+  const saveShot = async (shot: Shot): Promise<Shot> => {
+    const edit = edits[shot.id];
+    if (!edit || !story) throw new Error("Plan is not loaded.");
+    const newPath = edit.first_frame_path || null;
+    // A no-op save must not increment the generation version, or retries can get a new paid run key.
+    if (shot.action === edit.action && shot.duration === edit.duration && shot.first_frame_path === newPath) return shot;
+    const saved = await post<{ shot: Shot }>({ action: "shot.update", shot_id: shot.id, version: shot.version,
+      description: edit.action, duration: edit.duration, first_frame_path: newPath });
     await loadProject(story.project.id);
-    return true;
+    return saved.shot;
   };
   const save = (shot: Shot) => void doWork("save:" + shot.id, async () => { await saveShot(shot); setNotice("Plan saved."); });
   const attachTake = (shot: Shot) => void doWork("attach:" + shot.id, async () => {
@@ -118,7 +122,7 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
   });
   const prepare = (shot: Shot, generate: boolean) => void doWork("preview:" + shot.id, async () => {
     if (!story) return;
-    await saveShot(shot);
+    const saved = await saveShot(shot);
     const d = await post<{ preview: { prompt: string; params: Record<string, string | number>; notes: string[]; warnings: string[] } }>(
       { action: "shot.preview", shot_id: shot.id });
     setPreview(p => ({ ...p, [shot.id]: d.preview }));
@@ -127,7 +131,7 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
     const cost = typeof price === "number" ? "Estimated reservation: $" + price.toFixed(2) + ". " : "";
     if (!window.confirm(cost + "Start ONE paid H3 generation for this plan? Other plans and their selected takes stay unchanged.")) return;
     // Reuse the same key on a technical retry. The H3 admission RPC is idempotent.
-    const key = "alphogen-cinema:" + shot.id + ":" + shot.version;
+    const key = "alphogen-cinema:" + saved.id + ":" + saved.version;
     let requestKey = keys.current.get(key);
     if (!requestKey) {
       try { requestKey = sessionStorage.getItem(key) || undefined; } catch { /* memory fallback */ }
