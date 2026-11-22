@@ -117,7 +117,10 @@ function toneBoundaries(pcm: Float32Array, sr: number, winMs = 5) {
   }
   const changes: number[] = []; let last: number | null = null, lastIdx = 0;
   classes.forEach((c, k) => { if (c === null) return; if (last !== null && c !== last) changes.push(((lastIdx + 1 + k) / 2) * winMs / 1000); last = c; lastIdx = k; });
-  return changes;
+  // The first and last milliseconds hold the 8 ms fades and the encoder's edge samples, where a window can be classified
+  // at random (seen on Linux CI): only changes inside the clip count.
+  const total = pcm.length / sr;
+  return changes.filter(c => c > 0.05 && c < total - 0.05);
 }
 const decode = (ffmpeg: string, file: string) => new Promise<Float32Array>((resolve, reject) => {
   execFile(ffmpeg, ["-v", "error", "-i", file, "-vn", "-ac", "1", "-ar", "32000", "-f", "f32le", "pipe:1"], { encoding: "buffer", maxBuffer: 64 * 1024 * 1024 }, (err, out) => {
