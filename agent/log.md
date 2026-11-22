@@ -3479,4 +3479,5 @@ Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, po
 - tools/test-cinema-migration.mjs (CI, PGlite) extended with the cross-owner, tombstone, restrict and project-deletion cases; verified red against the previous migration.
 - tools/cinema-local/* + docs/cinema-m1-local-recipe.md: reproducible local recipe (replay of the migrations with the five historical failures asserted, seed, locked and simulated-dispatcher dev server, issue #117 scenario).
 - Findings outside #119 (see agent/review.md): Studio delete vs jobs.prompt NOT NULL, montage audio shorter than video, framing caution unreachable in M1.
-- Tests: see the PR description for the final SHA verification.
+- Results on 50870f0 (database rebuilt from blank with the documented procedure, real Luz clips): local recipe locked 54/54 and simulated 73/73; PGlite migration test passes (and fails on the previous migration); Vitest 1616 passed (148 files); tsc clean; lint 0 errors; next build OK; CI "ComfyUI admin free tests" #64 green. One real UI launch of plan 1.3 through the Cinema panel: one run, take on plan 1.3 only, selections intact after reload.
+- Open: D6 is NOT fixed. The recipe still records the 503 of the Studio deletion as a known issue outside #119 (agent/review.md).

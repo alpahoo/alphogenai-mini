@@ -369,6 +369,8 @@ if (MODE === "locked") {
   check("G22 the chosen finals are still a1bc89fe, cd598314 and e3d7a11c after four launches", finalSel === JSON.stringify([R.plan1, R.plan2, R.plan3].sort()) && (await storyboard(A, launchProj.id)).shots.every((s) => [LT.plan1.id, LT.plan2.id, LT.plan3.id].includes(s.selected_take_id)));
   note("gate after the simulated run", `remaining_runs=${gEnd.remaining_runs} committed_usd=${gEnd.committed_usd} (local database only, nothing real was reserved or charged)`);
   note("launch project", launchProj.id);
+  // Leave the simulator ready for manual use: a render launched from the UI afterwards must not stay held.
+  await mock("POST", "/control", { mode: "accept" });
 }
 
 const ok = t.summary();
