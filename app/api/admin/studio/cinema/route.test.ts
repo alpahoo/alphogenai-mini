@@ -34,13 +34,13 @@ function queryFor(table: string) {
     return rows()[0] ?? null;
   };
   const q={
-    select:(_?:string)=>q,
+    select:(columns?:string)=>{void columns; return q;},
     eq:(field:string,value:unknown)=>{cond.push([field,value]);return q;},
-    is:(_field:string,_value:unknown)=>q,
+    is:(field:string,value:unknown)=>{void field;void value;return q;},
     in:(field:string,values:unknown[])=>{ const old=cond.filter(([k])=>k!==field);cond=old;
       // Tests only need exact equality with one value; no wildcard reads.
       if(values.length===1)cond.push([field,values[0]]);return q;},
-    order:(_field:string,_opts?:unknown)=>q,
+    order:(field:string,opts?:unknown)=>{void field;void opts;return q;},
     limit:(n:number)=>{max=n;return q;},
     insert:(r:Row)=>{inserting=r;return q;},
     update:(r:Row)=>{patch=r;return q;},
