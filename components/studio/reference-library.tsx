@@ -33,7 +33,13 @@ export function ReferenceLibrary({ s, label, enabled }: { s: StudioState; label:
       setItems(d.items); setMax(d.max); setError("");
     } catch (e) { setItems(prev => prev ?? []); setError(e instanceof Error ? e.message : "Reference library unavailable"); }
   }, []);
-  useEffect(() => { if (open && items === null) void load(); }, [open, items, load]);
+  useEffect(() => {
+    if (!enabled || !open) return;
+    void load();
+    const refresh = () => { void load(); };
+    window.addEventListener("studio:reference-promoted", refresh);
+    return () => window.removeEventListener("studio:reference-promoted", refresh);
+  }, [enabled, open, load]);
 
   const save = async () => {
     if (!pending) return;
