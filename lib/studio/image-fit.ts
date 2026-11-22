@@ -55,7 +55,8 @@ export function uploadFailureMessage(status: number, serverError?: string | null
 
 export async function fitImage(file: File, opts: { budget?: number; codec?: Codec } = {}): Promise<FitResult> {
   const budget = opts.budget ?? UPLOAD_BUDGET_BYTES;
-  if (file.size <= budget || !FITTABLE.includes(file.type)) return { file, resized: false, note: null };
+  if (!FITTABLE.includes(file.type)) throw new FitError("Use a PNG, JPEG or WebP image.");
+  if (file.size <= budget) return { file, resized: false, note: null };
   if (file.size > MAX_INPUT_BYTES) throw new FitError(`Image must be ${MAX_INPUT_BYTES / 1024 / 1024} MB or less.`);
 
   const codec = opts.codec ?? browserCodec();
