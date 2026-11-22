@@ -288,6 +288,8 @@ if (MODE === "locked") {
   const sel0 = JSON.stringify((await storyboard(A, launchProj.id)).shots.map((s) => [s.id, s.version, s.selected_take_id]));
   const logCount = async () => (await mock("GET", "/log")).log.length;
   const startRuns = await BASE_RUNS(), startGate = await gate();
+  // The simulator process outlives a recipe run: count only the dispatches this run causes.
+  const logBase = await logCount();
 
   // The exact sequence the Cinema panel runs for "Generate this plan only".
   async function launch(shot, key, { expectStatus = 202 } = {}) {
@@ -306,7 +308,7 @@ if (MODE === "locked") {
   check("G2 launching plan 2 through the usual routes admits ONE run, dispatches it, and attaches it as a take of plan 2 only", l1.post.status === 202 && l1.post.json.dispatched === true && l1.take?.shot_id === L[1].id && (await BASE_RUNS()) === startRuns + 1);
   check("G3 the simulated render completes (claim, 2 files, finish) and appears as a finished take on plan 2", await waitFor(async () => (await runStatus(run1)) === "done"), "status " + (await runStatus(run1)));
   const sb1 = await storyboard(A, launchProj.id);
-  check("G4 plans 1 and 3 are not relaunched: no new run, takes and selections unchanged", sb1.takes.filter((x) => x.shot_id === L[0].id).length === 1 && sb1.takes.filter((x) => x.shot_id === L[2].id).length === 1 && sb1.takes.filter((x) => x.shot_id === L[1].id).length === 2 && (await logCount()) === 1);
+  check("G4 plans 1 and 3 are not relaunched: no new run, takes and selections unchanged", sb1.takes.filter((x) => x.shot_id === L[0].id).length === 1 && sb1.takes.filter((x) => x.shot_id === L[2].id).length === 1 && sb1.takes.filter((x) => x.shot_id === L[1].id).length === 2 && (await logCount()) === logBase + 1);
   check("G5 the new render did not overwrite the chosen take (a1bc89fe stays selected until the administrator picks)", sb1.shots.find((x) => x.id === L[1].id).selected_take_id === LT.plan2.id && JSON.stringify(sb1.shots.map((s) => [s.id, s.version, s.selected_take_id])) === sel0);
   const g1 = await gate();
   check("G6 one permit and 0.75 USD reserved (not charged: simulated), outbox delivered", g1.remaining_runs === 3 && Number(g1.committed_usd) === 0.75 && !!(await db.from("comfy_dispatch_outbox").select("delivered_at").eq("run_id", run1).single()).data?.delivered_at);
@@ -318,7 +320,7 @@ if (MODE === "locked") {
 
   // Technical retry with the SAME key: recovery, no new run, no new dispatch, no new debit.
   const rec = await call(A, "POST", "/api/admin/comfy/runs", { template: "minimax-h3", idempotency_key: K1, params: { prompt: "ignored on recovery" } });
-  check("G8 retry with the same key recovers the existing run (recovered:true): no new run, no new debit, no second dispatch", rec.status === 202 && rec.json.recovered === true && rec.json.run_id === run1 && (await BASE_RUNS()) === startRuns + 1 && (await gate()).remaining_runs === 3 && (await logCount()) === 1);
+  check("G8 retry with the same key recovers the existing run (recovered:true): no new run, no new debit, no second dispatch", rec.status === 202 && rec.json.recovered === true && rec.json.run_id === run1 && (await BASE_RUNS()) === startRuns + 1 && (await gate()).remaining_runs === 3 && (await logCount()) === logBase + 1);
 
   // Relaunch of plan 2 after an edit: new version, new key, new run, second alternative take.
   const cur2 = (await storyboard(A, launchProj.id)).shots.find((x) => x.id === L[1].id);
@@ -327,7 +329,7 @@ if (MODE === "locked") {
   const run2 = l2.post.json?.run_id;
   await waitFor(async () => (await runStatus(run2)) === "done");
   const sb2 = await storyboard(A, launchProj.id);
-  check("G9 relaunching plan 2 after an edit creates exactly one more run and a third take on plan 2; plans 1 and 3 still untouched", l2.post.status === 202 && run2 !== run1 && sb2.takes.filter((x) => x.shot_id === L[1].id).length === 3 && sb2.takes.filter((x) => x.shot_id !== L[1].id).length === 2 && (await BASE_RUNS()) === startRuns + 2 && (await logCount()) === 2);
+  check("G9 relaunching plan 2 after an edit creates exactly one more run and a third take on plan 2; plans 1 and 3 still untouched", l2.post.status === 202 && run2 !== run1 && sb2.takes.filter((x) => x.shot_id === L[1].id).length === 3 && sb2.takes.filter((x) => x.shot_id !== L[1].id).length === 2 && (await BASE_RUNS()) === startRuns + 2 && (await logCount()) === logBase + 2);
 
   // Dispatch outage: the admission succeeds, the dispatch is refused; Retry dispatch uses the usual route.
   await mock("POST", "/control", { mode: "reject" });
@@ -364,7 +366,7 @@ if (MODE === "locked") {
   check("G19 after exhaustion a NEW admission is refused (409) and creates nothing", fresh2.status === 409 && (await BASE_RUNS()) === before2);
   const gateNow = (await call(A, "GET", "/api/admin/comfy/runs?template=minimax-h3")).json;
   check("G20 the pre-check the panel runs reports not ready (so a new launch is blocked before any POST)", gateNow.ready === false);
-  check("G21 four runs were admitted in total; the simulator saw 6 dispatch attempts (4 first attempts + 2 retries of the run hit by the outage) and none for any older take", (await BASE_RUNS()) === startRuns + 4 && (await logCount()) === 6);
+  check("G21 four runs were admitted in total; the simulator saw 6 dispatch attempts (4 first attempts + 2 retries of the run hit by the outage) and none for any older take", (await BASE_RUNS()) === startRuns + 4 && (await logCount()) === logBase + 6);
   const finalSel = JSON.stringify((await storyboard(A, launchProj.id)).takes.filter((x) => [LT.plan1.id, LT.plan2.id, LT.plan3.id].includes(x.id)).map((x) => x.run_id).sort());
   check("G22 the chosen finals are still a1bc89fe, cd598314 and e3d7a11c after four launches", finalSel === JSON.stringify([R.plan1, R.plan2, R.plan3].sort()) && (await storyboard(A, launchProj.id)).shots.every((s) => [LT.plan1.id, LT.plan2.id, LT.plan3.id].includes(s.selected_take_id)));
   note("gate after the simulated run", `remaining_runs=${gEnd.remaining_runs} committed_usd=${gEnd.committed_usd} (local database only, nothing real was reserved or charged)`);
