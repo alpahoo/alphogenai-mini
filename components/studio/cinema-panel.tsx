@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { selectedRunsForMontage, type CinemaScene, type CinemaShot, type CinemaTake } from "@/lib/cinema/m1";
+import { reconcileShotDrafts, selectedRunsForMontage, type CinemaScene, type CinemaShot, type CinemaTake } from "@/lib/cinema/m1";
 import type { StudioState } from "./use-studio";
 
 const API = "/api/admin/studio/cinema";
@@ -58,6 +58,7 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const keys = useRef(new Map<string, string>());
+  const dirtyShots = useRef(new Set<string>());
   const loadProjects = useCallback(async () => {
     const data = await expectJson<{ projects: Project[] }>(await fetch(API, { cache: "no-store" }));
     setProjects(data.projects);
@@ -66,10 +67,11 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
     const data = await expectJson<{ items: LibraryItem[] }>(await fetch("/api/admin/studio/references", { cache: "no-store" }));
     setLibrary(data.items);
   }, []);
-  const loadProject = useCallback(async (id: string) => {
+  const loadProject = useCallback(async (id: string, savedShotId?: string) => {
     const data = await expectJson<Storyboard>(await fetch(API + "?project=" + encodeURIComponent(id), { cache: "no-store" }));
     setStory(data); setProjectId(id);
-    setEdits(Object.fromEntries(data.shots.map(x => [x.id, { action: x.action, duration: x.duration, first_frame_path: x.first_frame_path ?? "" }])));
+    setEdits(previous => reconcileShotDrafts(data.shots, previous, dirtyShots.current, savedShotId));
+    if (savedShotId) dirtyShots.current.delete(savedShotId);
   }, []);
   useEffect(() => {
     void loadProjects().catch(e => setError(e instanceof Error ? e.message : "Projects unavailable"));
@@ -101,10 +103,13 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
     if (!edit || !story) throw new Error("Plan is not loaded.");
     const newPath = edit.first_frame_path || null;
     // A no-op save must not increment the generation version, or retries can get a new paid run key.
-    if (shot.action === edit.action && shot.duration === edit.duration && shot.first_frame_path === newPath) return shot;
+    if (shot.action === edit.action && shot.duration === edit.duration && shot.first_frame_path === newPath) {
+      dirtyShots.current.delete(shot.id);
+      return shot;
+    }
     const saved = await post<{ shot: Shot }>({ action: "shot.update", shot_id: shot.id, version: shot.version,
       description: edit.action, duration: edit.duration, first_frame_path: newPath });
-    await loadProject(story.project.id);
+    await loadProject(story.project.id, shot.id);
     return saved.shot;
   };
   const save = (shot: Shot) => void doWork("save:" + shot.id, async () => { await saveShot(shot); setNotice("Plan saved."); });
@@ -124,7 +129,7 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
     if (!story) return;
     const saved = await saveShot(shot);
     const d = await post<{ preview: { prompt: string; params: Record<string, string | number>; notes: string[]; warnings: string[] } }>(
-      { action: "shot.preview", shot_id: shot.id });
+      { action: "shot.preview", shot_id: shot.id, expected_version: saved.version });
     setPreview(p => ({ ...p, [shot.id]: d.preview }));
     if (!generate) return;
     const price = s.readiness.cost?.reservation_usd;
@@ -144,9 +149,10 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
       body: JSON.stringify({ template: "minimax-h3", idempotency_key: requestKey, params: d.preview.params }),
     }));
     await post({ action: "take.attach", shot_id: shot.id, run_id: run.run_id });
+    // A GET failure after a paid admission is recoverable with the SAME idempotency key.
+    await loadProject(story.project.id);
     keys.current.delete(key);
     try { sessionStorage.removeItem(key); } catch { /* optional */ }
-    await loadProject(story.project.id);
     setNotice("Only this plan was submitted as a take. Refresh to follow progress.");
   });
   const exportSelected = () => void doWork("export", async () => {
@@ -168,8 +174,10 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
   const runsById = new Map((story?.runs ?? []).map(r => [r.id, r]));
   const assetsByRun = new Map((story?.assets ?? []).filter(a => a.role === "final").map(a => [a.run_id, a]));
   const takesFor = (shot: Shot) => (story?.takes ?? []).filter(t => t.shot_id === shot.id);
-  const edit = (shot: Shot, k: keyof Edit, v: string | number) =>
+  const edit = (shot: Shot, k: keyof Edit, v: string | number) => {
+    dirtyShots.current.add(shot.id);
     setEdits(prev => ({ ...prev, [shot.id]: { ...prev[shot.id], [k]: v } }));
+  };
   return (
     <main className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-6" data-testid="cinema-panel">
       <div className="flex flex-wrap items-center justify-between gap-2">
