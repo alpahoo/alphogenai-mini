@@ -102,3 +102,26 @@ export const mutedFor = (audible: AudibleTrack, side: "a" | "b"): boolean => aud
 
 /** Tolerance (seconds) before a mirrored player is moved to match the one the user is driving. */
 export const SYNC_TOLERANCE_S = 0.15;
+
+/** Track the destination of a programmatic seek so the reflected seeked event cannot move the source backwards. */
+export function createSeekMirror() {
+  type Player = { currentTime: number; duration: number };
+  const propagated = new WeakMap<Player, number>();
+  return (src: Player, dst: Player) => {
+    const pending = propagated.get(src);
+    if (pending !== undefined) {
+      propagated.delete(src);
+      if (Math.abs(src.currentTime - pending) <= SYNC_TOLERANCE_S) return;
+    }
+    const t = Math.min(src.currentTime, Number.isFinite(dst.duration) ? dst.duration : src.currentTime);
+    if (Math.abs(dst.currentTime - t) > SYNC_TOLERANCE_S) {
+      propagated.set(dst, t);
+      dst.currentTime = t;
+    }
+  };
+}
+
+/** Keep exactly one native soundtrack active, including clicks on the video's own mute button. */
+export function nextAudibleOnVolumeChange(current: AudibleTrack, side: "a" | "b", muted: boolean): AudibleTrack {
+  return muted ? (current === side ? "off" : current) : side;
+}

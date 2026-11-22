@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
-  durationNote, formatFact, mutedFor, primaryVideoAsset, runFacts, speechAtStartCaution, videoCompareCandidates,
+  durationNote, formatFact, mutedFor, primaryVideoAsset, runFacts, speechAtStartCaution, videoCompareCandidates, createSeekMirror, nextAudibleOnVolumeChange,
 } from "./video-compare";
 import type { StudioRun } from "@/components/studio/types";
 
@@ -106,5 +106,44 @@ describe("read only: comparing never generates, reserves or exposes anything", (
     const hook = readFileSync("components/studio/use-studio.ts", "utf8");
     expect(hook).toMatch(/const \[compareWith, setCompareWith\]/);
     expect(hook).not.toMatch(/compareVideo/);
+  });
+});
+
+describe("mirrored seeking with unequal durations", () => {
+  it("does not pull a 10-second clip back to 4 seconds when the 4-second clip reports its mirrored seek", () => {
+    const mirror = createSeekMirror();
+    const a = { currentTime: 8, duration: 10 };
+    const b = { currentTime: 0, duration: 4 };
+    mirror(a, b);
+    expect(b.currentTime).toBe(4);
+    mirror(b, a); // Programmatic seeked, not a new user action
+    expect(a.currentTime).toBe(8);
+    b.currentTime = 2; // Actual user seek of the shorter clip
+    mirror(b, a);
+    expect(a.currentTime).toBe(2);
+    mirror(a, b);
+    expect(b.currentTime).toBe(2);
+  });
+  it("mirrors within tolerance without recursive ping-pong", () => {
+    const mirror = createSeekMirror();
+    const a = { currentTime: 3, duration: 10 }, b = { currentTime: 0, duration: 10 };
+    mirror(a,b); mirror(b,a);
+    expect(a.currentTime).toBe(3);
+    expect(b.currentTime).toBe(3);
+  });
+});
+describe("native volume controls", () => {
+  it("switches to the unmuted track and switches off when that track is muted", () => {
+    expect(nextAudibleOnVolumeChange("a","b",false)).toBe("b");
+    expect(nextAudibleOnVolumeChange("b","a",true)).toBe("b");
+    expect(nextAudibleOnVolumeChange("b","b",true)).toBe("off");
+    expect(nextAudibleOnVolumeChange("off","a",false)).toBe("a");
+  });
+  it("wires the native volumechange event to both players and immediately silences the other", () => {
+    const ui = readFileSync("components/studio/video-compare.tsx","utf8");
+    const player = readFileSync("components/studio/private-video.tsx","utf8");
+    expect(ui.match(/onVolumeChange=\{video => onVolumeChange\(side, video\)\}/g)).toHaveLength(2);
+    expect(ui).toMatch(/other\.muted = true/);
+    expect(player).toMatch(/onVolumeChange=\{e => onVolumeChange\?\.\(e\.currentTarget\)\}/);
   });
 });

@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Info, Pause, Play, TriangleAlert, Volume2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  AUDIO_EXPLANATION, FACT_ROWS, SYNC_TOLERANCE_S, audioShiftCautionText, durationNote, formatFact, mutedFor, primaryVideoAsset,
-  runFacts, speechAtStartCaution, videoCompareCandidates, type AudibleTrack,
+  AUDIO_EXPLANATION, FACT_ROWS, audioShiftCautionText, durationNote, formatFact, mutedFor, primaryVideoAsset,
+  runFacts, speechAtStartCaution, videoCompareCandidates, createSeekMirror, nextAudibleOnVolumeChange, type AudibleTrack,
 } from "@/lib/studio/video-compare";
 import { PrivateVideo } from "./private-video";
 import type { StudioRun } from "./types";
@@ -23,14 +23,12 @@ export function useMirroredPlayers() {
   useEffect(() => {
     const va = a.current, vb = b.current;
     if (!va || !vb) return;
+    const mirrorSeek = createSeekMirror();
     const mirror = (src: HTMLVideoElement, dst: HTMLVideoElement) => {
       // Idempotent checks (not flags): applying a change to the other player re-fires its event, which then does nothing.
       const onPlay = () => { setPlaying(true); if (dst.paused && !dst.ended) void dst.play().catch(() => undefined); };
       const onPause = () => { if (src.ended) return; if (!dst.paused) dst.pause(); setPlaying(false); };
-      const onSeeked = () => {
-        const t = Math.min(src.currentTime, Number.isFinite(dst.duration) ? dst.duration : src.currentTime);
-        if (Math.abs(dst.currentTime - t) > SYNC_TOLERANCE_S) dst.currentTime = t;
-      };
+      const onSeeked = () => mirrorSeek(src, dst);
       src.addEventListener("play", onPlay); src.addEventListener("pause", onPause); src.addEventListener("seeked", onSeeked);
       return () => { src.removeEventListener("play", onPlay); src.removeEventListener("pause", onPause); src.removeEventListener("seeked", onSeeked); };
     };
@@ -47,6 +45,20 @@ export function useMirroredPlayers() {
     if (vs.some(v => !v.paused)) vs.forEach(v => v.pause()); else vs.forEach(v => void v.play().catch(() => undefined));
   }, []);
   return { a, b, playing, playBothFromStart, toggle };
+}
+
+/** Keep native video controls and SoundSwitch in sync: an unmuted side becomes the only audible side. */
+function useExclusiveAudio(a: React.RefObject<HTMLVideoElement | null>, b: React.RefObject<HTMLVideoElement | null>, initial: AudibleTrack) {
+  const [audible, setAudible] = useState<AudibleTrack>(initial);
+  const onVolumeChange = (side: "a" | "b", video: HTMLVideoElement) => {
+    if (!video.muted) {
+      // Enforce exclusivity immediately, not only after React commits new muted props.
+      const other = side === "a" ? b.current : a.current;
+      if (other && !other.muted) other.muted = true;
+    }
+    setAudible(previous => nextAudibleOnVolumeChange(previous, side, video.muted));
+  };
+  return { audible, setAudible, onVolumeChange };
 }
 
 /** One audible track at a time: two simultaneous soundtracks make the difference hard to hear. */
@@ -94,7 +106,7 @@ export function AudioInfo() {
 export function VersionCompare({ s, run }: { s: StudioState; run: StudioRun }) {
   const raw = run.assets?.find(a => a.role === "raw"), final = run.assets?.find(a => a.role === "final");
   const { a, b, playBothFromStart, toggle, playing } = useMirroredPlayers();
-  const [audible, setAudible] = useState<AudibleTrack>("b");
+  const { audible, setAudible, onVolumeChange } = useExclusiveAudio(a, b, "b");
   if (!raw || !final) return null;
   return (
     <div className="flex w-full flex-col items-center gap-3">
@@ -106,7 +118,7 @@ export function VersionCompare({ s, run }: { s: StudioState; run: StudioRun }) {
       <div className="grid w-full shrink-0 grid-cols-1 gap-3 md:grid-cols-2">
         {([[raw, "Original", a, "a"], [final, "Corrected", b, "b"]] as const).map(([asset, name, ref, side]) => (
           <figure key={asset.id} className="flex min-w-0 flex-col gap-2">
-            <PrivateVideo asset={asset} s={s} videoRef={ref} muted={mutedFor(audible, side)} label={name}
+            <PrivateVideo asset={asset} s={s} videoRef={ref} muted={mutedFor(audible, side)} onVolumeChange={video => onVolumeChange(side, video)} label={name}
               style={{ aspectRatio: aspectOf(run) }} className="max-h-[50vh] w-full rounded-2xl md:max-h-[48vh]" />
             <figcaption className="text-center text-xs text-muted-foreground">{name}{mutedFor(audible, side) ? " · muted" : " · sound on"}</figcaption>
           </figure>
@@ -141,7 +153,7 @@ export function VideoRunCompare({ s, run, onClose }: { s: StudioState; run: Stud
 
 function RunPair({ s, runA, runB, others, onClose }: { s: StudioState; runA: StudioRun; runB: StudioRun; others: StudioRun[]; onClose: () => void }) {
   const { a, b, playBothFromStart, toggle, playing } = useMirroredPlayers();
-  const [audible, setAudible] = useState<AudibleTrack>("a");
+  const { audible, setAudible, onVolumeChange } = useExclusiveAudio(a, b, "a");
   const [dur, setDur] = useState<{ a?: number; b?: number }>({});
   const assetA = primaryVideoAsset(runA), assetB = primaryVideoAsset(runB);
   const facts = [runFacts(runA), runFacts(runB)] as const;
@@ -166,7 +178,7 @@ function RunPair({ s, runA, runB, others, onClose }: { s: StudioState; runA: Stu
       <div className="grid w-full shrink-0 grid-cols-1 gap-3 md:grid-cols-2">
         {([[assetA, "A", a, "a", runA], [assetB, "B", b, "b", runB]] as const).map(([asset, tag, ref, side, r]) => (
           <figure key={tag} className="flex min-w-0 flex-col gap-2">
-            {asset && <PrivateVideo asset={asset} s={s} videoRef={ref} muted={mutedFor(audible, side)} label={`Video ${tag}`}
+            {asset && <PrivateVideo asset={asset} s={s} videoRef={ref} muted={mutedFor(audible, side)} onVolumeChange={video => onVolumeChange(side, video)} label={`Video ${tag}`}
               onMetadata={m => setDur(d => ({ ...d, [side]: m.duration }))} style={{ aspectRatio: aspectOf(r) }}
               className="max-h-[50vh] w-full rounded-2xl md:max-h-[48vh]" />}
             <figcaption className="text-center text-xs text-muted-foreground"><span className="font-semibold text-foreground">Video {tag}</span>{side === "a" ? " · current" : ""}{mutedFor(audible, side) ? " · muted" : " · sound on"}</figcaption>

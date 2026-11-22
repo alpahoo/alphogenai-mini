@@ -10,9 +10,9 @@ import type { StudioState } from "./use-studio";
  * Private video with signed-URL refresh when a link expires. The URL comes from the existing admin media route
  * (owner-scoped, short-lived) and is never stored or shown. One refresh is tried on error, then a clear message.
  */
-export function PrivateVideo({ asset, s, videoRef, muted, className, style, onMetadata, label = "Video" }: {
+export function PrivateVideo({ asset, s, videoRef, muted, className, style, onMetadata, onVolumeChange, label = "Video" }: {
   asset: StudioAsset; s: StudioState; videoRef?: React.Ref<HTMLVideoElement>; muted?: boolean; className?: string;
-  style?: React.CSSProperties; onMetadata?: (info: { duration: number; width: number; height: number }) => void; label?: string;
+  style?: React.CSSProperties; onMetadata?: (info: { duration: number; width: number; height: number }) => void; onVolumeChange?: (video: HTMLVideoElement) => void; label?: string;
 }) {
   const [url, setUrl] = useState<string | null>(s.media[asset.id]?.url ?? null);
   const [failed, setFailed] = useState(false);
@@ -33,7 +33,7 @@ export function PrivateVideo({ asset, s, videoRef, muted, className, style, onMe
   if (!url) return <div style={style} className={cn("grid place-items-center bg-black/40", className)}><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-label={`Loading ${label}`} /></div>;
   return (
     <video ref={videoRef} key={url} src={url} controls playsInline muted={muted} preload="metadata" onError={onError} style={style} aria-label={label}
-      onLoadedMetadata={e => onMetadata?.({ duration: e.currentTarget.duration, width: e.currentTarget.videoWidth, height: e.currentTarget.videoHeight })}
+      onLoadedMetadata={e => onMetadata?.({ duration: e.currentTarget.duration, width: e.currentTarget.videoWidth, height: e.currentTarget.videoHeight })} onVolumeChange={e => onVolumeChange?.(e.currentTarget)}
       className={cn("bg-black object-contain", className)} />
   );
 }
