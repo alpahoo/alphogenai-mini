@@ -41,3 +41,29 @@ Sortie privee : volume `alphogenai-longcat-avatar-poc-io` (`outputs/demo/*.mp4` 
 | Memoire GPU pic (nvidia-smi, echantillon 0,5 s) | 51 217 MiB (~50 Go) |
 | Cout GPU estime (tarif x duree conteneur) | ~0,31 $ ; CPU/memoire en sus non compte (~0,07 $) |
 Qualite visuelle et synchro labiale : non evaluees automatiquement, a juger sur le MP4 (`outputs/demo/ai2v_demo_1.mp4`). Le chargement a froid domine : un 2e rendu avec cache de volume chaud n'a pas ete mesure.
+
+## Test Luz : deux rendus dans la meme invocation (2026-11-23, H100, run `luz`)
+Entrees privees (volume `-io`, `inputs/`) : portrait `luz_face.png` (fiche personnage validee, `01_visage_face`, de face, bouche degagee) et voix FR `luz_fr.wav` (Emma validee, 9,72 s : « Salut ! Moi, c'est Luz, l'assistante virtuelle d'Atussa. Chaque semaine, je te montre des astuces simples pour bricoler, voyager et lancer tes projets. On commence ? », contient des p, b, m). INT8, distille 8 etapes, 3 segments (continuation), meme graine (`generator.manual_seed(seed)` avant chaque rendu), modele garde en memoire GPU entre les deux.
+
+| Mesure | Valeur |
+|---|---|
+| Chargement initial (modeles + preparation audio, volume a froid) | 168,6 s |
+| Rendu 1 (3 segments) | 183,9 s |
+| Rendu 2, a chaud (modele deja en memoire) | 182,0 s |
+| Total conteneur / mur client | 544,0 s / 552,0 s (demarrage a froid ~8 s) |
+| Pic VRAM | 42 289 MiB alloue par torch ; 52 429 MiB vu par nvidia-smi |
+| MP4 (x2) | 544x736, 25 fps, 253 images, 10,12 s, 10,4 Mo ; piste AAC 9,68 s |
+| Coût | ~0,60 $ GPU (544 s x 0,001097 $/s) + ~0,13 $ CPU/memoire estimes = ~0,73 $ |
+
+Constats : le chargement represente ~31 % du temps ; le 2e rendu n'est pas plus rapide (182 s contre 184 s) car les 3 segments de denoising dominent (~61 s/segment). Les deux MP4 sont identiques octet pour octet (meme MD5), le pipeline est deterministe a graine fixe. Voix presente sur toute la duree (energie non nulle chaque seconde, mesuree sur la piste du MP4) ; la video depasse l'audio de ~0,4 s. Synchro labiale et fidelite du visage : jugees visuellement par Paul, non mesurees automatiquement.
+
+Reproduction (depuis ce dossier, `PYTHONUTF8=1`), apres `--step weights` :
+```
+python -m modal volume put alphogenai-longcat-avatar-poc-io <portrait.png> inputs/luz_face.png
+python -m modal volume put alphogenai-longcat-avatar-poc-io <voix_16k_mono.wav> inputs/luz_fr.wav
+python -m modal run --detach app.py --step twice --run-tag luz --image-name luz_face.png --wav-name luz_fr.wav --segments 3 --prompt "<prompt>"   # GPU payant, plafond ~1,6 $ (timeout 1200 s)
+python -m modal volume get alphogenai-longcat-avatar-poc-io outputs/luz ./out
+```
+`--detach` evite qu'une interruption du client local ne tue le rendu. Prompt utilise : « A young woman with long curly dark hair and light blue eyes, wearing a white t-shirt, facing the camera in a front-facing close-up, centred in frame, soft even light, plain light grey background. She speaks in French with a natural friendly expression, her mouth clearly visible, subtle natural head movement. »
+
+Note sur le test precedent (`man_voiced`) : deux tentatives ont ete interrompues cote client avant la fin du chargement ; aucun resultat, cout non mesure (faible).

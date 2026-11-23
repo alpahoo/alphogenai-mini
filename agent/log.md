@@ -3479,3 +3479,4 @@ Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, po
 - Tests : pas de tests unitaires applicables (POC Modal) ; npm test/tsc/build non concernes (aucun fichier app/lib touche).
 - Next : rendu GPU apres feu vert, metriques, PR brouillon.
 - (suite) Rendu H100 autorise par Paul et execute : succes, 279 s, ~0,31 $ GPU, MP4 768x512 25 fps 3,72 s. Metriques dans le README du POC. Next : relecture qualite par Paul, PR brouillon (pas de gh local).
+- (suite) Test Luz 2 rendus H100 meme invocation autorise par Paul : OK, ~0,73 $, rendus identiques (meme MD5). Voir README du POC. Volumes conserves a la demande de Paul. Next : jugement visuel lipsync/fidelite par Paul.
