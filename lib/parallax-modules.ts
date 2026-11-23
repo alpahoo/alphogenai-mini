@@ -47,9 +47,13 @@ function sanitizeStates(value: unknown): ModuleStates {
 }
 
 export async function getModuleStates(): Promise<ModuleStates> {
-  const service = createServiceClient();
-  const { data } = await service.from("app_settings").select("value").eq("key", "parallax_modules").maybeSingle();
-  return sanitizeStates(data?.value);
+  try {
+    const service = createServiceClient();
+    const { data } = await service.from("app_settings").select("value").eq("key", "parallax_modules").maybeSingle();
+    return sanitizeStates(data?.value);
+  } catch {
+    return defaultModuleStates();
+  }
 }
 
 export async function isModuleEnabled(id: ParallaxModuleId): Promise<boolean> {
