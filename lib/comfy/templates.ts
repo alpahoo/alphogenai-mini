@@ -2,12 +2,13 @@ import mossManifest from "@/workflows/comfy/templates/moss-image/manifest.json";
 import mossT2i from "@/workflows/comfy/templates/moss-image/graph.t2i.api.json";
 import { bindManifest, type BindManifest } from "./bind";
 import { resolveTemplate, type Graph } from "./template";
+import { resolveAvatar } from "@/lib/avatar/template";
 
 /**
  * Admin template registry. Each entry names its runtime, its server binder and its admission path.
  * H3 keeps its original binder and SQL admission. New runtimes use the generic runtime gate.
  */
-export type TemplateSlug = "minimax-h3" | "moss-image";
+export type TemplateSlug = "minimax-h3" | "moss-image" | "longcat-avatar";
 
 export interface ResolvedRun {
   graph: Graph; hash: string; params: Record<string, string | number>;
@@ -18,7 +19,7 @@ interface TemplateEntry {
   runtime: string;
   /** Server env flag that must be "true" before any admission for this template. */
   enabledEnv: string;
-  admission: "h3_pilot" | "runtime_gate";
+  admission: "h3_pilot" | "runtime_gate" | "avatar_gate";
   resolve: (input: unknown, ownerId: string) => ResolvedRun;
 }
 
@@ -33,6 +34,10 @@ export const TEMPLATES: Record<TemplateSlug, TemplateEntry> = {
     runtime: "moss-image@1", enabledEnv: "COMFY_MOSS_ENABLED", admission: "runtime_gate",
     resolve: input => ({ ...bindManifest(moss, { t2i: mossT2i as Graph }, input), referencePath: null }),
   },
+  "longcat-avatar": {
+    runtime: "longcat-avatar@1", enabledEnv: "COMFY_LONGCAT_ENABLED", admission: "avatar_gate",
+    resolve: (input, owner) => resolveAvatar(input, owner),
+  },
 };
 
 export function templateFor(slug: unknown): TemplateSlug | null {
@@ -41,5 +46,6 @@ export function templateFor(slug: unknown): TemplateSlug | null {
 }
 
 export function slugForTemplateVersion(version: string | null | undefined): TemplateSlug {
+  if (version?.startsWith("longcat-avatar@")) return "longcat-avatar";
   return version?.startsWith("moss-image@") ? "moss-image" : "minimax-h3";
 }
