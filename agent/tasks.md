@@ -1,15 +1,6 @@
 # agent/tasks.md — Backlog partagé
 
-## T-1164d - Creator UGC corrected paid QA - VISUAL+AUDIO PASS / LIP-SYNC BLOCKER (2026-07-31, Claude)
-- Corrected acceptance ran after the product-only hardening: job `5b64a9e4-a3e3-44c9-99e8-679ec9346d4b` (15s FR,
-  `Paulo`+`Moi_5`, Powerbeats packshot+case refs, no person) → permanent MP4, 1 generation, no retry.
-- Visual review (Claude, Codex was navigation-blocked): PASS on format 1080×1920/15s H.264+audio, creator
-  continuity, Powerbeats fidelity (Beats logo faithful), UGC structure. Owner confirms FR audio good (minor slur).
-- **BLOCKER = lip-sync**: visemes don't match FR phonemes (dubbing effect) — provider (BytePlus) lip-sync,
-  English-biased. Fix = native LatentSync path (T-1163) → **T-1163e prioritized** for provider-neutral native
-  compositor + fallback to raise lip-sync fidelity. Everything else = PASS.
-
-
+## T-1164d - Creator UGC Studio adaptation - PRODUCT PASS / PHONETIC LIP-SYNC POLISH READY (2026-08-01, Codex)
 - Audited Open-AI-UGC and retained its useful generation contract: one script plus ordered actor/product/scene references in one native video request.
 - Added an explicit creator script and up to six private product/scene reference uploads to the admin UGC studio.
 - Hardened the provider prompt around visible product use, same-creator continuity, product fidelity and native creator speech.
@@ -18,7 +9,11 @@
 - Validation: 18 focused tests, TypeScript and production build pass; zero provider spend.
 - First paid acceptance attempt did not create a provider task: BytePlus rejected an official lifestyle reference containing a real athlete. No automatic retry was performed.
 - Hardened UI/API copy now requires product-only references without people and surfaces an actionable provider-neutral 422.
-- Next: deploy the hardening, then request a new explicit spend GO before one corrected 15-second acceptance using only the clean packshot and case references. Do not run the legacy assembly for this gate.
+- Corrected paid acceptance completed as production job `5b64a9e4-a3e3-44c9-99e8-679ec9346d4b` using only the clean packshot and case references. One provider task completed and the durable MP4 was saved; no retry was submitted.
+- Technical QA PASS: product-only upload contract, verified identity routing, provider start/poll and permanent output all work in production.
+- User product review PASS for creator continuity, product use, coherent French speech and overall creative. Remaining blocker: lips move on time but do not match French phonemes.
+- Added a fallback-safe post-generation LatentSync stage using the approved video's own audio. The raw native result remains the fallback; reusable-avatar animation stays capped at 8 seconds while this UGC adapter permits 16 seconds.
+- Next: deploy Modal + Vercel, then run one capped 15-second QA only after explicit approval. No further Seedance experimentation is required for this defect.
 
 ## T-1164b - Native multi-shot Product Ad path - TECH PASS / PRODUCT FAIL (2026-07-30, Codex)
 - Added a provider-neutral `UGCNativeAdProvider` contract alongside the existing three-shot contract.
@@ -1587,6 +1582,19 @@ Réfs : revue Codex 2026-07-16 ; `agent/log.md` (entrée durcissement).
 - Validation: 12 focused tests, root TypeScript, Revideo worker TypeScript and production build pass. Zero paid generation in this slice.
 - Next: deploy an authenticated Revideo service on Hostinger, then run one capped three-shot Beats QA. Do not repeat native one-shot QA.
 - Worker service is code-ready: async private API, concurrency 1, direct R2 output, Next.js start/poll integration and local security smoke pass. Deployment requires `REVIDEO_WORKER_SECRET` plus existing R2 variables on Hostinger and matching worker URL/secret on Vercel.
+## H3-ADMIN-1 — 2026-11-08 — owner: codex — code_ready
+- User-authorized implementation: PR #90 CI verification, then private admin H3 path from PR #89.
+- Scope: versioned API graphs/manifest, bounded admission, private storage, admin form/API, separate Modal app, free tests and draft code PR. No merge, production mutation, deployment or paid call.
+- Acceptance: preserve validated H3 settings and raw MP4; advance audio 0.4s; reject non-admin/unknown parameters; one explicitly authorized GPU execution permit; no public media URLs; mock integration and regression tests.
+
+## MOSS-CAPACITY-WAIT — 2026-11-09 — owner: codex — code_ready
+- User explicitly authorizes repairing the MOSS scheduling window after the failed EU L40S pilot. Isolated branch; no deploy, merge, permit change or paid run.
+- Scope: MOSS start deadline 300s, collection 660s, outer CPU broker 720s; preserve H3 start/collection/GPU limits and the SQL 900s deadline. Tests simulate delayed capacity without sleeping or invoking Modal.
+
+## MOSS-QUEUE-CANCEL — 2026-11-09 — owner: codex — code_ready
+- Explicit user request: fix queued MOSS calls surviving broker timeout. Branch codex/moss-queue-cancellation; no merge, deploy, permit or paid GPU authorized.
+- Scope: capture native SDK invocation ID before GPU start; persist and cancel on 300s start timeout; separate total result deadline; safe error codes/UI; free SDK/RPC and broker regressions. H3 stream and both GPU definitions remain unchanged.
+
 ## PARALLAX-VIDEO-LOT — 2026-11-23 — inventory and smallest draft slice
 - Start from `main` on `codex/parallax-video-lot`; do not invoke a provider, alter production, or add secrets.
 - Inventory the reusable authenticated job, reference, signed-storage, quota and retry paths, and record the missing H3 admin manifest/admission seam before implementing it.

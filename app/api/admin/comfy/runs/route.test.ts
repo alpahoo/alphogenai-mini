@@ -1,0 +1,109 @@
+import {beforeEach,describe,it,expect,vi} from "vitest";
+import {GET,POST} from "./route";
+import {requireAdmin} from "@/app/api/admin/middleware";
+import {createServiceClient} from "@/lib/supabase/service";
+import {dispatchRun,pilotState,runtimeGateState} from "@/lib/comfy/admin";
+vi.mock("@/app/api/admin/middleware",()=>({requireAdmin:vi.fn()}));
+vi.mock("@/lib/supabase/service",()=>({createServiceClient:vi.fn()}));
+vi.mock("@/lib/comfy/admin",()=>({dispatchRun:vi.fn(),pilotState:vi.fn(),runtimeGateState:vi.fn(),privateHeaders:{"Cache-Control":"private, no-store"}}));
+const rpc=vi.fn();
+const request=(params:unknown={prompt:"A cinematic sunset",seed:1})=>new Request("http://localhost/api/admin/comfy/runs",{method:"POST",body:JSON.stringify({params,idempotency_key:"a3263425-3a14-4170-a22c-8959566db7ac"})});
+beforeEach(()=>{vi.clearAllMocks();vi.stubEnv("COMFY_ADMIN_ENABLED","true");vi.stubEnv("COMFY_DISPATCH_URL","https://test.modal.run");vi.stubEnv("COMFY_DISPATCH_SECRET","test");
+  vi.mocked(requireAdmin).mockResolvedValue({user:{id:"admin-1",email:"admin@example.com"}});
+  vi.mocked(createServiceClient).mockReturnValue({rpc} as unknown as ReturnType<typeof createServiceClient>);
+  rpc.mockResolvedValue({data:"run-1",error:null});vi.mocked(dispatchRun).mockResolvedValue(undefined);});
+describe("private admin H3 admission",()=>{
+  it("rejects a non-admin before database or dispatch",async()=>{
+    vi.mocked(requireAdmin).mockResolvedValue({response:new Response("Forbidden",{status:403}) as never});
+    expect((await POST(request())).status).toBe(403);expect(rpc).not.toHaveBeenCalled();expect(dispatchRun).not.toHaveBeenCalled();
+  });
+  it("is disabled by default",async()=>{vi.stubEnv("COMFY_ADMIN_ENABLED","");expect((await POST(request())).status).toBe(503);expect(rpc).not.toHaveBeenCalled();});
+  it("rejects parameter tampering before admission",async()=>{expect((await POST(request({prompt:"A landscape",steps:100}))).status).toBe(400);expect(rpc).not.toHaveBeenCalled();});
+  it("does not dispatch when the SQL budget/permit refuses",async()=>{rpc.mockResolvedValue({error:{message:"H3_NOT_AUTHORIZED"}});expect((await POST(request())).status).toBe(409);expect(dispatchRun).not.toHaveBeenCalled();});
+  it("submits a frozen graph and dispatches only its run id",async()=>{
+    const response=await POST(request());expect(response.status).toBe(202);expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(rpc).toHaveBeenCalledWith("admit_comfy_admin_run",expect.objectContaining({p_user:"admin-1",p_hash:expect.stringMatching(/^[a-f0-9]{64}$/),p_graph:expect.any(Object)}));
+    expect(dispatchRun).toHaveBeenCalledWith("run-1");expect(await response.json()).toEqual({run_id:"run-1",dispatched:true});
+  });
+  it("a repeated request with the same key goes through SQL admission with that key, which returns the same run (no second permit here)",async()=>{
+    await POST(request());await POST(request());
+    expect(rpc).toHaveBeenCalledTimes(2);
+    for(const call of rpc.mock.calls)expect(call[1]).toMatchObject({p_key:"a3263425-3a14-4170-a22c-8959566db7ac",p_user:"admin-1"});
+  });
+  it("a failed dispatch never triggers a second admission",async()=>{
+    vi.mocked(dispatchRun).mockRejectedValue(Error("offline"));await POST(request());
+    expect(rpc.mock.calls.filter(c=>String(c[0]).startsWith("admit_"))).toHaveLength(1);
+  });
+  it("preserves the durable run on dispatch failure",async()=>{vi.mocked(dispatchRun).mockRejectedValue(Error("offline"));const response=await POST(request());expect(response.status).toBe(202);expect((await response.json()).dispatched).toBe(false);expect(rpc).toHaveBeenCalledTimes(1);});
+  it("readiness carries the real reservation and the server-configured MOSS GPU (no guessed value)",async()=>{
+    vi.mocked(runtimeGateState).mockResolvedValue({ready:false,blockers:[],reason:"GPU authorization is pending",allowance:null,licence_confirmed:true,reservation_usd:0.45});
+    vi.stubEnv("COMFY_MOSS_EXECUTOR_GPU","");
+    let body=await (await GET(new Request("http://localhost/api/admin/comfy/runs?template=moss-image"))).json();
+    expect(body.cost).toEqual({gpu:null,gpu_source:null,estimate:null,reservation_usd:0.45});
+    vi.stubEnv("COMFY_MOSS_EXECUTOR_GPU","H100");
+    body=await (await GET(new Request("http://localhost/api/admin/comfy/runs?template=moss-image"))).json();
+    expect(body.cost).toMatchObject({gpu:"H100",gpu_source:"server_config",reservation_usd:0.45,estimate:{measured:true}});
+  });
+  it("H3 readiness: fixed H100 executor and its 0.75 reservation",async()=>{
+    vi.mocked(pilotState).mockResolvedValue({ready:false,blockers:[],reason:"pending",manifest:(await import("@/lib/comfy/template")).manifest,allowance:null,reservation_usd:0.75});
+    const body=await (await GET(new Request("http://localhost/api/admin/comfy/runs?template=minimax-h3"))).json();
+    expect(body.cost).toMatchObject({gpu:"H100",gpu_source:"executor_code",reservation_usd:0.75});
+  });
+  it("readiness failure keeps the GPU info but no reservation",async()=>{
+    vi.mocked(runtimeGateState).mockRejectedValue(new Error("db down"));vi.stubEnv("COMFY_MOSS_EXECUTOR_GPU","H100");
+    const body=await (await GET(new Request("http://localhost/api/admin/comfy/runs?template=moss-image"))).json();
+    expect(body.ready).toBe(false);expect(body.cost).toMatchObject({gpu:"H100",reservation_usd:null});
+  });
+  it("serves readiness only through the admin guard",async()=>{vi.mocked(pilotState).mockResolvedValue({ready:false,reason:"pending",blockers:[],allowance:null,reservation_usd:0.75,manifest:(await import("@/lib/comfy/template")).manifest});expect((await GET(new Request("http://localhost/api/admin/comfy/runs"))).status).toBe(200);expect(pilotState).toHaveBeenCalledWith("admin-1");});
+});
+const mossRequest=(params:unknown={prompt:"A red bicycle",seed:1},extra:Record<string,unknown>={})=>new Request("http://localhost/api/admin/comfy/runs",{method:"POST",body:JSON.stringify({template:"moss-image",params,idempotency_key:"b3263425-3a14-4170-a22c-8959566db7ac",...extra})});
+describe("private admin MOSS admission",()=>{
+  beforeEach(()=>vi.stubEnv("COMFY_MOSS_ENABLED","true"));
+  it("is disabled unless its own flag is on, even when H3 is enabled",async()=>{vi.stubEnv("COMFY_MOSS_ENABLED","");expect((await POST(mossRequest())).status).toBe(503);expect(rpc).not.toHaveBeenCalled();});
+  it("rejects unknown templates and undeclared parameters before admission",async()=>{
+    expect((await POST(mossRequest(undefined,{template:"comfy-anything"}))).status).toBe(400);
+    expect((await POST(mossRequest({prompt:"A red bicycle",denoise:0.3}))).status).toBe(400);
+    expect((await POST(mossRequest({prompt:"A red bicycle",first_frame_path:"admin-1/x.png"}))).status).toBe(400);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+  it("admits through the runtime gate with the frozen graph, never the H3 pilot function",async()=>{
+    const res=await POST(mossRequest());expect(res.status).toBe(202);
+    expect(rpc).toHaveBeenCalledWith("admit_comfy_runtime_run",expect.objectContaining({p_runtime:"moss-image@1",p_template:"moss-image@1",p_user:"admin-1",p_hash:expect.stringMatching(/^[a-f0-9]{64}$/)}));
+    expect(rpc).not.toHaveBeenCalledWith("admit_comfy_admin_run",expect.anything());
+    expect(dispatchRun).toHaveBeenCalledWith("run-1");
+  });
+  it("returns 409 and does not dispatch when the gate refuses",async()=>{rpc.mockResolvedValue({error:{message:"RUNTIME_NOT_AUTHORIZED"}});expect((await POST(mossRequest())).status).toBe(409);expect(dispatchRun).not.toHaveBeenCalled();});
+  it("serves MOSS readiness from its own gate",async()=>{
+    vi.mocked(runtimeGateState).mockResolvedValue({ready:false,blockers:[],reason:"Licence validation is pending",allowance:null,licence_confirmed:false});
+    const res=await GET(new Request("http://localhost/api/admin/comfy/runs?template=moss-image"));
+    expect(res.status).toBe(200);expect(runtimeGateState).toHaveBeenCalledWith("admin-1","moss-image@1","COMFY_MOSS_ENABLED");
+    expect(pilotState).not.toHaveBeenCalled();
+  });
+});
+
+describe("a reference that no longer exists never reaches admission",()=>{
+  const path="admin-1/11111111-1111-4111-8111-111111111111.png";
+  const withReference=(exists:boolean)=>{
+    const createSignedUrl=vi.fn().mockResolvedValue(exists?{data:{signedUrl:"https://signed"},error:null}:{data:null,error:{message:"Object not found"}});
+    vi.mocked(createServiceClient).mockReturnValue({rpc,storage:{from:()=>({createSignedUrl})}} as unknown as ReturnType<typeof createServiceClient>);
+    return createSignedUrl;
+  };
+  const withFrame=()=>request({prompt:"A cinematic sunset",seed:1,quality:"turbo",first_frame_path:path});
+  it("refuses a missing reference: nothing is reserved, nothing is dispatched",async()=>{
+    const probe=withReference(false);
+    const res=await POST(withFrame());
+    expect(res.status).toBe(400);expect((await res.json()).error).toMatch(/no longer exists/);
+    expect(probe).toHaveBeenCalledWith(path,60);
+    expect(rpc).not.toHaveBeenCalled();expect(dispatchRun).not.toHaveBeenCalled();
+  });
+  it("admits normally when the reference exists",async()=>{
+    withReference(true);
+    expect((await POST(withFrame())).status).toBe(202);
+    expect(rpc).toHaveBeenCalledWith("admit_comfy_admin_run",expect.objectContaining({p_reference:path}));
+  });
+  it("does not look for a file when the run has no reference",async()=>{
+    const probe=withReference(true);
+    expect((await POST(request())).status).toBe(202);
+    expect(probe).not.toHaveBeenCalled();
+  });
+});

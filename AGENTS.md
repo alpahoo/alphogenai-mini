@@ -90,6 +90,9 @@ fichiers `agent/*`** (tasks → log → review), jamais par mémoire implicite.
 - Jamais committer de valeurs d'env / secrets.
 - Jamais loguer secrets / tokens déchiffrés.
 - Toujours valider les inputs API côté serveur + plan gate.
+- Toute nouvelle table `public` : `GRANT` explicites (`authenticated`, `service_role`, `anon`
+  seulement si public) + RLS dans la même migration que le `CREATE TABLE`. Depuis le
+  30/10/2026, Supabase ne les accorde plus automatiquement. Modèle dans `CLAUDE.md`.
 - Jamais `--no-verify`, jamais force-push sur `main`.
 
 ## Git

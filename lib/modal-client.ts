@@ -327,3 +327,19 @@ export async function triggerRenderNativeProductAd(jobId: string): Promise<void>
     );
   }
 }
+
+/** Start the long-form video -> ranked vertical Shorts worker on Modal. */
+export async function triggerCreateShorts(packId: string): Promise<void> {
+  const webhookSecret = secret();
+  if (!webhookSecret) throw new Error("MODAL_WEBHOOK_SECRET not configured");
+  const res = await fetch(`${modalBase()}/create-shorts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-webhook-secret": webhookSecret },
+    body: JSON.stringify({ pack_id: packId }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(`Modal /create-shorts ${res.status}: ${detail.slice(0, 200)}`);
+  }
+}

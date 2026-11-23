@@ -391,6 +391,20 @@ Audit + actions 2026-06-09 (go Paul) sur les 4 items de durcissement restants :
 - ATTENTION **URL→Video ne respecte pas un script imposé** (`override_script` ignoré) — c'est voulu
   (copie auto). Script verbatim = Avatar Video (V2). À cadrer côté UX quand UI publique.
 - Décision actée : URL→Video V1 **GELÉ** sur Jogg (validé prod 2026-07-16), périmètre copie auto.
+## H3-ADMIN-1 — 2026-11-08 — authorized implementation boundaries
+- The user's current request explicitly authorizes preparing auth/service-role, additive migrations, Modal and CI code in a reviewable PR. Applying migrations, deployment, merge and paid execution remain unauthorized.
+- First slice is admin-only; no public moderation claim, publication, Studio or MOSS implementation. Private outputs never enter legacy R2 or public jobs URLs. Production activation needs private rights confirmation and a single execution permit.
+- PR #90 Actions: 15 focused tests passed on 3fd751d. Existing /v and R2 exposure remains outside that fix. H3 branches from #90 so the API privacy dependency is visible.
+
+## MOSS capacity repair — 2026-11-09 — Codex
+- Explicit user request authorizes this targeted Modal code repair despite the generic role restriction in AGENTS.md. Production deployment and GPU remain unauthorized.
+- Shared CPU broker hard timeout must cover the MOSS window; H3 keeps its 110s start and 310s collection limit. Waiting for capacity can still fail after 5 minutes; no retry/fallback or region change. Longer broker waiting consumes CPU; $0.20 is an admission provision, not a Modal invoice cap.
+
+## MOSS queued-call cancellation — 2026-11-09 — Codex
+- User explicitly authorizes targeted Modal corrections and necessary tests/config despite generic role restrictions. No production action authorized by this request.
+- SDK 1.6.3 refuses public spawn on generators and its deployed input-plane generator API exposes no pre-start call ID. Reuse the native control-plane submission used by SDK spawn via a small, explicitly private/version-locked adapter; keep native generator frame decoding. Test with actual SDK and mocked transport. Fail closed on version mismatch. Do not rely on best-effort call-graph discovery.
+- Cancellation acknowledgement can fail under network/service outage: expose GPU_CANCELLATION_FAILED, preserve reservation, never claim success or retry automatically. Submission response loss also remains an explicitly uncertain state. Availability within 5 minutes cannot be guaranteed by code.
+
 ## Parallax Video lot — 2026-11-23
 - Le périmètre est volontairement documentaire : le port H3/MiniMax ne peut pas être déclaré livré depuis `main`, car son manifest et sa route admin dédiée sont absents.
 - Ne pas réutiliser une route générique pour contourner l’admin, les bornes, le quota ou la propriété. Le prochain code doit brancher ces contrôles avant tout provider et conserver le stockage privé.

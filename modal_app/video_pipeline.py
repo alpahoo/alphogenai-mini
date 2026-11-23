@@ -82,6 +82,21 @@ overlay_image = (
     .pip_install("pillow", "httpx", "boto3", "supabase", "sentry-sdk", "cryptography")
 )
 
+# Long-form -> Shorts. Whisper runs locally; no transcription provider call.
+clipping_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("ffmpeg", "fonts-dejavu-core")
+    .pip_install(
+        "faster-whisper==1.1.1",
+        "requests",
+        "supabase",
+        "boto3",
+        "httpx",
+        "sentry-sdk",
+        "cryptography",
+    )
+)
+
 # Explainer renderer (code-based slides + Kokoro voice) â€” CPU only, no GPU.
 # Mirrors infra/explainer-renderer/Dockerfile: Node 22 (HyperFrames) + chromium
 # + ffmpeg + python/kokoro-onnx + the model baked in. Renderer scripts (build.js,
@@ -266,6 +281,171 @@ def upload_to_r2(
 
     public_url = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")
     return f"{public_url}/{key}"
+
+
+def _short_candidates(segments, count: int):
+    """Build ranked, non-overlapping 18-45s windows from Whisper segments."""
+    hook_words = {
+        "how", "why", "secret", "mistake", "never", "best", "worst", "important",
+        "comment", "pourquoi", "secret", "erreur", "jamais", "meilleur", "important",
+    }
+    candidates = []
+    for start_index in range(len(segments)):
+        start = float(segments[start_index]["start"])
+        text_parts = []
+        end = start
+        for end_index in range(start_index, len(segments)):
+            end = float(segments[end_index]["end"])
+            if end - start > 45:
+                break
+            text_parts.append(segments[end_index]["text"].strip())
+            duration = end - start
+            if duration < 18:
+                continue
+            text = " ".join(text_parts).strip()
+            words = [word.strip(".,!?;:\"'()[]").lower() for word in text.split()]
+            density = len(words) / max(duration, 1)
+            hook = sum(1 for word in words if word in hook_words)
+            ending = 1.0 if text.endswith((".", "!", "?")) else 0.0
+            segment_text = segments[start_index]["text"].strip()
+            clean_start = (
+                start_index == 0
+                or segments[start_index - 1]["text"].strip().endswith((".", "!", "?"))
+                or (segment_text and segment_text[0].isupper())
+            )
+            score = density + hook * 0.45 + ending * 0.25 - abs(duration - 30) * 0.012
+            candidates.append({
+                "start": start,
+                "end": end,
+                "text": text,
+                "score": score,
+                "clean_start": clean_start,
+            })
+    clean_candidates = sorted(
+        (candidate for candidate in candidates if candidate["clean_start"]),
+        key=lambda item: item["score"],
+        reverse=True,
+    )
+    fallback_candidates = sorted(
+        (candidate for candidate in candidates if not candidate["clean_start"]),
+        key=lambda item: item["score"],
+        reverse=True,
+    )
+    selected = []
+    for candidate in clean_candidates + fallback_candidates:
+        if any(min(candidate["end"], item["end"]) - max(candidate["start"], item["start"]) > 3 for item in selected):
+            continue
+        selected.append(candidate)
+        if len(selected) >= count:
+            break
+    return sorted(selected, key=lambda item: item["score"], reverse=True)
+
+
+def _srt_timestamp(seconds: float) -> str:
+    millis = max(0, int(round(seconds * 1000)))
+    hours, millis = divmod(millis, 3_600_000)
+    minutes, millis = divmod(millis, 60_000)
+    secs, millis = divmod(millis, 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
+
+
+def _short_caption_cues(segments, window_start: float, window_end: float, words_per_cue: int = 5):
+    """Split verbose Whisper segments into short, timed social-video captions."""
+    cues = []
+    for item in segments:
+        words = item["text"].strip().split()
+        if not words:
+            continue
+        start = max(window_start, float(item["start"]))
+        end = min(window_end, float(item["end"]))
+        if end <= start:
+            continue
+        chunks = [words[index:index + words_per_cue] for index in range(0, len(words), words_per_cue)]
+        total_words = max(1, len(words))
+        cursor = start
+        for index, chunk in enumerate(chunks):
+            share = len(chunk) / total_words
+            chunk_end = end if index == len(chunks) - 1 else min(end, cursor + (end - start) * share)
+            cues.append({"start": cursor - window_start, "end": chunk_end - window_start, "text": " ".join(chunk)})
+            cursor = chunk_end
+    return cues
+
+
+@app.function(image=clipping_image, secrets=[secrets], timeout=1800, cpu=4, memory=8192)
+def create_short_pack(pack_id: str):
+    """Transcribe one private source and publish ranked 9:16 captioned clips."""
+    import shutil
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    sb = get_supabase_client()
+    pack_rows = sb.table("clipping_packs").select("*").eq("id", pack_id).limit(1).execute().data
+    if not pack_rows:
+        raise ValueError("Clipping pack not found")
+    pack = pack_rows[0]
+    sb.table("clipping_packs").update({"status": "processing", "error_message": None}).eq("id", pack_id).execute()
+    workdir = Path(tempfile.mkdtemp(prefix=f"clips-{pack_id[:8]}-"))
+    try:
+        from faster_whisper import WhisperModel
+
+        source = workdir / "source.mp4"
+        source.write_bytes(sb.storage.from_("clipping-sources").download(pack["source_path"]))
+        model = WhisperModel("small", device="cpu", compute_type="int8", cpu_threads=4)
+        raw_segments, _ = model.transcribe(str(source), vad_filter=True, beam_size=5)
+        segments = [
+            {"start": float(item.start), "end": float(item.end), "text": item.text.strip()}
+            for item in raw_segments if item.text.strip()
+        ]
+        selected = _short_candidates(segments, int(pack.get("clip_count") or 3))
+        if not selected:
+            raise RuntimeError("No spoken moments were found in this video")
+        sb.table("clipping_pack_clips").delete().eq("pack_id", pack_id).execute()
+        ready = 0
+        for index, window in enumerate(selected, start=1):
+            title_words = window["text"].replace("\n", " ").split()[:9]
+            title = " ".join(title_words).strip() or f"Short {index}"
+            row = sb.table("clipping_pack_clips").insert({
+                "pack_id": pack_id, "rank": index, "title": title[:200],
+                "transcript": window["text"], "start_seconds": window["start"],
+                "end_seconds": window["end"], "score": window["score"], "status": "processing",
+            }).execute().data[0]
+            try:
+                relative = [item for item in segments if item["end"] > window["start"] and item["start"] < window["end"]]
+                srt = workdir / f"short-{index}.srt"
+                blocks = []
+                for number, cue in enumerate(_short_caption_cues(relative, window["start"], window["end"]), start=1):
+                    blocks.append(
+                        f"{number}\n{_srt_timestamp(cue['start'])} --> {_srt_timestamp(cue['end'])}\n{cue['text']}\n"
+                    )
+                srt.write_text("\n".join(blocks), encoding="utf-8")
+                output = workdir / f"short-{index}.mp4"
+                escaped_srt = str(srt).replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
+                vf = (
+                    "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,"
+                    f"subtitles='{escaped_srt}':force_style='FontName=DejaVu Sans,FontSize=14,"
+                    "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=3,"
+                    "Shadow=1,Alignment=2,MarginV=80'"
+                )
+                result = subprocess.run([
+                    "ffmpeg", "-y", "-ss", f"{window['start']:.3f}", "-to", f"{window['end']:.3f}",
+                    "-i", str(source), "-vf", vf, "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                    "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(output),
+                ], capture_output=True, text=True)
+                if result.returncode != 0:
+                    raise RuntimeError(f"ffmpeg short failed: {result.stderr[-500:]}")
+                url = upload_to_r2(output.read_bytes(), f"shorts/{pack_id}/{row['id']}")
+                sb.table("clipping_pack_clips").update({"status": "ready", "video_url": url, "error_message": None}).eq("id", row["id"]).execute()
+                ready += 1
+            except Exception as clip_error:
+                sb.table("clipping_pack_clips").update({"status": "failed", "error_message": str(clip_error)[:1000]}).eq("id", row["id"]).execute()
+        final_status = "ready" if ready == len(selected) else "partial" if ready else "failed"
+        sb.table("clipping_packs").update({"status": final_status, "error_message": None if ready else "No Short could be rendered."}).eq("id", pack_id).execute()
+        return {"pack_id": pack_id, "status": final_status, "ready": ready}
+    except Exception as exc:
+        sb.table("clipping_packs").update({"status": "failed", "error_message": str(exc)[:1000]}).eq("id", pack_id).execute()
+        raise
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
 
 
 def update_scene(job_id: str, scene_index: int, **fields):
@@ -3981,6 +4161,9 @@ def webhook():
     class RenderNativeProductAdRequest(BaseModel):
         job_id: str
 
+    class CreateShortsRequest(BaseModel):
+        pack_id: str
+
     @web.post("/webhook")
     async def trigger(req: JobRequest, x_webhook_secret: str = Header(None)):
         expected = os.environ.get("MODAL_WEBHOOK_SECRET")
@@ -4140,6 +4323,18 @@ def webhook():
             print(f"[webhook /render-native-product-ad] spawn failed: {e}")
             raise HTTPException(status_code=500, detail=str(e)[:200])
         return {"success": True, "job_id": req.job_id}
+
+    @web.post("/create-shorts")
+    async def create_shorts_ep(req: CreateShortsRequest, x_webhook_secret: str = Header(None)):
+        expected = os.environ.get("MODAL_WEBHOOK_SECRET")
+        if not expected or x_webhook_secret != expected:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        try:
+            await create_short_pack.spawn.aio(req.pack_id)
+        except Exception as e:
+            print(f"[webhook /create-shorts] spawn failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e)[:200])
+        return {"success": True, "pack_id": req.pack_id}
 
     @web.post("/apply-voiceover")
     async def apply_voiceover(req: ConcatRequest, x_webhook_secret: str = Header(None)):

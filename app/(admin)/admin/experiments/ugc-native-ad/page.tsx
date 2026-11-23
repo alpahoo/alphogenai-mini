@@ -69,6 +69,7 @@ export default function NativeUGCExperimentPage() {
   const [running, setRunning] = useState(false);
   const [runningMode, setRunningMode] = useState<ExperimentMode | null>(null);
   const [result, setResult] = useState<ExperimentResult | null>(null);
+  const [polishJobId, setPolishJobId] = useState("");
   const resumedJobRef = useRef<string | null>(null);
   const productReferenceInputRef = useRef<HTMLInputElement | null>(null);
   const readyPresenters = useMemo(
@@ -336,6 +337,11 @@ export default function NativeUGCExperimentPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const jobId = new URLSearchParams(window.location.search).get("polish_job_id");
+    if (jobId) setPolishJobId(jobId);
+  }, []);
+
   const retryDirectedAssembly = async (jobId: string) => {
     setRunning(true);
     setRunningMode("directed_edit");
@@ -373,6 +379,40 @@ export default function NativeUGCExperimentPage() {
         ...current,
         status: "failed",
         error: error instanceof Error ? error.message : "Could not retry the final assembly.",
+      }));
+    } finally {
+      setRunning(false);
+      setRunningMode(null);
+    }
+  };
+
+  const retryLipSyncPolish = async (jobId: string) => {
+    setRunning(true);
+    setRunningMode("native");
+    setResult({ jobId, status: "processing" });
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Unauthorized");
+      const response = await fetch("/api/admin/experiments/ugc-native-ad", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "retry_polish", jobId }),
+      });
+      const json = (await response.json().catch(() => ({}))) as ExperimentResult;
+      if (!response.ok) throw new Error(json.error || "Could not start lip-sync polish.");
+      setResult({ ...json, jobId, status: "processing" });
+      await poll(jobId, "native");
+    } catch (error) {
+      setResult((current) => ({
+        ...current,
+        jobId,
+        status: "failed",
+        error: error instanceof Error ? error.message : "Could not retry lip-sync polish.",
       }));
     } finally {
       setRunning(false);
@@ -611,6 +651,35 @@ export default function NativeUGCExperimentPage() {
         </div>
       </section>
 
+      <section className="border border-border p-5">
+        <div className="text-sm font-medium">Lip-sync recovery</div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Reuse an existing native UGC video and apply only the phonetic lip-sync pass.
+          This does not launch another Seedance generation.
+        </p>
+        <div className="mt-4 flex gap-2">
+          <input
+            value={polishJobId}
+            onChange={(event) => setPolishJobId(event.target.value.trim())}
+            placeholder="Existing job ID"
+            className="h-10 min-w-0 flex-1 border border-border bg-background px-3 text-sm"
+          />
+          <button
+            type="button"
+            onClick={() => retryLipSyncPolish(polishJobId)}
+            disabled={running || !polishJobId}
+            className="inline-flex h-10 items-center gap-2 bg-foreground px-4 text-sm font-semibold text-background disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {runningMode === "native" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            Apply lip-sync only
+          </button>
+        </div>
+      </section>
+
       {result && (
         <section className="border border-border p-5">
           <div className="flex items-start gap-3">
@@ -643,6 +712,21 @@ export default function NativeUGCExperimentPage() {
                   Open final MP4
                   <ExternalLink className="h-4 w-4" />
                 </a>
+              )}
+              {result.status === "done" && result.jobId && result.videoUrl && (
+                <button
+                  type="button"
+                  onClick={() => retryLipSyncPolish(result.jobId!)}
+                  disabled={running}
+                  className="ml-3 mt-3 inline-flex h-9 items-center gap-2 border border-border px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {runningMode === "native" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  Retry lip-sync polish only
+                </button>
               )}
               {result.outputs && (
                 <div className="mt-4 flex flex-wrap gap-3">

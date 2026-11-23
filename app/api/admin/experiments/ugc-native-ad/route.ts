@@ -18,6 +18,10 @@ import {
   type UGCNativeAdTask,
 } from "@/lib/ugc-shot-provider";
 import { downloadAndUploadToR2, uploadBufferToR2 } from "@/lib/r2";
+import {
+  pollUGCLipSyncPolish,
+  startUGCLipSyncPolish,
+} from "@/lib/video-presenter-native-animation-provider";
 
 export const maxDuration = 60;
 
@@ -53,11 +57,18 @@ interface UGCNativeAdState {
     adId: string;
     providerTaskId: string;
   } | null;
+  polish: {
+    status: "processing" | "failed";
+    taskId: string;
+    rawVideoUrl: string;
+    errorCode?: string;
+  } | null;
   output: {
     status: "ready" | "failed";
     videoUrl?: string;
     errorCode?: string;
     usageUnits?: number;
+    polishApplied?: boolean;
   } | null;
 }
 
@@ -336,6 +347,7 @@ async function startNativeAd(
     nativeBaseId: mode === "native" ? nativeBaseId || null : null,
     verifiedAssetIds: mode === "native" ? resolvedAssetIds : [],
     task: null,
+    polish: null,
     output: null,
   };
 
@@ -427,6 +439,63 @@ async function pollNativeAd(user: { id: string }, body: Record<string, unknown>)
     });
   }
 
+  if (state.polish?.status === "processing") {
+    const polishResult = await pollUGCLipSyncPolish(state.polish.taskId);
+    if (polishResult.status === "processing") {
+      return NextResponse.json({
+        success: true,
+        jobId: job.id,
+        status: "processing",
+        stage: "lipsync_polish",
+        usageUnits: state.output?.usageUnits,
+      });
+    }
+
+    const polishApplied = polishResult.status === "completed";
+    const finalVideoUrl = polishApplied
+      ? polishResult.outputUrl
+      : state.polish.rawVideoUrl;
+    const nextState: UGCNativeAdState = {
+      ...state,
+      polish: polishApplied
+        ? null
+        : {
+            ...state.polish,
+            status: "failed",
+            errorCode: "lipsync_polish_failed",
+          },
+      output: {
+        status: "ready",
+        videoUrl: finalVideoUrl,
+        usageUnits: state.output?.usageUnits,
+        polishApplied,
+        ...(polishApplied ? {} : { errorCode: "lipsync_polish_failed" }),
+      },
+    };
+    const { error: updateError } = await service
+      .from("jobs")
+      .update({
+        status: "done",
+        current_stage: "done",
+        error_message: null,
+        video_url: finalVideoUrl,
+        output_url_final: finalVideoUrl,
+        app_state: nextState,
+      })
+      .eq("id", job.id);
+    if (updateError) {
+      return NextResponse.json({ error: "Could not save the polished UGC ad." }, { status: 500 });
+    }
+    return NextResponse.json({
+      success: true,
+      jobId: job.id,
+      status: "done",
+      videoUrl: finalVideoUrl,
+      polishApplied,
+      usageUnits: state.output?.usageUnits,
+    });
+  }
+
   const task: UGCNativeAdTask = {
     adId: state.task.adId,
     providerTaskId: state.task.providerTaskId,
@@ -477,12 +546,57 @@ async function pollNativeAd(user: { id: string }, body: Record<string, unknown>)
     result.videoUrl,
     `videos/ugc-native-ad/${job.id}/${randomUUID()}.mp4`
   );
+
+  if (state.mode === "native") {
+    try {
+      // The provider video contains the approved narration. Feeding the same
+      // media as audio preserves that voice while LatentSync corrects phonemes.
+      const polishTaskId = await startUGCLipSyncPolish({
+        videoUrl: permanentUrl,
+        audioUrl: permanentUrl,
+      });
+      const nextState: UGCNativeAdState = {
+        ...state,
+        polish: {
+          status: "processing",
+          taskId: polishTaskId,
+          rawVideoUrl: permanentUrl,
+        },
+        output: {
+          status: "ready",
+          videoUrl: permanentUrl,
+          usageUnits: result.usageUnits,
+          polishApplied: false,
+        },
+      };
+      const { error: updateError } = await service
+        .from("jobs")
+        .update({ current_stage: "lipsync_polish", app_state: nextState })
+        .eq("id", job.id);
+      if (updateError) {
+        return NextResponse.json({ error: "Could not save lip-sync progress." }, { status: 500 });
+      }
+      return NextResponse.json({
+        success: true,
+        jobId: job.id,
+        status: "processing",
+        stage: "lipsync_polish",
+        usageUnits: result.usageUnits,
+      });
+    } catch (error) {
+      console.error(`[ugc-native-ad] lip-sync polish start failed job=${job.id}`, error);
+      // Polish is additive: the already-approved native result remains usable.
+    }
+  }
+
   const nextState: UGCNativeAdState = {
     ...state,
     output: {
       status: "ready",
       videoUrl: permanentUrl,
       usageUnits: result.usageUnits,
+      polishApplied: false,
+      ...(state.mode === "native" ? { errorCode: "lipsync_polish_unavailable" } : {}),
     },
   };
   const { error: updateError } = await service
@@ -509,11 +623,92 @@ async function pollNativeAd(user: { id: string }, body: Record<string, unknown>)
   });
 }
 
+async function retryLipSyncPolish(user: { id: string }, body: Record<string, unknown>) {
+  const jobId = typeof body.jobId === "string" ? body.jobId : "";
+  if (!UUID_RE.test(jobId)) {
+    return NextResponse.json({ error: "A valid job id is required." }, { status: 400 });
+  }
+
+  const service = createServiceClient();
+  const { data: job, error } = await service
+    .from("jobs")
+    .select("id,status,app_state,output_url_final,video_url")
+    .eq("id", jobId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (error || !job) return NextResponse.json({ error: "Job not found." }, { status: 404 });
+
+  const state = job.app_state as UGCNativeAdState | null;
+  if (state?.capability !== "ugc_native_ad" || state.mode !== "native") {
+    return NextResponse.json({ error: "This job cannot use UGC lip-sync polish." }, { status: 400 });
+  }
+  if (state.polish?.status === "processing") {
+    return NextResponse.json(
+      { success: true, jobId: job.id, status: "processing", stage: "lipsync_polish" },
+      { status: 202 },
+    );
+  }
+
+  const rawVideoUrl =
+    state.polish?.rawVideoUrl ||
+    state.output?.videoUrl ||
+    job.output_url_final ||
+    job.video_url;
+  if (typeof rawVideoUrl !== "string" || !rawVideoUrl) {
+    return NextResponse.json({ error: "This job has no reusable source video." }, { status: 409 });
+  }
+
+  try {
+    const taskId = await startUGCLipSyncPolish({
+      videoUrl: rawVideoUrl,
+      audioUrl: rawVideoUrl,
+    });
+    const nextState: UGCNativeAdState = {
+      ...state,
+      polish: { status: "processing", taskId, rawVideoUrl },
+      output: {
+        status: "ready",
+        videoUrl: rawVideoUrl,
+        usageUnits: state.output?.usageUnits,
+        polishApplied: false,
+      },
+    };
+    const { error: updateError } = await service
+      .from("jobs")
+      .update({
+        status: "in_progress",
+        current_stage: "lipsync_polish",
+        error_message: null,
+        app_state: nextState,
+      })
+      .eq("id", job.id);
+    if (updateError) {
+      return NextResponse.json({ error: "Could not save lip-sync retry progress." }, { status: 500 });
+    }
+    return NextResponse.json(
+      { success: true, jobId: job.id, status: "processing", stage: "lipsync_polish" },
+      { status: 202 },
+    );
+  } catch (retryError) {
+    console.error(`[ugc-native-ad] lip-sync retry failed job=${job.id}`, retryError);
+    return NextResponse.json(
+      {
+        error:
+          retryError instanceof Error
+            ? retryError.message
+            : "Lip-sync polish could not be started.",
+      },
+      { status: 502 },
+    );
+  }
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth.response) return auth.response;
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   if (body.action === "start") return startNativeAd(auth.user, body);
   if (body.action === "poll") return pollNativeAd(auth.user, body);
+  if (body.action === "retry_polish") return retryLipSyncPolish(auth.user, body);
   return NextResponse.json({ error: "Unsupported action." }, { status: 400 });
 }

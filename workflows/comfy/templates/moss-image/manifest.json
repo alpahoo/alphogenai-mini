@@ -1,0 +1,33 @@
+{
+  "schema": "alphogen.comfy.manifest/1",
+  "slug": "moss-image",
+  "title": "MOSS-Image",
+  "runtime": "moss-image@1",
+  "version": 1,
+  "access": "admin",
+  "variants": {"text": "t2i"},
+  "params": [
+    {"key": "prompt", "label": "Prompt", "widget": "text", "required": true, "maxLength": 2000, "target": {"node": "4", "input": "text"},
+     "tier": "simple", "help": "Describe subject, composition, lighting, style and any text to render."},
+    {"key": "aspect", "label": "Format", "widget": "select", "options": ["1:1", "4:3", "3:4", "16:9", "9:16", "3:2", "2:3"], "default": "1:1",
+     "optionLabels": {"1:1": "Square", "4:3": "Landscape 4:3", "3:4": "Portrait 3:4", "16:9": "Wide", "9:16": "Tall", "3:2": "Photo landscape", "2:3": "Photo portrait"},
+     "tier": "simple"},
+    {"key": "negative_prompt", "label": "Negative prompt", "widget": "text", "required": false, "maxLength": 1000, "default": "nsfw, worst quality, bad anatomy, watermark, jpeg artifact",
+     "target": {"node": "5", "input": "text"}, "tier": "advanced", "help": "What to avoid. The official template default is pre-filled."},
+    {"key": "seed", "label": "Seed", "widget": "number", "min": 0, "max": 9007199254740991, "step": 1, "target": {"node": "7", "input": "seed"},
+     "tier": "advanced", "help": "Leave empty for a random seed. Lock it to reproduce a result."},
+    {"key": "steps", "label": "Steps", "widget": "number", "min": 10, "max": 50, "step": 1, "default": 25, "target": {"node": "7", "input": "steps"},
+     "tier": "advanced", "help": "Official template: 25. More steps cost more GPU time."},
+    {"key": "cfg", "label": "Guidance (CFG)", "widget": "number", "min": 1, "max": 6, "step": 0.1, "default": 2.5, "target": {"node": "7", "input": "cfg"},
+     "tier": "advanced", "help": "Official template: 2.5."},
+    {"key": "sampler_name", "label": "Sampler", "widget": "select", "options": ["er_sde", "euler", "dpmpp_2m", "res_multistep"], "default": "er_sde",
+     "target": {"node": "7", "input": "sampler_name"}, "tier": "advanced", "help": "Official template: er_sde. Others are untested with MOSS."},
+    {"key": "scheduler", "label": "Scheduler", "widget": "select", "options": ["simple", "beta", "karras", "sgm_uniform"], "default": "simple",
+     "target": {"node": "7", "input": "scheduler"}, "tier": "advanced", "help": "Official template: simple."}
+  ],
+  "resolutions": {"1:1": [1024, 1024], "4:3": [1152, 864], "3:4": [864, 1152], "16:9": [1344, 768], "9:16": [768, 1344], "3:2": [1216, 832], "2:3": [832, 1216]},
+  "locked": ["unet_name", "clip_name", "vae_name", "denoise", "batch_size"],
+  "outputs": [{"node": "9", "kind": "image", "mime": "image/png"}],
+  "preserve_raw": true,
+  "studio": {"kind": "image", "modes": ["text-to-image"], "variant_axes": []}
+}

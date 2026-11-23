@@ -322,7 +322,7 @@ export default function JobPage() {
       }
       const data = await res.json();
       if (!res.ok) {
-        if (res.status === 404) { setAuthState("denied"); return "error"; }
+        if ([401, 403, 404].includes(res.status)) { setAuthState("denied"); return "error"; }
         throw new Error(data.error || "Failed to fetch job");
       }
       setJob(data.job);

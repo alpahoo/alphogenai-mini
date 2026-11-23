@@ -6,6 +6,12 @@ const nextConfig: NextConfig = {
     formats: ["image/avif", "image/webp"],
   },
   transpilePackages: ["lucide-react"],
+  // Montage (app/api/admin/studio/montages): ffmpeg runs from the binary installed by `ffmpeg-static`. The package
+  // stays external (its path is resolved at runtime) and the binary is added to that route's serverless bundle.
+  serverExternalPackages: ["ffmpeg-static"],
+  outputFileTracingIncludes: {
+    "/api/admin/studio/montages": ["./node_modules/ffmpeg-static/ffmpeg*"],
+  },
   webpack: (config) => {
     config.externals = [...(config.externals || []), { remotion: "remotion" }];
     return config;

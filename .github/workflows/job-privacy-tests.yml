@@ -1,0 +1,38 @@
+name: Job privacy unit tests
+
+on:
+  pull_request:
+    paths:
+      - "app/api/jobs/[id]/route.ts"
+      - "app/api/jobs/[id]/route.test.ts"
+      - "app/api/cron/evolink-poll/route.ts"
+      - "lib/cron-auth.ts"
+      - "lib/__tests__/cron-auth.test.ts"
+      - ".github/workflows/job-privacy-tests.yml"
+  push:
+    branches:
+      - fix/job-privacy-access
+    paths:
+      - "app/api/jobs/[id]/route.ts"
+      - "app/api/jobs/[id]/route.test.ts"
+      - "app/api/cron/evolink-poll/route.ts"
+      - "lib/cron-auth.ts"
+      - "lib/__tests__/cron-auth.test.ts"
+      - ".github/workflows/job-privacy-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  access-control-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Run focused access-control tests
+        run: npx vitest run "app/api/jobs/[id]/route.test.ts" "lib/__tests__/cron-auth.test.ts"

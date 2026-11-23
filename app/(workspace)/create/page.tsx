@@ -30,6 +30,34 @@ interface Tool {
 
 const TOOLS: Tool[] = [
   {
+    id: "clipping",
+    title: "Clipping & Shorts",
+    description: "Upload a long video and receive ranked vertical clips with captions.",
+    badge: "New",
+    visual: "linear-gradient(135deg, #fff1fb, #ffffff 52%, #ede9fe)",
+    href: "/create/clipping",
+    status: "live",
+  },
+  {
+    id: "headshot",
+    title: "Professional Headshots",
+    description: "Upload a few photos and receive four consistent professional portraits.",
+    badge: "New",
+    visual: "linear-gradient(135deg, #e9f1ff, #ffffff 52%, #e8dcff)",
+    href: "/create/headshot",
+    status: "live",
+  },
+  {
+    id: "amazon",
+    title: "Amazon Product Pack",
+    description: "Upload product photos and receive a hero, lifestyle image, feature card, and close-up.",
+    badge: "New",
+    visual: "linear-gradient(135deg, #eefbf4, #ffffff 52%, #d9f3ff)",
+    href: "/create/amazon",
+    status: "live",
+    recommended: true,
+  },
+  {
     id: "story",
     title: "Story / Cinematic",
     description: "Plan scenes with the Director. Describe a scene or sequence, add references, then generate.",
@@ -47,7 +75,6 @@ const TOOLS: Tool[] = [
     visual: "linear-gradient(135deg, #fff7db, #f9fbff 50%, #83e8ff)",
     href: "/create/url",
     status: "live",
-    recommended: true,
   },
   {
     id: "avatar",
@@ -94,6 +121,22 @@ const TOOLS: Tool[] = [
 function CardVisual({ tool }: { tool: Tool }) {
   const common = "h-32 w-full rounded-2xl border border-white/50 shadow-inner overflow-hidden";
   switch (tool.id) {
+    case "clipping":
+      return <div className={common} style={{ background: tool.visual }}><div className="flex h-full items-center justify-center gap-3 p-4">{[1, 2, 3].map((item) => <div key={item} className="flex h-24 w-14 flex-col justify-end border border-fuchsia-200 bg-slate-950 p-1.5 shadow-sm"><div className="mb-2 h-1 w-full bg-white/60" /><span className="text-[8px] font-bold text-fuchsia-200">#{item} Short</span></div>)}</div></div>;
+    case "headshot":
+      return <div className={common} style={{ background: tool.visual }}><div className="grid h-full grid-cols-4 gap-2 p-4">{["Studio", "Executive", "Natural", "Creative"].map((label, index) => <div key={label} className="flex flex-col items-center justify-end border border-blue-100 bg-white p-2 shadow-sm"><div className={`mb-2 h-10 w-10 rounded-full ${["bg-slate-200", "bg-blue-100", "bg-amber-100", "bg-violet-100"][index]}`} /><span className="text-[9px] font-bold text-slate-600">{label}</span></div>)}</div></div>;
+    case "amazon":
+      return (
+        <div className={common} style={{ background: tool.visual }}>
+          <div className="grid h-full grid-cols-2 gap-2 p-4">
+            {["Hero", "Lifestyle", "Features", "Detail"].map((label, index) => (
+              <div key={label} className="flex items-end border border-emerald-200 bg-white p-2 shadow-sm">
+                <span className="text-[10px] font-bold text-slate-600">{index + 1}. {label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
     case "story": // director clapperboard + scene frames (dark featured card)
       return (
         <div className={common} style={{ background: tool.visual }}>

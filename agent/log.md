@@ -1,3 +1,10 @@
+## 2026-10-20 — Claude — Règle GRANT explicites Supabase (changement du 30/10/2026)
+- Supabase n'accordera plus automatiquement l'accès Data API aux nouvelles tables `public` à partir du 30/10/2026
+  (tables existantes non affectées). Vérifié sur le projet : default privileges encore actifs aujourd'hui.
+- Ajouté la règle + un modèle de migration (CREATE TABLE + RLS + GRANT + policy) dans `CLAUDE.md`, et un rappel
+  dans les garde-fous de `AGENTS.md` pour Codex. Docs uniquement, aucune migration ni changement DB.
+- Prochaine étape : appliquer le modèle à la prochaine table créée et vérifier ses GRANT après application.
+
 ## 2026-07-31 — Claude — Creator UGC (T-1164d) corrected paid QA: visual+audio PASS, lip-sync gap
 - After Codex's product-only hardening (`065f016`), the corrected 15s FR acceptance ran and produced a permanent
   MP4: job `5b64a9e4-a3e3-44c9-99e8-679ec9346d4b` (`Paulo` + verified identity `Moi_5`, refs = Powerbeats
@@ -3440,6 +3447,32 @@ Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, po
 - Validation without provider spend: 12 focused tests pass, root TypeScript clean, Revideo worker typecheck clean and production build passes. No Seedance generation, GPU job or Hostinger deployment was started.
 - Remaining gate: turn the CLI-only Revideo worker into a private authenticated Hostinger service, then run exactly one capped three-shot Beats validation and assemble the final MP4.
 - The remaining worker gate is now code-ready: authenticated async `POST /render`, `GET /status/:id`, one-render-at-a-time queue, idempotent job dispatch, direct R2 upload and restart-safe re-dispatch from Next.js. Local service smoke passed (`health=200`, unauthenticated status `401`, invalid authenticated render `400`). Hostinger/Vercel deployment and the single paid QA are still pending.
+## 2026-11-08 — Codex — H3 admin first private generation (code only)
+- Verified PR #90 head 3fd751d: GitHub Actions job privacy run 42503519415 succeeded (15 tests); no blocking CI error to fix. Historical R2/public-page privacy remains distinct.
+- Prepared branch codex/h3-admin stacked on #90: lab-derived complete graphs, manifest-bound form, private admin APIs, atomic one-use permit/admission, service-only outputs, original and -0.4s audio version, separate secret-free single-use H100 executor and CPU broker.
+- Model revisions/SHA256 locked using public metadata only (five files); no weights downloaded. Dedicated read-only volume copy/hash helper prepared, never invoked.
+- Free checks: 1154 Vitest tests in 107 files; TypeScript; full Next production build; lint (existing warnings only); embedded local PostgreSQL migration/admission/idempotency/terminal/permissions; 4 Python CPU tests including real ffmpeg audio shift and identical video packets; Modal SDK 1.6.3 local definition imports.
+- Environment fixes during verification: npm needed normal package-network access; local temp-directory permissions initially prevented a Vitest run and synthetic ffmpeg output, resolved by using workspace tmp. SDK 1.4 lacked read-only mount API; isolated test SDK pinned to 1.6.3; removed unsupported retries option from web endpoint. No baseline test weakened.
+- Prepared GitHub free-test workflow. Modal production workflow excludes the new app, Vercel review-branch auto-deployment disabled. No production/configuration state changed, no migration applied, no deployment, no GPU/paid API call.
+- Activation/limits/cost and pending account checks: docs/implementation/h3-admin-activation.md. Public moderation/Studio/MOSS are not claimed complete. Owner approval required for merge, migration, CPU preparation/deployment and exactly one GPU UI test (proposed reserve $0.75 + CPU preparation, total allowance $1 within prior $3).
+
+## 2026-11-09 — Codex — MOSS capacity window repair
+- Isolated branch codex/moss-capacity-wait from main fdb1cbf. MOSS start window 300s; collection 660s; shared CPU broker hard timeout 720s. H3 start 110s/collection 310s and both GPU definitions unchanged. SQL deadline and production permits unchanged.
+- Free validation: all 1,229 Vitest tests, TypeScript, production build and 25 Python tests PASS. Simulated delayed capacity accepts MOSS after 210/299s, fences at 300s, preserves H3 110s boundary and terminates containers. Existing build lint warnings remain.
+- No deploy, migration, model preparation, reservation reconciliation, remote mutation or GPU run. Next: review/merge approval, then manual deployment with no active H3; separate explicit approval before one paid MOSS run. Availability within five minutes remains unproven.
+
+## MOSS-QUEUE-CANCEL initial validation — 2026-11-09
+- Python 30/31 passed; new SDK transport fixture failed before any invocation: FunctionCallCancelResponse does not exist in Modal 1.6.3. Stop further checks, correct the fixture to the RPC's actual empty response, then rerun. No production action.
+- SDK fixture follow-up: real Client._stub is read-only; use a spec-constrained client transport mock while retaining the actual SDK Function, invocation, serializer, stream decoder and cancellation handle. No implementation failure or remote call occurred.
+- SDK fixture correction: a truthy mocked snapshot flag caused hydration to replace the fake client. Interrupted the test; the dummy function ID was fu-moss, not a deployed executor. Use a real unopened Client with only its cached control-plane transport replaced, and forbid from_env in the test to prevent any fallback network client.
+
+## 2026-11-09 — Codex — MOSS pre-start cancellation correction ready
+- New moss_queue.py persists the native Modal invocation ID before any GPU frame, enforces a real 300s first-frame wait separately from the 660s result limit, and requests cancellation with container termination even if no frame arrives. Cancellation/stream cleanup have 20s/5s limits; uncertain submission and cancellation have explicit safe codes and never retry or refund.
+- SDK 1.6.3 adapter reuses the control-plane SYNC_LEGACY generator submission and native decoder, with native hydrated cancellation handle. CPU image pins the version; other versions fail before submission. Private SDK dependency is isolated and documented; remote server/GPU confirmation remains for an explicitly authorized pilot. H3 invocation, both GPU definitions, models, grants, SQL gates and budgets unchanged.
+- Studio displays distinct start, execution, cancellation, submission and SDK errors; business logs include only UUID/fixed code. CI includes the new CPU suite.
+- Validation: 1,230 Vitest tests (113 files), 32 Python tests, TypeScript and production build PASS (existing lint warnings). Actual SDK with fake transport proves pre-start cancellation, input-plane metadata handling and >3MiB frame decoding. Regression covers no first frame, 210s/300s start guards, callback/database failure, wrong header, result timeout, cancellation failure and H3 behavior. Earlier fixture setup errors corrected before broad validation.
+- No merge, deploy, remote migration, model preparation, permit change or paid GPU. Next: review/merge and manual deploy only after owner approval; preserve closed gate and require separate approval for one real run.
+
 ## 2026-11-23 — Codex — Parallax Video lot cadré
 - Branche `codex/parallax-video-lot` créée depuis `main`, commit `6286b08`, poussée et PR brouillon #121 ouverte.
 - Réutilisation documentée : jobs, références privées/signées, garde quota/plan, retry et UI Create mobile. `main` ne contient pas le manifest/route H3 admin ; aucun provider n’a été appelé.

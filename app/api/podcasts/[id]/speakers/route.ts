@@ -28,7 +28,7 @@ export async function PATCH(
     const { id } = await params;
     const service = createServiceClient();
 
-    const { data: podcast } = await service.from("podcasts").select("id, user_id").eq("id", id).single();
+    const { data: podcast } = await service.from("podcasts").select("id, user_id, metadata").eq("id", id).single();
     if (!podcast || podcast.user_id !== user.id) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -113,9 +113,23 @@ export async function PATCH(
       (hostPersona !== undefined && hostPersona !== (host.persona_id ?? null)) ||
       (guestPersona !== undefined && guestPersona !== (guest.persona_id ?? null));
     if (personaChanged) {
+      const currentMetadata = podcast.metadata && typeof podcast.metadata === "object"
+        ? podcast.metadata as Record<string, unknown>
+        : {};
+      const metadata = { ...currentMetadata };
+      for (const key of [
+        "studio_preview_id",
+        "studio_preview_url",
+        "studio_preview_style",
+        "studio_preview_personas",
+        "studio_preset_id",
+        "studio_pack_id",
+        "studio_shots",
+        "studio_base_clips",
+      ]) delete metadata[key];
       const { error: resetErr } = await service
         .from("podcasts")
-        .update({ video_url: null, render_status: "idle", render_error: null })
+        .update({ metadata, video_url: null, render_status: "idle", render_error: null })
         .eq("id", id);
       if (resetErr) {
         console.error("[podcast/speakers] stale-render reset failed:", resetErr);

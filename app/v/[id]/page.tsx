@@ -19,6 +19,8 @@ async function getPublicJob(id: string) {
     .eq("status", "done")
     .single();
 
+  // ComfyUI pilot assets are private and must never use this legacy public page.
+  if (job?.engine_used?.startsWith("comfy:")) return null;
   return job;
 }
 

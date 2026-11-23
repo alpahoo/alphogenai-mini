@@ -68,7 +68,12 @@ export async function GET(req: Request) {
     try {
       const res = await fetch(`${baseUrl}/api/jobs/${job.id}`, {
         method: "GET",
-        headers: { "Cache-Control": "no-cache" },
+        // GET /api/jobs/[id] is owner-only; the cron proves itself with the
+        // same CRON_SECRET it was authorized with (checked by assertCronAuth).
+        headers: {
+          "Cache-Control": "no-cache",
+          Authorization: `Bearer ${process.env.CRON_SECRET}`,
+        },
         signal: AbortSignal.timeout(25_000), // 25s per job max
       });
 
