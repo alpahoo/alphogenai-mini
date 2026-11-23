@@ -4,6 +4,7 @@ import h3T2vFull from "@/workflows/comfy/templates/minimax-h3/graph.t2v_full.api
 import h3I2v from "@/workflows/comfy/templates/minimax-h3/graph.i2v.api.json";
 import mossManifest from "@/workflows/comfy/templates/moss-image/manifest.json";
 import mossT2i from "@/workflows/comfy/templates/moss-image/graph.t2i.api.json";
+import avatarManifest from "@/workflows/comfy/templates/longcat-avatar/manifest.json";
 import type { StudioManifest } from "./manifest";
 
 export type OutputKind = "video" | "image";
@@ -45,6 +46,18 @@ export const STUDIO_MODELS: StudioModel[] = [
     manifest: mossManifest as unknown as StudioManifest,
     graphs: { t2i: mossT2i as Graph },
     capabilities: ["Text to image", "Seven aspect ratios", "PNG, JPEG, WebP downloads"],
+  },
+  {
+    // Not created from this form: it needs a portrait AND an audio from two private libraries, so it has its own
+    // screen. Listed here so its runs show with the right title in the history instead of falling back to H3.
+    slug: "longcat-avatar",
+    title: "Talking avatar",
+    kind: "video",
+    tagline: "Portrait + audio to speaking video",
+    availability: "pending",
+    pendingReason: "Create talking avatars on their own screen: Studio → Talking avatar (/admin/studio/avatar).",
+    manifest: avatarManifest as unknown as StudioManifest,
+    capabilities: ["Portrait + audio to video", "About 10 seconds, 480p", "Private library and MP4 download"],
   },
 ];
 

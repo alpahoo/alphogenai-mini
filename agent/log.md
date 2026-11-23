@@ -3472,3 +3472,8 @@ Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, po
 - Studio displays distinct start, execution, cancellation, submission and SDK errors; business logs include only UUID/fixed code. CI includes the new CPU suite.
 - Validation: 1,230 Vitest tests (113 files), 32 Python tests, TypeScript and production build PASS (existing lint warnings). Actual SDK with fake transport proves pre-start cancellation, input-plane metadata handling and >3MiB frame decoding. Regression covers no first frame, 210s/300s start guards, callback/database failure, wrong header, result timeout, cancellation failure and H3 behavior. Earlier fixture setup errors corrected before broad validation.
 - No merge, deploy, remote migration, model preparation, permit change or paid GPU. Next: review/merge and manual deploy only after owner approval; preserve closed gate and require separate approval for one real run.
+
+## 2026-11-23 - claude - T-1171 talking avatar (integration)
+- Fait : runtime `longcat-avatar@1` (binder, admission SQL, audio library API, executor/broker Modal, page Studio dediee, catalogue), docs et coordination. Aucun GPU, aucune migration appliquee, aucun deploiement.
+- Tests : vitest (suite complete), tsc, eslint sur le code neuf, unittest Python `test_avatar` (23) + suites comfy existantes.
+- Next : recette locale/staging avec rendu simule, puis un seul rendu GPU apres accord du cout max.
