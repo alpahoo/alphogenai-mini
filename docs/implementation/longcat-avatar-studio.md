@@ -228,3 +228,28 @@ variable). Claude does not type passwords into a login page that is not a local 
 owner starts once (`tools/avatar-staging/hosted-recipe.mjs`, to be written after the approval below): it creates the two disposable staging
 accounts with random passwords kept only in a protected temporary file, signs in through the Supabase API, runs the checks against the three
 Previews with the bearer token, writes a pass/fail report that Claude reads, then deletes the accounts and the file.
+
+## Hosted rehearsal: the single command (supersedes the secrets script)
+
+Findings that shaped it (2026-11-23, third pass):
+- Vercel Preview variables set on a branch are **not readable back** (`env pull` returns masked values ending in "…"), so the staging
+  `service_role` / `anon` keys cannot be copied from the Cinema or Parallax branches. The Supabase CLI is not logged in. The script therefore
+  gets the keys **in memory** through `supabase projects api-keys`, after a one-time browser authorisation (`supabase login`, no password).
+- Preview deployments are SSO-protected, so API calls from a script need an automation bypass. The script creates **one temporary
+  Protection Bypass for Automation secret** on the Vercel project (random, in memory) and **revokes it in `finally`**; before it, the project had none.
+- Most admin routes read the session from cookies only (`requireAdmin()` without the request), so the checks sign in through the Supabase API
+  with the disposable accounts and send the resulting session cookie; no password is typed into a page.
+- Deleting a disposable account requires deleting its `comfy_runs`, `cinema_*` rows and storage files first (`comfy_runs.job_id`,
+  `cinema_takes.run_id` forbid it otherwise); `tools/avatar-staging/cleanup.mjs` does it in the right order and was self-tested locally
+  (no residue, `deleteUser` ok).
+
+```powershell
+cd "C:\tmp\alphogenai-longcat-int"
+node tools\avatar-staging\run-hosted-staging.mjs
+```
+
+Optional dry check first (changes nothing): `node tools\avatar-staging\run-hosted-staging.mjs --check`.
+
+Files: `run-hosted-staging.mjs` (orchestration and cleanup), `checks.mjs` (API checks for #125, #119, #123 and the list of visual checks still to do),
+`cleanup.mjs`, `local-selftest.mjs` (runs the LongCat checks and the cleanup against the local stack: 24/24 and no residue on 2026-11-23).
+The Cinema and Parallax checks are written from their route code and could not be exercised locally in this branch.
