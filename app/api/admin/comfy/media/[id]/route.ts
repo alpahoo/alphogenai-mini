@@ -47,6 +47,17 @@ export async function GET(req:Request,{params}:{params:Promise<{id:string}>}) {
   }
 
   const download=query.get("download")==="1";
+  const inline=query.get("inline")==="1";
+  // Rendering stays same-origin and authenticated. This avoids relying on a
+  // third-party signed URL being fetchable by an <img> after a page reload,
+  // while preserving the signed URL path for downloads and API consumers.
+  if(inline){
+    if(mime!=="image/png")return NextResponse.json({error:"Inline media unavailable"},{status:400,headers:privateHeaders});
+    const {data:blob,error}=await db.storage.from("comfy-outputs").download(asset.storage_key);
+    if(error || !blob || blob.size>MAX_CONVERT_BYTES)return NextResponse.json({error:"Media unavailable"},{status:503,headers:privateHeaders});
+    return new NextResponse(new Uint8Array(await blob.arrayBuffer()),{headers:{...privateHeaders,"Content-Type":mime,
+      "Content-Disposition":"inline","X-Content-Type-Options":"nosniff"}});
+  }
   const name=`${stem}.${EXT[mime] ?? "bin"}`;
   const {data,error}=download
     ? await db.storage.from("comfy-outputs").createSignedUrl(asset.storage_key,600,{download:name})

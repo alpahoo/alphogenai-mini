@@ -61,4 +61,18 @@ describe("H3 private media",()=>{
   it("names PNG downloads with the right extension",async()=>{asset={storage_key:"k.png",run_id:"run",role:"raw",mime:"image/png"};
     await GET(new Request("http://localhost?download=1"),{params:Promise.resolve({id:"asset"})});
     expect(sign).toHaveBeenCalledWith("k.png",600,{download:"alphogen-run-original.png"});});
+  it("streams a PNG inline only after the same owner and completed-run checks",async()=>{
+    const png=Buffer.from("png-fixture");
+    asset={storage_key:"k.png",run_id:"run",role:"raw",mime:"image/png"};
+    download.mockResolvedValue({data:new Blob([new Uint8Array(png)],{type:"image/png"}),error:null});
+    const res=await GET(new Request("http://localhost?inline=1"),{params:Promise.resolve({id:"asset"})});
+    expect(res.status).toBe(200); expect(res.headers.get("content-type")).toContain("image/png");
+    expect(res.headers.get("content-disposition")).toBe("inline"); expect(sign).not.toHaveBeenCalled();
+    expect(Buffer.from(await res.arrayBuffer()).toString()).toBe("png-fixture");
+  });
+  it("does not inline non-PNG media",async()=>{
+    asset={storage_key:"k.mp4",run_id:"run",role:"final",mime:"video/mp4"};
+    expect((await GET(new Request("http://localhost?inline=1"),{params:Promise.resolve({id:"asset"})})).status).toBe(400);
+    expect(download).not.toHaveBeenCalled();
+  });
 });
