@@ -82,7 +82,10 @@ function stagingKeys() {
   const run = () => sh("npx", ["--yes", "supabase@3.2.0", "projects", "api-keys", "--project-ref", STAGING_REF, "-o", "json"], { allowFail: true });
   let r = run();
   if (r.status !== 0) {
-    log("   Supabase CLI is not logged in: a browser tab opens once to authorise it (no password involved).");
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      throw new Error("Supabase CLI is not logged in and this is not an interactive terminal. Once, in a normal terminal (cmd.exe is fine), run: npx supabase@3.2.0 login  (a browser page opens, authorise, paste the verification code into the terminal). The token is then stored for later runs.");
+    }
+    log("   Supabase CLI is not logged in: a browser page opens once to authorise it (no password involved).");
     sh("npx", ["--yes", "supabase@3.2.0", "login"], { capture: false });
     r = run();
     if (r.status !== 0) throw new Error("Supabase CLI could not list the staging API keys");
@@ -178,6 +181,18 @@ const result = { ok: false, steps: [], residue: [] };
 let keys = null, db = null, bypass = null, dispatchSecret = null;
 const originals = {};
 try {
+  if (process.argv.includes("--check")) {
+    log("--check: read-only Vercel and Modal checks");
+    log(`   Vercel user: ${vercel(["whoami"]).out.trim().split(/\r?\n/).pop()}`);
+    for (const b of [BR.cinema, BR.parallax]) {
+      const e = pullBranchEnv(b);
+      log(`   branch ${b}: admin e-mail list ${e.NEXT_PUBLIC_ADMIN_EMAILS && !e.NEXT_PUBLIC_ADMIN_EMAILS.includes("…") ? "readable" : "NOT readable"}, targets staging: ${!!e.NEXT_PUBLIC_SUPABASE_URL?.includes(STAGING_REF)}`);
+    }
+    const proj = vapi("GET", `/v9/projects/${PROJECT}`);
+    log(`   Vercel project: ${Object.keys(proj.protectionBypass ?? {}).length} automation bypass secret(s) at start (expected 0)`);
+    const envs = sh("python", ["-m", "modal", "environment", "list"], { env: { PYTHONUTF8: "1" } }).out;
+    log(`   Modal: environment ${MODAL_ENV} ${envs.includes(MODAL_ENV) ? "exists" : "MISSING"}`);
+  }
   log("1/8 staging keys (in memory)");
   keys = stagingKeys();
   db = createClient(STAGING_URL, keys.service, { auth: { persistSession: false } });
@@ -186,15 +201,7 @@ try {
   const ref = await db.from("comfy_runtime_gates").select("runtime").eq("runtime", "longcat-avatar@1").maybeSingle();
   if (!ref.data) throw new Error("the LongCat migration is missing on this project");
   log(`   OK: project ${STAGING_REF}; existing accounts are not touched.`);
-  if (process.argv.includes("--check")) {
-    for (const b of [BR.cinema, BR.parallax]) {
-      const e = pullBranchEnv(b);
-      log(`   branch ${b}: admin list ${e.NEXT_PUBLIC_ADMIN_EMAILS && !e.NEXT_PUBLIC_ADMIN_EMAILS.includes("…") ? "readable" : "NOT readable"}, targets staging: ${!!e.NEXT_PUBLIC_SUPABASE_URL?.includes(STAGING_REF)}`);
-    }
-    log(`   Vercel user: ${vercel(["whoami"]).out.trim().split(/\r?\n/).pop()}`);
-    log("--check finished: nothing was changed.");
-    process.exit(0);
-  }
+  if (process.argv.includes("--check")) { log("--check finished: nothing was changed."); process.exit(0); }
 
   log("2/8 disposable accounts");
   const mk = async (label) => {
