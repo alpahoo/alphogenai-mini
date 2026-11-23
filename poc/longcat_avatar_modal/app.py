@@ -41,6 +41,7 @@ IO_VOL = "alphogenai-longcat-avatar-poc-io"
 GPU = "H100"  # 1x H100 80 Go ; 0,001097 $/s (grille Modal du 2026-11-23)
 GPU_TIMEOUT_S = 1500  # plafond dur du premier rendu
 GPU_PRICE_PER_S = 0.001097
+TWICE_TIMEOUT_S = 900  # plafond dur du test a deux rendus
 
 W = "/weights"  # /weights/LongCat-Video et /weights/LongCat-Video-Avatar-1.6
 IO = "/io"
@@ -127,9 +128,33 @@ def prepare_demo_inputs() -> dict:
     # 93 images a 16 fps = 5,8 s ; le script upstream tronque a duree + 1 s.
     subprocess.run(["ffmpeg", "-y", "-i", str(d / "man.mp3"), "-t", "7", "-ac", "1",
                     "-ar", "16000", str(d / "man.wav")], check=True, capture_output=True)
+    # man.mp3 : intro musicale sans voix pendant ~5 s (mesure du separateur de voix).
+    # Fenetre voisee pour juger le lipsync : de 6 s a 13 s.
+    subprocess.run(["ffmpeg", "-y", "-ss", "6", "-i", str(d / "man.mp3"), "-t", "7", "-ac", "1",
+                    "-ar", "16000", str(d / "man_voiced.wav")], check=True, capture_output=True)
     (d / "prompt.txt").write_text(DEMO_PROMPT, encoding="utf-8")
     io_vol.commit()
     return {"files": sorted(p.name for p in d.iterdir())}
+
+
+@app.function(image=image, volumes={W: weights_vol, IO: io_vol}, timeout=900, cpu=8, memory=16384)
+def analyze_audio(name: str = "man.mp3", seconds: float = 40.0) -> dict:
+    """CPU : energie de la voix isolee (separateur upstream) par seconde, pour choisir la fenetre audio."""
+    import sys
+
+    import numpy as np
+    from audio_separator.separator import Separator
+
+    sys.path.insert(0, REPO_DIR)
+    from longcat_video.audio_process.vocal_separator import separate_vocals
+
+    sep = Separator(output_dir="/tmp/vocals", output_single_stem="vocals",
+                    model_file_dir=f"{W}/LongCat-Video-Avatar-1.6/vocal_separator")
+    sep.load_model("Kim_Vocal_2.onnx")
+    arr, sr = separate_vocals(sep, f"{IO}/inputs/{name}", duration=seconds)
+    n = int(len(arr) / sr)
+    rms = [round(float(np.sqrt((arr[i * sr:(i + 1) * sr] ** 2).mean())), 4) for i in range(n)]
+    return {"sample_rate": sr, "seconds": n, "vocal_rms_per_s": rms}
 
 
 def _probe(path: Path) -> dict:
@@ -217,10 +242,114 @@ def generate(image_name: str = "man.png", wav_name: str = "man.wav", prompt: str
     return result
 
 
+def _patched_two_render_script(n_renders: int) -> str:
+    """Copie du script upstream (SHA epingle) dont la generation est bouclee n fois,
+    modeles charges une seule fois. Patch textuel verifie par assertions."""
+    src = (Path(REPO_DIR) / "run_demo_avatar_single_audio_to_video.py").read_text(encoding="utf-8")
+    start = "    # prepare audio embedding for the first clip\n"
+    end = ("    if context_parallel_util.get_cp_size() > 1:\n"
+           "        torch.distributed.barrier(group=context_parallel_util.get_cp_group())\n\n"
+           "    # =========================================\n")
+    assert src.count(start) == 1 and src.count(end) == 1
+    i, j = src.index(start), src.index(end)
+    block = src[i:j]
+    old_name = 'os.path.join(output_dir, "ai2v_demo_1")'
+    assert old_name in block
+    block = block.replace(old_name, 'os.path.join(output_dir, f"ai2v_render_{_k + 1}")')
+    block = "".join("    " + ln if ln.strip() else ln for ln in block.splitlines(keepends=True))
+    loop = (
+        "    torch.cuda.synchronize()\n"
+        '    print(f"[POC] load_s={time.time() - _POC_T0:.1f}", flush=True)\n'
+        f"    for _k in range({n_renders}):\n"
+        "        generator.manual_seed(seed)  # rendus identiques : meme graine\n"
+        "        _t = time.time()\n"
+        + block +
+        "        torch.cuda.synchronize()\n"
+        '        print(f"[POC] render_{_k + 1}_s={time.time() - _t:.1f}", flush=True)\n'
+        '        print(f"[POC] torch_peak_mib_{_k + 1}={torch.cuda.max_memory_allocated() / 2**20:.0f}", flush=True)\n\n'
+    )
+    return "import time\n_POC_T0 = time.time()\n" + src[:i] + loop + src[j:]
+
+
+@app.function(image=image, gpu=GPU, timeout=TWICE_TIMEOUT_S, cpu=8, memory=65536,
+              volumes={W: weights_vol, IO: io_vol}, max_containers=1)
+def generate_twice(image_name: str = "man.png", wav_name: str = "man_voiced.wav",
+                   prompt: str = DEMO_PROMPT, run_tag: str = "twice", n_renders: int = 2) -> dict:
+    """GPU : modeles charges une fois, n rendus identiques (meme graine) dans le meme processus."""
+    t_enter = time.time()
+    run_dir = Path(IO) / "outputs" / run_tag
+    run_dir.mkdir(parents=True, exist_ok=True)
+    cfg = {"prompt": prompt, "cond_image": f"{IO}/inputs/{image_name}",
+           "cond_audio": {"person1": f"{IO}/inputs/{wav_name}"}}
+    cfg_path = run_dir / "input.json"
+    cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    script = Path(REPO_DIR) / "poc_two_render.py"
+    script.write_text(_patched_two_render_script(n_renders), encoding="utf-8")
+
+    cmd = [
+        "torchrun", "--nproc_per_node=1", script.name,
+        "--context_parallel_size=1", f"--checkpoint_dir={W}/LongCat-Video-Avatar-1.6",
+        "--stage_1=ai2v", f"--input_json={cfg_path}", f"--output_dir={run_dir}",
+        "--resolution=480p", "--use_int8", "--use_distill",
+        "--lora_path", "loraB/lora.safetensors", "--model_type", "avatar-v1.6",
+        "--mix_steps=4", "--mix_alpha=1.0",
+    ]
+    peak = {"v": 0}
+    stop = threading.Event()
+
+    def poll():
+        while not stop.is_set():
+            try:
+                o = subprocess.run(["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+                                   capture_output=True, text=True).stdout.split()
+                peak["v"] = max(peak["v"], int(o[0]))
+            except Exception:
+                pass
+            stop.wait(0.5)
+
+    threading.Thread(target=poll, daemon=True).start()
+    p = subprocess.Popen(cmd, cwd=REPO_DIR, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                         text=True, bufsize=1)
+    tail: list[str] = []
+    poc: dict[str, float] = {}
+    for line in p.stdout:  # type: ignore[union-attr]
+        print(line, end="")
+        tail = (tail + [line.rstrip()])[-40:]
+        m = re.match(r"\[POC\] (\w+)=([\d.]+)", line)
+        if m:
+            poc[m.group(1)] = float(m.group(2))
+    rc = p.wait()
+    t_end = time.time()
+    stop.set()
+    result = {
+        "returncode": rc, "gpu": GPU, "run_tag": run_tag, "n_renders": n_renders,
+        "container_to_end_s": round(t_end - t_enter, 1),
+        "load_s_incl_audio_prep": poc.get("load_s"),
+        "renders_s": {k: v for k, v in poc.items() if k.startswith("render_")},
+        "torch_peak_mib": {k: v for k, v in poc.items() if k.startswith("torch_peak")},
+        "gpu_mem_peak_mib_nvidia_smi": peak["v"],
+        "est_gpu_cost_usd": round((t_end - t_enter) * GPU_PRICE_PER_S, 3),
+        "outputs": [], "log_tail": tail[-15:] if rc else [],
+    }
+    for m in sorted(run_dir.glob("*.mp4")):
+        result["outputs"].append({"file": f"outputs/{run_tag}/{m.name}", **_probe(m)})
+    (run_dir / "metrics.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+    io_vol.commit()
+    return result
+
+
 @app.local_entrypoint()
 def main(step: str = "weights", run_tag: str = "demo"):
-    """step = weights | inputs | run  (run = rendu GPU PAYANT, a lancer apres feu vert)."""
-    if step == "weights":
+    """step = weights | inputs | analyze | run | twice  (run/twice = rendu GPU PAYANT, apres feu vert)."""
+    if step == "analyze":
+        print(json.dumps(analyze_audio.remote()))
+    elif step == "twice":
+        t0 = time.time()
+        r = generate_twice.remote(run_tag="twice" if run_tag == "demo" else run_tag)
+        r["client_wall_s"] = round(time.time() - t0, 1)
+        r["approx_cold_start_s"] = round(r["client_wall_s"] - r["container_to_end_s"], 1)
+        print(json.dumps(r, indent=2))
+    elif step == "weights":
         print(download_weights.remote())
     elif step == "inputs":
         print(prepare_demo_inputs.remote())
