@@ -54,7 +54,8 @@ export function VideoStudio() {
     }
   }, [currentId, currentStatus]);
 
-  const view: View = chosen ?? ((runs && runs.length > 0) || s.busy === "submitting" ? "history" : "examples");
+  // While the history loads the gallery shows its skeleton (not the examples for an instant); with no video at all it shows the examples.
+  const view: View = chosen ?? (runs === null || runs.length > 0 || s.busy === "submitting" ? "history" : "examples");
   const closeDetail = useCallback(() => setDetailOpen(false), []);
   const open = (id: string) => { void s.openRun(id); setDetailOpen(true); };
 
