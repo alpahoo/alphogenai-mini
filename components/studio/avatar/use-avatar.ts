@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isActive, pollDelay } from "@/lib/studio/status";
 import { anySignal, startRunPolling } from "@/lib/studio/run-poller";
-import { DEFAULT_PROMPT } from "@/lib/avatar/template";
+import { DEFAULT_PROMPT } from "@/lib/avatar/constants";
 import { canSubmit as canSubmitNow, createAttemptStore, submitBlocker } from "@/lib/avatar/attempt";
 import type { AudioItem } from "@/lib/avatar/audio-library";
 import type { LibraryItem } from "@/lib/studio/reference-library";

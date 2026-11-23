@@ -48,3 +48,20 @@ describe("messages", () => {
     expect(expectedVideoLabel(null)).toMatch(/unknown/);
   });
 });
+
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+describe("client bundle safety", () => {
+  // `next build` failed once because a client component pulled `node:crypto` through lib/avatar/template.ts.
+  const root = path.resolve(__dirname, "../..");
+  const clientFiles = ["components/studio/avatar/use-avatar.ts", "components/studio/avatar/avatar-studio.tsx",
+    "lib/avatar/constants.ts", "lib/avatar/audio-library.ts", "lib/avatar/messages.ts", "lib/avatar/attempt.ts"];
+  it.each(clientFiles)("%s imports nothing server-only", file => {
+    const source = readFileSync(path.join(root, file), "utf8");
+    expect(source).not.toMatch(/from "node:/);
+    expect(source).not.toMatch(/lib\/avatar\/template"/);
+    expect(source).not.toMatch(/lib\/comfy\/template"/);
+    expect(source).not.toMatch(/supabase\/service/);
+  });
+});
