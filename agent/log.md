@@ -3491,3 +3491,9 @@ Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, po
 - Mise à jour de `docs/parallax-video-lot.md`, `agent/tasks.md` et `agent/review.md` pour remplacer l'ancien faux blocage documentaire et décrire les limites de la recette sans génération.
 - Vérifications : `git diff --check` PASS; Vitest `149 files / 1612 tests` PASS; `npx tsc --noEmit -p tsconfig.json` PASS; `npm run build` PASS avec avertissements préexistants. `npm ci` requis car `node_modules` était incomplet.
 - Suite : commit/push, CI et Preview; recette hébergée avec un run H3 staging déjà terminé, sans cliquer sur Generate.
+
+## 2026-11-23 - Claude - Parallax Video #121 : ecran Video greffe
+- Ecran `/admin/studio/video` (components/studio/video/*, lib/studio/video-screen.ts, video-examples.ts) greffe depuis Parallax a98671e (MIT, notice dans components/studio/video/LICENSE-parallax.txt) : disposition a deux volets, exemples, tuiles d'historique, fenetre de details, structure du formulaire. Branche sur useStudio (memes routes admin, porte, quota, reservation, historique et liens signes). Aucune route, table, migration ou fournisseur.
+- Tests ajoutes : 17 (helpers purs et rendu des tuiles), verifies par 4 mutations. Codex a ajoute lib/studio/parallax-video.ts (+ test) ; fusion 556678a.
+- Recette locale (Supabase local + simulateur HTTPS, compte de test local) : exemple -> reference de bibliotheque -> Generate -> tuile en cours -> video -> details -> telechargement Corrected (200, MP4 1,48 Mo) -> rechargement complet -> meme resultat retrouve et telechargeable ; lien ?run= ; Reuse settings. Base : run done, reference de bibliotheque, un permis consomme.
+- Recette Preview NON faite : la Preview de la branche est reliee a la production (voir agent/review.md).

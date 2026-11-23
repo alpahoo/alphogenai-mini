@@ -1609,3 +1609,8 @@ Réfs : revue Codex 2026-07-16 ; `agent/log.md` (entrée durcissement).
 - Livrer l’adaptateur visible Parallax Video dans le Studio H3 : référence privée, préparation contrôlée par le manifest, historique/reprise et résultat privé lisible/téléchargeable après rechargement.
 - Réutiliser les routes/jobs/médias privés AlphoGenAI et conserver `lib/cinema/LICENSE-parallax.txt`; ajouter des tests de contrat et de parcours sans appeler de provider.
 - Critères : Vitest, tsc, build, CI et Preview READY ; une recette hébergée sur un run staging déjà terminé ou dispatcher simulé ; PR #121 conservée en brouillon.
+
+## PARALLAX-VIDEO-LOT (#121) - coordination - 2026-11-23 - owner: claude (ecran) / codex (adaptateur) - code ready
+- Deux agents ont travaille sur la branche en parallele : Claude a livre l'ecran `/admin/studio/video` (db17dad, df2a7ef), Codex a pousse `lib/studio/parallax-video.ts` et son badge (b7d59bf) par-dessus db17dad. Fusion propre dans 556678a. Le badge est maintenant un lien vers l'ecran.
+- Regle pour la suite : `git fetch` avant tout push sur cette branche, jamais de force. Une seule personne par tache `in_progress`.
+- Reste : la recette depuis la Preview est BLOQUEE (voir agent/review.md : la Preview de cette branche est reliee a la production). Il faut des variables Preview propres a la branche vers le staging, comme pour #119 et #120 : changement Vercel avec la cle de service du staging, a decider par le proprietaire. Ne pas se connecter a cette Preview en l'etat.
