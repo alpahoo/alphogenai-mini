@@ -3497,3 +3497,10 @@ Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, po
 - Tests ajoutes : 17 (helpers purs et rendu des tuiles), verifies par 4 mutations. Codex a ajoute lib/studio/parallax-video.ts (+ test) ; fusion 556678a.
 - Recette locale (Supabase local + simulateur HTTPS, compte de test local) : exemple -> reference de bibliotheque -> Generate -> tuile en cours -> video -> details -> telechargement Corrected (200, MP4 1,48 Mo) -> rechargement complet -> meme resultat retrouve et telechargeable ; lien ?run= ; Reuse settings. Base : run done, reference de bibliotheque, un permis consomme.
 - Recette Preview NON faite : la Preview de la branche est reliee a la production (voir agent/review.md).
+
+
+## 2026-11-23 - Codex - Preview finale #121
+- Commit local rebased et poussé : `b7d59bf` (Claude `db17dad` conservé comme parent immédiat).
+- Vercel Preview du SHA `b7d59bf` READY : `https://nextjs-with-supabase-l5zv-21ldctbcl-paul-alains-projects.vercel.app` ; CI `free-tests` et Preview Comments vertes.
+- Recette hébergée tentée sur `/admin/studio/video` : la page de login répond, mais `cinema-admin-staging@example.com` est rejeté par `Invalid login credentials`. Aucun parcours authentifié, téléchargement ou génération n'est déclaré ; blocage exact : compte/variables Supabase Auth de la Preview ne correspondent pas au compte staging préautorisé.
+- Commentaire de preuve ajouté à la PR #121 (id `7092994274`). PR toujours brouillon, aucune fusion, production ou génération payante.
