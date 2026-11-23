@@ -3478,3 +3478,4 @@ Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, po
 - Fichiers : `poc/longcat_avatar_modal/{app.py,README.md}`, `HANDOVER.md`, `agent/tasks.md`.
 - Tests : pas de tests unitaires applicables (POC Modal) ; npm test/tsc/build non concernes (aucun fichier app/lib touche).
 - Next : rendu GPU apres feu vert, metriques, PR brouillon.
+- (suite) Rendu H100 autorise par Paul et execute : succes, 279 s, ~0,31 $ GPU, MP4 768x512 25 fps 3,72 s. Metriques dans le README du POC. Next : relecture qualite par Paul, PR brouillon (pas de gh local).
