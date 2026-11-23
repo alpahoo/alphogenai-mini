@@ -1,4 +1,4 @@
-﻿# agent/review.md — Points de review, risques, décisions ouvertes
+# agent/review.md — Points de review, risques, décisions ouvertes
 
 Format :
 - **[ID] Sujet** — `severity: info|low|medium|high` · `status: open|resolved`
@@ -380,6 +380,15 @@ Audit + actions 2026-06-09 (go Paul) sur les 4 items de durcissement restants :
 - Build local doit passer **sans secrets** (`/gallery` dégrade proprement) — acquis.
 - Lint doit rester « no warnings or errors » — acquis.
 
+## PARALLAX-REMIX-LOT — 2026-11-23
+- Le code amont Remix dépend de l’authentification, du registre UI et du hook jobs de Parallax.
+  Il est adapté ici au compte Supabase/Jobs existant : aucune nouvelle auth, table ou route de
+  génération n’est introduite.
+- Le parcours peut préparer une référence privée et soumettre une nouvelle génération seulement
+  via les contrôles déjà présents de `/api/jobs` (quota, plan, politique et moteur). La recette
+  hébergée n’est pas autorisée sur une nouvelle Preview dans ce lot sans variables staging
+  dédiées ; aucun fournisseur payant ne doit être appelé.
+
 
 ## 2026-07-16 (Claude) — Risques / décisions ouvertes — URL→Video V1 (Jogg)
 - ATTENTION **Clé Jogg test à entitlement spécial** (génère à quota=0, non contractuel, cycle 30j).
@@ -404,3 +413,14 @@ Audit + actions 2026-06-09 (go Paul) sur les 4 items de durcissement restants :
 - User explicitly authorizes targeted Modal corrections and necessary tests/config despite generic role restrictions. No production action authorized by this request.
 - SDK 1.6.3 refuses public spawn on generators and its deployed input-plane generator API exposes no pre-start call ID. Reuse the native control-plane submission used by SDK spawn via a small, explicitly private/version-locked adapter; keep native generator frame decoding. Test with actual SDK and mocked transport. Fail closed on version mismatch. Do not rely on best-effort call-graph discovery.
 - Cancellation acknowledgement can fail under network/service outage: expose GPU_CANCELLATION_FAILED, preserve reservation, never claim success or retry automatically. Submission response loss also remains an explicitly uncertain state. Availability within 5 minutes cannot be guaranteed by code.
+## 2026-11-23 — Coexistence Parallax — points de revue
+
+- Les états sont stockés dans `app_settings` sous une clé dédiée ; aucune migration distante n’est
+  requise. Les écritures passent par `requireAdmin` et le client service côté serveur.
+- Les parcours AlphoGenAI sont activés par défaut. Les modules Parallax sont désactivés par défaut
+  et doivent être activés explicitement sur le staging. La désactivation bloque les nouvelles actions
+  sans interrompre les jobs existants.
+- Shorts délègue la création à `/api/jobs` après contrôle de module ; quotas, permissions et contrôle
+  du moteur restent donc ceux d’AlphoGenAI. Le parcours Musique n’a déclenché aucune génération et
+  reste à valider avec un moteur autorisé.
+
