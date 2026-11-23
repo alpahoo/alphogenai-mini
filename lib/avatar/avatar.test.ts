@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { audioFileName, audioPath, cleanAudioName, isOwnAudioPath, parseAudioFileName, wavDurationSeconds } from "./audio-library";
 import { DEFAULT_PROMPT, resolveAvatar, segmentsFor, videoSecondsFor } from "./template";
 import { fileNameFor, libraryPath } from "@/lib/studio/reference-library";
-import { InputError } from "@/lib/comfy/template";
+import { InputError, graphHash, type Graph } from "@/lib/comfy/template";
 
 const OWNER = "0f8fad5b-d9cb-469f-a165-70867728950e", OTHER = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const ID1 = "11111111-1111-4111-8111-111111111111", ID2 = "22222222-2222-4222-8222-222222222222";
@@ -108,4 +108,15 @@ describe("resolveAvatar", () => {
     ["a too long prompt", { image_path: image, audio_path: audio, prompt: "x".repeat(601) }],
     ["a non-object body", "nope"],
   ])("rejects %s", (_name, input) => { expect(() => resolveAvatar(input, OWNER)).toThrow(InputError); });
+});
+
+describe("cross-language graph hash", () => {
+  it("equals the Python canonical hash of the same graph (modal_app/comfy/test_avatar.py)", () => {
+    const graph = { "1": { class_type: "LongCatAvatar", inputs: {
+      image_path: "u1/library/4c757a_11111111-1111-4111-8111-111111111111.png",
+      audio_path: "u1/audio-library/4c757a_22222222-2222-4222-8222-222222222222.wav",
+      prompt: "Salut, ça va ? « Luz »", seed: 42, resolution: "480p", steps: 8, precision: "int8", distilled: true, model: "avatar-v1.6", mix_steps: 4, mix_alpha: 1.0,
+    } } } as Graph;
+    expect(graphHash(graph)).toBe("8eef85e9f2589a241d6c7218affea14c4342971fe8bc22a94d44592465b48b90");
+  });
 });
