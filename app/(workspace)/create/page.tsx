@@ -96,9 +96,9 @@ const TOOLS: Tool[] = [
   },
   {
     id: "remix",
-    title: "Remix",
-    description: "Choose a private finished video, direct new motion, and save a separate version.",
-    badge: "Remix",
+    title: "Parallax — Remix",
+    description: "Private finished video to a separate motion version, alongside the existing creators.",
+    badge: "Parallax",
     visual: "linear-gradient(135deg, #f4edff, #fff 52%, #d8c6ff)",
     href: "/remix",
     status: "live",
@@ -372,4 +372,3 @@ export default function CreateHub() {
     </div>
   );
 }
-
