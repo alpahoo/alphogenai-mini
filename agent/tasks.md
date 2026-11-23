@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 32937)
-Total output lines: 1619
-
 # agent/tasks.md — Backlog partagé
 
 ## T-1164d - Creator UGC Studio adaptation - PRODUCT PASS / PHONETIC LIP-SYNC POLISH READY (2026-08-01, Codex)
@@ -772,7 +769,202 @@ polir l'existant.
 
 - Decision Paul (2026-06-09) : Codex peut commit + push `main` des qu une tranche est
   validee (tests/tsc/lint/build selon risque), sans attendre un "push main" explicite.
-- Exceptions : demander validation avant migrations DB, secrets, config cr…2937 tokens truncated…i/jobs/[id]` avec `{ favorite: boolean }`, ownership check et
+- Exceptions : demander validation avant migrations DB, secrets, config critique, changement
+  produit ambigu, ou action potentiellement destructive.
+
+## Priorites actees Paul - 2026-06-08
+
+1. T-602 - tests d integration API : done.
+2. R-003 - migration retrospective Supabase : migration tracee, no user data.
+3. T-604 - retirer typescript.ignoreBuildErrors : done/verifie.
+4. T-401 - Saved Looks : spec done ; implementation future apres audit.
+5. Avatar/look duplicate : contrat done ; 409 conserve jusqu a reconstruction fidele.
+6. T-301c - retry affordances : done.
+7. R-006 - aide interne verified face ID : done.
+
+## Axe 7 - Visible Premium Pass  `status: in_progress`
+
+### [T-701] Schedule double-sidebar fix - `status: done` - `owner: codex`
+- Livre UI-only : `app/(workspace)/schedule/page.tsx` ne rend plus sa propre
+  `Sidebar`; le layout workspace reste la seule source de navigation.
+- Nettoyage : suppression du fetch profil local `plan/email` devenu inutile.
+- Validation : 270 tests, tsc, lint, build OK.
+
+### [T-702] Landing public refresh - `status: done` - `owner: codex`
+- Livre UI/copy-only : `app/page.tsx` remplace le hero date "Text to Video / Modal"
+  par un positionnement product-led : AI video direction workspace, Director plan,
+  assets, post-generation studio.
+- Provider-neutral ; aucun backend/route/DB. Validation : 270 tests, tsc, lint, build OK.
+- Note verification : dev server HTTP 200 ; Browser plugin indisponible dans cet environnement au moment du check.
+
+### [T-703] Create flow premium pass - `status: done` - `owner: codex`
+- Livre UI-only : ajout d'une `Director Console` dans le create flow, juste apres
+  les controles principaux. Le Director devient un chemin central visible avec
+  resume Plan / Model / Readiness, CTA `Plan with AI Director`, et skip path
+  `Generate now`.
+- Nettoyage : retrait de l'ancien bouton Director cache en bas du formulaire ;
+  libelles visibles de credits admin rendus provider-neutral dans le create flow.
+- Scope : aucune route/API/DB/state machine ; generation Director et Generate Video
+  conservent les chemins existants.
+- Validation : 270 tests, tsc, lint, build OK ; dev server local `/create/story`
+  -> HTTP 307 (auth gate, pas de 500).
+
+### [T-704] Home dashboard premium pass - `status: done` - `owner: codex`
+- Livre UI-only : `/home` transforme l'ancien template picker en command center
+  premium : hero operationnel, actions principales (Director, reference, studio),
+  production pulse, pipeline workspace, starters compacts et projets recents.
+- Donnees : reutilise uniquement le fetch existant des jobs recents (limite portee
+  a 8) ; aucune route/API/DB.
+- QA : Playwright ajoute comme dev dependency + smoke tests publics/auth gate
+  (`npm run test:e2e`). La capture authentifiee reste limitee par le login user.
+- Validation : 270 tests, 3 smoke e2e Playwright, tsc, lint, build OK.
+
+### [T-705] Library asset studio pass - `status: done` - `owner: codex`
+- Livre UI-only : `/library` devient un Asset Studio avec hero, stats, recherche,
+  filtres (all/reference/social-ready), grille video premium et actions par asset.
+- Actions : `Reference` -> `/create/story?reference_job_id=<id>`, `Studio` ->
+  `/jobs/<id>`, `Master` telecharge la video finale, `Social` ouvre le job.
+- Donnees : reutilise `jobs` done + `social_exports` existants ; aucune route/API/DB.
+- Validation : 270 tests, 3 smoke e2e Playwright, tsc, lint, build OK.
+
+---
+
+## Axe 8 — Lip-Sync & Video Reuse  `status: in_progress`
+
+Spec : **`docs/product/lipsync-existing-video-spec.md`** (audit complet, costing, 
+workflows, non-goals V1/V2). Objectif : réutiliser une vidéo cinématique réussie 
+(HeyGen Avatar Shots) sans régénération complète, en appliquant nouveau script + voix 
++ lip-sync pour réduire coûts (V1 = 5–20% du coût full video).
+
+### [T-801] Audit + Spec : Lip-sync existing video — `status: done` · `owner: claude`
+- **Scope** : audit pure, docs-only, sans code runtime.
+- Livré : `docs/product/lipsync-existing-video-spec.md`
+  - État actuel (✅ implementé) : Save Look, Reuse Look, TTS + lip-sync workflow
+  - Limitations actuelles (⚠️) : UX affordance manquante, costing non transparent
+  - Out of scope V1 (❌) : arbitrary video lip-sync, ElevenLabs TTS, editing results
+  - Decisions & rationale : pourquoi HeyGen Avatar Shots only, pourquoi HeyGen TTS V1
+  - Open questions : script screening, quality degradation, plan limits
+  - Testing strategy, rollout plan, API examples
+- Audit files lus :
+  - `app/(workspace)/create/avatar/page.tsx` (Reuse Look UI)
+  - `lib/saved-look-payload.ts` (validation payload)
+  - `app/api/looks/route.ts` (save/list/delete Looks)
+  - `app/api/jobs/route.ts` (look_id branch, lip-sync workflow)
+  - `lib/heygen-client.ts` (generateSpeech, createLipsync)
+- Conclusions : Feature core est fonctionnel et testé ; manquent UX affordance + 
+  costing display pour V1 public launch.
+- Validation : spec review-ready ; docs/product/* conforme ; pas de code breaking.
+
+### [T-802] UX affordance : "Reuse with new voice" — `status: done` · `owner: claude`
+- Livré : Button "Reuse with new voice" sur job page (HeyGen Avatar Shots only)
+  - Auto-navigates `/create/avatar?look_id=...` quand Look sauvegardée
+  - Button visible uniquement après `lookSaved && savedLookId` true
+  - Stocke `savedLookId` retourné par `POST /api/looks`
+- Fichiers : `app/jobs/[id]/page.tsx` (button + state pour savedLookId)
+- Validation : tsc/lint clean, tests 408/408 passing
+
+### [T-803] Cost transparency : Lip-sync costing in UI — `status: done` · `owner: claude`
+- Livré : Helper `estimateLipsyncCost(scriptLength, mode, duration)` dans `lib/lipsync-cost.ts`
+  - Estime TTS cost (~0.01 credits/100 chars) + lip-sync cost (mode-dependent)
+  - Retourne `{ ttsCost, lipsyncCost, totalCost, percentOfFullVideo }`
+  - Display sur `/create/avatar` quand Look selected & script fourni
+  - Affichage : "X credits (~Y% of full video)" avec breakdown TTS + lip-sync
+  - Mise à jour réactive : cost recalcule quand script ou lipsyncMode change
+- Fichiers : `lib/lipsync-cost.ts` (new), `lib/__tests__/lipsync-cost.test.ts` (6 tests),
+  `app/(workspace)/create/avatar/page.tsx` (import + display)
+- Validation : tsc/lint clean, tests 408/408 passing
+
+### [T-804a] Spec: Library Looks management — `status: done` · `owner: claude`
+- Livré : `docs/product/library-looks-management-spec.md` (spec-only, audit + decisions)
+  - Audit `/api/looks` GET/POST/DELETE, schema `cinematic_looks`
+  - UX decisions : `/library?tab=looks` (cohérent), hard delete (simple), 
+    no thumbnail V1 (MVP: inline video preview)
+  - Rename strategy : `PATCH /api/looks/[id] { name }` (new endpoint)
+  - Implementation phases : T-804a (grid UI), T-804b (thumbnail), T-804c (rename + E2E)
+- Risk mitigation : lazy-gen thumbnails, grid virtualization if >50 Looks, 
+  soft delete in V1+ if user feedback needed
+- Non-goals V1 : bulk ops, tags, share, analytics, soft delete
+
+### [T-804b] UI: Library Looks grid + rename modal — `status: done` · `owner: claude`
+- Livré : UI complète de gestion des Looks dans la Library.
+  - ✅ Grid composant déjà présent (video preview + name + duration badge + "Create with look" button)
+  - ✅ Rename modal : input (1-100 chars), Save/Cancel, validation feedback (char count)
+  - ✅ Delete confirmation modal : avertissement "permanently delete", Delete (red)/Cancel
+  - ✅ Hover actions : pencil icon → rename, trash icon → delete (group:hover)
+  - ✅ Empty state déjà implémenté
+  - ✅ Responsive layout : 4 cols desktop (xl:grid-cols-4), 2 mobile (sm:grid-cols-2) ✅
+- `app/(workspace)/library/page.tsx` : état (renameModalOpen, selectedLookId, newName, 
+  deleteConfirmOpen, lookToDelete, isSaving, isDeleting) + handlers 
+  (handleStartRename, handleSaveRename, handleStartDelete, handleConfirmDelete)
+- Error handling : user-facing alerts (rename/delete failures)
+- Dépendances : T-804a spec done ✅
+- Commit : b3c5b67
+
+### [T-804c] API + E2E: Rename endpoint + delete confirmation — `status: done` · `owner: claude`
+- Livré : API endpoints + UI modals (inclus dans T-804b implementation).
+  - ✅ `PATCH /api/looks/[id] { name }` route (`app/api/looks/[id]/route.ts`)
+    - Validation : name [1..100], type string
+    - Ownership check : user_id == auth user
+    - Response : { success, look: { id, name, updated_at } }
+    - Errors : 400 (invalid), 401 (unauth), 404 (not found), 500 (DB)
+  - ✅ `DELETE /api/looks/[id]` route (path param variant, nouvelle + query param ancien)
+    - Ownership check : user_id == auth user
+    - Hard delete (spec V1 acceptable)
+  - ✅ UI modals : rename + delete confirmation (voir T-804b)
+- `app/api/looks/[id]/route.ts` (nouveau) : 85 lines, PATCH + DELETE handlers
+- Tests : tsc clean (Promise<params> fix), build OK
+- Dépendances : T-804a (spec) ✅, T-804b (grid UI + modals) ✅
+- Commit : b3c5b67
+
+### [T-805] Futures : Video upload / Lip-sync source video contract
+- Objectif : Permettre à l'utilisateur de télécharger une vidéo et faire juste du lip-sync.
+- Priorité : **TIER 2** (plus risqué, nécessite spec + contrat backend clair).
+- Scope : Research + spec phase d'abord, pas implementation V1.
+- Questions clés :
+  - Formats vidéo acceptés (mp4, webm, mov) ? Résolution min/max ?
+  - Durée min/max ? Constraints HeyGen lip-sync API ?
+  - Comment reconnaître "vidéo compatible" vs "vidéo non-compatible" ?
+  - UX : upload form vs drag-drop vs gallery picker ?
+  - Costing : moins cher que génération Seedance ? Baseline estimate ?
+- À faire post-T-804 : audit HeyGen lip-sync API, draft spec contract
+
+### [T-806] V2 Planning : Alternative TTS providers — `status: todo` · `owner: —`
+- Objectif : abstraire voice provider pour supporter ElevenLabs + open-source (V2+).
+- Priorité : **TIER 3** (moins urgent ; après flux HeyGen parfaitement propre).
+- Scope : architecture & decision, pas d'implementation.
+- À faire (design phase) :
+  - [ ] Spec voice_provider abstraction (heygen | elevenlabs | openai | custom)
+  - [ ] Costing model per provider + currency handling
+  - [ ] Consent/licensing logic (ElevenLabs commercial, etc)
+  - [ ] Voice mapping: HeyGen voice_id ≠ ElevenLabs voice_id
+  - [ ] Fallback strategy si voice provider unavailable
+- Dépendances : T-801 (spec) done ; T-804 (Looks stable) done
+- Risques : feature creep ; dépasser scope V1 produit
+
+### [T-805] V2 Planning : Alternative TTS providers — `status: todo` · `owner: —`
+- Objectif : abstraire voice provider pour supporter ElevenLabs + open-source (V2+).
+- Scope : architecture & decision, pas d'implementation.
+- À faire (design phase) :
+  - [ ] Spec voice_provider abstraction (heygen | elevenlabs | openai | custom)
+  - [ ] Costing model per provider + currency handling
+  - [ ] Consent/licensing logic (ElevenLabs commercial, etc)
+  - [ ] Voice mapping: HeyGen voice_id ≠ ElevenLabs voice_id
+  - [ ] Fallback strategy si voice provider unavailable
+- Dépendances : T-801 (spec) done
+- Risques : feature creep ; dépasser scope V1 produit
+
+---
+
+## Axe 9 — Favorites & Personal Curation  `status: in_progress`
+
+Objectif : donner à l'utilisateur un contrôle simple sur ses meilleures générations
+sans migration DB V1. Les favoris sont stockés dans `jobs.app_state.favorite`,
+préservant tout état applicatif existant.
+
+### [T-901] Favorites V1 — `status: done` · `owner: codex`
+- Scope : favori par job vidéo, visible sur job detail, Library et Projects.
+- Données : `jobs.app_state.favorite === true` ; aucune nouvelle table, aucune migration.
+- API : `PATCH /api/jobs/[id]` avec `{ favorite: boolean }`, ownership check et
   service-role côté serveur ; ne modifie pas `updated_at`.
 - UI :
   - bouton `Favorite/Favorited` sur la page job ;
@@ -1383,28 +1575,6 @@ Bêta fermée admin-only OK sans eux ; **requis avant tout trafic client payant.
 - [ ] **Poller batché** (Codex P1 #4) : borner le nombre de jobs traités par run + concurrence limitée + budget temps < `maxDuration` (éviter le timeout en plein download quand plusieurs jobs sont actifs).
 - [ ] **Couverture tests complète submit/status/poll/idempotence** : validation d'entrée, quota, échec provider, transitions poll, idempotence bout-en-bout (l'auth cron + parsing + persistance poller sont déjà couverts par le lot quick-wins).
 Réfs : revue Codex 2026-07-16 ; `agent/log.md` (entrée durcissement).
-
-## PARALLAX-REMIX-LOT — 2026-11-23 — owner: codex — in_progress
-- Reprendre le lot Remix de Parallax depuis `a98671e3c47fdb12c42789aee821268aa8f23f6c`.
-- Réutiliser le composeur `/create/[mode]`, la référence privée `/api/jobs/[id]/reference-image`,
-  l’historique `jobs` RLS et la duplication serveur existante.
-- Critères : depuis le Studio, choisir un rendu vidéo terminé appartenant au compte, ouvrir un
-  brief Remix avec l’image privée préremplie, modifier le mouvement, puis lancer le même parcours
-  contrôlé par quota/permissions ; retrouver le résultat dans Projects/Jobs après rechargement.
-- Aucun appel fournisseur, aucune migration, aucune modification production ou secret ; vérifier
-  mobile par layout responsive et tests locaux.
-
-## PARALLAX-COEXISTENCE-FLAGS — 2026-11-23 — owner: codex — in_progress
-- Ajouter des réglages admin indépendants pour les parcours AlphoGenAI existants et les modules
-  Parallax (Clipping/Shorts, Podcast/Audio, Remix), avec défauts conservateurs et accès direct
-  bloqué quand un module est désactivé.
-- Réutiliser `app_settings` existante via routes serveur admin-only et une lecture publique
-  strictement limitée aux états activés. Ne pas ajouter de migration ni exposer de secret.
-- Ajouter au moins les entrées Shorts et Audio en parallèle, en conservant les parcours existants.
-- Risques : garde d’accès cohérente entre navigation, pages et endpoints ; aucune génération
-  payante ne doit être déclenchée par les tests.
-- Validation : tests ciblés des flags et routes, `npm test`, `npx tsc --noEmit -p tsconfig.json`,
-  `npm run build`; recette hébergée uniquement si la Preview staging est READY.
 ## T-1164c - Directed Product Ad quality path - CODE READY (2026-07-30, Codex)
 - Versioned the shot pack to V2 and removed product generation from both creator shots. The product demo is anchored to one exact first frame and uses full Seedance 2.
 - Added deterministic French narration, captions and CTA before paid generation; the Revideo manifest owns voice, copy, branding and timing.
@@ -1424,4 +1594,3 @@ Réfs : revue Codex 2026-07-16 ; `agent/log.md` (entrée durcissement).
 ## MOSS-QUEUE-CANCEL — 2026-11-09 — owner: codex — code_ready
 - Explicit user request: fix queued MOSS calls surviving broker timeout. Branch codex/moss-queue-cancellation; no merge, deploy, permit or paid GPU authorized.
 - Scope: capture native SDK invocation ID before GPU start; persist and cancel on 300s start timeout; separate total result deadline; safe error codes/UI; free SDK/RPC and broker regressions. H3 stream and both GPU definitions remain unchanged.
-
