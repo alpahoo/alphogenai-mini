@@ -12,4 +12,3 @@ Le périmètre vérifié localement est :
 - navigation Studio simulée sur petit écran via les onglets Create, Result et History.
 
 À valider sur une Preview reliée à une base de test isolée : connexion admin, création d’une image MOSS sans fournisseur payant, vérification du PNG après rechargement, expiration puis renouvellement d’URL signée, suppression du résultat sans suppression de la référence, et parcours à 375 px avec un vrai compte admin. La cible Cinema doit rester séparée de la Preview commune avant toute migration ou fixture.
-

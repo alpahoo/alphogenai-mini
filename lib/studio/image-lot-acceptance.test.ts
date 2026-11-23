@@ -58,4 +58,3 @@ describe("Parallax Image lot: MOSS contract", () => {
     expect(studio).toContain('"history", "History"');
   });
 });
-
