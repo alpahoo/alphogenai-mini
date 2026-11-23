@@ -4,6 +4,7 @@ import { getUserFromRequest } from "@/lib/podcast/auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { clippingExtension, validateClippingPrepare } from "@/lib/clipping-pack";
 import { triggerCreateShorts } from "@/lib/modal-client";
+import { isModuleEnabled } from "@/lib/parallax-modules";
 
 const SELECT = "*, clipping_pack_clips(*)";
 
@@ -19,6 +20,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const user = await getUserFromRequest(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await isModuleEnabled("alphogenai_clipping"))) {
+    return NextResponse.json({ error: "AlphoGenAI Clipping is disabled" }, { status: 404 });
+  }
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const action = body?.action;
   const service = createServiceClient();
@@ -70,3 +74,4 @@ export async function POST(request: NextRequest) {
   }
   return NextResponse.json({ error: "Unsupported action." }, { status: 400 });
 }
+
