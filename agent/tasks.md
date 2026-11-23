@@ -119,6 +119,14 @@ Format d'une tâche :
 
 ---
 
+### [T-1170] LongCat-Video-Avatar 1.6 : POC Modal isole - `status: in_progress` - `owner: claude`
+- Objectif : deployer LongCat-Video-Avatar 1.6 (INT8, distille 8 etapes, 480p) dans une app Modal de test privee (`alphogenai-longcat-avatar-poc`) et produire une premiere animation portrait + WAV. Integration AlphoGenAI = tache distincte.
+- Fichiers : `poc/longcat_avatar_modal/` (app.py, README.md), `HANDOVER.md` (entree), `agent/log.md`.
+- Risques : cout GPU (rendu soumis a feu vert explicite de Paul avec GPU/tarif/timeout/cout max) ; poids ~50 Go sur volume dedie ; aucune route/job/Supabase/Vercel touche ; Codex, `codex/parallax-coexistence` et PR #123 hors perimetre.
+- Validation : image buildee, poids epingles telecharges, MP4 prive recupere, metriques consignees dans le handoff.
+
+---
+
 ### [T-1157] Premium lipsync QA follow-up and failure observability - `status: superseded` · `owner: claude`
 - **SUPERSEDED (2026-07-16)** par le gel de **Podcast Premium V1 = VEED web worker** (voir `docs/decision-books/podcast-premium-v1.md`). Ce suivi QA portait sur l'ancienne voie **HeyGen lip-sync premium**, qui n'est plus la brique V1. Conservé pour historique ; aucune action.
 - Objective (historique): finish the short premium render only after explaining the two remaining missing lip-sync clips.
