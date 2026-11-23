@@ -41,7 +41,7 @@ IO_VOL = "alphogenai-longcat-avatar-poc-io"
 GPU = "H100"  # 1x H100 80 Go ; 0,001097 $/s (grille Modal du 2026-11-23)
 GPU_TIMEOUT_S = 1500  # plafond dur du premier rendu
 GPU_PRICE_PER_S = 0.001097
-TWICE_TIMEOUT_S = 900  # plafond dur du test a deux rendus
+TWICE_TIMEOUT_S = 1200  # plafond dur du test a deux rendus (Luz, 3 segments)
 
 W = "/weights"  # /weights/LongCat-Video et /weights/LongCat-Video-Avatar-1.6
 IO = "/io"
@@ -164,9 +164,16 @@ def _probe(path: Path) -> dict:
          "-of", "json", str(path)], capture_output=True, text=True, check=True).stdout
     j = json.loads(out)
     s = j["streams"][0]
+    a = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
+         "stream=codec_name,duration", "-of", "json", str(path)],
+        capture_output=True, text=True).stdout
+    astreams = json.loads(a or "{}").get("streams", [])
     return {"width": s["width"], "height": s["height"], "fps": s["r_frame_rate"],
             "frames": s.get("nb_frames"), "duration_s": float(j["format"]["duration"]),
-            "size_bytes": int(j["format"]["size"])}
+            "size_bytes": int(j["format"]["size"]),
+            "audio_codec": astreams[0].get("codec_name") if astreams else None,
+            "audio_duration_s": float(astreams[0]["duration"]) if astreams and astreams[0].get("duration") else None}
 
 
 @app.function(image=image, gpu=GPU, timeout=GPU_TIMEOUT_S, cpu=8, memory=65536,
@@ -247,15 +254,19 @@ def _patched_two_render_script(n_renders: int) -> str:
     modeles charges une seule fois. Patch textuel verifie par assertions."""
     src = (Path(REPO_DIR) / "run_demo_avatar_single_audio_to_video.py").read_text(encoding="utf-8")
     start = "    # prepare audio embedding for the first clip\n"
-    end = ("    if context_parallel_util.get_cp_size() > 1:\n"
-           "        torch.distributed.barrier(group=context_parallel_util.get_cp_group())\n\n"
-           "    # =========================================\n")
+    # Le bloc bouclé va jusqu'à la fin de generate() : premier segment + segments de continuation.
+    end = "\n\ndef _parse_args():"
     assert src.count(start) == 1 and src.count(end) == 1
-    i, j = src.index(start), src.index(end)
+    i, j = src.index(start), src.index(end) + 1
     block = src[i:j]
-    old_name = 'os.path.join(output_dir, "ai2v_demo_1")'
-    assert old_name in block
-    block = block.replace(old_name, 'os.path.join(output_dir, f"ai2v_render_{_k + 1}")')
+    for old, new in (
+        ('os.path.join(output_dir, "ai2v_demo_1")', 'os.path.join(output_dir, f"render{_k + 1}_ai2v")'),
+        ('os.path.join(output_dir, f"video_continue_{segment_idx+1}")',
+         'os.path.join(output_dir, f"render{_k + 1}_segments{segment_idx+1}")'),
+    ):
+        assert old in block
+        block = block.replace(old, new)
+    assert "return" not in block.replace("return_", "")
     block = "".join("    " + ln if ln.strip() else ln for ln in block.splitlines(keepends=True))
     loop = (
         "    torch.cuda.synchronize()\n"
@@ -274,7 +285,8 @@ def _patched_two_render_script(n_renders: int) -> str:
 @app.function(image=image, gpu=GPU, timeout=TWICE_TIMEOUT_S, cpu=8, memory=65536,
               volumes={W: weights_vol, IO: io_vol}, max_containers=1)
 def generate_twice(image_name: str = "man.png", wav_name: str = "man_voiced.wav",
-                   prompt: str = DEMO_PROMPT, run_tag: str = "twice", n_renders: int = 2) -> dict:
+                   prompt: str = DEMO_PROMPT, run_tag: str = "twice", n_renders: int = 2,
+                   num_segments: int = 1) -> dict:
     """GPU : modeles charges une fois, n rendus identiques (meme graine) dans le meme processus."""
     t_enter = time.time()
     run_dir = Path(IO) / "outputs" / run_tag
@@ -294,6 +306,8 @@ def generate_twice(image_name: str = "man.png", wav_name: str = "man_voiced.wav"
         "--lora_path", "loraB/lora.safetensors", "--model_type", "avatar-v1.6",
         "--mix_steps=4", "--mix_alpha=1.0",
     ]
+    if num_segments > 1:  # continuation : 93 images puis +80 par segment (README upstream)
+        cmd += [f"--num_segments={num_segments}", "--ref_img_index=10", "--mask_frame_range=0"]
     peak = {"v": 0}
     stop = threading.Event()
 
@@ -322,7 +336,7 @@ def generate_twice(image_name: str = "man.png", wav_name: str = "man_voiced.wav"
     t_end = time.time()
     stop.set()
     result = {
-        "returncode": rc, "gpu": GPU, "run_tag": run_tag, "n_renders": n_renders,
+        "returncode": rc, "gpu": GPU, "run_tag": run_tag, "n_renders": n_renders, "num_segments": num_segments,
         "container_to_end_s": round(t_end - t_enter, 1),
         "load_s_incl_audio_prep": poc.get("load_s"),
         "renders_s": {k: v for k, v in poc.items() if k.startswith("render_")},
@@ -338,14 +352,37 @@ def generate_twice(image_name: str = "man.png", wav_name: str = "man_voiced.wav"
     return result
 
 
+@app.function(image=image, volumes={W: weights_vol, IO: io_vol}, timeout=900, cpu=8, memory=16384)
+def transcribe(name: str = "luz_fr.wav") -> dict:
+    """CPU : transcription (whisper-large-v3 du volume) pour reperer les p/b/m dans la voix."""
+    import torch
+    from transformers import pipeline
+
+    asr = pipeline("automatic-speech-recognition", model=f"{W}/LongCat-Video-Avatar-1.6/whisper-large-v3",
+                   torch_dtype=torch.float32, device="cpu")
+    out = asr(f"{IO}/inputs/{name}", generate_kwargs={"language": "french", "task": "transcribe"},
+              return_timestamps="word")
+    return {"text": out["text"], "words": [(c["text"], c["timestamp"]) for c in out.get("chunks", [])]}
+
+
 @app.local_entrypoint()
-def main(step: str = "weights", run_tag: str = "demo"):
+def main(step: str = "weights", run_tag: str = "demo", image_name: str = "", wav_name: str = "",
+         segments: int = 1, prompt: str = ""):
     """step = weights | inputs | analyze | run | twice  (run/twice = rendu GPU PAYANT, apres feu vert)."""
-    if step == "analyze":
+    if step == "transcribe":
+        print(json.dumps(transcribe.remote(wav_name or "luz_fr.wav"), ensure_ascii=False, indent=1))
+    elif step == "analyze":
         print(json.dumps(analyze_audio.remote()))
     elif step == "twice":
         t0 = time.time()
-        r = generate_twice.remote(run_tag="twice" if run_tag == "demo" else run_tag)
+        kw = {"run_tag": "twice" if run_tag == "demo" else run_tag, "num_segments": segments}
+        if image_name:
+            kw["image_name"] = image_name
+        if wav_name:
+            kw["wav_name"] = wav_name
+        if prompt:
+            kw["prompt"] = prompt
+        r = generate_twice.remote(**kw)
         r["client_wall_s"] = round(time.time() - t0, 1)
         r["approx_cold_start_s"] = round(r["client_wall_s"] - r["container_to_end_s"], 1)
         print(json.dumps(r, indent=2))
