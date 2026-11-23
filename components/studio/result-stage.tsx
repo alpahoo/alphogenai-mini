@@ -32,7 +32,7 @@ function useNow(active: boolean) {
 }
 
 /** Private video with signed-URL refresh when a link expires. */
-function PrivateVideo({ asset, s, videoRef, muted, className }: { asset: StudioAsset; s: StudioState; videoRef?: React.Ref<HTMLVideoElement>; muted?: boolean; className?: string }) {
+export function PrivateVideo({ asset, s, videoRef, muted, className }: { asset: StudioAsset; s: StudioState; videoRef?: React.Ref<HTMLVideoElement>; muted?: boolean; className?: string }) {
   const [url, setUrl] = useState<string | null>(s.media[asset.id]?.url ?? null);
   const [failed, setFailed] = useState(false);
   const retried = useRef(false);
