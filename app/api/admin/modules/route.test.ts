@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/app/api/admin/middleware";
 import { createServiceClient } from "@/lib/supabase/service";
 import { GET, PATCH } from "./route";
@@ -9,7 +9,7 @@ vi.mock("@/lib/supabase/service", () => ({ createServiceClient: vi.fn() }));
 
 const auth = vi.mocked(requireAdmin);
 const service = vi.mocked(createServiceClient);
-const request = (method: string, body?: unknown) => new Request("http://local/api/admin/modules", {
+const request = (method: string, body?: unknown) => new NextRequest("http://local/api/admin/modules", {
   method,
   ...(body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
 });
