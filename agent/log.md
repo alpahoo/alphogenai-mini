@@ -3477,3 +3477,5 @@ Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, po
 - Fait : runtime `longcat-avatar@1` (binder, admission SQL, audio library API, executor/broker Modal, page Studio dediee, catalogue), docs et coordination. Aucun GPU, aucune migration appliquee, aucun deploiement.
 - Tests : vitest (suite complete), tsc, eslint sur le code neuf, unittest Python `test_avatar` (23) + suites comfy existantes.
 - Next : recette locale/staging avec rendu simule, puis un seul rendu GPU apres accord du cout max.
+- (suite) 2026-11-23 : migration LongCat appliquee sur le staging `hhearpympdflxyfmszap` (accord explicite, verifications H3/MOSS/Cinema avant, apres : porte fermee, fonction service_role seule, comptes inchanges). Env Modal `comfy-staging` + volume vide crees. Mode simulation hors GPU ajoute (verrouille sur le ref staging). Preview de la branche = variables de PRODUCTION tant que le script `tools/avatar-staging/prepare-staging-secrets.ps1` n'a pas ete execute par le proprietaire.
+

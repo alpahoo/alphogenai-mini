@@ -37,6 +37,8 @@ runtime_environment = {
     # Same selection inside the deployed containers as at deploy time.
     "MOSS_EXECUTOR_GPU": MOSS_EXECUTOR_GPU,
 }
+# Hosted staging rehearsal without a GPU (see modal_app/comfy/avatar.py::simulation_enabled): forwarded only when set at deploy time.
+runtime_environment.update({k: os.environ[k] for k in ("AVATAR_SIMULATE", "AVATAR_SIMULATE_SUPABASE_REF") if k in os.environ})
 volume = modal.Volume.from_name(os.environ.get("H3_MODELS_VOLUME", "alphogenai-comfy-models"), create_if_missing=False)
 cpu_image = (modal.Image.debian_slim(python_version="3.12").apt_install("ffmpeg")
              .pip_install("supabase==2.28.0", "requests==2.32.5", "fastapi==0.121.1", "av==17.0.0", "modal==1.6.3")
@@ -177,6 +179,9 @@ def broker(run_id: str):
         from modal_app.comfy.transfer import receive_output
 
         if runtime == AVATAR_RUNTIME:
+            from modal_app.comfy.avatar import simulated_output, simulation_enabled
+            if simulation_enabled():
+                return simulated_output(graph)  # staging rehearsal only: no GPU is submitted
             # `graph` is the avatar payload here (image, 16 kHz WAV, prompt, seed, segments), already validated by the
             # broker. Same bounded start window, call-id persistence and confirmed cancellation as MOSS.
             from modal_app.comfy.moss_queue import collect_moss

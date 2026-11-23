@@ -206,3 +206,41 @@ def execute(payload: dict, weights: str = WEIGHTS_ROOT, repo: str = REPO_DIR, ro
         return {"mp4": raw, "generation_seconds": round(time.monotonic() - started, 2)}
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Hosted STAGING rehearsal without a GPU. The broker normally submits the payload to `execute_avatar` (H100). With the
+# two settings below it returns a synthetic MP4 instead, so the hosted flow (Preview -> dispatch -> broker -> storage ->
+# Studio) can be validated for free. Fail-closed: the flag alone does nothing, and it refuses to run unless the broker's own
+# SUPABASE_URL belongs to the explicitly allowed project, so it can never fake a render on another database.
+SIMULATION_FLAG = "AVATAR_SIMULATE"
+SIMULATION_FLAG_VALUE = "no-gpu-staging-only"
+SIMULATION_REF = "AVATAR_SIMULATE_SUPABASE_REF"
+
+
+def simulation_enabled(env=None) -> bool:
+    env = os.environ if env is None else env
+    if env.get(SIMULATION_FLAG) != SIMULATION_FLAG_VALUE:
+        return False
+    ref = env.get(SIMULATION_REF, "")
+    if not ref or ref not in env.get("SUPABASE_URL", ""):
+        raise AvatarInputError("AVATAR_EXECUTION_FAILED")  # simulation requested for a database it is not allowed on
+    return True
+
+
+def simulated_output(payload: dict) -> dict:
+    """Synthetic MP4 shaped like the real output (25 fps, whole segments, the request's own audio, shorter than the video)."""
+    segments, audio = payload.get("segments"), payload.get("audio")
+    if type(segments) is not int or not 1 <= segments <= MAX_SEGMENTS or not isinstance(audio, (bytes, bytearray)):
+        raise AvatarInputError("AVATAR_EXECUTION_FAILED")
+    with tempfile.TemporaryDirectory() as directory:
+        wav, out = Path(directory) / "speech.wav", Path(directory) / "simulated.mp4"
+        wav.write_bytes(bytes(audio))
+        try:
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                            "-i", f"testsrc2=size=272x368:rate={FPS}:duration={video_seconds(segments)}", "-i", str(wav),
+                            "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(out)],
+                           check=True, timeout=120, capture_output=True)
+        except Exception:
+            raise AvatarInputError("AVATAR_OUTPUT_INVALID") from None
+        return {"mp4": out.read_bytes(), "generation_seconds": 0.5}

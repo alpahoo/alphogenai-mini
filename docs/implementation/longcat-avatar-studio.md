@@ -159,11 +159,32 @@ button for renders. Fix options for the owner: store `''` instead of `null`, or 
 - **Not verified**: the migration on the staging/prod database, the Modal image build and deploy, the executor on a GPU, the page
   against staging, the CI workflow (its test list does not include `test_avatar` yet, see `agent/review.md`).
 
-## Blockers before the staging step (decisions that are the owner's)
+## Staging status (2026-11-23, authorised by the owner)
 
-1. Writing the migration to the staging Supabase project `hhearpympdflxyfmszap` (rule: nothing is written there without approval).
-2. The Vercel Preview of this branch needs staging variables (`COMFY_LONGCAT_ENABLED`, dispatch URL/secret, staging Supabase keys); the
-   Vercel API refuses the variable listing here (403), and a Preview can point at production by default (seen on #121).
-3. Modal: an isolated environment with the staging broker secret `alphogenai-comfy-broker`, the weights volume visible from it
-   (`H3_SOURCE_ENVIRONMENT`), and the deploy of the shared app `alphogenai-comfy`.
-4. One real GPU render for the acceptance (cost stated and approved first, see the PR description).
+**Done**
+- Migration `20261123_comfy_longcat_avatar.sql` applied to the staging Supabase project `hhearpympdflxyfmszap` and nothing else
+  (read-only checks first: staging already had H3, MOSS and Cinema M1; no Parallax migration exists; the only Cinema link to the
+  comfy tables is the FK `cinema_takes.run_id -> comfy_runs(id)`, untouched by a wider CHECK). Result: runtime CHECK now accepts
+  `longcat-avatar@1`; gate row closed (0 runs, 0 USD, reserve 0.75); `admit_comfy_avatar_run` executable by `service_role` only;
+  `references` bucket accepts WAV/MP3; inactive engine row; H3/MOSS gates, the 5 existing runs and the 2 existing accounts unchanged.
+- Modal: isolated environment `comfy-staging` and an empty volume `alphogenai-comfy-staging-models` created (the live pilot app
+  `alphogenai-comfy` in environment `comfy-admin` is NOT touched: it holds the production broker secret).
+- Hosted no-GPU mode added: `AVATAR_SIMULATE=no-gpu-staging-only` + `AVATAR_SIMULATE_SUPABASE_REF=hhearpympdflxyfmszap`; fails closed
+  on any other database (6 tests).
+
+**Vercel findings (read-only)**
+- The MCP 403 on the variable list is a connector permission, not your role: the signed-in account is the team OWNER and the
+  Vercel CLI (own credentials) lists variables fine. Missing: the Vercel MCP connection does not have the environment-variables
+  read scope (re-authorise the Vercel connector with env access, or keep using the CLI).
+- Branch-scoped Preview variables exist for `codex/parallax-*` and `feat/cinema-m1-persistence` (staging) but **not for
+  `claude/longcat-avatar-integration`**: its Preview currently falls back to the generic Preview variables, which are the
+  **production** Supabase. Do not sign in to the current Preview of this branch.
+- Previews are SSO-protected (`all_except_custom_domains`).
+
+**Owner-run step (keys never pass through Claude):** `tools/avatar-staging/prepare-staging-secrets.ps1` copies the staging
+settings from the cinema branch (refuses to continue unless the URL is the staging project), creates the Modal secret
+`alphogenai-comfy-broker` in `comfy-staging`, and adds the Preview variables for this branch only.
+
+**Still needed from the owner**: (1) run that script; (2) the privately approved Modal region (`H3_MODAL_REGION`); then Claude
+deploys the Modal staging app in simulated mode, sets `COMFY_DISPATCH_URL` (not a secret), redeploys the Preview, opens the
+staging gate for a few simulated runs, validates the hosted flow, and closes the gate again.

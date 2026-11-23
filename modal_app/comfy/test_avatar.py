@@ -306,6 +306,48 @@ class BrokerFlowTests(unittest.TestCase):
             self.assertFalse(self.finish_call(db)["p_success"])
 
 
+class SimulationTests(unittest.TestCase):
+    """The hosted STAGING rehearsal mode must be impossible to enable by accident or on another database."""
+    OK = {"AVATAR_SIMULATE": "no-gpu-staging-only", "AVATAR_SIMULATE_SUPABASE_REF": "hhearpympdflxyfmszap",
+          "SUPABASE_URL": "https://hhearpympdflxyfmszap.supabase.co"}
+
+    def test_off_by_default_and_the_flag_alone_is_not_enough(self):
+        self.assertFalse(avatar.simulation_enabled({}))
+        self.assertFalse(avatar.simulation_enabled({"AVATAR_SIMULATE": "1"}))
+        self.assertFalse(avatar.simulation_enabled({**self.OK, "AVATAR_SIMULATE": "true"}))
+
+    def test_refuses_any_other_database(self):
+        for env in ({**self.OK, "SUPABASE_URL": "https://qbrpzmuedfugbhoeytdj.supabase.co"},
+                    {**self.OK, "AVATAR_SIMULATE_SUPABASE_REF": ""}, {k: v for k, v in self.OK.items() if k != "SUPABASE_URL"}):
+            with self.assertRaises(AvatarInputError):
+                avatar.simulation_enabled(env)
+
+    def test_enabled_only_for_the_allowed_project(self):
+        self.assertTrue(avatar.simulation_enabled(self.OK))
+
+    @unittest.skipUnless(HAS_FFMPEG, "ffmpeg not installed")
+    def test_synthetic_clip_has_the_real_shape(self):
+        out = avatar.simulated_output({"segments": 3, "audio": wav_bytes(9.72)})
+        self.assertEqual(out["mp4"][4:8], b"ftyp")
+        import av
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "s.mp4"
+            f.write_bytes(out["mp4"])
+            with av.open(str(f)) as c:
+                self.assertAlmostEqual(float(c.duration) / av.time_base, 10.12, delta=0.15)
+                self.assertEqual({s.type for s in c.streams if s.type in ("video", "audio")}, {"video", "audio"})
+
+    def test_rejects_bad_payload(self):
+        for payload in ({"segments": 4, "audio": b"x"}, {"segments": 1, "audio": "no"}, {}):
+            with self.assertRaises(AvatarInputError):
+                avatar.simulated_output(payload)
+
+    def test_the_broker_branch_calls_simulation_before_any_gpu_submission(self):
+        source = (ROOT / "modal_app/comfy/app.py").read_text(encoding="utf-8")
+        branch = source[source.index("if runtime == AVATAR_RUNTIME:"):]
+        self.assertLess(branch.index("simulation_enabled()"), branch.index("collect_moss(execute_avatar"))
+
+
 class DefinitionTests(unittest.TestCase):
     def setUp(self):
         self.tree = ast.parse((ROOT / "modal_app/comfy/app.py").read_text(encoding="utf-8"))
