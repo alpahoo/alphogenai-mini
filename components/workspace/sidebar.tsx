@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -23,7 +25,6 @@ import { createClient } from "@/lib/supabase/client";
 import { isAdminEmail } from "@/lib/flags";
 import { useRouter } from "next/navigation";
 import { QuotaBar } from "./quota-bar";
-import { useEffect, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Navigation config
@@ -49,9 +50,9 @@ const MAIN_NAV = [
   },
   {
     href: "/remix",
-    label: "Remix",
+    label: "Parallax — Remix",
     icon: WandSparkles,
-    description: "Rework a private video",
+    description: "Private motion variant",
   },
   {
     href: "/research",
@@ -255,4 +256,3 @@ export function Sidebar({ plan, email }: SidebarProps) {
     </aside>
   );
 }
-
