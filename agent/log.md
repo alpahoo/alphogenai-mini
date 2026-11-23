@@ -3478,3 +3478,9 @@ Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, po
 - Réutilisation documentée : jobs, références privées/signées, garde quota/plan, retry et UI Create mobile. `main` ne contient pas le manifest/route H3 admin ; aucun provider n’a été appelé.
 - `git diff --check` passe. Vitest n’a pas pu démarrer dans ce worktree vierge (`vitest/config` non résolu, dépendances absentes) ; la CI/installation reste à faire.
 
+
+## 2026-11-23 - Claude - Parallax Video lot (#121)
+- Cause du faux blocage : la branche partait de 01cdc54 (2026-07-31), 95 commits derriere main, avant le chemin H3 admin (7d3e7e2, 47ac9d2). main fusionne (7226a9c). Le manifest H3 est `workflows/comfy/templates/minimax-h3/manifest.json`, la route admin `app/api/admin/comfy/runs/route.ts` (+ `[id]`, `history`, `media/[id]`).
+- Premier Vitest de la branche : 146 fichiers / 1599 tests verts avant mes ajouts. Aucun run GitHub Actions n'existait sur #121 : le filtre `paths` de `comfy-admin-tests.yml` ignore les PR purement docs.
+- Ajouts : `runs/[id]/owner-scoping.test.ts` (6 tests) et `media/[id]/signed-url.test.ts` (4 tests), verifies par 5 mutations (chacune fait echouer au moins un test). `docs/parallax-video-lot.md` reecrit avec les faits corrects.
+- Lecture seule, catalogue uniquement : staging `hhearpympdflxyfmszap` (`jobs.prompt` NOT NULL ; aucun droit anon/authenticated sur comfy_* et cinema_*). Production non consultee.

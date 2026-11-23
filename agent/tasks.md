@@ -1598,3 +1598,8 @@ Réfs : revue Codex 2026-07-16 ; `agent/log.md` (entrée durcissement).
 ## PARALLAX-VIDEO-LOT — 2026-11-23 — inventory and smallest draft slice
 - Start from `main` on `codex/parallax-video-lot`; do not invoke a provider, alter production, or add secrets.
 - Inventory the reusable authenticated job, reference, signed-storage, quota and retry paths, and record the missing H3 admin manifest/admission seam before implementing it.
+
+## PARALLAX-VIDEO-LOT (#121) - 2026-11-23 - owner: claude - in_progress
+- Reprise de la PR #121 (brouillon) a la demande du proprietaire. Le worktree de Codex `Documents/Codex/alphogenai-video-lot` etait propre, sans commit depuis 05:23, et le blocage qu'il avait note venait d'une base perimee. Ne pas reprendre cette tache sans en parler : branche locale de travail `claude/video-lot-121`, poussee vers `codex/parallax-video-lot` (fast-forward uniquement, jamais de force).
+- Perimetre : `main` fusionne dans la branche, document corrige, tests de garanties existantes sur le chemin H3 admin. Aucun fournisseur, aucune migration, aucun staging ni production touches, aucune fusion.
+- Critere : Vitest complet, tsc, lint et build verts ; CI executee sur la PR ; PR reste en brouillon.
