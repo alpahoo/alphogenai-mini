@@ -3491,3 +3491,9 @@ Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, po
 - Mise à jour de `docs/parallax-video-lot.md`, `agent/tasks.md` et `agent/review.md` pour remplacer l'ancien faux blocage documentaire et décrire les limites de la recette sans génération.
 - Vérifications : `git diff --check` PASS; Vitest `149 files / 1612 tests` PASS; `npx tsc --noEmit -p tsconfig.json` PASS; `npm run build` PASS avec avertissements préexistants. `npm ci` requis car `node_modules` était incomplet.
 - Suite : commit/push, CI et Preview; recette hébergée avec un run H3 staging déjà terminé, sans cliquer sur Generate.
+
+## 2026-11-23 - Codex - Preview finale #121
+- Commit local rebased et poussé : `b7d59bf` (Claude `db17dad` conservé comme parent immédiat).
+- Vercel Preview du SHA `b7d59bf` READY : `https://nextjs-with-supabase-l5zv-21ldctbcl-paul-alains-projects.vercel.app` ; CI `free-tests` et Preview Comments vertes.
+- Recette hébergée tentée sur `/admin/studio/video` : la page de login répond, mais `cinema-admin-staging@example.com` est rejeté par `Invalid login credentials`. Aucun parcours authentifié, téléchargement ou génération n'est déclaré ; blocage exact : compte/variables Supabase Auth de la Preview ne correspondent pas au compte staging préautorisé.
+- Commentaire de preuve ajouté à la PR #121 (id `7092994274`). PR toujours brouillon, aucune fusion, production ou génération payante.
