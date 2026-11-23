@@ -64,9 +64,10 @@ image = (
         f"git -C {REPO_DIR} checkout {UPSTREAM_SHA}",
         # Ecarts volontaires vs requirements upstream : torch/flash-attn deja
         # installes ci-dessus ; streamlit (UI) inutile ; libsndfile1==0.0.1 n'est
-        # pas un paquet pip (apt libsndfile1 ci-dessus).
+        # pas un paquet pip (apt libsndfile1 ci-dessus) ; tritonserverclient==0.0.6
+        # n'existe pas sur PyPI et n'est importe nulle part dans le depot.
         f"cd {REPO_DIR} && grep -v -E '^(torch|flash-attn|streamlit)==' requirements.txt > /tmp/req.txt",
-        f"cd {REPO_DIR} && grep -v -E '^libsndfile1==' requirements_avatar.txt > /tmp/req_avatar.txt",
+        f"cd {REPO_DIR} && grep -v -E '^(libsndfile1|tritonserverclient)==' requirements_avatar.txt > /tmp/req_avatar.txt",
         "pip install -r /tmp/req.txt -r /tmp/req_avatar.txt",
         "pip install 'huggingface_hub>=0.25,<1' hf_transfer",
     )

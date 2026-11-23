@@ -1,3 +1,9 @@
+## 2026-11-23 - LongCat-Video-Avatar 1.6 : POC Modal isole (T-1170, claude)
+- App `alphogenai-longcat-avatar-poc` + volumes `alphogenai-longcat-avatar-poc-weights` (47,3 Go) et `-io`. Code : `poc/longcat_avatar_modal/` (README = commandes et versions epinglees).
+- Fait (CPU seulement) : image buildee (correctif : `tritonserverclient==0.0.6` inexistant sur PyPI, retire), poids INT8 telecharges, entrees de demo upstream preparees.
+- Rendu GPU : **en attente du feu vert de Paul** (H100, timeout 1500 s). Resultats/metriques a ajouter ici apres execution.
+- Hors perimetre non touche : Vercel, Supabase, routes, jobs, Studio, apps Modal existantes, PR #123.
+
 # AlphoGen — Handover (source of truth)
 
 ## 2026-11-08 — H3 private admin pilot, code prepared only
