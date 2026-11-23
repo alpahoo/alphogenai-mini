@@ -100,6 +100,14 @@ const MODE_CONFIG: Record<
     iconBg: "bg-pink-500/10 text-pink-600 dark:text-pink-400",
     accentColor: "pink",
   },
+  remix: {
+    title: "Remix Video",
+    subtitle: "Choose a private finished video, describe new motion, and create a separate version.",
+    placeholder: "A slow camera push-in, soft natural movement, and a gentle turn toward the light…",
+    icon: Sparkles,
+    iconBg: "bg-violet-500/10 text-violet-700",
+    accentColor: "violet",
+  },
 };
 
 const DURATION_OPTIONS = [
