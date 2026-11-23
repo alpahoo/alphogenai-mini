@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 33647)
-Total output lines: 2810
-
 "use client";
 
 import { useState, useEffect, use, useRef, useMemo } from "react";
@@ -104,9 +101,9 @@ const MODE_CONFIG: Record<
     accentColor: "pink",
   },
   remix: {
-    title: "Remix Video",
-    subtitle: "Choose a private finished video, describe new motion, and create a separate version.",
-    placeholder: "A slow camera push-in, soft natural movement, and a gentle turn toward the light…",
+    title: "Parallax — Remix Video",
+    subtitle: "Choose a private finished video and create a separate version.",
+    placeholder: "A slow camera push-in and gentle movement toward the light…",
     icon: Sparkles,
     iconBg: "bg-violet-500/10 text-violet-700",
     accentColor: "violet",
@@ -1366,7 +1363,320 @@ export default function CreateModePage({
           !productReference
             ? ["add a product image for stronger visual grounding"]
             : scene.role === "style"
-              ? ["ou…3647 tokens truncated…ground">
+              ? ["outfit is a style reference, not exact try-on"]
+              : undefined,
+      })),
+    );
+    setDirectorOpen(true);
+  };
+
+  const ugcPanel = ugcPanelVisible ? (
+    <div className="rounded-2xl border border-emerald-500/25 bg-card px-4 py-4 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-3 py-1 text-[11px] font-semibold uppercase text-emerald-600 dark:text-emerald-400">
+            <ShoppingBag className="h-3.5 w-3.5" />
+            UGC Studio
+          </div>
+          <h2 className="mt-2 text-lg font-bold tracking-tight text-foreground">
+            Build a creator-style product plan
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Uses your first image as the product reference and the second image as outfit/style.
+          </p>
+        </div>
+        <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-xs lg:w-56">
+          <span className="block text-muted-foreground/60">References</span>
+          <span className={`mt-0.5 block font-semibold ${productReference ? "text-emerald-500" : "text-amber-500"}`}>
+            {productReference ? `${productReference.label}${outfitReference ? ` + ${outfitReference.label}` : ""}` : "Product image needed"}
+          </span>
+        </div>
+      </div>
+
+      <div className={`mt-4 rounded-xl border px-3 py-3 ${ugcReadinessToneClass}`}>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-xs font-bold text-foreground">
+              {ugcReadiness.tone === "risky" ? (
+                <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+              ) : (
+                <Check className="h-3.5 w-3.5" />
+              )}
+              UGC readiness
+            </p>
+            <p className="mt-1 text-sm font-semibold">{ugcReadiness.label}</p>
+            <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-muted-foreground/70">
+              {ugcReadiness.detail}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5 md:justify-end">
+            {ugcReadiness.checks.map((check) => (
+              <span
+                key={check.label}
+                className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${
+                  check.ok
+                    ? "border-emerald-500/25 bg-background text-emerald-600"
+                    : "border-border/50 bg-background text-muted-foreground/55"
+                }`}
+              >
+                {check.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        <input
+          value={ugcProductName}
+          onChange={(e) => setUgcProductName(e.target.value)}
+          placeholder="Product name"
+          className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-emerald-500/40"
+        />
+        <input
+          value={ugcBenefit}
+          onChange={(e) => setUgcBenefit(e.target.value)}
+          placeholder="Main benefit"
+          className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-emerald-500/40"
+        />
+        <input
+          value={ugcTone}
+          onChange={(e) => setUgcTone(e.target.value)}
+          placeholder="Tone"
+          className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-emerald-500/40"
+        />
+      </div>
+
+      {ugcIdentityPanel}
+
+      <div className="mt-3 rounded-xl border border-violet-500/25 bg-violet-500/5 p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="flex items-center gap-2 text-xs font-bold text-foreground">
+              <Share2 className="h-3.5 w-3.5 text-violet-500" />
+              Social Pack preset
+            </p>
+            <p className="mt-1 text-sm font-semibold text-violet-600 dark:text-violet-300">
+              {ugcSocialPreset.label}
+            </p>
+            <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-muted-foreground/70">
+              {ugcSocialPreset.metadataBrief}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5 md:justify-end">
+            {ugcSocialPreset.primaryFormats.map((format) => (
+              <span key={format} className="rounded-full border border-violet-500/25 bg-background px-2 py-1 text-[10px] font-semibold text-violet-600">
+                {format}
+              </span>
+            ))}
+            <span className="rounded-full border border-emerald-500/25 bg-emerald-500/5 px-2 py-1 text-[10px] font-semibold text-emerald-600">
+              Captions auto
+            </span>
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {ugcSocialPreset.hashtagHints.map((tag) => (
+            <span key={tag} className="text-[10px] font-medium text-muted-foreground/60">{tag}</span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={ugcAngle}
+            onChange={(e) => setUgcAngle(e.target.value as UGCAngle)}
+            className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-emerald-500/40"
+          >
+            <option value="product_demo">Product demo</option>
+            <option value="testimonial">Testimonial</option>
+            <option value="unboxing">Unboxing</option>
+            <option value="try_on">Try-on / outfit</option>
+            <option value="before_after">Before / after</option>
+            <option value="founder_pitch">Founder pitch</option>
+          </select>
+          <select
+            value={ugcPlatform}
+            onChange={(e) => setUgcPlatform(e.target.value as UGCPlatform)}
+            className="rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-emerald-500/40"
+          >
+            <option value="tiktok_reels">TikTok / Reels</option>
+            <option value="square_feed">Square feed</option>
+            <option value="landscape_ad">Landscape ad</option>
+          </select>
+
+        </div>
+        <button
+          type="button"
+          onClick={buildUGCPlan}
+          disabled={loading}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-600/15 transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Clapperboard className="h-4 w-4" />
+          Build UGC Director plan
+        </button>
+      </div>
+
+      <p className="mt-3 text-[11px] text-muted-foreground/55">
+        Plan target: {ugcPlatformLabel}. Product/outfit references stay attached through the existing image chips.
+      </p>
+    </div>
+  ) : null;
+
+  // Unified control row: Model · Duration · Format · Scenes (CTO mockup).
+  const modelBlock = (
+    <div className="space-y-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Model */}
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <Cpu className="h-3.5 w-3.5 text-indigo-500" /> Model
+          </label>
+          <select
+            value={selectedEngine}
+            onChange={(e) => setSelectedEngine(e.target.value as EngineKey | "auto")}
+            className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
+          >
+            <option value="auto">Auto — best for your plan</option>
+            {engineOptions.map((opt) => {
+              const locked =
+                (opt.gate === "premium" && plan !== "premium") ||
+                (opt.gate === "pro" && plan === "free");
+              const tags = [
+                opt.quality === "1080p" ? "HD" : null,
+                opt.supportsRefs ? "Refs" : null,
+                locked ? `${opt.gate === "premium" ? "Premium" : "Pro"} only 🔒` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <option key={opt.key} value={opt.key} disabled={locked}>
+                  {getEngineIntention(opt)} — {cleanModelName(opt.label)}
+                  {tags ? ` · ${tags}` : ""}
+                </option>
+              );
+            })}
+          </select>
+          {selectedEngine !== "auto" && (
+            <p className="mt-1 text-[10px] text-muted-foreground/50">
+              Powered by {cleanModelName(engineOptions.find((e) => e.key === selectedEngine)?.label ?? selectedEngine)}
+            </p>
+          )}
+        </div>
+
+        {/* Duration */}
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <Clock className="h-3.5 w-3.5 text-amber-500" /> Duration
+          </label>
+          <select
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            disabled={!planLoaded}
+            className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
+          >
+            {durationOptions.map((o) => (
+              <option key={o.value} value={o.value} disabled={o.disabled}>
+                {o.label}
+                {o.locked ? " 🔒" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Format */}
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <Monitor className="h-3.5 w-3.5 text-blue-500" /> Format
+          </label>
+          <select
+            value={aspectRatio}
+            onChange={(e) => setAspectRatio(e.target.value as "16:9" | "9:16" | "1:1")}
+            className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
+          >
+            <option value="16:9">Landscape (16:9)</option>
+            <option value="9:16">Portrait (9:16)</option>
+            <option value="1:1">Square (1:1)</option>
+          </select>
+        </div>
+
+        {/* Scenes */}
+        <div>
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+            <Film className="h-3.5 w-3.5 text-purple-500" /> Scenes
+          </label>
+          {plan !== "free" && planLoaded && sceneCountChoices.length > 0 ? (
+            <select
+              value={numScenes === "auto" ? "auto" : String(sceneCount)}
+              onChange={(e) =>
+                setNumScenes(e.target.value === "auto" ? "auto" : parseInt(e.target.value, 10))
+              }
+              className="w-full rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground focus:border-primary/40 focus:outline-none"
+            >
+              <option value="auto">Auto ({autoSceneCount})</option>
+              {sceneCountChoices.map((n) => (
+                <option key={n} value={String(n)}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-sm text-muted-foreground/60">
+              1 (Auto)
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Hints under the control row */}
+      {selectedEngine !== "auto" &&
+        engineHealth[selectedEngine] !== undefined &&
+        engineHealth[selectedEngine] !== -1 &&
+        engineHealth[selectedEngine] < 0.6 && (
+          <p className="text-[11px] text-amber-500">
+            ⚠ This model has a low success rate right now ({Math.round(engineHealth[selectedEngine] * 100)}% / 24h) — consider another.
+          </p>
+        )}
+      {plan !== "premium" && (
+        <Link
+          href="/pricing"
+          className="flex items-center gap-1.5 text-xs font-medium text-primary/80 transition-colors hover:text-primary"
+        >
+          <Lock className="h-3.5 w-3.5" />
+          {plan === "free" ? "Unlock longer videos & advanced models" : "Get up to 120s"}
+        </Link>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="relative flex h-full bg-[#f6f6f2]">
+      {/* ── Full-page loading overlay ─────────────────────────────── */}
+      {loading && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
+        >
+          <div className="flex flex-col items-center gap-6 max-w-sm w-full px-8">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+            <div className="text-center">
+              <h2 className="text-lg font-semibold mb-1">Creating your video</h2>
+              <p className="text-sm text-muted-foreground">{currentLoadingStep.label}</p>
+            </div>
+            {/* Progress bar */}
+            <div className="w-full">
+              <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                <motion.div
+                  className="h-full rounded-full bg-primary"
+                  initial={{ width: "0%" }}
+                  animate={{ width: `${loadingProgress}%` }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                />
+              </div>
+              <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
                 <span>{Math.round(loadingProgress)}%</span>
                 <span className="tabular-nums">{loadingElapsed}s</span>
               </div>
@@ -2496,5 +2806,4 @@ export default function CreateModePage({
     </div>
   );
 }
-
 
