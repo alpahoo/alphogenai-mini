@@ -14,6 +14,7 @@ import {
   BarChart3,
   Gift,
   Clapperboard,
+  WandSparkles,
   CalendarClock,
   SearchCheck,
 } from "lucide-react";
@@ -44,6 +45,12 @@ const MAIN_NAV = [
     label: "Scene Editor",
     icon: Clapperboard,
     description: "Storyboard",
+  },
+  {
+    href: "/remix",
+    label: "Remix",
+    icon: WandSparkles,
+    description: "Rework a private video",
   },
   {
     href: "/research",
