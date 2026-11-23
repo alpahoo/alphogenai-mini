@@ -391,3 +391,8 @@ Audit + actions 2026-06-09 (go Paul) sur les 4 items de durcissement restants :
 - ATTENTION **URL→Video ne respecte pas un script imposé** (`override_script` ignoré) — c'est voulu
   (copie auto). Script verbatim = Avatar Video (V2). À cadrer côté UX quand UI publique.
 - Décision actée : URL→Video V1 **GELÉ** sur Jogg (validé prod 2026-07-16), périmètre copie auto.
+## Parallax Video lot — 2026-11-23
+- Le périmètre est volontairement documentaire : le port H3/MiniMax ne peut pas être déclaré livré depuis `main`, car son manifest et sa route admin dédiée sont absents.
+- Ne pas réutiliser une route générique pour contourner l’admin, les bornes, le quota ou la propriété. Le prochain code doit brancher ces contrôles avant tout provider et conserver le stockage privé.
+- Blocages : dépendances non installées dans le worktree et disponibilité GPU non vérifiée. Aucun secret, migration, production ou rendu payant touché.
+

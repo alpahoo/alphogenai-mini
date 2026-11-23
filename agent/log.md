@@ -3440,3 +3440,8 @@ Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, po
 - Validation without provider spend: 12 focused tests pass, root TypeScript clean, Revideo worker typecheck clean and production build passes. No Seedance generation, GPU job or Hostinger deployment was started.
 - Remaining gate: turn the CLI-only Revideo worker into a private authenticated Hostinger service, then run exactly one capped three-shot Beats validation and assemble the final MP4.
 - The remaining worker gate is now code-ready: authenticated async `POST /render`, `GET /status/:id`, one-render-at-a-time queue, idempotent job dispatch, direct R2 upload and restart-safe re-dispatch from Next.js. Local service smoke passed (`health=200`, unauthenticated status `401`, invalid authenticated render `400`). Hostinger/Vercel deployment and the single paid QA are still pending.
+## 2026-11-23 — Codex — Parallax Video lot cadré
+- Branche `codex/parallax-video-lot` créée depuis `main`, commit `6286b08`, poussée et PR brouillon #121 ouverte.
+- Réutilisation documentée : jobs, références privées/signées, garde quota/plan, retry et UI Create mobile. `main` ne contient pas le manifest/route H3 admin ; aucun provider n’a été appelé.
+- `git diff --check` passe. Vitest n’a pas pu démarrer dans ce worktree vierge (`vitest/config` non résolu, dépendances absentes) ; la CI/installation reste à faire.
+
