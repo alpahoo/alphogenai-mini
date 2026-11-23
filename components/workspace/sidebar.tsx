@@ -14,6 +14,7 @@ import {
   BarChart3,
   Gift,
   Clapperboard,
+  WandSparkles,
   CalendarClock,
   SearchCheck,
 } from "lucide-react";
@@ -22,6 +23,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isAdminEmail } from "@/lib/flags";
 import { useRouter } from "next/navigation";
 import { QuotaBar } from "./quota-bar";
+import { useEffect, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Navigation config
@@ -44,6 +46,12 @@ const MAIN_NAV = [
     label: "Scene Editor",
     icon: Clapperboard,
     description: "Storyboard",
+  },
+  {
+    href: "/remix",
+    label: "Remix",
+    icon: WandSparkles,
+    description: "Rework a private video",
   },
   {
     href: "/research",
@@ -100,6 +108,10 @@ interface SidebarProps {
 export function Sidebar({ plan, email }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [modules, setModules] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    fetch("/api/modules").then((response) => response.json()).then((data) => setModules(data.modules ?? {})).catch(() => undefined);
+  }, []);
 
   const handleSignOut = async () => {
     const supabase = createClient();
@@ -167,6 +179,8 @@ export function Sidebar({ plan, email }: SidebarProps) {
         {/* Create section */}
         <div className="space-y-1">
           {MAIN_NAV.map(renderNavItem)}
+          {modules.parallax_shorts && renderNavItem({ href: "/parallax/shorts", label: "Parallax — Shorts", icon: WandSparkles, description: "Vertical video" })}
+          {modules.parallax_audio && renderNavItem({ href: "/parallax/audio", label: "Parallax — Audio", icon: Sparkles, description: "Voice & music" })}
         </div>
 
         {/* Divider */}
@@ -241,3 +255,4 @@ export function Sidebar({ plan, email }: SidebarProps) {
     </aside>
   );
 }
+
