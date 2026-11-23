@@ -80,7 +80,7 @@ The recipe sets the H3 gate **in the local database only** (4 permits, 3.00 USD 
 
 ## Findings from the recipe that are not part of this PR
 
-* **Deleting a real H3 run fails on a database built from the repository.** `lib/comfy/delete-run.ts` (main, #111) clears `jobs.prompt` with `NULL`, but `20251004_jobs_table.sql` declares `prompt TEXT NOT NULL`. The Studio delete answers 503 ("Could not clear the prompt from the job record"). Whether the production column is nullable has **not** been checked (no production access in this work). The recipe reports it as `D6a KNOWN ISSUE` and applies the tombstone by hand so the Cinema behaviour (take kept, shown as unavailable) is still verified.
+* **Deletion redacts rather than nulls the job prompt.** The repository declares `jobs.prompt TEXT NOT NULL`, so `lib/comfy/delete-run.ts` writes the fixed marker `[deleted]` before the run tombstone. This keeps the job row for accounting without retaining the private prompt and avoids the former 503. The production column and hosted deletion path still require the separate staging/production validation; no production migration is implied.
 * **Montage: a clip whose audio is shorter than its video shifts the next clips earlier** by the shortfall. `lib/montage/build.ts` trims each audio to the video length (`atrim`) but never pads (`apad`). Real H3 clips are padded (5.184 s of audio for 5.167 s of video), so the Luz montage is exact; the case appeared with a fixture cut by hand. The seed script now pads such fixtures.
 * **The framing caution is not reachable in Cinema M1.** `refFraming` (PR #114) is filled only in tests: the first frame of a plan is a library image path and no framing is stored for it. It is not an acceptance criterion of #117 (nor part of the #118 inventory); wiring it needs a stored framing per first frame (schema and UI) and belongs to a follow-up.
 
@@ -91,3 +91,4 @@ Validated against a real local PostgreSQL 17 / GoTrue / Storage stack and the re
 Simulated: the GPU render and the Modal dispatcher (the simulator above), the H3 gate and budget (local rows), the Luz clips when `--media-dir` is not given (synthetic H3-shaped clips).
 
 **Not verified, requires a hosted environment or a real render:** the migration on the hosted Supabase project (and the order in which it is approved and applied), Vercel build/auth cookies/admin allow-list on the real domain, ffmpeg and its 60 s limit on Vercel, signed URLs against the hosted Storage, mobile rendering, concurrent use from two browsers, a real GPU render of a plan and its real cost, and the production `jobs.prompt` question above.
+
