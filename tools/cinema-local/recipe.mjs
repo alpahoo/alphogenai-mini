@@ -224,13 +224,7 @@ const tk = (await attach(A, scratchShot, disposable)).json?.take;
 const del = await call(A, "DELETE", "/api/admin/comfy/runs/" + disposable);
 if (del.status === 200) check("D6 deleting the run through the Studio succeeds", true);
 else {
-  // KNOWN ISSUE outside #119 (lib/comfy/delete-run.ts, main since #111): it clears jobs.prompt with NULL, which the repository
-  // schema forbids (jobs.prompt is NOT NULL). Reported, not hidden. The recipe then applies the same final state by hand so the
-  // Cinema behaviour (take kept, run hidden) is still verified.
-  note("D6a KNOWN ISSUE (not part of #119)", "Studio deletion of a real-shaped run answered " + del.status + ": " + (del.json?.error ?? ""));
-  for (const a of (await db.from("comfy_assets").select("storage_key").eq("run_id", disposable)).data ?? []) await db.storage.from("comfy-outputs").remove([a.storage_key]);
-  for (const tbl of ["comfy_dispatch_outbox", "comfy_run_graphs", "comfy_assets"]) await db.from(tbl).delete().eq("run_id", disposable);
-  await db.from("comfy_runs").update({ params_effective: { deleted_at: new Date().toISOString() }, reference_path: null }).eq("id", disposable);
+  check("D6 deletion through the Studio succeeds", false, "status " + del.status + " " + (del.json?.error ?? ""));
 }
 const afterDel = await storyboard(A, scratch.id);
 check("D6 a deleted (tombstoned) run keeps its take row, which reads as unavailable: run and file hidden", afterDel.takes.some((x) => x.id === tk.id) && !afterDel.runs.some((x) => x.id === disposable) && !afterDel.assets.some((x) => x.run_id === disposable));
@@ -378,3 +372,4 @@ if (MODE === "locked") {
 const ok = t.summary();
 console.log("PROJECT_ID " + proj.id);
 process.exit(ok ? 0 : 1);
+
