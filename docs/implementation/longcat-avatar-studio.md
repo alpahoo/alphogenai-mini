@@ -188,3 +188,43 @@ settings from the cinema branch (refuses to continue unless the URL is the stagi
 **Still needed from the owner**: (1) run that script; (2) the privately approved Modal region (`H3_MODAL_REGION`); then Claude
 deploys the Modal staging app in simulated mode, sets `COMFY_DISPATCH_URL` (not a secret), redeploys the Preview, opens the
 staging gate for a few simulated runs, validates the hosted flow, and closes the gate again.
+
+## Hosted rehearsal: second pass (2026-11-23)
+
+Verified without any session or secret:
+- **Which database each Preview uses** (project id read from the client bundle of `/login`, opened in the administrator's Chrome, which has
+  Vercel SSO but no application session): #119 and #123 → staging `hhearpympdflxyfmszap`; **#125 (this branch) → PRODUCTION
+  `qbrpzmuedfugbhoeytdj`** because it has no branch-scoped Preview variables. Do not sign in to this branch's Preview before the secrets
+  script has run and the target has been re-checked (check = same read of the bundle; it must show only `hhearpympdflxyfmszap`).
+- Anonymous probes on this Preview: `/api/admin/comfy/runs?template=longcat-avatar`, `/api/admin/studio/audio`, `/api/admin/studio/references`,
+  `/api/admin/comfy/history` → 401; `/admin/studio/avatar` → redirect to `/login`.
+- **Reusable sessions: none.** Chrome has no application session on any Preview. Staging holds two `@example.com` accounts (an admin and a
+  non-admin) created by Codex for the Cinema recipe; their passwords are not available here and the accounts are left untouched.
+- **Modal region:** the approved region is the one the deployed pilot functions already use (read from the metadata of
+  `alphogenai-comfy` in environment `comfy-admin`, identical on three functions, kept in a local scratch file, never printed). It will be used
+  for the staging deploy; no input is needed from the owner for it.
+- Existing staging checks for the two other PRs are recorded in their branches (`docs/cinema-m1-hosted-checks-2026-11-23.md`,
+  `docs/parallax-hosted-checks-2026-11-23.md`). Finding for #123: `public.app_settings` does not exist on staging, so module toggles cannot
+  be saved there.
+
+### Why the secrets script must be run by the owner
+
+It copies the staging service-role key from one Vercel variable set into another Vercel variable set and into a Modal secret. Writing a
+service-role key into configuration fields is something Claude does not do, even with permission; the owner's CLIs are already
+authenticated (Vercel CLI as the team owner, Modal profile `alpahoo`), so it is one command, nothing to paste, no value shown:
+
+```powershell
+cd "C:\tmp\alphogenai-longcat-int"
+powershell -ExecutionPolicy Bypass -File tools\avatar-staging\prepare-staging-secrets.ps1
+```
+
+It stops by itself if the donor variables do not point at the staging project, and touches only the Preview variables of
+`claude/longcat-avatar-integration` and the Modal environment `comfy-staging`.
+
+### Authenticating without passwords being handed over
+
+`requireAdmin` accepts `Authorization: Bearer <Supabase access token>` and decides admin by e-mail (`NEXT_PUBLIC_ADMIN_EMAILS`, a build-time
+variable). Claude does not type passwords into a login page that is not a local development host, so the hosted recipe is a script the
+owner starts once (`tools/avatar-staging/hosted-recipe.mjs`, to be written after the approval below): it creates the two disposable staging
+accounts with random passwords kept only in a protected temporary file, signs in through the Supabase API, runs the checks against the three
+Previews with the bearer token, writes a pass/fail report that Claude reads, then deletes the accounts and the file.
