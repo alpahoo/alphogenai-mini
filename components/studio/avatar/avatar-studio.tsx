@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, ArrowLeft, Check, Download, Loader2, Mic, RefreshCw, Trash2, Upload, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatElapsed, isActive } from "@/lib/studio/status";
-import { avatarErrorMessage, canRenderAgain } from "@/lib/avatar/messages";
+import { avatarErrorMessage } from "@/lib/avatar/messages";
 import { MAX_AUDIO_SECONDS } from "@/lib/avatar/audio-library";
 import { StatusPill } from "../result-stage";
 import type { StudioAsset, StudioRun } from "../types";
@@ -139,8 +139,6 @@ function Result({ s, run }: { s: AvatarState; run: StudioRun }) {
       {run.status === "done" && !video && <p className="text-sm text-muted-foreground">The video is not available.</p>}
       <div className="mt-3 flex flex-wrap gap-2">
         {run.status === "done" && video && <button type="button" onClick={download} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm hover:bg-muted"><Download className="h-4 w-4" />Download MP4</button>}
-        {canRenderAgain(run.status) && <button type="button" disabled={s.busy === "delete"} onClick={() => { if (confirm("Delete this render and its video permanently?")) void s.removeRun(run.id); }}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted-foreground hover:bg-muted"><Trash2 className="h-4 w-4" />Delete</button>}
       </div>
     </section>
   );

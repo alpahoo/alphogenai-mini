@@ -25,6 +25,7 @@ from modal_app.comfy.broker import run  # noqa: E402
 def invoke(payload, reference, run_id, runtime="longcat-avatar@1"):
     mode = sys.argv[2] if len(sys.argv) > 2 else "ok"
     assert runtime == "longcat-avatar@1" and reference is None
+    print("SIM_GPU_CALL", flush=True)  # the only line that proves the (simulated) GPU was used
     assert sorted(payload) == ["audio", "image", "prompt", "seed", "segments"], sorted(payload)
     if mode == "slow":
         time.sleep(float(os.environ.get("SIM_SLOW_SECONDS", "20")))
