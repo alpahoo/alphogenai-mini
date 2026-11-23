@@ -74,4 +74,3 @@ export function AdminSidebar({ email }: { email: string }) {
     </aside>
   );
 }
-
