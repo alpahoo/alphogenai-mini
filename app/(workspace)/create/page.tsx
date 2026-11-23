@@ -9,6 +9,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
+import { useEffect, useState } from "react";
 
 type ToolStatus = "live" | "soon";
 
@@ -320,6 +321,10 @@ function CardInner({ tool }: { tool: Tool }) {
 }
 
 export default function CreateHub() {
+  const [modules, setModules] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    fetch("/api/modules").then((response) => response.json()).then((data) => setModules(data.modules ?? {})).catch(() => undefined);
+  }, []);
   return (
     <div className="mx-auto max-w-6xl px-8 py-12">
       <motion.div
@@ -336,7 +341,10 @@ export default function CreateHub() {
       </motion.div>
 
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {TOOLS.map((tool, i) => {
+        {TOOLS.filter((tool) =>
+          (tool.id !== "clipping" || modules.alphogenai_clipping !== false) &&
+          (tool.id !== "podcast" || modules.alphogenai_podcast !== false)
+        ).map((tool, i) => {
           const base =
             "group flex min-h-[260px] flex-col rounded-2xl border p-5 transition-all duration-200";
           const skin = tool.featured
