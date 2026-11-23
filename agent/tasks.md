@@ -1603,3 +1603,9 @@ Réfs : revue Codex 2026-07-16 ; `agent/log.md` (entrée durcissement).
 - Reprise de la PR #121 (brouillon) a la demande du proprietaire. Le worktree de Codex `Documents/Codex/alphogenai-video-lot` etait propre, sans commit depuis 05:23, et le blocage qu'il avait note venait d'une base perimee. Ne pas reprendre cette tache sans en parler : branche locale de travail `claude/video-lot-121`, poussee vers `codex/parallax-video-lot` (fast-forward uniquement, jamais de force).
 - Perimetre : `main` fusionne dans la branche, document corrige, tests de garanties existantes sur le chemin H3 admin. Aucun fournisseur, aucune migration, aucun staging ni production touches, aucune fusion.
 - Critere : Vitest complet, tsc, lint et build verts ; CI executee sur la PR ; PR reste en brouillon.
+
+## PARALLAX-VIDEO-LOT (#121) — continuation Codex — 2026-11-23 — owner: codex — in_progress
+- Reprendre la branche après `922c994` dans le worktree dédié, sans génération fournisseur, migration, production ni fusion.
+- Livrer l’adaptateur visible Parallax Video dans le Studio H3 : référence privée, préparation contrôlée par le manifest, historique/reprise et résultat privé lisible/téléchargeable après rechargement.
+- Réutiliser les routes/jobs/médias privés AlphoGenAI et conserver `lib/cinema/LICENSE-parallax.txt`; ajouter des tests de contrat et de parcours sans appeler de provider.
+- Critères : Vitest, tsc, build, CI et Preview READY ; une recette hébergée sur un run staging déjà terminé ou dispatcher simulé ; PR #121 conservée en brouillon.

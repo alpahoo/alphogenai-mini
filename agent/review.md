@@ -405,10 +405,10 @@ Audit + actions 2026-06-09 (go Paul) sur les 4 items de durcissement restants :
 - SDK 1.6.3 refuses public spawn on generators and its deployed input-plane generator API exposes no pre-start call ID. Reuse the native control-plane submission used by SDK spawn via a small, explicitly private/version-locked adapter; keep native generator frame decoding. Test with actual SDK and mocked transport. Fail closed on version mismatch. Do not rely on best-effort call-graph discovery.
 - Cancellation acknowledgement can fail under network/service outage: expose GPU_CANCELLATION_FAILED, preserve reservation, never claim success or retry automatically. Submission response loss also remains an explicitly uncertain state. Availability within 5 minutes cannot be guaranteed by code.
 
-## Parallax Video lot — 2026-11-23
-- Le périmètre est volontairement documentaire : le port H3/MiniMax ne peut pas être déclaré livré depuis `main`, car son manifest et sa route admin dédiée sont absents.
-- Ne pas réutiliser une route générique pour contourner l’admin, les bornes, le quota ou la propriété. Le prochain code doit brancher ces contrôles avant tout provider et conserver le stockage privé.
-- Blocages : dépendances non installées dans le worktree et disponibilité GPU non vérifiée. Aucun secret, migration, production ou rendu payant touché.
+## Parallax Video lot — 2026-11-23 — mise à jour Codex
+- Le faux blocage documentaire est levé : après fusion de `main` (`7226a9c`), le manifest H3 et les routes admin de runs, historique et médias privés sont présents et testés.
+- Le lot #121 doit rester un adaptateur du Studio H3 existant. Il ne doit pas réutiliser une route générique pour contourner l’admin, les bornes, le quota, la propriété ou les URLs signées.
+- La Preview peut prouver l’ouverture d’une référence, la préparation, la reprise d’un run de test déjà terminé et le téléchargement privé. Une génération H3 réelle, la disponibilité GPU et le coût restent hors périmètre tant qu’un accord séparé n’est pas donné.
 
 
 ## Revue independante #119 / #120 / #121 - 2026-11-23 - Claude (lecture seule des branches de Codex)
