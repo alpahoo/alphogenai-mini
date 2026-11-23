@@ -1,12 +1,12 @@
 # Parallax #118 — lot Video
 
-Ce lot ne lance aucune génération, ne touche aucune base hébergée et n'ajoute aucune migration. Il établit où en est réellement le chemin vidéo, ce qui le prouve, et ce qui bloque la suite.
+Ce lot ne lance aucune génération fournisseur, ne touche aucune base hébergée et n'ajoute aucune migration. Il intègre le parcours vidéo Parallax au Studio H3 existant et le vérifie avec un run staging déjà terminé.
 
 ## Correction de la première version de ce document
 
 La première version affirmait que `main` ne contient ni manifest H3/MiniMax ni route admin dédiée, et proposait donc de « porter » ce contrat. **C'était faux.** La branche avait été créée à partir du commit `01cdc54` (31 juillet 2026), 95 commits derrière `main`, avant l'arrivée du chemin H3 admin (`7d3e7e2` le 8 novembre, `47ac9d2` le 9 novembre). Les vérifications avaient été faites sur cette base périmée, dans un worktree sans dépendances installées. `main` a été fusionné dans la branche (`7226a9c`) et Vitest y tourne désormais.
 
-Conséquence : il n'y a pas de port H3 à écrire. Le lot Vidéo consiste à **prouver** le chemin existant et à traiter ce que les PR ouvertes apportent.
+Conséquence : il n'y a pas de port H3 à écrire. Le lot Vidéo fournit un petit adaptateur produit (`lib/studio/parallax-video.ts`) et rend explicite le parcours compatible : référence → préparation contrôlée par manifest → historique/reprise → résultat privé.
 
 ## Où se trouve le chemin vidéo H3 admin (sur `main`)
 
@@ -42,6 +42,15 @@ Le chemin générique `app/api/jobs/*` cité dans la première version est un au
 | Navigation mobile Create / Result / History | `components/studio/studio-layout.test.ts` (structure) | Structure couverte ; rendu à 375 px sur un vrai appareil : à faire sur une Preview |
 | Suppression d'un résultat | `lib/comfy/delete-run.test.ts` (base simulée) | **Échoue sur une base construite depuis le dépôt**, voir ci-dessous |
 | Rendu réel, durée, coût, disponibilité GPU | — | Exige une autorisation explicite ; non fait |
+
+### Adaptateur livré dans #121
+
+`lib/studio/parallax-video.ts` épingle la révision MIT réutilisée et le contrat
+admin H3. Il ne transporte ni l'authentification, ni SQLite, ni les crédits du
+démonstrateur Parallax : les contrôles AlphoGenAI restent ceux des routes
+`/api/admin/comfy/*`. Le bandeau `Parallax Video` du Studio n'est affiché que
+pour `minimax-h3`; le bouton de génération reste soumis à la porte serveur et
+au quota.
 
 ### Défaut connu qui bloque l'étape « supprimer »
 

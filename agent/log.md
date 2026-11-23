@@ -3484,3 +3484,10 @@ Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, po
 - Premier Vitest de la branche : 146 fichiers / 1599 tests verts avant mes ajouts. Aucun run GitHub Actions n'existait sur #121 : le filtre `paths` de `comfy-admin-tests.yml` ignore les PR purement docs.
 - Ajouts : `runs/[id]/owner-scoping.test.ts` (6 tests) et `media/[id]/signed-url.test.ts` (4 tests), verifies par 5 mutations (chacune fait echouer au moins un test). `docs/parallax-video-lot.md` reecrit avec les faits corrects.
 - Lecture seule, catalogue uniquement : staging `hhearpympdflxyfmszap` (`jobs.prompt` NOT NULL ; aucun droit anon/authenticated sur comfy_* et cinema_*). Production non consultee.
+
+## 2026-11-23 - Codex - Parallax Video #121 implementation
+- Reprise depuis `922c994` dans `alphogenai-video-lot`; aucun provider, staging, production, migration ou secret touché.
+- Ajout de `lib/studio/parallax-video.ts` et de ses tests : révision Parallax figée `a98671e3c47fdb12c42789aee821268aa8f23f6c`, MIT, contrat H3 admin, historique, reprise et médias privés. Le Studio affiche le parcours `Parallax Video` uniquement pour H3 et conserve la porte serveur/quota.
+- Mise à jour de `docs/parallax-video-lot.md`, `agent/tasks.md` et `agent/review.md` pour remplacer l'ancien faux blocage documentaire et décrire les limites de la recette sans génération.
+- Vérifications : `git diff --check` PASS; Vitest `149 files / 1612 tests` PASS; `npx tsc --noEmit -p tsconfig.json` PASS; `npm run build` PASS avec avertissements préexistants. `npm ci` requis car `node_modules` était incomplet.
+- Suite : commit/push, CI et Preview; recette hébergée avec un run H3 staging déjà terminé, sans cliquer sur Generate.
