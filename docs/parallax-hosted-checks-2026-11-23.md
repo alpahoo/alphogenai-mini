@@ -39,3 +39,12 @@ grant select, insert, update, delete on public.app_settings to service_role;
 Admin et non-admin (403 sur PATCH), Shorts distinct, historique privé après rechargement et parcours Audio exigent des sessions. L'accès
 admin est décidé par l'e-mail (`NEXT_PUBLIC_ADMIN_EMAILS`, variable de build de la Preview) : un compte jetable n'est administrateur que si
 son e-mail est ajouté à la variable Preview de la branche, puis la Preview reconstruite. Plan de reprise : demande groupée dans la PR #125.
+
+## Mise à jour : migration `20261124_create_app_settings.sql` (appliquée sur le staging)
+
+Schéma et droits attendus, relevés dans le code : `app_settings(key text primary key, value jsonb, updated_at)`, accès uniquement par le
+client `service_role` (`/api/admin/modules`, `lib/parallax-modules.ts`, `/api/admin/providers`, `/api/engines`, Modal `video_pipeline`), `upsert`
+sur `key`. La migration crée la table si elle n'existe pas, active RLS sans politique (refus par défaut), retire tout droit à `anon` et
+`authenticated`, donne les droits au `service_role`. Idempotente : sans effet sur la production, où la table existe déjà avec RLS.
+Datée après la chaîne historique pour ne pas modifier l'ordre des fichiers existants ni les cinq échecs de rejeu documentés.
+Appliquée au staging `hhearpympdflxyfmszap` avec l'accord du propriétaire ; vérifié ensuite : RLS active, 0 politique, droits `service_role` seuls, 0 ligne.
