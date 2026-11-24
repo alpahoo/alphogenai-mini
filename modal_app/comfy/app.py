@@ -122,7 +122,9 @@ def execute_image_graph_h100(graph: dict, start_before: float):
 AVATAR_SCALEDOWN_SECONDS = 60
 AVATAR_START_WINDOW_SECONDS = 300
 AVATAR_COLLECT_TIMEOUT_SECONDS = 660
-AVATAR_EXECUTOR_TIMEOUT_SECONDS = 720
+# Hard cost ceiling per execution: H100 0.001097 + RAM 128 GiB limit 0.000284 + 8 CPU 0.000105 = 0.001486 USD/s, so 640 s <= 0.95 USD
+# (it was 720 s with a 64 GiB limit: 0.968 USD). Measured need: model load 169-223 s + 3 segments ~185 s = 354-408 s.
+AVATAR_EXECUTOR_TIMEOUT_SECONDS = 640
 AVATAR_FLASH_ATTN_WHEEL = ("https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/"
                            "flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp310-cp310-linux_x86_64.whl")
 avatar_volume = modal.Volume.from_name(os.environ.get("AVATAR_WEIGHTS_VOLUME", WEIGHTS_VOLUME_DEFAULT),
