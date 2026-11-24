@@ -467,15 +467,140 @@ class DefinitionTests(unittest.TestCase):
                   if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name) and isinstance(n.value, ast.Constant)}
         self.assertLess(consts["AVATAR_COLLECT_TIMEOUT_SECONDS"], consts["BROKER_TIMEOUT_SECONDS"])
         self.assertLess(consts["BROKER_TIMEOUT_SECONDS"], 900)                # SQL deadline is 15 minutes
-        self.assertLess(consts["AVATAR_COLLECT_TIMEOUT_SECONDS"] + 30, consts["BROKER_TIMEOUT_SECONDS"])
+        self.assertLess(consts["AVATAR_COLLECT_TIMEOUT_SECONDS"] + consts["AVATAR_TRANSFER_GRACE_SECONDS"] + 30,
+                        consts["BROKER_TIMEOUT_SECONDS"])
         # Third real render: container start ~290 s, then render 375 s. The collector must cover both with a margin.
         self.assertGreaterEqual(consts["AVATAR_COLLECT_TIMEOUT_SECONDS"], 290 + 375 + 100)
         self.assertGreater(consts["AVATAR_START_WINDOW_SECONDS"], 290 + 30)
-        self.assertEqual(consts["AVATAR_COLLECT_TIMEOUT_SECONDS"],
+        self.assertEqual(consts["AVATAR_COLLECT_TIMEOUT_SECONDS"] + consts["AVATAR_TRANSFER_GRACE_SECONDS"],
                          consts["AVATAR_START_WINDOW_SECONDS"] + consts["AVATAR_EXECUTOR_TIMEOUT_SECONDS"])
         self.assertGreater(avatar.RENDER_TIMEOUT_SECONDS, 375 + 40)
         self.assertGreaterEqual(consts["AVATAR_EXECUTOR_TIMEOUT_SECONDS"], avatar.RENDER_TIMEOUT_SECONDS + 60)
         self.assertGreaterEqual(consts["AVATAR_EXECUTOR_TIMEOUT_SECONDS"], avatar.RENDER_TIMEOUT_SECONDS)
+
+
+class LateResultTests(unittest.TestCase):
+    """Third real render (2026-11-24): container start ~290 s, render 375 s, collector gave up at 660 s from submission.
+    Simulated here with the real asyncio timeouts at 1/250 scale (1 s of test = 250 s of the real run); no GPU, no Modal."""
+    SCALE = 250.0
+    FRAMES = 4
+
+    def consts(self):
+        import importlib
+        from unittest.mock import patch as p
+        with p.dict("os.environ", {"H3_MODAL_REGION": "eu"}):
+            app = importlib.import_module("modal_app.comfy.app")
+        return app
+
+    def settings(self, collect=None, grace=None):
+        app = self.consts()
+        s = self.SCALE
+        return (app.AVATAR_START_WINDOW_SECONDS / s, (collect or app.AVATAR_COLLECT_TIMEOUT_SECONDS) / s,
+                (app.AVATAR_TRANSFER_GRACE_SECONDS if grace is None else grace) / s)
+
+    def fake_call(self, start_s, render_s, transfer_s):
+        """A Modal generator call: call id after `start_s`, output header after `render_s` more, then the chunks."""
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock
+        import asyncio
+        from modal_app.comfy.transfer import output_frames
+        raw = bytes([0, 0, 0, 24]) + b"ftypmp42" + b"x" * 2048
+        cancel, state = AsyncMock(), {"streamed": 0}
+
+        async def submit(function, graph, deadline):
+            async def frames():
+                await asyncio.sleep(start_s / self.SCALE)
+                yield {"call_id": "fc-avatar"}
+                await asyncio.sleep(render_s / self.SCALE)
+                frames_out = list(output_frames({"mp4": raw, "generation_seconds": render_s}))
+                for index, frame in enumerate(frames_out):
+                    if index:
+                        await asyncio.sleep(transfer_s / self.SCALE / max(1, len(frames_out) - 1))
+                    state["streamed"] += 1
+                    yield frame
+            return "fc-avatar", frames(), SimpleNamespace(cancel=SimpleNamespace(aio=cancel))
+        return submit, cancel, state, raw
+
+    def collect(self, submit, collect_s=None, grace_s=None):
+        import asyncio
+        from modal_app.comfy.moss_queue import collect_moss
+        start, total, grace = self.settings(collect_s, grace_s)
+        saved = []
+        with patch("modal_app.comfy.moss_queue.submit_generator", side_effect=submit):
+            return saved, asyncio.run(collect_moss(object(), {}, saved.append, start, total, transfer_grace=grace))
+
+    def test_the_measured_third_render_is_collected_with_the_new_deadlines(self):
+        submit, cancel, state, raw = self.fake_call(290, 375, 4)
+        saved, result = self.collect(submit)
+        self.assertEqual(result["mp4"], raw)
+        self.assertEqual(saved, ["fc-avatar"])
+        cancel.assert_awaited_once_with(terminate_containers=True)   # the finished call is still closed, never left running
+
+    def test_the_same_run_failed_with_the_old_660_second_deadline(self):
+        from modal_app.comfy.moss_queue import MossQueueError
+        submit, _, _, _ = self.fake_call(290, 375, 4)
+        with self.assertRaises(MossQueueError) as caught:
+            self.collect(submit, collect_s=660, grace_s=0)
+        self.assertEqual(caught.exception.code, "GPU_EXECUTION_TIMEOUT")
+
+    def test_a_result_already_streaming_at_the_deadline_is_not_cut_mid_transfer(self):
+        app = self.consts()
+        # header 20 s before the deadline, transfer takes 30 s: it ends 10 s after the deadline, inside the 40 s grace
+        submit, _, state, raw = self.fake_call(300, app.AVATAR_COLLECT_TIMEOUT_SECONDS - 300 - 20, 30)
+        _, result = self.collect(submit)
+        self.assertEqual(result["mp4"], raw)
+        self.assertEqual(state["streamed"], 1 + (len(raw) + 512 * 1024 - 1) // (512 * 1024))
+
+    def test_a_transfer_that_outlasts_the_grace_is_cancelled_and_publishes_nothing(self):
+        from modal_app.comfy.moss_queue import MossQueueError
+        app = self.consts()
+        submit, cancel, _, _ = self.fake_call(300, app.AVATAR_COLLECT_TIMEOUT_SECONDS - 300 - 30, 200)
+        with self.assertRaises(MossQueueError) as caught:
+            self.collect(submit)
+        self.assertEqual(caught.exception.code, "GPU_EXECUTION_TIMEOUT")
+        cancel.assert_awaited_once_with(terminate_containers=True)
+
+    def test_a_render_that_has_not_produced_anything_by_the_deadline_is_cancelled(self):
+        from modal_app.comfy.moss_queue import MossQueueError
+        app = self.consts()
+        submit, cancel, state, _ = self.fake_call(300, app.AVATAR_COLLECT_TIMEOUT_SECONDS - 300 + 40, 1)
+        with self.assertRaises(MossQueueError) as caught:
+            self.collect(submit)
+        self.assertEqual((caught.exception.code, state["streamed"]), ("GPU_EXECUTION_TIMEOUT", 0))
+        cancel.assert_awaited_once_with(terminate_containers=True)
+
+    def test_a_late_start_beyond_the_start_window_is_still_refused(self):
+        from modal_app.comfy.moss_queue import MossQueueError
+        app = self.consts()
+        submit, cancel, _, _ = self.fake_call(app.AVATAR_START_WINDOW_SECONDS + 15, 10, 1)
+        with self.assertRaises(MossQueueError) as caught:
+            self.collect(submit)
+        self.assertEqual(caught.exception.code, "GPU_START_TIMEOUT")
+        cancel.assert_awaited_once_with(terminate_containers=True)
+
+    def test_a_late_collected_result_is_published_exactly_once_and_a_late_failure_publishes_nothing(self):
+        import asyncio
+        from modal_app.comfy.moss_queue import MossQueueError, collect_moss
+        app = self.consts()
+        for case, (start, render, transfer) in {"late but in time": (300, 400, 20), "too late": (300, 520, 1)}.items():
+            with self.subTest(case):
+                submit, _, _, raw = self.fake_call(start, render, transfer)
+                db = BrokerFlowTests.make_db(self, wav_bytes(9.72, 44100))
+                stored = []
+
+                def invoke(payload, reference, run_id, runtime="h3-video@1"):
+                    _, got = self.collect(submit)
+                    return got
+                with patch("modal_app.comfy.broker.database", return_value=db),                      patch("modal_app.comfy.broker.store_avatar", side_effect=lambda *a: stored.append(a[3]["mp4"])):
+                    run(RUN_ID, invoke)
+                finish = [c[0][1] for c in db.rpc.call_args_list if c[0][0] == "finish_comfy_admin_run"]
+                if case == "late but in time":
+                    self.assertEqual((len(stored), len(finish), finish[0]["p_success"]), (1, 1, True))
+                    self.assertEqual(stored[0], raw)
+                else:
+                    self.assertEqual((stored, len(finish), finish[0]["p_success"], finish[0]["p_error"]),
+                                     ([], 1, False, "GPU_EXECUTION_TIMEOUT"))
+                    db.table.return_value.delete.assert_called()    # asset rows of the failed run are removed
 
 
 if __name__ == "__main__":

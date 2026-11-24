@@ -122,10 +122,12 @@ def execute_image_graph_h100(graph: dict, start_before: float):
 AVATAR_SCALEDOWN_SECONDS = 60
 # Deadlines of one avatar run, from the third real render (2026-11-24): container start took ~290 s BEFORE the render began,
 # then the render itself took 375 s (exit 0). The collector deadline used to be 660 s counted from submission, so it gave up
-# 15 s after the render had finished. It now covers start window + executor budget: 330 + 500 = 830 s, below the broker (870 s)
-# which is below the 15-minute SQL deadline (900 s).
+# 15 s after the render had finished. It now waits for the result until start window + render budget (330 + 460 = 790 s);
+# a result that has begun to stream by then keeps a bounded 40 s transfer grace instead of being cut mid-transfer, so the
+# hard bound is 830 s, below the broker (870 s) which is below the 15-minute SQL deadline (900 s).
 AVATAR_START_WINDOW_SECONDS = 330
-AVATAR_COLLECT_TIMEOUT_SECONDS = 830
+AVATAR_COLLECT_TIMEOUT_SECONDS = 790
+AVATAR_TRANSFER_GRACE_SECONDS = 40
 # Executor budget once the container runs: render cap 440 s (measured 375 s) + ~60 s for output encoding and transfer.
 # Worst-case cost per execution: (330 s start + 500 s + 60 s scale-down) x 0.001486 USD/s (H100 + 128 GiB limit + 8 CPU) = 1.32 USD.
 # Expected cost is the measured one: 1.12 USD (third attempt).
@@ -198,7 +200,8 @@ def broker(run_id: str):
             def save_avatar_call_id(call_id):
                 database().table("comfy_runs").update({"modal_call_id": call_id}).eq("id", run_id).execute()
             return asyncio.run(collect_moss(execute_avatar, graph, save_avatar_call_id,
-                                           AVATAR_START_WINDOW_SECONDS, AVATAR_COLLECT_TIMEOUT_SECONDS))
+                                           AVATAR_START_WINDOW_SECONDS, AVATAR_COLLECT_TIMEOUT_SECONDS,
+                                           transfer_grace=AVATAR_TRANSFER_GRACE_SECONDS))
 
         if runtime == "moss-image@1":
             from modal_app.comfy.moss_queue import collect_moss

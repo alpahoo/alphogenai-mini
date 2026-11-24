@@ -112,3 +112,18 @@ Not yet done (needs a decision and a new GPU approval): the fix is in the deadli
 Cost: the worst case is now (330 + 500 + 60) x 0.001486 = **1.32 USD** (was 1.13 USD); it only occurs if every timeout is used in full. The expected cost is the measured one, **about 1.12 USD**, because the container start is billed (about 0.43 USD of the third attempt). The guard test now asserts a ceiling under 1.35 USD, that the collector covers the measured start + render with 100 s margin, and that it stays below the broker and the SQL deadline.
 
 Margins are thin by design (the SQL deadline leaves 30 s); the 290 s container start is the next thing to reduce (volume mount, image start), which also lowers the cost. 80 Python tests pass in a CI-like environment (ffmpeg available, none skipped).
+
+## Late result handling (simulation only, no GPU)
+
+Refinement of the deadline fix, in the existing orchestrator (`collect_moss`, no new component, MOSS/H3 behaviour unchanged because the new parameter is optional):
+
+- `AVATAR_COLLECT_TIMEOUT_SECONDS` is now **790 s** (start window 330 s + render budget 460 s) and bounds the wait for the render result.
+- New `AVATAR_TRANSFER_GRACE_SECONDS = 40`: when the output header is already streaming at that deadline, the deadline moves to header + 40 s instead of cutting a finished (paid) render mid-transfer. It never moves earlier. Hard bound: 830 s, below the broker (870 s) and the SQL deadline (900 s).
+- A result with nothing produced by the deadline is still cancelled (`GPU_EXECUTION_TIMEOUT`), and a start beyond 330 s is still refused (`GPU_START_TIMEOUT`).
+
+Proved in `LateResultTests` (real asyncio timeouts at 1/250 scale, fake Modal generator, broker `run` with the real finish/cleanup logic):
+- the measured third render (start 290 s + render 375 s) is collected; the same timeline **fails** with the old 660 s deadline (regression);
+- a result streaming at the deadline is recovered; a transfer outlasting the grace is cancelled and publishes nothing;
+- a late result that is in time is **published exactly once** (one `store_avatar`, one success `finish`); a result that is too late publishes nothing, finishes the run as failed once and deletes its asset rows.
+
+87 Python tests pass (two consecutive runs of the new class are stable). Not validated on a real render.
