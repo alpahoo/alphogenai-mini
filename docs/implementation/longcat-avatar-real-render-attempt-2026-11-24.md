@@ -86,3 +86,15 @@ Cout deja constate : 1,456 USD (deux essais). Aucune des deux variantes n'est la
 ## Point structurel a surveiller
 Le collecteur de l'application abandonne 660 s apres la soumission, delai qui inclut le demarrage a froid du conteneur ; le delai propre de l'executeur (640 s) ne court qu'apres. Les traces
 (`inputs ready after ...s` compare a l'heure de soumission) diront si le demarrage a froid consomme une part notable du budget.
+
+## Attempt 3 (traced run, 2026-11-24 16:1x-16:29 UTC)
+
+Result: **failed GPU_EXECUTION_TIMEOUT, but the render itself succeeded.**
+
+- The traces show the avatar process exiting with **code 0 after 375 s** (3 segments x 8 denoising steps, about 54 s per segment, 6.8 s/it, VRAM peak 51.8 GiB, GPU 100 %). Attempt 2 was therefore not a hang or a CPU limit: nothing was wrong with the render.
+- Timeline inside the container: weights load 0-45 s, INT8 DiT + LoRAs 45-142 s (slow, GPU idle: this is the read-only volume), first segment starts at 198 s, exit at 375 s.
+- The run still failed because the collector deadline (660 s from submission) also counts the **cold start before the container executes anything**: the UI wall time was 693 s while the render only started about 290 s after submission. 290 s + 375 s > 660 s, so the collector gave up just after the render finished and the video was not collected.
+- Observed cost (Modal billing, env comfy-staging, hour 16:00 UTC): **1.124 USD**, under the 1.13 USD ceiling. Total spent over the three attempts: 1.456 + 1.124 = 2.58 USD.
+- Cleanup verified: gate closed (enabled false, 0 runs, budget 0), no active run, disposable account deleted, Vercel bypass revoked, Preview admin list restored, Modal back to simulation.
+
+Not yet done (needs a decision and a new GPU approval): the fix is in the deadlines, not the render. The collector deadline must cover cold start + render (about 290 + 375 + margin), with the executor timeout and the cost ceiling re-derived from that. A second lever is the 290 s cold start itself (volume mount, image start).
