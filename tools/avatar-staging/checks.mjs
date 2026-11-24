@@ -87,7 +87,23 @@ export async function checksLongcat(ctx) {
     const ld = lr.json?.run_id ? await waitTerminal(ctx, lr.json.run_id, 8 * 60_000) : null;
     r.check("a 12 s audio is refused by the broker BEFORE any GPU (AUDIO_TOO_LONG)", ld?.run?.status === "failed" && ld.run.error_code === "AUDIO_TOO_LONG", `${ld?.run?.status} ${ld?.run?.error_code ?? ""}`);
   }
-  r.note("deleting a finished render", "not exercised: shared defect (jobs.prompt NOT NULL), no delete button on this screen");
+  // Deleting a finished render (the [deleted] redaction shared with #119): ownership, content gone, accounting kept.
+  const jobId = (await ctx.db.from("comfy_runs").select("job_id").eq("id", runId).single()).data?.job_id;
+  const assetIds = (done?.assets ?? []).map((a) => a.id);
+  const before = (await ctx.db.from("comfy_runtime_gates").select("remaining_runs,committed_usd").eq("runtime", "longcat-avatar@1").single()).data;
+  r.check("another account cannot delete the render (404)", [403, 404].includes((await ctx.req("user", "DELETE", `/api/admin/comfy/runs/${runId}`)).status));
+  const del = await ctx.req("admin", "DELETE", `/api/admin/comfy/runs/${runId}`);
+  r.check("DELETE a finished render answers 200 (no 503)", del.status === 200, `${del.status} ${del.json?.error ?? ""}`);
+  const jobRow = (await ctx.db.from("jobs").select("prompt").eq("id", jobId).maybeSingle()).data;
+  r.check("the job row stays with the redaction marker instead of the prompt", jobRow?.prompt === "[deleted]", String(jobRow?.prompt).slice(0, 20));
+  const left = (await ctx.db.from("comfy_assets").select("id").eq("run_id", runId)).data?.length ?? 0;
+  const graph = (await ctx.db.from("comfy_run_graphs").select("run_id").eq("run_id", runId)).data?.length ?? 0;
+  r.check("the asset records and the stored graph are gone", left === 0 && graph === 0, `assets=${left} graphs=${graph}`);
+  r.check("the run is hidden (GET 404) and absent from the library", (await ctx.req("admin", "GET", `/api/admin/comfy/runs/${runId}`)).status === 404 && !(await ctx.req("admin", "GET", "/api/admin/comfy/history?limit=20")).json?.items?.some((i) => i.id === runId));
+  r.check("the signed link of the deleted video no longer works", assetIds.length ? [403, 404].includes((await ctx.req("admin", "GET", `/api/admin/comfy/media/${assetIds[0]}`)).status) : false);
+  const after = (await ctx.db.from("comfy_runtime_gates").select("remaining_runs,committed_usd").eq("runtime", "longcat-avatar@1").single()).data;
+  r.check("deleting gives nothing back: the reservation and the run count are unchanged", JSON.stringify(after) === JSON.stringify(before), JSON.stringify({ before, after }));
+  r.check("deleting twice is refused (404), never a second deletion", (await ctx.req("admin", "DELETE", `/api/admin/comfy/runs/${runId}`)).status === 404);
   return r;
 }
 

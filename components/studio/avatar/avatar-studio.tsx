@@ -139,6 +139,8 @@ function Result({ s, run }: { s: AvatarState; run: StudioRun }) {
       {run.status === "done" && !video && <p className="text-sm text-muted-foreground">The video is not available.</p>}
       <div className="mt-3 flex flex-wrap gap-2">
         {run.status === "done" && video && <button type="button" onClick={download} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm hover:bg-muted"><Download className="h-4 w-4" />Download MP4</button>}
+        {!active && <button type="button" disabled={s.busy === "delete"} onClick={() => { if (confirm("Delete this render? The video and its prompt are removed for good. Your portrait and audio stay in their libraries.")) void s.removeRun(run.id); }}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-50"><Trash2 className="h-4 w-4" />Delete render</button>}
       </div>
     </section>
   );
