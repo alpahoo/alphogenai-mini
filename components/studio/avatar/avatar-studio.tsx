@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, Check, Download, Loader2, Mic, RefreshCw, Trash2, Upload, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Download, Loader2, Mic, Moon, RefreshCw, Sun, Trash2, Upload, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useStudioDark } from "@/lib/studio/theme";
 import { formatElapsed, isActive } from "@/lib/studio/status";
 import { avatarErrorMessage } from "@/lib/avatar/messages";
 import { MAX_AUDIO_SECONDS } from "@/lib/avatar/audio-library";
@@ -134,13 +135,13 @@ function Result({ s, run }: { s: AvatarState; run: StudioRun }) {
           <button type="button" onClick={() => void s.retryDispatch(run.id)} disabled={s.busy === "dispatch"} className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-xs hover:bg-muted"><RefreshCw className="h-3.5 w-3.5" />Retry dispatch</button>
         </div>)}
       {!active && run.status !== "done" && (
-        <p role="alert" className="mb-3 flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{message ?? "The render did not complete."}</p>)}
+        <p role="alert" className="mb-3 flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{message ?? "The render did not complete."}</p>)}
       {run.status === "done" && video && <PrivateVideo asset={video} sign={s.signMedia} />}
       {run.status === "done" && !video && <p className="text-sm text-muted-foreground">The video is not available.</p>}
       <div className="mt-3 flex flex-wrap gap-2">
         {run.status === "done" && video && <button type="button" onClick={download} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm hover:bg-muted"><Download className="h-4 w-4" />Download MP4</button>}
         {!active && <button type="button" disabled={s.busy === "delete"} onClick={() => { if (confirm("Delete this render? The video and its prompt are removed for good. Your portrait and audio stay in their libraries.")) void s.removeRun(run.id); }}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-50"><Trash2 className="h-4 w-4" />Delete render</button>}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-500/10 disabled:opacity-50"><Trash2 className="h-4 w-4" />Delete render</button>}
       </div>
     </section>
   );
@@ -148,11 +149,15 @@ function Result({ s, run }: { s: AvatarState; run: StudioRun }) {
 
 export function AvatarStudio() {
   const s = useAvatar();
+  const [dark, toggleTheme] = useStudioDark();
   const [adv, setAdv] = useState(false);
   const cost = s.readiness.cost;
   const blocker = s.blocker;
 
   return (
+    // The admin frame around the Studio is exactly one screen high (h-[100dvh]): this screen scrolls inside it, like the Studio.
+    <div className={cn(dark && "dark", "h-full")}>
+    <div className="h-full overflow-y-auto bg-background text-foreground">
     <div className="mx-auto max-w-6xl space-y-4 p-4 lg:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -160,13 +165,15 @@ export function AvatarStudio() {
           <h1 className="text-lg font-semibold tracking-tight">Talking avatar</h1>
           <p className="text-xs text-muted-foreground">One portrait + one audio → one MP4 of about 10 seconds · private admin</p>
         </div>
-        <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]", s.readiness.ready ? "border-emerald-500/30 text-emerald-400" : "border-border/60 text-muted-foreground")}>
-          <span className={cn("h-1.5 w-1.5 rounded-full", s.readiness.ready ? "bg-emerald-400" : "bg-muted-foreground/60")} />{s.readiness.ready ? "GPU authorized" : "GPU locked"}
+        <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]", s.readiness.ready ? "border-emerald-500/30 text-emerald-700 dark:text-emerald-400" : "border-border/60 text-muted-foreground")}>
+          <span className={cn("h-1.5 w-1.5 rounded-full", s.readiness.ready ? "bg-emerald-500" : "bg-muted-foreground/60")} />{s.readiness.ready ? "GPU authorized" : "GPU locked"}
         </span>
+        <button type="button" onClick={toggleTheme} aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+          className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground">{dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
       </header>
 
       {(s.error || s.notice) && (
-        <div role={s.error ? "alert" : "status"} className={cn("flex items-start justify-between gap-3 rounded-xl border px-4 py-2.5 text-sm", s.error ? "border-red-500/20 bg-red-500/[0.07] text-red-300" : "border-primary/20 bg-primary/[0.06]")}>
+        <div role={s.error ? "alert" : "status"} className={cn("flex items-start justify-between gap-3 rounded-xl border px-4 py-2.5 text-sm", s.error ? "border-red-500/20 bg-red-500/[0.07] text-red-700 dark:text-red-300" : "border-primary/20 bg-primary/[0.06]")}>
           <span>{s.error || s.notice}</span>
           <button type="button" aria-label="Dismiss" onClick={() => { s.setError(""); s.setNotice(""); }} className="opacity-70 hover:opacity-100">×</button>
         </div>)}
@@ -218,6 +225,8 @@ export function AvatarStudio() {
           </section>
         </div>
       </div>
+    </div>
+    </div>
     </div>
   );
 }
