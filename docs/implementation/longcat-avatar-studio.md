@@ -143,12 +143,15 @@ Result on 2026-11-23 (PostgreSQL 17, Supabase local): **51/51 checks passed**, i
 - a 12 s MP3 passes the upload but the broker refuses it **before any GPU** (`AUDIO_TOO_LONG`).
 Browser (in-app, local): sign-in, choose portrait + audio, render, status, video playback, no console error, no horizontal overflow at 375 px.
 
-## Known defect found (pre-existing, shared with H3/MOSS)
+## Deleting a render (defect found, fixed here with the same text as #119)
 
-Deleting a **finished** run answers HTTP 503 ("Could not clear the prompt from the job record"): `lib/comfy/delete-run.ts` sets
-`jobs.prompt = null` but the column is `NOT NULL` (reproduced locally on an avatar run, previously noted on the staging schema).
-It is not touched here (shared code, Studio deletion semantics, outside this scope). The avatar screen therefore shows no Delete
-button for renders. Fix options for the owner: store `''` instead of `null`, or relax the column in a migration.
+Deleting a **finished** run answered HTTP 503 ("Could not clear the prompt from the job record"): `lib/comfy/delete-run.ts` wrote
+`jobs.prompt = null` but the column is `NOT NULL`. The fix of #119 (commit "redact deleted job prompts without 503") applies to the
+avatar unchanged: the avatar admission creates a `jobs` row with a prompt and `engine_used = comfy:longcat-avatar`, which the
+cleanup filter (`comfy:%`) matches. It is taken over here **textually identical** (the redaction marker `[deleted]`), so merging #119
+and #125 produces no conflict. The test double now refuses `prompt: null` like the real column. The Delete button is shown again.
+Verified on the staging Preview, from the UI at 375 px (dark): "Render deleted.", the job row stays with `[deleted]`, no asset record is
+left, the signed link no longer works, the reservation and the run count are unchanged, a second delete answers 404.
 
 ## What was verified (and what was not)
 
