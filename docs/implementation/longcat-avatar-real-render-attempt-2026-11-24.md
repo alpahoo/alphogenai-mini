@@ -98,3 +98,17 @@ Result: **failed GPU_EXECUTION_TIMEOUT, but the render itself succeeded.**
 - Cleanup verified: gate closed (enabled false, 0 runs, budget 0), no active run, disposable account deleted, Vercel bypass revoked, Preview admin list restored, Modal back to simulation.
 
 Not yet done (needs a decision and a new GPU approval): the fix is in the deadlines, not the render. The collector deadline must cover cold start + render (about 290 + 375 + margin), with the executor timeout and the cost ceiling re-derived from that. A second lever is the 290 s cold start itself (volume mount, image start).
+
+## Deadline fix after attempt 3 (no GPU, not yet validated on a real render)
+
+| Constant | Before | After | Why |
+|---|---|---|---|
+| `AVATAR_START_WINDOW_SECONDS` / `startup_timeout` | 300 | 330 | container start measured at ~290 s, the old window left 10 s |
+| `RENDER_TIMEOUT_SECONDS` | 540 | 440 | render measured 375 s (+17 %) |
+| `AVATAR_EXECUTOR_TIMEOUT_SECONDS` | 640 | 500 | render cap + 60 s for encoding and transfer |
+| `AVATAR_COLLECT_TIMEOUT_SECONDS` | 660 | 830 | = start window + executor budget; the measured run needs 290 + 375 = 665 s |
+| `BROKER_TIMEOUT_SECONDS` (shared) | 720 | 870 | collector + 30 s margin, still below the 15-minute SQL deadline (900 s); a CPU-only wait, no GPU cost, H3/MOSS collectors unchanged |
+
+Cost: the worst case is now (330 + 500 + 60) x 0.001486 = **1.32 USD** (was 1.13 USD); it only occurs if every timeout is used in full. The expected cost is the measured one, **about 1.12 USD**, because the container start is billed (about 0.43 USD of the third attempt). The guard test now asserts a ceiling under 1.35 USD, that the collector covers the measured start + render with 100 s margin, and that it stays below the broker and the SQL deadline.
+
+Margins are thin by design (the SQL deadline leaves 30 s); the 290 s container start is the next thing to reduce (volume mount, image start), which also lowers the cost. 80 Python tests pass in a CI-like environment (ffmpeg available, none skipped).

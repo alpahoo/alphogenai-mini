@@ -34,7 +34,7 @@ FPS = 25
 FIRST_SEGMENT_FRAMES = 93
 NEW_FRAMES_PER_SEGMENT = 80
 MAX_SEGMENTS = 3
-RENDER_TIMEOUT_SECONDS = 540               # model load ~170 s + 3 segments ~185 s measured on H100; wide margin
+RENDER_TIMEOUT_SECONDS = 440               # measured 375 s on H100 in staging (model load ~200 s + 3 segments ~177 s)
 MAX_MP4_BYTES = 40 * 1024 * 1024
 
 

@@ -459,14 +459,22 @@ class DefinitionTests(unittest.TestCase):
         # Worst case per execution: H100 0.001097 + 128 GiB RAM 0.000284 + 8 CPU 0.000105 USD/s, over the timeout, the 60 s scale-down
         # window and ~60 s of container start (measured spend of the two failed attempts: 1.456 USD in total).
         rate = 0.001097 + (limit / 1024) * 0.00000222 + 8 * 0.0000131
-        ceiling = (consts["AVATAR_EXECUTOR_TIMEOUT_SECONDS"] + consts["AVATAR_SCALEDOWN_SECONDS"] + 60) * rate
-        self.assertLess(ceiling, 1.15, f"cost ceiling {ceiling:.2f} USD")
+        ceiling = (consts["AVATAR_START_WINDOW_SECONDS"] + consts["AVATAR_EXECUTOR_TIMEOUT_SECONDS"] + consts["AVATAR_SCALEDOWN_SECONDS"]) * rate
+        self.assertLess(ceiling, 1.35, f"cost ceiling {ceiling:.2f} USD")
 
     def test_broker_timeout_covers_the_avatar_window(self):
         consts = {n.targets[0].id: ast.literal_eval(n.value) for n in self.tree.body
                   if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name) and isinstance(n.value, ast.Constant)}
         self.assertLess(consts["AVATAR_COLLECT_TIMEOUT_SECONDS"], consts["BROKER_TIMEOUT_SECONDS"])
-        self.assertLessEqual(consts["AVATAR_COLLECT_TIMEOUT_SECONDS"], 660)   # SQL deadline is 15 minutes
+        self.assertLess(consts["BROKER_TIMEOUT_SECONDS"], 900)                # SQL deadline is 15 minutes
+        self.assertLess(consts["AVATAR_COLLECT_TIMEOUT_SECONDS"] + 30, consts["BROKER_TIMEOUT_SECONDS"])
+        # Third real render: container start ~290 s, then render 375 s. The collector must cover both with a margin.
+        self.assertGreaterEqual(consts["AVATAR_COLLECT_TIMEOUT_SECONDS"], 290 + 375 + 100)
+        self.assertGreater(consts["AVATAR_START_WINDOW_SECONDS"], 290 + 30)
+        self.assertEqual(consts["AVATAR_COLLECT_TIMEOUT_SECONDS"],
+                         consts["AVATAR_START_WINDOW_SECONDS"] + consts["AVATAR_EXECUTOR_TIMEOUT_SECONDS"])
+        self.assertGreater(avatar.RENDER_TIMEOUT_SECONDS, 375 + 40)
+        self.assertGreaterEqual(consts["AVATAR_EXECUTOR_TIMEOUT_SECONDS"], avatar.RENDER_TIMEOUT_SECONDS + 60)
         self.assertGreaterEqual(consts["AVATAR_EXECUTOR_TIMEOUT_SECONDS"], avatar.RENDER_TIMEOUT_SECONDS)
 
 

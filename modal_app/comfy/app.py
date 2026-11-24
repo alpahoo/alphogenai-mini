@@ -59,7 +59,7 @@ broker_secret = modal.Secret.from_name("alphogenai-comfy-broker")
 # Queue time is not part of Modal's GPU execution timeout. H3 keeps its existing limits.
 MOSS_START_WINDOW_SECONDS = 300
 MOSS_COLLECT_TIMEOUT_SECONDS = 660
-BROKER_TIMEOUT_SECONDS = 720
+BROKER_TIMEOUT_SECONDS = 870
 
 
 @app.function(image=gpu_image, gpu="H100", cpu=(2, 2), memory=(65536, 65536),
@@ -120,11 +120,16 @@ def execute_image_graph_h100(graph: dict, start_before: float):
 # private directory that is wiped afterwards (modal_app/comfy/avatar.py). Model load is ~170 s, so reuse inside the
 # window only skips the container start; the weights are re-read per run (the in-memory model reuse is a later step).
 AVATAR_SCALEDOWN_SECONDS = 60
-AVATAR_START_WINDOW_SECONDS = 300
-AVATAR_COLLECT_TIMEOUT_SECONDS = 660
-# Hard cost ceiling per execution: H100 0.001097 + RAM 128 GiB limit 0.000284 + 8 CPU 0.000105 = 0.001486 USD/s, so 640 s <= 0.95 USD
-# (it was 720 s with a 64 GiB limit: 0.968 USD). Measured need: model load 169-223 s + 3 segments ~185 s = 354-408 s.
-AVATAR_EXECUTOR_TIMEOUT_SECONDS = 640
+# Deadlines of one avatar run, from the third real render (2026-11-24): container start took ~290 s BEFORE the render began,
+# then the render itself took 375 s (exit 0). The collector deadline used to be 660 s counted from submission, so it gave up
+# 15 s after the render had finished. It now covers start window + executor budget: 330 + 500 = 830 s, below the broker (870 s)
+# which is below the 15-minute SQL deadline (900 s).
+AVATAR_START_WINDOW_SECONDS = 330
+AVATAR_COLLECT_TIMEOUT_SECONDS = 830
+# Executor budget once the container runs: render cap 440 s (measured 375 s) + ~60 s for output encoding and transfer.
+# Worst-case cost per execution: (330 s start + 500 s + 60 s scale-down) x 0.001486 USD/s (H100 + 128 GiB limit + 8 CPU) = 1.32 USD.
+# Expected cost is the measured one: 1.12 USD (third attempt).
+AVATAR_EXECUTOR_TIMEOUT_SECONDS = 500
 AVATAR_FLASH_ATTN_WHEEL = ("https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/"
                            "flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp310-cp310-linux_x86_64.whl")
 avatar_volume = modal.Volume.from_name(os.environ.get("AVATAR_WEIGHTS_VOLUME", WEIGHTS_VOLUME_DEFAULT),
@@ -156,7 +161,7 @@ avatar_image = (modal.Image.from_registry("nvidia/cuda:12.4.1-cudnn-devel-ubuntu
               volumes={AVATAR_WEIGHTS_ROOT: avatar_volume.with_mount_options(read_only=True)},
               secrets=[], block_network=True, restrict_modal_access=True,
               min_containers=0, max_containers=1, scaledown_window=AVATAR_SCALEDOWN_SECONDS,
-              timeout=AVATAR_EXECUTOR_TIMEOUT_SECONDS, startup_timeout=300, region=REGION)
+              timeout=AVATAR_EXECUTOR_TIMEOUT_SECONDS, startup_timeout=AVATAR_START_WINDOW_SECONDS, region=REGION)
 def execute_avatar(payload: dict, start_before: float):
     import time
     from modal_app.comfy.avatar import execute
