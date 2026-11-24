@@ -16,9 +16,8 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync, statSync } from "no
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { chromium } from "playwright";
 import { ROOT, WORK, SHOTS, PROJECT, STAGING_REF, PROD_REF, STAGING_URL, BR, WIN, log, clean, rand, sh, vapi, pullBranchEnv, setAdminEmails,
-  stagingKeys, waitLatestReady, redeploy, waitReady, fetcherFor, bundleRefs, signIn } from "./shared.mjs";
+  stagingKeys, launchChromium, waitLatestReady, redeploy, waitReady, fetcherFor, bundleRefs, signIn } from "./shared.mjs";
 import { sleep } from "../avatar-local/lib.mjs";
 import { cleanupData } from "./cleanup.mjs";
 
@@ -99,7 +98,7 @@ try {
   log("6/8 the render, driven from /admin/studio/avatar");
   const sess = await signIn(keys.anon, email, password);
   const base = `https://${host}`;
-  browser = await chromium.launch({ headless: true });
+  browser = await launchChromium();
   const context = await browser.newContext({ viewport: { width: 1366, height: 850 }, colorScheme: "dark", acceptDownloads: true });
   await context.addInitScript(() => { try { localStorage.setItem("theme", "dark"); } catch { /* blocked */ } });
   const page = await context.newPage();

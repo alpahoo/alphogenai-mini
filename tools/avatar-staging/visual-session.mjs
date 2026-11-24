@@ -16,8 +16,8 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
-import { chromium } from "playwright";
 import { sleep } from "../avatar-local/lib.mjs";
+import { launchChromium } from "./shared.mjs";
 import { cleanupData } from "./cleanup.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -188,7 +188,7 @@ try {
   rec("cinema", "fixtures: project, scene and shot created for the disposable admin", !!sc?.json?.scene?.id, `${pj.status}`);
 
   log("6/9 browser session");
-  browser = await chromium.launch({ headless: true });
+  browser = await launchChromium();
   const ctxs = new Map();
   const getPage = async (branchKey, combo) => {
     const id = `${branchKey}/${combo.key}`;
@@ -362,7 +362,7 @@ try {
   // Contact sheets: one PNG per page, desktop light|dark on top, mobile light|dark below.
   try {
     const names = [...new Set(shots.map((s) => `${s.branchKey}__${s.name}`))];
-    const b2 = await chromium.launch({ headless: true });
+    const b2 = await launchChromium();
     for (const n of names) {
       const get = (k) => { const s = shots.find((x) => `${x.branchKey}__${x.name}` === n && x.combo.key === k); return s && existsSync(s.file) ? `data:image/png;base64,${readFileSync(s.file).toString("base64")}` : null; };
       const cell = (k, w) => { const d = get(k); return `<figure style="margin:0"><figcaption style="font:12px sans-serif;color:#555">${k}</figcaption>${d ? `<img src="${d}" style="width:${w}px;max-height:1500px;object-fit:cover;object-position:top;border:1px solid #888">` : `<div style="width:${w}px;height:80px;border:1px dashed #888;font:12px sans-serif">missing</div>`}</figure>`; };

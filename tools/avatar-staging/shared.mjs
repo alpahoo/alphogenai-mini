@@ -5,6 +5,8 @@ import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServerClient } from "@supabase/ssr";
+import { chromium } from "playwright";
+import { existsSync } from "node:fs";
 import { sleep } from "../avatar-local/lib.mjs";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -99,3 +101,12 @@ export async function signIn(anonKey, email, password) {
   return { id: data.user.id, cookies: () => [...jar].map(([name, value]) => ({ name, value })) };
 }
 
+
+/** The Playwright of the repo may expect a newer Chromium than the one already installed: reuse the installed one, never download. */
+export async function launchChromium() {
+  const root = (process.env.LOCALAPPDATA ?? "").split(String.fromCharCode(92)).join("/") + "/ms-playwright/";
+  for (const rel of ["chromium_headless_shell-1208/chrome-headless-shell-win64/chrome-headless-shell.exe", "chromium-1208/chrome-win64/chrome.exe"]) {
+    if (existsSync(root + rel)) { try { return await chromium.launch({ headless: true, executablePath: root + rel }); } catch { /* try the next one */ } }
+  }
+  return chromium.launch({ headless: true });
+}
