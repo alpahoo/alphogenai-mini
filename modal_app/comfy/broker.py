@@ -12,8 +12,9 @@ from modal_app.comfy.executor import canonical_hash
 from modal_app.comfy.postprocess import shift_audio
 from modal_app.comfy.transfer import PNG_SIGNATURE
 from modal_app.comfy.moss_queue import MossQueueError
+from modal_app.comfy.avatar import AVATAR_RUNTIME, AvatarInputError, check_image, own_path, prepare_audio
 
-SUPPORTED_RUNTIMES = ("h3-video@1", "moss-image@1")
+SUPPORTED_RUNTIMES = ("h3-video@1", "moss-image@1", AVATAR_RUNTIME)
 MAX_PNG_BYTES = 40 * 1024 * 1024
 # MOSS renders about 1 MP; 4 MP leaves room for every declared aspect and bounds memory (<= ~16 MiB raw).
 MAX_PNG_PIXELS = 4 * 1024 * 1024
@@ -139,6 +140,39 @@ def store_video(db, row: dict, run_id: str, result: dict, uploaded: list) -> Non
                 "role": role, "storage_key": key}).execute()
 
 
+def store_avatar(db, row: dict, run_id: str, result: dict, uploaded: list) -> None:
+    """One finalized MP4 (role `final`). The audio stream is padded with silence to the video length so both streams
+    end together; the 0.4 s tail the model renders after the last word is a natural resting pause and is kept."""
+    raw = result["mp4"]
+    if not isinstance(raw, bytes) or len(raw) > 40 * 1024 * 1024 or raw[4:8] != b"ftyp":
+        raise AvatarInputError("AVATAR_OUTPUT_INVALID")
+    with tempfile.TemporaryDirectory() as directory:
+        source, final = Path(directory) / "raw.mp4", Path(directory) / "final.mp4"
+        source.write_bytes(raw)
+        shift_audio(source, final, 0.0)
+        key = f"{row['user_id']}/{run_id}/final.mp4"
+        db.storage.from_("comfy-outputs").upload(key, final.read_bytes(),
+            {"content-type": "video/mp4", "cache-control": "no-store", "upsert": "false"})
+        uploaded.append(key)
+        db.table("comfy_assets").insert({"run_id": run_id, "owner_id": row["user_id"],
+            "role": "final", "storage_key": key, "mime": "video/mp4"}).execute()
+
+
+def load_avatar_inputs(db, row: dict, graph: dict, image: bytes) -> dict:
+    """Both private inputs must be the owner's own library files; nothing is fetched before that is proven."""
+    inputs = graph["1"]["inputs"]
+    user = row["user_id"]
+    if not own_path(user, "library", row["reference_path"], (".png", ".jpg", ".webp")) or inputs.get("image_path") != row["reference_path"]:
+        raise AvatarInputError("INVALID_REFERENCE")
+    if not own_path(user, "audio-library", inputs.get("audio_path"), (".wav", ".mp3")):
+        raise AvatarInputError("INVALID_AUDIO_PATH")
+    check_image(image)
+    audio = db.storage.from_("references").download(inputs["audio_path"])
+    prepared = prepare_audio(audio)  # real audio, 1..10 s: refused here, before any GPU
+    return {"image": image, "audio": prepared["audio"], "segments": prepared["segments"],
+            "prompt": inputs["prompt"], "seed": inputs["seed"]}
+
+
 def run(run_id: str, invoke) -> None:
     uuid.UUID(run_id)
     db = database()
@@ -155,7 +189,7 @@ def run(run_id: str, invoke) -> None:
             raise ValueError("GRAPH_MISMATCH")
         reference = None
         if row["reference_path"]:
-            if runtime != "h3-video@1":
+            if runtime not in ("h3-video@1", AVATAR_RUNTIME):
                 raise ValueError("REFERENCE_NOT_SUPPORTED")
             if not row["reference_path"].startswith(row["user_id"] + "/") or ".." in row["reference_path"]:
                 raise ValueError("INVALID_REFERENCE")
@@ -165,6 +199,10 @@ def run(run_id: str, invoke) -> None:
         if runtime == "h3-video@1":
             result = invoke(graph, reference, run_id)
             store_video(db, row, run_id, result, uploaded)
+        elif runtime == AVATAR_RUNTIME:
+            payload = load_avatar_inputs(db, row, graph, reference)
+            result = invoke(payload, None, run_id, runtime=runtime)
+            store_avatar(db, row, run_id, result, uploaded)
         else:
             result = invoke(graph, None, run_id, runtime=runtime)
             store_image(db, row, run_id, graph, result, uploaded)
@@ -175,7 +213,11 @@ def run(run_id: str, invoke) -> None:
         finished = finished and status == "done"
     except Exception as error:
         # Raw errors, prompts and storage tokens must never appear in a public response/log.
-        code = error.code if runtime == "moss-image@1" and isinstance(error, MossQueueError) else "GENERATION_FAILED"
+        code = "GENERATION_FAILED"
+        if runtime == "moss-image@1" and isinstance(error, MossQueueError):
+            code = error.code
+        elif runtime == AVATAR_RUNTIME and isinstance(error, (MossQueueError, AvatarInputError)):
+            code = error.code
         print(f"comfy_run_failed run={run_id} code={code}")
         db.rpc("finish_comfy_admin_run", {"p_run": run_id, "p_success": False, "p_error": code, "p_seconds": None}).execute()
     finally:

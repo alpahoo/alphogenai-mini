@@ -43,7 +43,16 @@ export async function POST(req:Request) {
       const {data:probe,error:probeError}=await db.storage.from("references").createSignedUrl(resolved.referencePath,60);
       if(probeError || !probe?.signedUrl)return NextResponse.json({error:"Invalid reference: this image no longer exists. Remove it or choose another one."},{status:400});
     }
-    const {data:runId,error}=entry.admission==="h3_pilot"
+    // The avatar flow needs a second private input: the audio must still exist before anything is reserved.
+    if(entry.admission==="avatar_gate"){
+      const audioPath=String((resolved.graph["1"]?.inputs as Record<string,unknown>|undefined)?.audio_path ?? "");
+      const {data:probe,error:probeError}=await db.storage.from("references").createSignedUrl(audioPath,60);
+      if(probeError || !probe?.signedUrl)return NextResponse.json({error:"Invalid audio: this file no longer exists. Choose another one."},{status:400});
+    }
+    const {data:runId,error}=entry.admission==="avatar_gate"
+      ? await db.rpc("admit_comfy_avatar_run",{p_user:auth.user.id,p_key:body.idempotency_key,p_prompt:resolved.params.prompt,
+          p_params:resolved.params,p_graph:resolved.graph,p_hash:resolved.hash,p_image:resolved.referencePath})
+      : entry.admission==="h3_pilot"
       ? await db.rpc("admit_comfy_admin_run",{p_user:auth.user.id,p_key:body.idempotency_key,
           p_prompt:resolved.params.prompt,p_params:resolved.params,p_graph:resolved.graph,p_hash:resolved.hash,p_reference:resolved.referencePath})
       : await db.rpc("admit_comfy_runtime_run",{p_runtime:entry.runtime,p_template:resolved.template,p_user:auth.user.id,p_key:body.idempotency_key,

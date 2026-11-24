@@ -6,6 +6,7 @@
  *   `MOSS_EXECUTOR_GPU` (modal_app/comfy/app.py). Unset or invalid → GPU "not confirmed", no estimate.
  *   It is a manual mirror: redeploying Modal on another GPU requires updating it too.
  * - H3: `execute_graph` is hard-coded to H100 and not selectable (modal_app/comfy/app.py).
+ * - LongCat avatar: `execute_avatar` is hard-coded to H100 (modal_app/comfy/app.py).
  *
  * Estimates are display-only and always labelled measured/estimated. They are neither the application
  * reservation (SQL gate) nor a Modal billing limit.
@@ -43,6 +44,10 @@ const ESTIMATES: Record<string, CostEstimate> = {
     low_usd: 0.03, high_usd: 0.10, measured: false,
     basis: "Estimate from Modal rates; never measured on L40S.",
   },
+  "longcat-avatar@1/H100": {
+    low_usd: 0.35, high_usd: 0.60, measured: true,
+    basis: "Measured on the Luz POC (10.12 s clip, 3 segments, cold model load 169 s + render 184 s, H100, 23 Nov 2026): about 0.5 USD GPU incl. CPU. Staging run pending.",
+  },
   "h3-video@1/H100": {
     low_usd: 0.15, high_usd: 0.30, measured: false,
     basis: "Estimate for a 5 s turbo clip (first pilot; invoice not yet reconciled).",
@@ -52,6 +57,7 @@ const ESTIMATES: Record<string, CostEstimate> = {
 export function executorInfo(slug: TemplateSlug, env: Record<string, string | undefined> = process.env): ExecutorInfo {
   const [runtime, gpu, source]: [string, ExecutorGpu | null, ExecutorInfo["gpu_source"]] = slug === "minimax-h3"
     ? ["h3-video@1", "H100", "executor_code"]
+    : slug === "longcat-avatar" ? ["longcat-avatar@1", "H100", "executor_code"]
     : ["moss-image@1", parseExecutorGpu(env[MOSS_GPU_ENV]), "server_config"];
   if (!gpu) return { gpu: null, gpu_source: null, estimate: null };
   return { gpu, gpu_source: source, estimate: ESTIMATES[`${runtime}/${gpu}`] ?? null };

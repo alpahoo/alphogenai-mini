@@ -48,7 +48,23 @@ async def submit_generator(function, graph, start_before):
     return call_id, invocation.run_generator(), call
 
 
-async def collect_moss(function, graph, save_call_id, start_window=300, total_timeout=660):
+async def _extend_once_streaming(stream, deadline, grace):
+    """Yield the stream unchanged; when the first output frame arrives, move the overall deadline to now + grace.
+
+    The overall deadline bounds the wait for the render. A result whose header arrives just before it is already
+    produced: cutting its transfer mid-stream would throw away a finished (paid) render, so the transfer alone gets
+    a short bounded grace. The deadline never moves earlier, and a result that has not started streaming by the
+    deadline is still cancelled."""
+    loop = asyncio.get_running_loop()
+    first = True
+    async for item in stream:
+        if first:
+            first = False
+            deadline.reschedule(max(deadline.when(), loop.time() + grace))
+        yield item
+
+
+async def collect_moss(function, graph, save_call_id, start_window=300, total_timeout=660, transfer_grace=None):
     loop = asyncio.get_running_loop()
     started_at = loop.time()
     start_before = time.time() + start_window
@@ -65,13 +81,15 @@ async def collect_moss(function, graph, save_call_id, start_window=300, total_ti
             raise MossQueueError("GPU_SUBMISSION_FAILED") from None
         save_call_id(call_id)  # Persist BEFORE waiting for the first GPU frame.
         try:
-            async with asyncio.timeout(max(0, total_timeout - (loop.time() - started_at))):
+            async with asyncio.timeout(max(0, total_timeout - (loop.time() - started_at))) as overall:
                 async with asyncio.timeout(max(0, start_window - (loop.time() - started_at))):
                     header = await anext(stream)
                 if not isinstance(header, dict) or header.get("call_id") != call_id:
                     raise ValueError("INVALID_EXECUTOR_HANDLE")
                 confirmed_start = True
-                return await receive_output(stream)
+                if transfer_grace is None:
+                    return await receive_output(stream)
+                return await receive_output(_extend_once_streaming(stream, overall, transfer_grace))
         except TimeoutError as error:
             code = "GPU_EXECUTION_TIMEOUT" if confirmed_start else "GPU_START_TIMEOUT"
             if str(error) == "EXECUTOR_START_EXPIRED":

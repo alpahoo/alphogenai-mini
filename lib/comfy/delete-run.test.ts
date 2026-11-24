@@ -50,7 +50,7 @@ function world(opts: { runs?: Row[]; assets?: Row[]; failOnce?: Step[]; failAlwa
             for (let i = rows.length - 1; i >= 0; i--) if (match(rows[i])) rows.splice(i, 1);
             log.push(`delete:${table}`); return resolve({ error: null });
           }
-          if (table === "jobs") { if (blocked("job")) return resolve({ error: err }); for (const j of jobs) if (match(j)) Object.assign(j, patch); log.push("update:jobs"); return resolve({ error: null }); }
+          if (table === "jobs") { if (blocked("job")) return resolve({ error: err }); if ("prompt" in patch && patch.prompt === null) return resolve({ error: { message: "null value in column \"prompt\" of relation \"jobs\" violates not-null constraint", code: "23502" } }); for (const j of jobs) if (match(j)) Object.assign(j, patch); log.push("update:jobs"); return resolve({ error: null }); }
           if (blocked("tombstone")) return resolve({ error: err });
           for (const r of runs) if (match(r)) Object.assign(r, patch); log.push("update:comfy_runs"); return resolve({ error: null });
         },
@@ -74,7 +74,7 @@ describe("deleteRun: what is kept and what is removed", () => {
     expect(w.graphs).toEqual([]); expect(w.outbox).toEqual([]); expect(w.assets).toEqual([]);
     expect(isTombstone(w.runs[0].params_effective)).toBe(true);
     expect(w.runs[0].reference_path).toBeNull();
-    expect(w.jobs[0].prompt).toBeNull();
+    expect(w.jobs[0].prompt).toBe("[deleted]");
   });
 
   it("keeps the accounting row and the job row: quota is never restored", async () => {
@@ -128,7 +128,7 @@ describe("deleteRun: a failure at any step is reported and the deletion can be r
       const second = await deleteRun(w.db, "me", "r1");
       expect(second).toEqual({ ok: true, reference_removed: ONE_OFF });
       expect(isTombstone(w.runs[0].params_effective)).toBe(true);
-      expect(w.jobs[0].prompt).toBeNull();
+      expect(w.jobs[0].prompt).toBe("[deleted]");
       expect(w.assets).toEqual([]); expect(w.graphs).toEqual([]); expect(w.outbox).toEqual([]);
       expect([...w.files]).toEqual([]);
       expect(w.gateWrites).toEqual([]);
@@ -147,7 +147,7 @@ describe("deleteRun: a failure at any step is reported and the deletion can be r
   it("a failure on the tombstone leaves the prompt already cleared and the run retryable", async () => {
     const w = world({ ...withRef(null), failOnce: ["tombstone"] });
     expect(await deleteRun(w.db, "me", "r1")).toMatchObject({ ok: false });
-    expect(w.jobs[0].prompt).toBeNull();
+    expect(w.jobs[0].prompt).toBe("[deleted]");
     expect(await deleteRun(w.db, "me", "r1")).toMatchObject({ ok: true });
   });
 
