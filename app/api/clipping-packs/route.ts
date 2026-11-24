@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const user = await getUserFromRequest(request);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await isModuleEnabled("alphogenai_clipping"))) {
+  if (!(await isModuleEnabled("alphogenai_clipping", user))) {
     return NextResponse.json({ error: "AlphoGenAI Clipping is disabled" }, { status: 404 });
   }
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;

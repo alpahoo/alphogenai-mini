@@ -3,11 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { isModuleEnabled } from "@/lib/parallax-modules";
 
 export async function POST(request: NextRequest) {
-  if (!(await isModuleEnabled("parallax_shorts"))) {
-    return NextResponse.json({ error: "Parallax Shorts is disabled" }, { status: 404 });
-  }
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  // Guard before anything else (no job is created while the module is off for this viewer), then authentication.
+  if (!(await isModuleEnabled("parallax_shorts", user))) {
+    return NextResponse.json({ error: "Parallax Shorts is disabled" }, { status: 404 });
+  }
   if (!user) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   const body = await request.json().catch(() => null) as { prompt?: unknown; target_duration_seconds?: unknown } | null;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";

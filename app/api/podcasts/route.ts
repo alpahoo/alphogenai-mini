@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     const moduleId = request.headers?.get?.("x-alphogen-module") === "parallax_audio"
       ? "parallax_audio"
       : "alphogenai_podcast";
-    if (!(await isModuleEnabled(moduleId))) {
+    if (!(await isModuleEnabled(moduleId, user))) {
       return NextResponse.json({ error: `${moduleId} is disabled` }, { status: 404 });
     }
 

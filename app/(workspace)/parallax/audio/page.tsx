@@ -3,6 +3,7 @@
 /** Adapted from nickvasilescu/parallax@a98671e3c47fdb12c42789aee821268aa8f23f6c (MIT). */
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 type Tab = "voice" | "music" | "history";
 
@@ -12,11 +13,16 @@ export default function ParallaxAudioPage() {
   const [text, setText] = useState("");
   const [history, setHistory] = useState<Array<{ id: string; title: string; status: string }>>([]);
   const [message, setMessage] = useState("");
-  const loadHistory = async () => { const response = await fetch("/api/podcasts?limit=12"); if (response.ok) setHistory((await response.json()).podcasts ?? []); };
+  // /api/podcasts authenticates with a Bearer token (like the Podcast Studio page); a cookie-only fetch always answered 401.
+  const authHeaders = async (): Promise<Record<string, string>> => {
+    const { data } = await createClient().auth.getSession();
+    return data.session?.access_token ? { Authorization: `Bearer ${data.session.access_token}` } : {};
+  };
+  const loadHistory = async () => { const response = await fetch("/api/podcasts?limit=12", { headers: await authHeaders() }); if (response.ok) setHistory((await response.json()).podcasts ?? []); };
   useEffect(() => { fetch("/api/modules").then((r) => r.json()).then((data) => setEnabled(Boolean(data.modules?.parallax_audio))).catch(() => setEnabled(false)); void loadHistory(); }, []);
   const prepareVoice = async (event: FormEvent) => {
     event.preventDefault(); if (!text.trim()) return; setMessage("");
-    const response = await fetch("/api/podcasts", { method: "POST", headers: { "content-type": "application/json", "x-alphogen-module": "parallax_audio" }, body: JSON.stringify({ source_mode: "generate", source_topic: text.trim(), title: `Parallax Audio — ${text.trim().slice(0, 48)}`, language: "fr-FR" }) });
+    const response = await fetch("/api/podcasts", { method: "POST", headers: { ...(await authHeaders()), "content-type": "application/json", "x-alphogen-module": "parallax_audio" }, body: JSON.stringify({ source_mode: "generate", source_topic: text.trim(), title: `Parallax Audio — ${text.trim().slice(0, 48)}`, language: "fr-FR" }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) setMessage(data.error || "Le studio n’a pas pu préparer le job."); else { setMessage("Brouillon vocal préparé dans l’historique privé."); setText(""); await loadHistory(); }
   };

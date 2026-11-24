@@ -49,12 +49,6 @@ const MAIN_NAV = [
     description: "Storyboard",
   },
   {
-    href: "/remix",
-    label: "Parallax — Remix",
-    icon: WandSparkles,
-    description: "Private motion variant",
-  },
-  {
     href: "/research",
     label: "Research",
     icon: SearchCheck,
@@ -180,6 +174,7 @@ export function Sidebar({ plan, email }: SidebarProps) {
         {/* Create section */}
         <div className="space-y-1">
           {MAIN_NAV.map(renderNavItem)}
+          {modules.parallax_remix && renderNavItem({ href: "/remix", label: "Parallax — Remix", icon: WandSparkles, description: "Private motion variant" })}
           {modules.parallax_shorts && renderNavItem({ href: "/parallax/shorts", label: "Parallax — Shorts", icon: WandSparkles, description: "Vertical video" })}
           {modules.parallax_audio && renderNavItem({ href: "/parallax/audio", label: "Parallax — Audio", icon: Sparkles, description: "Voice & music" })}
         </div>

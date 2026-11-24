@@ -343,7 +343,8 @@ export default function CreateHub() {
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {TOOLS.filter((tool) =>
           (tool.id !== "clipping" || modules.alphogenai_clipping !== false) &&
-          (tool.id !== "podcast" || modules.alphogenai_podcast !== false)
+          (tool.id !== "podcast" || modules.alphogenai_podcast !== false) &&
+          (tool.id !== "remix" || modules.parallax_remix === true)
         ).map((tool, i) => {
           const base =
             "group flex min-h-[260px] flex-col rounded-2xl border p-5 transition-all duration-200";
