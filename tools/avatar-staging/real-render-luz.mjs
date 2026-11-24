@@ -124,7 +124,9 @@ try {
   check("Render is enabled for the authorised admin", await btn.isEnabled());
   const t0 = Date.now();
   await btn.click();
-  await page.waitForSelector("video", { timeout: 12 * 60_000 }).catch(() => {});
+  // Stop as soon as the run is terminal (a failed run must not keep the session open for 12 minutes).
+  for (let i = 0; i < 12 * 12; i++) { const st = (await db.from("comfy_runs").select("status").eq("user_id", uid).order("created_at", { ascending: false }).limit(1)).data?.[0]?.status; if (st && !["queued", "running", "dispatching"].includes(st)) break; await sleep(5000); }
+  await page.waitForSelector("video", { timeout: 20_000 }).catch(() => {});
   const seconds = Math.round((Date.now() - t0) / 1000);
   const run = (await db.from("comfy_runs").select("id,status,error_code,generation_seconds,finance_status,reserved_cost_usd").eq("user_id", uid).order("created_at", { ascending: false }).limit(1)).data?.[0];
   notes.push(`run: ${JSON.stringify(run ?? null)}; wall time ${seconds} s`);
