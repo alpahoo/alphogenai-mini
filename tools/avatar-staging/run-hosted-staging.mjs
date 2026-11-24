@@ -104,7 +104,7 @@ function modalSetup(keys, dispatchSecret) {
   if (!existsSync(py)) {
     log("   creating a Python venv with modal==1.6.3 (one time, about 1 minute)...");
     sh("python", ["-m", "venv", venv]);
-    sh(py, ["-m", "pip", "install", "-q", "modal==1.6.3", "fastapi==0.121.1", "requests==2.32.5"]);
+    sh(py, ["-m", "pip", "install", "-q", "modal==1.6.3", "fastapi==0.121.1", "requests==2.32.5", "python-dotenv"]);
   }
   const dotenv = path.join(WORK, `broker-${rand(4)}.env`);
   try {
