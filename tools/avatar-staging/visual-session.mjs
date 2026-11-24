@@ -195,7 +195,7 @@ try {
     if (ctxs.has(id)) return ctxs.get(id);
     const base = `https://${state.hosts[branchKey]}`;
     const context = await browser.newContext({ ...VIEWPORTS[combo.vp], colorScheme: combo.scheme, acceptDownloads: true });
-    await context.addInitScript((scheme) => { try { localStorage.setItem("theme", scheme); } catch { /* storage blocked */ } }, combo.scheme);
+    await context.addInitScript((scheme) => { try { localStorage.setItem("theme", scheme); localStorage.setItem("alphogen.studio.theme", scheme); } catch { /* storage blocked */ } }, combo.scheme);
     const page = await context.newPage();
     const issues = [];
     page.on("pageerror", (e) => issues.push(`pageerror: ${clean(e.message)}`));
@@ -213,10 +213,20 @@ try {
     const file = path.join(SHOTS, `${branchKey}__${name}__${combo.key}.png`);
     await e.page.waitForTimeout(600);
     await e.page.screenshot({ path: file, fullPage: full && combo.vp === "mobile" ? true : false });
-    const m = await e.page.evaluate(() => ({ over: document.documentElement.scrollWidth - window.innerWidth, dark: document.documentElement.classList.contains("dark"), title: document.title, h1: document.querySelector("h1")?.textContent?.slice(0, 60) ?? "" }));
+    const m = await e.page.evaluate(() => {
+      const lum = (rgb) => { const [r, g, b] = rgb.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+      const parse = (c) => { const m = c.match(/rgba?(([^)]+))/); if (!m) return null; const p = m[1].split(",").map((x) => parseFloat(x)); return { rgb: p.slice(0, 3), a: p.length > 3 ? p[3] : 1 }; };
+      const bgOf = (el) => { for (let n = el; n; n = n.parentElement) { const c = parse(getComputedStyle(n).backgroundColor); if (c && c.a > 0.5) return c.rgb; } return [255, 255, 255]; };
+      const h = document.querySelector("main h1, h1, main h2, h2");
+      let contrast = null;
+      if (h) { const fg = parse(getComputedStyle(h).color); if (fg) { const a = lum(fg.rgb) + 0.05, b = lum(bgOf(h)) + 0.05; contrast = Math.round((Math.max(a, b) / Math.min(a, b)) * 10) / 10; } }
+      return { over: document.documentElement.scrollWidth - window.innerWidth, outerScroll: document.documentElement.scrollHeight - window.innerHeight, dark: document.documentElement.classList.contains("dark") || !!document.querySelector(".dark"), title: document.title, h1: h?.textContent?.slice(0, 60) ?? "", contrast };
+    });
     shots.push({ branchKey, name, combo, file, ...m });
     rec(branchKey, `${name} @ ${combo.key}: no horizontal scroll`, m.over <= 1, `overflow ${m.over}px`);
-    rec(branchKey, `${name} @ ${combo.key}: theme class matches (${combo.scheme})`, m.dark === (combo.scheme === "dark"), `dark=${m.dark}`);
+    rec(branchKey, `${name} @ ${combo.key}: theme matches (${combo.scheme})`, m.dark === (combo.scheme === "dark"), `dark=${m.dark}`);
+    if (m.contrast !== null) rec(branchKey, `${name} @ ${combo.key}: heading contrast >= 3:1`, m.contrast >= 3, `ratio ${m.contrast}`);
+    if (e.page.url().includes("/admin/studio")) rec(branchKey, `${name} @ ${combo.key}: the page scrolls inside the admin frame (no outer overflow)`, m.outerScroll <= 1, `outer overflow ${m.outerScroll}px`);
     return e;
   };
   const open = async (branchKey, combo, p) => {
@@ -265,6 +275,7 @@ try {
       await o.e.page.locator("#hist-h").locator("xpath=..").locator("li button").first().click().catch(() => {});
       await o.e.page.waitForSelector("video", { timeout: 60_000 }).catch(() => {});
       await shoot("longcat", c, "avatar-done");
+      if (c.vp === "mobile") { await o.e.page.evaluate(() => { for (const el of document.querySelectorAll("div")) if (el.scrollHeight > el.clientHeight + 40 && getComputedStyle(el).overflowY === "auto") el.scrollTop = el.scrollHeight; }); await shoot("longcat", c, "avatar-done-bottom", { full: false }); }
     }
   }
 
@@ -280,9 +291,10 @@ try {
       if (entry) {
         await entry.click().catch(() => {}); await o.e.page.waitForTimeout(1500);
         await shoot("cinema", c, "cinema-view");
-        const proj = o.e.page.getByText("Visual recipe project").first();
-        if (await proj.count()) { await proj.click().catch(() => {}); await o.e.page.waitForTimeout(1500); await shoot("cinema", c, "cinema-storyboard"); }
-        else notes.push(`cinema @ ${c.key}: project card not found by text`);
+        const sel = o.e.page.getByRole("combobox").first();
+        const picked = (await sel.count()) ? await sel.selectOption({ label: "Visual recipe project" }).then(() => true, () => false) : false;
+        if (picked) { await o.e.page.waitForTimeout(2000); await shoot("cinema", c, "cinema-storyboard"); }
+        else notes.push(`cinema @ ${c.key}: project not selectable in the list`);
       } else notes.push(`cinema @ ${c.key}: no control named Cinema found in /admin/studio`);
     }
     // Parallax: modules off (default), then on.
@@ -292,21 +304,20 @@ try {
       await shoot("parallax", c, "modules-default");
       for (const p of ["/parallax/shorts", "/parallax/audio", "/remix"]) {
         const x = await open("parallax", c, p);
-        if (c.key === "desktop-light") notes.push(`parallax OFF ${p}: HTTP ${x.status}`);
+        if (p !== "/remix" || true) { const msg = await x.e.page.getByText(/désactivé par l.administrateur/i).count(); rec("parallax", `${p} shows the disabled message while its module is off @ ${c.key}`, msg > 0, `HTTP ${x.status}`); }
         await shoot("parallax", c, `off${p.replace(/\//g, "-")}`, { full: false });
       }
     }
     {
       const o = await open("parallax", DL, "/admin/modules");
-      const sw = o.e.page.getByRole("switch");
-      const n = await sw.count();
-      rec("parallax", "the modules screen shows the switches", n >= 3, `${n} switch(es)`);
+      const off = o.e.page.getByRole("button", { name: /Désactivé/ });
+      const n = await off.count();
+      rec("parallax", "the modules screen lists the three Parallax toggles (Désactivé by default)", n === 3, `${n} button(s)`);
       if (n) {
-        const before = await sw.first().getAttribute("aria-checked");
-        await sw.first().click(); await o.e.page.waitForTimeout(1500);
+        await off.first().click(); await o.e.page.waitForTimeout(2000);
         await o.e.page.reload({ waitUntil: "networkidle" });
-        const after = await o.e.page.getByRole("switch").first().getAttribute("aria-checked");
-        rec("parallax", "a switch saved from the UI survives a reload", before !== after, `${before} -> ${after}`);
+        const after = await o.e.page.getByRole("button", { name: /Désactivé/ }).count();
+        rec("parallax", "a toggle saved from the UI survives a reload (3 -> 2 disabled)", after === 2, `${after} disabled after reload`);
       }
     }
     for (const id of ["parallax_shorts", "parallax_audio", "parallax_remix"]) await api("parallax", "PATCH", "/api/admin/modules", { module: id, enabled: true });
