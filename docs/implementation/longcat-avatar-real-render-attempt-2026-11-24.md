@@ -28,3 +28,34 @@ La cause est la plus probable d'apres le code de sortie 137 et la difference ave
 Un second rendu necessite un nouvel accord explicite (meme cout attendu ~0,55 USD, plafond ~0,96 USD). Apres lui, l'app Modal repasse en simulation.
 Tests Python : `test_avatar` et `test_moss_executor_select` echouent dans le venv de recette (paquet `supabase` absent) avec ou sans ce changement ;
 a rejouer dans l'environnement CI.
+
+---
+
+# Essai 2 (meme jour, autorise une seule fois) : ECHEC `GPU_EXECUTION_TIMEOUT`, arret apres cet essai
+
+Conditions posees par le proprietaire, verifiees avant le lancement : tests Python (71/71, 0 ignore, dependances de la CI, Python 3.13 au lieu de 3.12, ffmpeg du depot dans le PATH ;
+`test_avatar` n'est pas dans le workflow CI, non modifie), plafond recalcule, reservation du premier run sans effet sur l'admission (l'admission ne lit que la ligne de la porte ;
+total `awaiting_reconciliation` = 0 car la ligne du run 1 a ete supprimee avec le compte jetable ; la porte est rouverte a `committed_usd = 0`).
+Changement fait pour tenir le plafond : `AVATAR_EXECUTOR_TIMEOUT_SECONDS` 720 -> 640 s (avec la limite de 128 Gio, le pire cas theorique passait a ~1,07 USD ; a 640 s : ~0,95 USD).
+
+## Observe
+- Run `70fbbbdc` : **failed / GPU_EXECUTION_TIMEOUT**, aucun MP4, un seul run (pas de doublon), duree murale 693 s (= delai de 640 s + marge d'attente de la page).
+- **Plus de `SIGKILL` / code 137** : le correctif de memoire a tres probablement leve l'arret par manque de memoire. Le conteneur est reste actif jusqu'au delai.
+- Le journal Modal ne contient que la banniere CUDA : la sortie du rendu n'est pas relayee, on ne sait donc pas dans quelle phase le temps est passe
+  (chargement des ~47 Go, pretraitement audio, ou segments de debruitage). Le POC mesurait 354 a 408 s au total (chargement 169 a 223 s + 3 segments ~185 s).
+
+## Cout observe (facturation Modal, environnement `comfy-staging`, heure 14:00-15:00 UTC, resolution horaire, la plus fine)
+**1,456 USD** pour les DEUX essais (plus de petits couts CPU/deploiement du meme intervalle). Le detail par essai n'est pas disponible a cette resolution.
+C'est plus que mes estimations (essai 1 <= ~0,25 ; essai 2 ~0,86-0,95, soit ~1,1-1,2 au total) : l'ecart d'environ 0,25-0,35 USD vient probablement du demarrage du conteneur et de la
+fenetre de 60 s avant arret (`scaledown_window`), facturables en plus du delai. **Formule de plafond corrigee** pour la suite :
+(delai + 60 s de fenetre + demarrage) x 0,001486 USD/s : a 640 s, > 1,04 USD avant demarrage. Aucun autre essai n'a ete lance.
+
+## Etat laisse
+Porte fermee, 0 compte jetable, 0 run actif, 0 secret de contournement, Preview reconstruite, app Modal remise en mode simulation (aucun conteneur actif).
+
+## Hypotheses a verifier avant tout nouvel essai (non testees)
+1. **Limite CPU stricte** : `cpu=(8, 8)` fixe une limite dure de 8 coeurs ; le POC passait `cpu=8` (demande seule, la limite par defaut etant plus haute). Des bibliotheques qui ouvrent beaucoup de fils (torch, numpy, preparation audio) peuvent etre etranglees.
+2. **Lecture du volume** : le montage `read_only` / sans reseau pourrait etre plus lent que le montage du POC ; le POC avait lu 47 Go en 169 a 223 s.
+3. Un blocage dans une phase (pas seulement de la lenteur) : non distinguable sans traces.
+Proposition (sans GPU, a decider) : relayer la sortie du processus avec des horodatages par phase dans les journaux, aligner `cpu`/`memory` sur le POC (`cpu=8`, `memory=(65536, 131072)`),
+puis ne rejouer qu'avec un accord explicite, un plafond recalcule avec la formule ci-dessus et un delai assez large pour finir la mesure.
