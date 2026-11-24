@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -14,6 +16,7 @@ import {
   BarChart3,
   Gift,
   Clapperboard,
+  WandSparkles,
   CalendarClock,
   SearchCheck,
 } from "lucide-react";
@@ -100,6 +103,10 @@ interface SidebarProps {
 export function Sidebar({ plan, email }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [modules, setModules] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    fetch("/api/modules").then((response) => response.json()).then((data) => setModules(data.modules ?? {})).catch(() => undefined);
+  }, []);
 
   const handleSignOut = async () => {
     const supabase = createClient();
@@ -167,6 +174,9 @@ export function Sidebar({ plan, email }: SidebarProps) {
         {/* Create section */}
         <div className="space-y-1">
           {MAIN_NAV.map(renderNavItem)}
+          {modules.parallax_remix && renderNavItem({ href: "/remix", label: "Parallax — Remix", icon: WandSparkles, description: "Private motion variant" })}
+          {modules.parallax_shorts && renderNavItem({ href: "/parallax/shorts", label: "Parallax — Shorts", icon: WandSparkles, description: "Vertical video" })}
+          {modules.parallax_audio && renderNavItem({ href: "/parallax/audio", label: "Parallax — Audio", icon: Sparkles, description: "Voice & music" })}
         </div>
 
         {/* Divider */}
