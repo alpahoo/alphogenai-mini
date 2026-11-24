@@ -157,7 +157,7 @@ export function AvatarStudio() {
   return (
     // The admin frame around the Studio is exactly one screen high (h-[100dvh]): this screen scrolls inside it, like the Studio.
     <div className={cn(dark && "dark", "h-full")}>
-    <div className="h-full overflow-y-auto bg-background text-foreground">
+    <div className="h-full overflow-x-hidden overflow-y-auto bg-background text-foreground">
     <div className="mx-auto max-w-6xl space-y-4 p-4 lg:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -178,8 +178,8 @@ export function AvatarStudio() {
           <button type="button" aria-label="Dismiss" onClick={() => { s.setError(""); s.setNotice(""); }} className="opacity-70 hover:opacity-100">×</button>
         </div>)}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(320px,440px)_minmax(0,1fr)]">
-        <div className="space-y-4">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(320px,440px)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-4">
           <Portraits s={s} />
           <Audios s={s} />
           <section className={box}>
@@ -206,7 +206,7 @@ export function AvatarStudio() {
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {s.current ? <Result s={s} run={s.current} /> : <section className={cn(box, "text-sm text-muted-foreground")}>Your render appears here. Choose a portrait and an audio, then render.</section>}
           <section className={box} aria-labelledby="hist-h">
             <h2 id="hist-h" className={cn(label, "mb-3")}>Library</h2>

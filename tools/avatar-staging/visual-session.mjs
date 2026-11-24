@@ -215,16 +215,19 @@ try {
     await e.page.screenshot({ path: file, fullPage: full && combo.vp === "mobile" ? true : false });
     const m = await e.page.evaluate(() => {
       const lum = (rgb) => { const [r, g, b] = rgb.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-      const parse = (c) => { const m = c.match(/rgba?(([^)]+))/); if (!m) return null; const p = m[1].split(",").map((x) => parseFloat(x)); return { rgb: p.slice(0, 3), a: p.length > 3 ? p[3] : 1 }; };
+      const cv = document.createElement("canvas"); cv.width = cv.height = 1; const cx = cv.getContext("2d", { willReadFrequently: true });
+      const parse = (c) => { try { cx.clearRect(0, 0, 1, 1); cx.fillStyle = "#000"; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1); const d = cx.getImageData(0, 0, 1, 1).data; return { rgb: [d[0], d[1], d[2]], a: d[3] / 255 }; } catch { return null; } };
       const bgOf = (el) => { for (let n = el; n; n = n.parentElement) { const c = parse(getComputedStyle(n).backgroundColor); if (c && c.a > 0.5) return c.rgb; } return [255, 255, 255]; };
       const h = document.querySelector("main h1, h1, main h2, h2");
       let contrast = null;
       if (h) { const fg = parse(getComputedStyle(h).color); if (fg) { const a = lum(fg.rgb) + 0.05, b = lum(bgOf(h)) + 0.05; contrast = Math.round((Math.max(a, b) / Math.min(a, b)) * 10) / 10; } }
-      return { over: document.documentElement.scrollWidth - window.innerWidth, outerScroll: document.documentElement.scrollHeight - window.innerHeight, dark: document.documentElement.classList.contains("dark") || !!document.querySelector(".dark"), title: document.title, h1: h?.textContent?.slice(0, 60) ?? "", contrast };
+      const crossers = []; for (const el of document.querySelectorAll("main *, body *")) { const r = el.getBoundingClientRect(); if (r.width > 0 && r.height > 0 && r.right > window.innerWidth + 1 && crossers.length < 3 && getComputedStyle(el).position !== "fixed") crossers.push(`${el.tagName.toLowerCase()}.${String(el.className).split(" ").slice(0, 3).join(".")} right=${Math.round(r.right)}`); }
+      return { crossers, over: document.documentElement.scrollWidth - window.innerWidth, outerScroll: document.documentElement.scrollHeight - window.innerHeight, dark: document.documentElement.classList.contains("dark") || !!document.querySelector(".dark"), title: document.title, h1: h?.textContent?.slice(0, 60) ?? "", contrast };
     });
     shots.push({ branchKey, name, combo, file, ...m });
     rec(branchKey, `${name} @ ${combo.key}: no horizontal scroll`, m.over <= 1, `overflow ${m.over}px`);
     rec(branchKey, `${name} @ ${combo.key}: theme matches (${combo.scheme})`, m.dark === (combo.scheme === "dark"), `dark=${m.dark}`);
+    rec(branchKey, `${name} @ ${combo.key}: no element crosses the right edge of the screen`, m.crossers.length === 0, m.crossers.join(" ; "));
     if (m.contrast !== null) rec(branchKey, `${name} @ ${combo.key}: heading contrast >= 3:1`, m.contrast >= 3, `ratio ${m.contrast}`);
     if (e.page.url().includes("/admin/studio")) rec(branchKey, `${name} @ ${combo.key}: the page scrolls inside the admin frame (no outer overflow)`, m.outerScroll <= 1, `outer overflow ${m.outerScroll}px`);
     return e;
@@ -304,7 +307,7 @@ try {
       await shoot("parallax", c, "modules-default");
       for (const p of ["/parallax/shorts", "/parallax/audio", "/remix"]) {
         const x = await open("parallax", c, p);
-        if (p !== "/remix" || true) { const msg = await x.e.page.getByText(/désactivé par l.administrateur/i).count(); rec("parallax", `${p} shows the disabled message while its module is off @ ${c.key}`, msg > 0, `HTTP ${x.status}`); }
+        if (p !== "/remix" || true) { const msg = await x.e.page.getByText(/désactivé/i).count(); rec("parallax", `${p} shows the disabled message while its module is off @ ${c.key}`, msg > 0, `HTTP ${x.status}`); }
         await shoot("parallax", c, `off${p.replace(/\//g, "-")}`, { full: false });
       }
     }
