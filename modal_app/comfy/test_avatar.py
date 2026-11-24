@@ -4,6 +4,8 @@ import io
 import json
 import shutil
 import subprocess
+import time
+import sys
 import tempfile
 import unittest
 import wave
@@ -165,7 +167,7 @@ class ExecutorTests(unittest.TestCase):
 
     def test_runs_the_pinned_script_with_the_request_seed_and_wipes_everything(self):
         runner, seen = self.fake_run()
-        with patch("subprocess.run", runner):
+        with patch("modal_app.comfy.avatar.run_traced", runner):
             out = execute(self.payload, weights="/w", repo=str(self.repo), root=str(self.root))
         self.assertEqual(out["mp4"][4:8], b"ftyp")
         self.assertEqual(seen["env"]["AVATAR_SEED"], "7")
@@ -174,23 +176,26 @@ class ExecutorTests(unittest.TestCase):
         self.assertEqual(seen["input"]["prompt"], "She speaks to the camera")
         self.assertIn("--num_segments=2", seen["cmd"])
         self.assertEqual(seen["kwargs"]["timeout"], avatar.RENDER_TIMEOUT_SECONDS)
+        self.assertEqual(seen["env"]["PYTHONUNBUFFERED"], "1")
+        self.assertIn("She speaks to the camera", seen["kwargs"]["redact"], "the prompt must be masked in the logs")
+        self.assertIn(str(seen["workdir"]), seen["kwargs"]["redact"], "the private work directory must be masked in the logs")
         self.assertEqual(list(self.root.iterdir()), [], "the per-run directory must be wiped")
         self.assertEqual([p.name for p in self.repo.iterdir()], ["run_demo_avatar_single_audio_to_video.py"], "the patched copy must be removed")
 
     def test_failures_map_to_fixed_codes_and_still_wipe(self):
         runner, _ = self.fake_run(fail=True)
-        with patch("subprocess.run", runner), self.assertRaises(AvatarInputError) as ctx:
+        with patch("modal_app.comfy.avatar.run_traced", runner), self.assertRaises(AvatarInputError) as ctx:
             execute(self.payload, weights="/w", repo=str(self.repo), root=str(self.root))
         self.assertEqual(ctx.exception.code, "AVATAR_EXECUTION_FAILED")
         self.assertEqual(list(self.root.iterdir()), [])
         runner, _ = self.fake_run(produce=False)
-        with patch("subprocess.run", runner), self.assertRaises(AvatarInputError) as ctx:
+        with patch("modal_app.comfy.avatar.run_traced", runner), self.assertRaises(AvatarInputError) as ctx:
             execute(self.payload, weights="/w", repo=str(self.repo), root=str(self.root))
         self.assertEqual(ctx.exception.code, "AVATAR_OUTPUT_INVALID")
         self.assertEqual(list(self.root.iterdir()), [])
 
     def test_bad_inputs_never_reach_the_subprocess(self):
-        with patch("subprocess.run") as sub:
+        with patch("modal_app.comfy.avatar.run_traced") as sub:
             for patch_ in ({"segments": 4}, {"segments": 0}, {"image": b"not an image"}, {"image": b"\x89PNG\r\n\x1a\n" + b"z" * 100},
                            {"audio": b"x"}, {"prompt": "x"}, {"seed": -1}, {"seed": 1.5}):
                 with self.assertRaises(AvatarInputError):
@@ -348,6 +353,82 @@ class SimulationTests(unittest.TestCase):
         self.assertLess(branch.index("simulation_enabled()"), branch.index("collect_moss(execute_avatar"))
 
 
+class RunTracedTests(unittest.TestCase):
+    """The render output used to go to DEVNULL; these run a REAL subprocess to prove the traces are useful and safe."""
+
+    def run_py(self, code, **kw):
+        lines = []
+        kw.setdefault("with_gpu", False)
+        kw.setdefault("cgroup_root", "/nonexistent")
+        try:
+            avatar.run_traced([sys.executable, "-u", "-c", code], cwd=None, env=None, log=lines.append, **kw)
+            error = None
+        except Exception as e:  # noqa: BLE001 - the tests inspect the exact exception
+            error = e
+        return lines, error
+
+    def test_output_is_forwarded_with_a_relative_timestamp_and_the_exit_code(self):
+        lines, error = self.run_py("print('loading checkpoint'); print('segment 1/3')", timeout=30)
+        self.assertIsNone(error)
+        text = "\n".join(lines)
+        self.assertRegex(lines[0], r"^\[avatar \+\d+s\] start ")
+        self.assertIn("loading checkpoint", text)
+        self.assertIn("segment 1/3", text)
+        self.assertRegex(lines[-1], r"exited code=0")
+
+    def test_the_prompt_and_the_private_directory_are_masked(self):
+        lines, error = self.run_py("print('prompt = She speaks to the camera in /tmp/avatar-run-xyz/portrait.png')", timeout=30,
+                                   redact=("She speaks to the camera", "/tmp/avatar-run-xyz"))
+        self.assertIsNone(error)
+        text = "\n".join(lines)
+        self.assertNotIn("She speaks", text)
+        self.assertNotIn("avatar-run-xyz", text)
+        self.assertIn("[redacted]", text)
+
+    def test_a_failure_raises_called_process_error_without_the_command_line(self):
+        lines, error = self.run_py("import sys; print('boom'); sys.exit(3)", timeout=30)
+        self.assertIsInstance(error, subprocess.CalledProcessError)
+        self.assertEqual(error.returncode, 3)
+        self.assertNotIn("-c", str(error.cmd))
+        self.assertTrue(any("exited code=3" in l for l in lines))
+
+    def test_a_timeout_kills_the_process_and_is_reported(self):
+        started = time.monotonic()
+        lines, error = self.run_py("import time; print('start'); time.sleep(60)", timeout=1)
+        self.assertIsInstance(error, subprocess.TimeoutExpired)
+        self.assertLess(time.monotonic() - started, 20)
+        self.assertTrue(any("timeout after 1s" in l for l in lines))
+
+    def test_the_output_is_capped(self):
+        lines, error = self.run_py("for i in range(60): print('line', i)", timeout=30, max_lines=5)
+        self.assertIsNone(error)
+        shown = [l for l in lines if " line " in l]
+        self.assertEqual(len(shown), 5)
+        self.assertEqual(sum("further output not shown" in l for l in lines), 1)
+
+    def test_long_lines_are_cut(self):
+        lines, error = self.run_py("print('x' * 5000)", timeout=30)
+        self.assertIsNone(error)
+        self.assertTrue(all(len(l) < 260 for l in lines))
+
+    def test_a_heartbeat_is_written_while_the_render_runs(self):
+        lines, error = self.run_py("import time; time.sleep(1.6)", timeout=30, heartbeat_seconds=0.3)
+        self.assertIsNone(error)
+        self.assertGreaterEqual(sum("heartbeat" in l for l in lines), 2)
+
+    def test_resource_snapshot_reads_cgroup_v2_and_never_raises(self):
+        with tempfile.TemporaryDirectory() as d:
+            Path(d, "memory.current").write_text(str(10 * 2 ** 20))
+            Path(d, "memory.peak").write_text(str(70 * 2 ** 30))
+            Path(d, "cpu.stat").write_text("usage_usec 5\nnr_periods 10\nnr_throttled 4\nthrottled_usec 2500000\n")
+            line = avatar.resource_snapshot(d, with_gpu=False)
+        self.assertIn("mem=10MiB", line)
+        self.assertIn("peak=71680MiB", line)
+        self.assertIn("cpu_throttled_s=2.5", line)
+        self.assertIn("throttled_periods=4", line)
+        self.assertIn("mem=n/a", avatar.resource_snapshot("/nonexistent", with_gpu=False))
+
+
 class DefinitionTests(unittest.TestCase):
     def setUp(self):
         self.tree = ast.parse((ROOT / "modal_app/comfy/app.py").read_text(encoding="utf-8"))
@@ -367,6 +448,19 @@ class DefinitionTests(unittest.TestCase):
         self.assertIn("scaledown_window", s)
         self.assertNotIn("retries", s)                                # a failed render is never retried automatically
         self.assertNotIn("single_use_containers", s)                  # deliberate: warm reuse inside the scale-down window
+
+    def test_avatar_executor_resources_match_the_poc_and_keep_the_cost_ceiling(self):
+        s = self.settings("execute_avatar")
+        self.assertEqual(ast.literal_eval(s["cpu"]), 8)                      # a plain request like the POC, not a hard 8-core limit
+        request, limit = ast.literal_eval(s["memory"])
+        self.assertEqual((request, limit), (65536, 131072))                  # the 64 GiB hard limit OOM-killed the first real render
+        consts = {n.targets[0].id: ast.literal_eval(n.value) for n in self.tree.body
+                  if isinstance(n, ast.Assign) and isinstance(n.targets[0], ast.Name) and isinstance(n.value, ast.Constant)}
+        # Worst case per execution: H100 0.001097 + 128 GiB RAM 0.000284 + 8 CPU 0.000105 USD/s, over the timeout, the 60 s scale-down
+        # window and ~60 s of container start (measured spend of the two failed attempts: 1.456 USD in total).
+        rate = 0.001097 + (limit / 1024) * 0.00000222 + 8 * 0.0000131
+        ceiling = (consts["AVATAR_EXECUTOR_TIMEOUT_SECONDS"] + consts["AVATAR_SCALEDOWN_SECONDS"] + 60) * rate
+        self.assertLess(ceiling, 1.15, f"cost ceiling {ceiling:.2f} USD")
 
     def test_broker_timeout_covers_the_avatar_window(self):
         consts = {n.targets[0].id: ast.literal_eval(n.value) for n in self.tree.body

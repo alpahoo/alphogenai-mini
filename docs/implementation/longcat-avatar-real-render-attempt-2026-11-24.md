@@ -59,3 +59,30 @@ Porte fermee, 0 compte jetable, 0 run actif, 0 secret de contournement, Preview 
 3. Un blocage dans une phase (pas seulement de la lenteur) : non distinguable sans traces.
 Proposition (sans GPU, a decider) : relayer la sortie du processus avec des horodatages par phase dans les journaux, aligner `cpu`/`memory` sur le POC (`cpu=8`, `memory=(65536, 131072)`),
 puis ne rejouer qu'avec un accord explicite, un plafond recalcule avec la formule ci-dessus et un delai assez large pour finir la mesure.
+
+---
+
+# Preparation d'un troisieme essai (aucun GPU, rien deploye, rien lance)
+
+## Ce qui a change (commit suivant `9ce5337`)
+1. **Traces du rendu** (`modal_app/comfy/avatar.py`, `run_traced`) : la sortie du processus allait a `DEVNULL`. Elle est maintenant relayee dans le journal du conteneur, avec un temps relatif
+   (`[avatar +123s] ...`), un battement toutes les 30 s (memoire courante et pic du conteneur, **temps de limitation CPU** du cgroup, charge, utilisation du GPU et VRAM), et les marqueurs
+   `inputs ready`, `start`, `exited code=...`, `timeout after ...`. Confidentialite : le prompt et le repertoire prive sont masques (`[redacted]`), lignes coupees a 200 caracteres, 400 lignes au plus.
+   Comportement inchange : memes codes d'erreur fixes, meme nettoyage, meme delai de 540 s, arret de tout le groupe de processus au delai.
+2. **CPU aligne sur le POC** (`modal_app/comfy/app.py`) : `cpu=8` (demande seule) au lieu de `cpu=(8, 8)` (limite dure de 8 coeurs, hypothese 1 de l'essai 2). Memoire inchangee : `(65536, 131072)`.
+3. **Script de rendu** : apres le run, il recupere les lignes `[avatar ...]` du journal Modal (`tmp/avatar-staging/luz/modal-traces.txt`) et en resume les marqueurs dans le rapport.
+4. **Tests** : 80 tests Python OK avec les dependances de la CI (ffmpeg du depot dans le PATH, 0 ignore), dont 9 nouveaux : sortie relayee et horodatee, prompt et repertoire masques, echec sans ligne de commande,
+   delai qui tue le processus, plafond de lignes, lignes longues, battement, lecture cgroup v2, et un garde-fou de plafond de cout (ressources de l'executeur, CPU 8 sans limite, memoire 128 Gio).
+   Import des definitions `modal_app.comfy.app` / `broker` : OK. Test a blanc du script : OK.
+
+## Plafond de cout recalcule (formule corrigee)
+Taux pire cas : H100 0,001097 + RAM 128 Gio 0,000284 + 8 CPU 0,000105 = **0,001486 USD/s**.
+| Variante | Duree comptee | Plafond |
+|---|---|---|
+| Essai complet, delai 640 s (+60 s de fenetre d'arret, +~60 s de demarrage) | 760 s | **~1,13 USD** |
+| Sonde courte, delai 300 s (traces de chargement seulement, pas de clip) | 420 s | ~0,62 USD |
+Cout deja constate : 1,456 USD (deux essais). Aucune des deux variantes n'est lancee ; la sonde courte demanderait un parametre de delai supplementaire non implemente.
+
+## Point structurel a surveiller
+Le collecteur de l'application abandonne 660 s apres la soumission, delai qui inclut le demarrage a froid du conteneur ; le delai propre de l'executeur (640 s) ne court qu'apres. Les traces
+(`inputs ready after ...s` compare a l'heure de soumission) diront si le demarrage a froid consomme une part notable du budget.

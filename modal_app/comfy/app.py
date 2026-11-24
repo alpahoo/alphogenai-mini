@@ -149,9 +149,10 @@ avatar_image = (modal.Image.from_registry("nvidia/cuda:12.4.1-cudnn-devel-ubuntu
                 .add_local_python_source("modal_app.comfy"))
 
 
+# CPU is a plain request (8) like the POC that worked: a hard limit of 8 cores was a suspect for the second failure (GPU_EXECUTION_TIMEOUT).
 # Memory: (request, LIMIT) in MiB. The first real staging render (2026-11-24) was killed with SIGKILL / exit 137 about two minutes in,
 # while loading the 47 GB of weights, under a hard limit equal to the request (65536). The POC, which worked, passed a plain request.
-@app.function(image=avatar_image, gpu="H100", cpu=(8, 8), memory=(65536, 131072),
+@app.function(image=avatar_image, gpu="H100", cpu=8, memory=(65536, 131072),
               volumes={AVATAR_WEIGHTS_ROOT: avatar_volume.with_mount_options(read_only=True)},
               secrets=[], block_network=True, restrict_modal_access=True,
               min_containers=0, max_containers=1, scaledown_window=AVATAR_SCALEDOWN_SECONDS,

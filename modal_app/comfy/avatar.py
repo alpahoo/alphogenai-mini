@@ -13,6 +13,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -143,6 +144,112 @@ def command(workdir: Path, segments: int, script: str = "run_demo_avatar_single_
     return cmd
 
 
+TRACE_MAX_LINES = 400                       # the upstream script and tqdm are chatty: cap what reaches the logs
+TRACE_HEARTBEAT_SECONDS = 30
+
+
+def _read_number(path: str):
+    try:
+        return int(Path(path).read_text().split()[0])
+    except Exception:
+        return None
+
+
+def resource_snapshot(cgroup_root: str = "/sys/fs/cgroup", with_gpu: bool = True) -> str:
+    """One short line: container memory (current/peak), CPU throttling (cgroup v2), load average and GPU use. Never raises."""
+    parts = []
+    mib = lambda v: "n/a" if v is None else f"{v / 2 ** 20:.0f}MiB"
+    parts.append(f"mem={mib(_read_number(cgroup_root + '/memory.current'))} peak={mib(_read_number(cgroup_root + '/memory.peak'))}")
+    try:
+        stat = dict(line.split() for line in Path(cgroup_root + "/cpu.stat").read_text().splitlines() if len(line.split()) == 2)
+        parts.append(f"cpu_throttled_s={int(stat.get('throttled_usec', 0)) / 1e6:.1f} throttled_periods={stat.get('nr_throttled', 'n/a')}")
+    except Exception:
+        parts.append("cpu_throttled=n/a")
+    try:
+        parts.append(f"load={Path('/proc/loadavg').read_text().split()[0]}")
+    except Exception:
+        pass
+    if with_gpu:
+        try:
+            out = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,memory.used", "--format=csv,noheader,nounits"],
+                                 capture_output=True, text=True, timeout=5, check=True).stdout.strip().splitlines()[0]
+            util, used = [x.strip() for x in out.split(",")]
+            parts.append(f"gpu={util}% vram={used}MiB")
+        except Exception:
+            parts.append("gpu=n/a")
+    return " ".join(parts)
+
+
+def run_traced(cmd, *, cwd, env, timeout, redact=(), log=print, heartbeat_seconds=TRACE_HEARTBEAT_SECONDS,
+               max_lines=TRACE_MAX_LINES, cgroup_root="/sys/fs/cgroup", with_gpu=True) -> None:
+    """Runs the render and writes timestamped progress to the container log (the previous version discarded everything,
+    so a slow or hung run could not be diagnosed). Otherwise it behaves like subprocess.run(check=True, timeout=...):
+    CalledProcessError on a non-zero exit, TimeoutExpired after `timeout` seconds (the whole process group is killed).
+
+    Privacy: every string in `redact` (the prompt, the private work directory) is masked in each line, lines are cut at 200
+    characters and at most `max_lines` are shown. A heartbeat reports memory, CPU throttling, load and GPU use.
+    """
+    started = time.monotonic()
+    stamp = lambda: f"[avatar +{time.monotonic() - started:.0f}s]"
+    secrets = [r for r in redact if isinstance(r, str) and len(r) >= 3]
+
+    def mask(line: str) -> str:
+        for secret in secrets:
+            line = line.replace(secret, "[redacted]")
+        return line[:200]
+
+    log(f"{stamp()} start {resource_snapshot(cgroup_root, with_gpu)}")
+    proc = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
+                            bufsize=1, start_new_session=(os.name == "posix"))
+    shown = {"n": 0}
+
+    def pump():
+        for raw in proc.stdout:
+            line = raw.strip()
+            if not line:
+                continue
+            shown["n"] += 1
+            if shown["n"] <= max_lines:
+                log(f"{stamp()} {mask(line)}")
+            elif shown["n"] == max_lines + 1:
+                log(f"{stamp()} (further output not shown)")
+
+    def kill():
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, 9)
+            else:
+                proc.kill()
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    reader = threading.Thread(target=pump, daemon=True)
+    reader.start()
+    stop = threading.Event()
+
+    def beat():
+        while not stop.wait(heartbeat_seconds):
+            log(f"{stamp()} heartbeat {resource_snapshot(cgroup_root, with_gpu)}")
+
+    threading.Thread(target=beat, daemon=True).start()
+    try:
+        try:
+            code = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            kill()
+            log(f"{stamp()} timeout after {timeout}s: process group killed {resource_snapshot(cgroup_root, with_gpu)}")
+            raise
+        reader.join(5)
+        log(f"{stamp()} exited code={code} {resource_snapshot(cgroup_root, with_gpu)}")
+        if code != 0:
+            raise subprocess.CalledProcessError(code, "avatar")   # no command line in the error (it holds private paths)
+    finally:
+        stop.set()
+
+
 def execute(payload: dict, weights: str = WEIGHTS_ROOT, repo: str = REPO_DIR, root: str = "/tmp") -> dict:
     """GPU executor body. `payload`: image bytes, 16 kHz WAV bytes, prompt, seed, segments. Returns the raw MP4.
 
@@ -188,9 +295,10 @@ def execute(payload: dict, weights: str = WEIGHTS_ROOT, repo: str = REPO_DIR, ro
         script = Path(repo) / f"avatar_run_{workdir.name}.py"  # next to the package so `longcat_video` imports resolve
         try:
             script.write_text(patched_script((Path(repo) / "run_demo_avatar_single_audio_to_video.py").read_text(encoding="utf-8")), encoding="utf-8")
-            subprocess.run(command(workdir, segments, script.name, weights), cwd=repo, check=True,
-                           timeout=RENDER_TIMEOUT_SECONDS, env={**os.environ, "AVATAR_SEED": str(seed)},
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(f"[avatar] inputs ready after {time.monotonic() - started:.1f}s, segments={segments}, starting the render", flush=True)
+            run_traced(command(workdir, segments, script.name, weights), cwd=repo, timeout=RENDER_TIMEOUT_SECONDS,
+                       env={**os.environ, "AVATAR_SEED": str(seed), "PYTHONUNBUFFERED": "1"}, redact=(prompt, str(workdir)),
+                       log=lambda m: print(m, flush=True))
         except AvatarInputError:
             raise
         except Exception:

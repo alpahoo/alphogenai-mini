@@ -123,6 +123,7 @@ try {
   const btn = page.getByRole("button", { name: /Render avatar/ });
   check("Render is enabled for the authorised admin", await btn.isEnabled());
   const t0 = Date.now();
+  const sinceIso = new Date(t0 - 60_000).toISOString();
   await btn.click();
   // Stop as soon as the run is terminal (a failed run must not keep the session open for 12 minutes).
   for (let i = 0; i < 12 * 12; i++) { const st = (await db.from("comfy_runs").select("status").eq("user_id", uid).order("created_at", { ascending: false }).limit(1)).data?.[0]?.status; if (st && !["queued", "running", "dispatching"].includes(st)) break; await sleep(5000); }
@@ -134,6 +135,16 @@ try {
   const count = (await db.from("comfy_runs").select("id").eq("user_id", uid)).data?.length ?? 0;
   check("exactly ONE run exists for the session (no duplicate GPU execution)", count === 1, String(count));
   await page.screenshot({ path: path.join(SHOTS, "luz-done.png"), fullPage: false });
+  try {
+    await sleep(20_000); // let the container flush its last lines
+    const py = path.join(WORK, "venv", WIN ? "Scripts/python.exe" : "bin/python");
+    const logs = run2(py, ["-m", "modal", "app", "logs", "alphogenai-comfy", "--env", MODAL_ENV, "--since", sinceIso], { ...process.env, PYTHONUTF8: "1" });
+    const traces = String(logs.stdout || "").split(/\r?\n/).filter((l) => /\[avatar/.test(l) || /comfy_run_failed/.test(l) || /Runner killed/.test(l));
+    writeFileSync(path.join(LUZ, "modal-traces.txt"), traces.join("\n"));
+    const beats = traces.filter((l) => /heartbeat/.test(l));
+    notes.push(`container traces: ${traces.length} line(s) saved in tmp/avatar-staging/luz/modal-traces.txt; first: ${clean(traces[0] ?? "none")}`);
+    for (const l of [...traces.filter((x) => /inputs ready|exited|timeout after|Runner killed|comfy_run_failed/.test(x)), ...beats.slice(-2)]) notes.push(`trace: ${clean(l)}`);
+  } catch (e) { notes.push(`could not read the container traces: ${clean(e.message)}`); }
   const [download] = await Promise.all([page.waitForEvent("download", { timeout: 60_000 }).catch(() => null), page.getByRole("button", { name: /Download MP4/ }).click().catch(() => null)]);
   if (download) { await download.saveAs(OUT); const buf = readFileSync(OUT); check("the MP4 was downloaded (ftyp box, > 100 kB)", buf.length > 100_000 && buf.subarray(4, 8).toString() === "ftyp", `${buf.length} bytes`); }
   else check("the MP4 was downloaded", false, "no download event");
