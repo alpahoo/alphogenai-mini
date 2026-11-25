@@ -47,6 +47,7 @@ export const maxDuration = 60;
 const VALID_ENGINES = [
   "wan_i2v",
   "ltx_2_3",
+  "ltx_2_5",
   "seedance",
   "heygen_avatar_iv",
   "heygen_avatar_shots",
@@ -55,6 +56,13 @@ const VALID_ENGINES = [
   ...Object.keys(BYTEPLUS_ENGINES),
   ...Object.keys(ATLAS_ENGINES),
 ];
+
+// Engines that run inside the Modal pipeline (routed by preferred_engine there).
+const MODAL_LOCAL_ENGINES = new Set(["wan_i2v", "ltx_2_3", "ltx_2_5"]);
+
+// Per-clip ceiling of Modal engines that can render longer than the default
+// 5 s clip in one shot (LTX-2.5: a 10 s Short is a single continuous take).
+const MODAL_ENGINE_MAX_CLIP_SECONDS: Record<string, number> = { ltx_2_5: 10 };
 
 // Hard cap on multi-scene chaining length (defense in depth — storyboard
 // is already capped per-plan). Even premium can't ask EvoLink for >6 chained
@@ -637,6 +645,7 @@ export async function POST(req: Request) {
       // Seedance supports up to 15s) instead of being split into repeated cuts.
       const engineMaxClip =
         (safePreferredEngine && EVOLINK_ENGINES[safePreferredEngine]?.maxDuration) ||
+        (safePreferredEngine && MODAL_ENGINE_MAX_CLIP_SECONDS[safePreferredEngine]) ||
         undefined;
       // Explicit scene count from the UI "Scenes" control (numeric => forced).
       const rawNumScenes = Number(num_scenes);
@@ -968,10 +977,9 @@ export async function POST(req: Request) {
           scene_count: storyboard.length,
           ...(safeImageUrl && { image_url: safeImageUrl }),
           ...(safeReferences && { references: safeReferences }),
-          // Pass Modal-local engines (wan_i2v, ltx_2_3) as the preferred engine
-          // so generate_video_complete routes to the right adapter.
-          preferred_engine:
-            engineKey === "wan_i2v" || engineKey === "ltx_2_3" ? engineKey : undefined,
+          // Pass Modal-local engines (wan_i2v, ltx_2_3, ltx_2_5) as the preferred
+          // engine so generate_video_complete routes to the right adapter.
+          preferred_engine: MODAL_LOCAL_ENGINES.has(engineKey) ? engineKey : undefined,
         }),
       });
 
