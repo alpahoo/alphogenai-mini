@@ -458,6 +458,55 @@ def update_scene(job_id: str, scene_index: int, **fields):
         log(job_id, f"update_scene[{scene_index}] FAILED: {e}")
 
 
+# The DB watchdogs (watchdog_stuck_jobs / watchdog_stuck_scenes, every 5 min)
+# fail any job or scene whose updated_at is older than 30 minutes. A Wan scene
+# takes ~28 min (cold start + 20 steps x ~77 s) and writes nothing meanwhile,
+# so the row is touched every few minutes while a scene is being generated.
+HEARTBEAT_SECONDS = 240
+_ACTIVE_JOB_STATUSES = ["pending", "generating", "in_progress", "uploading"]
+
+
+def _touch_rows(job_id: str, scene_index: Optional[int] = None) -> None:
+    """Refresh updated_at on the job (and scene) if they are still active."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        sb = get_supabase_client()
+        sb.table("jobs").update({"updated_at": now}).eq("id", job_id) \
+            .in_("status", _ACTIVE_JOB_STATUSES).execute()
+        if scene_index is not None:
+            sb.table("job_scenes").update({"updated_at": now}).eq("job_id", job_id) \
+                .eq("scene_index", scene_index).eq("status", "generating").execute()
+    except Exception as e:  # a missed beat must never break generation
+        log(job_id, f"heartbeat FAILED: {e}")
+
+
+class _Heartbeat:
+    """Context manager: touch the job/scene rows every HEARTBEAT_SECONDS."""
+
+    def __init__(self, job_id: str, scene_index: Optional[int] = None,
+                 interval: float = HEARTBEAT_SECONDS):
+        import threading
+        self.job_id = job_id
+        self.scene_index = scene_index
+        self.interval = interval
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self):
+        while not self._stop.wait(self.interval):
+            _touch_rows(self.job_id, self.scene_index)
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self._stop.set()
+        self._thread.join(timeout=5)
+        return False
+
+
 # ===========================================================================
 # GPU function â€” single clip generation
 # ===========================================================================
@@ -465,12 +514,20 @@ def update_scene(job_id: str, scene_index: int, **fields):
 @app.function(
     image=base_image,
     gpu=GPU,
-    timeout=1800,  # 30 min max (cold start + 14B model load + inference)
+    # Measured 25 Nov 2026 (9:16, 720x1280): 20 steps x ~77 s = 25.6 min of
+    # inference, ~29 min end to end with cold start. 45 min leaves headroom for
+    # a slow cold start; the DB watchdogs are kept off by _Heartbeat.
+    timeout=2700,
     retries=0,
     volumes={"/models": models_volume},
     secrets=[secrets],
 )
-def generate_clip(prompt: str, job_id: str, image_url: Optional[str] = None) -> bytes:
+def generate_clip(
+    prompt: str,
+    job_id: str,
+    image_url: Optional[str] = None,
+    aspect_ratio: str = "16:9",
+) -> bytes:
     """
     Single-clip pipeline:
       1. User image OR SDXL-Turbo â†’ 1 image
@@ -478,6 +535,11 @@ def generate_clip(prompt: str, job_id: str, image_url: Optional[str] = None) -> 
       3. ffmpeg â†’ MP4 bytes
 
     If image_url is provided, skips T2I and downloads the user's image.
+
+    aspect_ratio ("16:9" | "9:16" | "1:1") sets the generation size. The pixel
+    area stays ~1280x720 so the GPU time per scene does not change. For a
+    non-default aspect, a user image is centre-cropped to that aspect first.
+    16:9 keeps the legacy behaviour exactly (user image aspect is respected).
     """
     import torch
     import gc
@@ -486,8 +548,14 @@ def generate_clip(prompt: str, job_id: str, image_url: Optional[str] = None) -> 
     from PIL import Image
     import tempfile
     from pathlib import Path
+    from modal_app.utils.aspect import (
+        center_crop_box, is_default_aspect, normalize_aspect_ratio, target_dimensions,
+    )
 
-    log(job_id, f"generate_clip start | GPU={GPU} steps={NUM_STEPS}"
+    aspect_ratio = normalize_aspect_ratio(aspect_ratio)
+    gen_w, gen_h = target_dimensions(aspect_ratio)
+
+    log(job_id, f"generate_clip start | GPU={GPU} steps={NUM_STEPS} aspect={aspect_ratio}"
         f"{' | I2V mode (user image)' if image_url else ''}")
 
     # --- verify models ------------------------------------------------
@@ -512,6 +580,9 @@ def generate_clip(prompt: str, job_id: str, image_url: Optional[str] = None) -> 
         resp.raise_for_status()
         image = Image.open(BytesIO(resp.content)).convert("RGB")
         log(job_id, f"user image loaded {image.size}")
+        if not is_default_aspect(aspect_ratio):
+            image = image.crop(center_crop_box(image.width, image.height, aspect_ratio))
+            log(job_id, f"user image cropped to {aspect_ratio}: {image.size}")
     else:
         # T2I mode: generate image via SDXL-Turbo
         log(job_id, "loading SDXL-Turbo")
@@ -521,14 +592,14 @@ def generate_clip(prompt: str, job_id: str, image_url: Optional[str] = None) -> 
 
         image = t2i(
             prompt=prompt, num_inference_steps=4, guidance_scale=0.0,
-            height=IMG_HEIGHT, width=IMG_WIDTH,
+            height=gen_h, width=gen_w,
         ).images[0]
         log(job_id, f"image generated {image.size}")
 
         del t2i; gc.collect(); torch.cuda.empty_cache()
 
     # resize for Wan (must be divisible by 16)
-    max_area = IMG_HEIGHT * IMG_WIDTH
+    max_area = gen_h * gen_w
     ar = image.height / image.width
     h = round(np.sqrt(max_area * ar)) // 16 * 16
     w = round(np.sqrt(max_area / ar)) // 16 * 16
@@ -651,6 +722,54 @@ def _probe_video(path: str) -> tuple[int, int, float]:
     except Exception:
         duration = 0.0
     return width, height, max(duration, 0.1)
+
+
+def _reframe_file(src_path: str, dst_path: str, aspect_ratio: str, job_id: str) -> bool:
+    """Centre-crop + scale a clip to the job aspect when it does not match.
+
+    Returns True when dst_path was written, False when the clip already fits
+    (or the job is 16:9, which is never reframed). Audio, if any, is copied.
+    """
+    import subprocess
+    from modal_app.utils.aspect import needs_reframe, reframe_filter
+
+    width, height, _ = _probe_video(src_path)
+    if not needs_reframe(width, height, aspect_ratio):
+        return False
+    vf = reframe_filter(width, height, aspect_ratio)
+    log(job_id, f"reframe {width}x{height} -> {aspect_ratio} ({vf})")
+    result = subprocess.run(
+        [
+            "ffmpeg", "-y", "-i", src_path,
+            "-map", "0:v:0", "-map", "0:a?",
+            "-vf", vf,
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
+            "-c:a", "copy",
+            "-movflags", "+faststart",
+            dst_path,
+        ],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg reframe failed: {result.stderr[-500:]}")
+    return True
+
+
+def enforce_aspect_ratio(video_bytes: bytes, job_id: str, aspect_ratio: str) -> bytes:
+    """Bytes-in/bytes-out wrapper of _reframe_file (no-op for 16:9 or matching clips)."""
+    import tempfile
+    from pathlib import Path
+    from modal_app.utils.aspect import is_default_aspect
+
+    if is_default_aspect(aspect_ratio):
+        return video_bytes
+    with tempfile.TemporaryDirectory(prefix=f"reframe_{job_id}_") as tmpdir:
+        src = Path(tmpdir) / "src.mp4"
+        dst = Path(tmpdir) / "dst.mp4"
+        src.write_bytes(video_bytes)
+        if not _reframe_file(str(src), str(dst), aspect_ratio, job_id):
+            return video_bytes
+        return dst.read_bytes()
 
 
 def _render_overlay_png(path: str, width: int, height: int, element: dict, safe_area: int):
@@ -835,7 +954,7 @@ def apply_overlays_to_video(video_url: str, job_id: str, overlay_plan: dict) -> 
     timeout=9000,
     retries=0,
 )
-def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferred_engine: Optional[str] = None, image_url: Optional[str] = None) -> list:
+def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferred_engine: Optional[str] = None, image_url: Optional[str] = None, aspect_ratio: str = "16:9") -> list:
     """
     Generate clips for each scene in the storyboard sequentially.
 
@@ -879,7 +998,9 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferre
         t0 = time.monotonic()
 
         log(job_id, f"scene [{idx+1}/{total}] generating | prompt={scene_prompt[:60]}")
-        update_scene(job_id, idx, status="in_progress")
+        # "generating" is the value job_scenes_status_check allows (and the one
+        # the UI and watchdog read); "in_progress" was rejected by the DB.
+        update_scene(job_id, idx, status="generating")
         # Update parent job stage so frontend shows per-scene progress
         update_job(job_id, current_stage=f"generating_scene_{idx+1}")
 
@@ -893,13 +1014,15 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferre
             )
             # Only first scene (idx=0) gets the user-uploaded image
             scene_image_url = image_url if idx == 0 else None
-            video_bytes, actual_engine = generate_with_fallback(
-                engine_key, prompt=scene_prompt,
-                job_id=f"{job_id}_scene_{idx:02d}",
-                duration_seconds=scene_dur,
-                image_url=scene_image_url,
-                supabase_client=ms_sb,
-            )
+            with _Heartbeat(job_id, idx):
+                video_bytes, actual_engine = generate_with_fallback(
+                    engine_key, prompt=scene_prompt,
+                    job_id=f"{job_id}_scene_{idx:02d}",
+                    duration_seconds=scene_dur,
+                    image_url=scene_image_url,
+                    supabase_client=ms_sb,
+                    aspect_ratio=aspect_ratio,
+                )
             if actual_engine != engine_key:
                 log(job_id, f"scene [{idx+1}/{total}] fallback: {engine_key} â†’ {actual_engine}")
                 any_fallback = True
@@ -929,9 +1052,14 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferre
 
 
 @app.function(image=base_image, secrets=[secrets], timeout=600, retries=0)
-def assemble_scenes(job_id: str, clip_urls: list) -> bytes:
+def assemble_scenes(job_id: str, clip_urls: list, aspect_ratio: str = "16:9") -> bytes:
     """
     Download scene clips and concatenate them into a single MP4 via ffmpeg.
+
+    For a non-default aspect (9:16, 1:1), every clip that does not already have
+    the target size is centre-cropped and scaled first, so the concat stays
+    homogeneous and the final file has the requested shape whatever engine made
+    each scene. 16:9 jobs are concatenated exactly as before.
 
     Runs on Modal (has ffmpeg via base_image). Returns final video bytes.
     """
@@ -945,6 +1073,7 @@ def assemble_scenes(job_id: str, clip_urls: list) -> bytes:
     with tempfile.TemporaryDirectory(prefix=f"assemble_{job_id}_") as tmpdir:
         tmppath = Path(tmpdir)
         clip_paths = []
+        any_reframed = False
 
         # Download each clip
         client = httpx.Client(timeout=120.0)
@@ -954,6 +1083,10 @@ def assemble_scenes(job_id: str, clip_urls: list) -> bytes:
             resp.raise_for_status()
             clip_file = tmppath / f"clip_{i:02d}.mp4"
             clip_file.write_bytes(resp.content)
+            reframed = tmppath / f"clip_{i:02d}_framed.mp4"
+            if _reframe_file(str(clip_file), str(reframed), aspect_ratio, job_id):
+                clip_file = reframed
+                any_reframed = True
             clip_paths.append(clip_file)
         client.close()
 
@@ -963,14 +1096,20 @@ def assemble_scenes(job_id: str, clip_urls: list) -> bytes:
             for p in clip_paths:
                 f.write(f"file '{p}'\n")
 
-        # Concatenate
+        # Concatenate. Stream copy as before, unless a clip was re-encoded by
+        # the reframe step: then encoder settings differ between clips, so the
+        # video is re-encoded once to keep the joined stream clean.
         output_path = tmppath / "final.mp4"
+        codec_args = (
+            ["-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "copy"]
+            if any_reframed else ["-c", "copy"]
+        )
         result = subprocess.run(
             [
                 "ffmpeg", "-y",
                 "-f", "concat", "-safe", "0",
                 "-i", str(concat_file),
-                "-c", "copy",
+                *codec_args,
                 str(output_path),
             ],
             capture_output=True, text=True,
@@ -1181,10 +1320,11 @@ def concat_and_finalize(job_id: str) -> str:
 
         # Read job metadata for plan + audio settings
         job_row = sb.table("jobs") \
-            .select("plan, prompt, audio_mode, audio_prompt") \
+            .select("plan, prompt, audio_mode, audio_prompt, aspect_ratio") \
             .eq("id", job_id).single().execute()
         job_data = job_row.data or {}
         plan = job_data.get("plan", "free")
+        job_aspect = job_data.get("aspect_ratio") or "16:9"
         audio_mode = job_data.get("audio_mode", "auto")
         audio_prompt = job_data.get("audio_prompt")
         job_prompt = job_data.get("prompt", "")
@@ -1197,9 +1337,10 @@ def concat_and_finalize(job_id: str) -> str:
                 resp.raise_for_status()
             final_bytes = resp.content
             log(job_id, f"single scene downloaded: {len(final_bytes)/1e6:.1f}MB")
+            final_bytes = enforce_aspect_ratio(final_bytes, job_id, job_aspect)
         else:
             update_job(job_id, current_stage="encoding")
-            final_bytes = assemble_scenes.remote(job_id, clip_urls)
+            final_bytes = assemble_scenes.remote(job_id, clip_urls, job_aspect)
 
         # Watermark for free plan
         if plan == "free":
@@ -2666,9 +2807,13 @@ def generate_video_complete(
         # Fetch job to read storyboard â€” scene_count is ALWAYS derived
         # server-side from DB, never from client webhook payload.
         sb = get_supabase_client()
-        job_row = sb.table("jobs").select("storyboard, target_duration_seconds, plan").eq("id", job_id).single().execute()
+        job_row = sb.table("jobs").select("storyboard, target_duration_seconds, plan, aspect_ratio").eq("id", job_id).single().execute()
         storyboard = (job_row.data or {}).get("storyboard") or []
         plan = (job_row.data or {}).get("plan", "free")
+        # Requested frame shape (Shorts = 9:16). 16:9 keeps the legacy path.
+        from modal_app.utils.aspect import normalize_aspect_ratio
+        aspect_ratio = normalize_aspect_ratio((job_row.data or {}).get("aspect_ratio"))
+        log(job_id, f"aspect_ratio={aspect_ratio}")
 
         # Server-side hard cap (defense in depth)
         plan_cap = MAX_SCENES.get(plan, 1)
@@ -2703,11 +2848,14 @@ def generate_video_complete(
             except Exception as e:
                 log(job_id, f"cost tracking skipped: {e}")
 
-            video_bytes, actual_engine = generate_with_fallback(
-                engine_key, prompt=prompt, job_id=job_id, duration_seconds=clip_dur,
-                image_url=image_url, supabase_client=supabase_client_for_engines,
-                references=references,
-            )
+            with _Heartbeat(job_id):
+                video_bytes, actual_engine = generate_with_fallback(
+                    engine_key, prompt=prompt, job_id=job_id, duration_seconds=clip_dur,
+                    image_url=image_url, supabase_client=supabase_client_for_engines,
+                    references=references, aspect_ratio=aspect_ratio,
+                )
+            # Safety net: an engine that ignored the aspect is reframed here
+            video_bytes = enforce_aspect_ratio(video_bytes, job_id, aspect_ratio)
             if actual_engine != engine_key:
                 log(job_id, f"fallback triggered: {engine_key} â†’ {actual_engine}")
                 update_job(job_id, engine_used=actual_engine)
@@ -2795,7 +2943,7 @@ def generate_video_complete(
             log(job_id, f"cost tracking skipped: {e}")
 
         # Step 1: generate all scene clips
-        ms_result = generate_multi_scene.remote(job_id, storyboard, plan, preferred_engine, image_url)
+        ms_result = generate_multi_scene.remote(job_id, storyboard, plan, preferred_engine, image_url, aspect_ratio)
         clip_urls = ms_result["clip_urls"]
         ms_any_fallback = ms_result["any_fallback"]
 
@@ -2813,7 +2961,7 @@ def generate_video_complete(
 
         # Step 2: assemble into final video
         update_job(job_id, current_stage="encoding")
-        final_bytes = assemble_scenes.remote(job_id, clip_urls)
+        final_bytes = assemble_scenes.remote(job_id, clip_urls, aspect_ratio)
 
         # Apply watermark for free plan users only
         if plan == "free":

@@ -36,4 +36,6 @@ class WanEngine(BaseEngine):
             raise RuntimeError("WanEngine: generate_fn not set. Call set_generate_fn() first.")
         # Forward image_url so generate_clip skips SDXL-Turbo when user provides one
         image_url = kwargs.get("image_url")
-        return self._generate_fn(prompt, job_id, image_url=image_url)
+        # Forward the job aspect so Wan generates 720x1280 for 9:16 natively
+        aspect_ratio = kwargs.get("aspect_ratio") or "16:9"
+        return self._generate_fn(prompt, job_id, image_url=image_url, aspect_ratio=aspect_ratio)
