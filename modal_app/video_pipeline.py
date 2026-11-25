@@ -134,6 +134,23 @@ models_volume = modal.Volume.from_name("alphogenai-models", create_if_missing=Tr
 # Volume partagÃ© avec l'app de test ltx_video.py â€” contient dÃ©jÃ  le checkpoint FP8
 # + Gemma (tÃ©lÃ©chargÃ©s et validÃ©s). MontÃ© Ã  /cache pour generate_clip_ltx23.
 hf_volume = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
+# LTX-2.5 weights (Lightricks/LTX-2.5, gated: the HF token must have accepted the
+# licence). Filled once by download_ltx25_models; read-only at generation time.
+ltx25_volume = modal.Volume.from_name(os.environ.get("LTX25_MODELS_VOLUME", "alphogenai-ltx25-models"),
+                                      create_if_missing=True)
+hf_token_secret = modal.Secret.from_name("alphogenai-hf-token")
+LTX25_DIR = "/ltx25"
+LTX25_COMFY_VERSION = "v0.46.3"  # first stable tag validated with the official LTX-2.5 templates
+ltx25_image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .apt_install("git", "ffmpeg", "libgl1", "libglib2.0-0")
+    .run_commands(
+        f"git clone --depth 1 --branch {LTX25_COMFY_VERSION} https://github.com/Comfy-Org/ComfyUI /root/ComfyUI",
+        "pip install -r /root/ComfyUI/requirements.txt",
+    )
+    .pip_install("huggingface_hub[hf_xet]", "requests")
+    .add_local_python_source("modal_app.utils")
+)
 
 GPU = "A100-80GB"
 
@@ -977,6 +994,7 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferre
     init_engines(
         generate_clip_fn=generate_clip.remote,
         generate_clip_ltx23_fn=generate_clip_ltx23.remote,
+        generate_clip_ltx25_fn=LTX25().generate.remote,
     )
 
     total = len(scenes)
@@ -2164,6 +2182,137 @@ def generate_clip_ltx23(
 
 
 # ===========================================================================
+# LTX-2.5 (Lightricks, official ComfyUI templates) — native 9:16, native audio
+# ===========================================================================
+# Licence: LTX-2.x Community License (free under $10M annual revenue, SaaS hosting
+# allowed, Attachment A use restrictions must be passed on to users, outputs must be
+# disclosed as AI-generated, no removal of watermark / provenance features).
+
+@app.function(image=ltx25_image, secrets=[hf_token_secret], volumes={LTX25_DIR: ltx25_volume},
+              timeout=3600, retries=0)
+def download_ltx25_models() -> list:
+    """One-off: fill the LTX-2.5 volume (~40 GB) from the gated Lightricks/LTX-2.5 repo."""
+    import os
+    import shutil
+    from pathlib import Path
+    from concurrent.futures import ThreadPoolExecutor
+    from huggingface_hub import hf_hub_download
+    from modal_app.utils.ltx25_workflow import MODEL_FILES
+
+    os.environ["HF_XET_HIGH_PERFORMANCE"] = "1"
+    token = os.environ.get("HF_TOKEN")
+
+    def fetch(item):
+        path, folder = item
+        dst = Path(LTX25_DIR) / folder / Path(path).name
+        if dst.exists():
+            return f"present {dst.name}"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        src = hf_hub_download("Lightricks/LTX-2.5", path, token=token, local_dir=f"{LTX25_DIR}/_dl")
+        shutil.move(src, dst)
+        return f"downloaded {dst.name}"
+
+    with ThreadPoolExecutor(max_workers=len(MODEL_FILES)) as pool:
+        done = list(pool.map(fetch, MODEL_FILES))
+    shutil.rmtree(f"{LTX25_DIR}/_dl", ignore_errors=True)
+    ltx25_volume.commit()
+    print("[ltx25] models ready:", done)
+    return done
+
+
+@app.cls(image=ltx25_image, gpu="H100", volumes={LTX25_DIR: ltx25_volume},
+         timeout=1800, retries=0, scaledown_window=120)
+class LTX25:
+    """ComfyUI server kept alive for the container's life, so the scenes of one job
+    reuse loaded weights. Scale to zero two minutes after the last call."""
+
+    @modal.enter()
+    def start(self):
+        import subprocess
+        import time
+        from pathlib import Path
+        import requests
+        from modal_app.utils.ltx25_workflow import MODEL_FILES
+
+        missing = [p for p, folder in MODEL_FILES
+                   if not (Path(LTX25_DIR) / folder / Path(p).name).exists()]
+        if missing:
+            raise RuntimeError(f"LTX-2.5 weights missing on the volume (run download_ltx25_models): {missing}")
+        cfg = Path("/root/ComfyUI/extra_model_paths.yaml")
+        cfg.write_text("ltx25:\n"
+                       f"  base_path: {LTX25_DIR}\n"
+                       "  diffusion_models: diffusion_models\n"
+                       "  text_encoders: text_encoders\n"
+                       "  vae: vae\n"
+                       "  latent_upscale_models: latent_upscale_models\n")
+        self.proc = subprocess.Popen(
+            ["python", "main.py", "--listen", "127.0.0.1", "--port", "8188",
+             "--disable-auto-launch", "--extra-model-paths-config", str(cfg)],
+            cwd="/root/ComfyUI")
+        for _ in range(300):
+            try:
+                if requests.get("http://127.0.0.1:8188/system_stats", timeout=2).ok:
+                    return
+            except Exception:
+                pass
+            if self.proc.poll() is not None:
+                break
+            time.sleep(1)
+        raise RuntimeError("ComfyUI did not start")
+
+    @modal.method()
+    def generate(self, prompt: str, job_id: Optional[str] = None, image_url: Optional[str] = None,
+                 duration_seconds: float = 5.0, aspect_ratio: str = "16:9", seed: int = 42) -> bytes:
+        import io
+        import json
+        import time
+        import requests
+        from PIL import Image
+        from modal_app.utils.aspect import center_crop_box, normalize_aspect_ratio
+        from modal_app.utils.ltx25_workflow import SAVE_NODE, build_graph, dimensions
+
+        base = "http://127.0.0.1:8188"
+        aspect = normalize_aspect_ratio(aspect_ratio)
+        t0 = time.time()
+        image_name = None
+        if image_url:
+            resp = requests.get(image_url, timeout=60)
+            resp.raise_for_status()
+            img = Image.open(io.BytesIO(resp.content)).convert("RGB")
+            img = img.crop(center_crop_box(img.width, img.height, aspect)).resize(dimensions(aspect), Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            up = requests.post(f"{base}/upload/image",
+                               files={"image": (f"first_{int(t0 * 1000)}.png", buf.getvalue(), "image/png")},
+                               data={"overwrite": "true"}, timeout=60)
+            up.raise_for_status()
+            image_name = up.json()["name"]
+
+        graph = build_graph(prompt, aspect, duration_seconds, seed, image_name)
+        r = requests.post(f"{base}/prompt", json={"prompt": graph, "client_id": job_id or "ltx25"}, timeout=60)
+        if not r.ok:
+            raise RuntimeError(f"ComfyUI rejected the LTX-2.5 graph ({r.status_code}): {r.text[:1500]}")
+        pid = r.json()["prompt_id"]
+        while True:
+            hist = requests.get(f"{base}/history/{pid}", timeout=30).json()
+            if pid in hist:
+                break
+            if time.time() - t0 > 1500:
+                raise TimeoutError("LTX-2.5 generation took more than 25 min")
+            time.sleep(2)
+        entry = hist[pid]
+        if entry.get("status", {}).get("status_str") == "error":
+            raise RuntimeError(f"LTX-2.5 generation failed: {json.dumps(entry['status'])[:1500]}")
+        files = next(v for v in entry["outputs"][SAVE_NODE].values()
+                     if isinstance(v, list) and v and "filename" in v[0])
+        video = requests.get(f"{base}/view", params=files[0], timeout=120)
+        video.raise_for_status()
+        print(f"[ltx25] job={job_id} {'i2v' if image_name else 't2v'} {aspect} "
+              f"{duration_seconds}s in {time.time() - t0:.0f}s, {len(video.content) // 1024} KB")
+        return video.content
+
+
+# ===========================================================================
 # Explainer (code-based slides + Kokoro voice) â€” CPU only, ~cents/video
 # ===========================================================================
 @app.function(image=explainer_image, secrets=[secrets], timeout=1200, retries=0)
@@ -2798,6 +2947,7 @@ def generate_video_complete(
     init_engines(
         generate_clip_fn=generate_clip.remote,
         generate_clip_ltx23_fn=generate_clip_ltx23.remote,
+        generate_clip_ltx25_fn=LTX25().generate.remote,
     )
 
     log(job_id, f"orchestrator start | prompt={prompt[:60]}"
