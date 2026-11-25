@@ -458,6 +458,55 @@ def update_scene(job_id: str, scene_index: int, **fields):
         log(job_id, f"update_scene[{scene_index}] FAILED: {e}")
 
 
+# The DB watchdogs (watchdog_stuck_jobs / watchdog_stuck_scenes, every 5 min)
+# fail any job or scene whose updated_at is older than 30 minutes. A Wan scene
+# takes ~28 min (cold start + 20 steps x ~77 s) and writes nothing meanwhile,
+# so the row is touched every few minutes while a scene is being generated.
+HEARTBEAT_SECONDS = 240
+_ACTIVE_JOB_STATUSES = ["pending", "generating", "in_progress", "uploading"]
+
+
+def _touch_rows(job_id: str, scene_index: Optional[int] = None) -> None:
+    """Refresh updated_at on the job (and scene) if they are still active."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        sb = get_supabase_client()
+        sb.table("jobs").update({"updated_at": now}).eq("id", job_id) \
+            .in_("status", _ACTIVE_JOB_STATUSES).execute()
+        if scene_index is not None:
+            sb.table("job_scenes").update({"updated_at": now}).eq("job_id", job_id) \
+                .eq("scene_index", scene_index).eq("status", "generating").execute()
+    except Exception as e:  # a missed beat must never break generation
+        log(job_id, f"heartbeat FAILED: {e}")
+
+
+class _Heartbeat:
+    """Context manager: touch the job/scene rows every HEARTBEAT_SECONDS."""
+
+    def __init__(self, job_id: str, scene_index: Optional[int] = None,
+                 interval: float = HEARTBEAT_SECONDS):
+        import threading
+        self.job_id = job_id
+        self.scene_index = scene_index
+        self.interval = interval
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self):
+        while not self._stop.wait(self.interval):
+            _touch_rows(self.job_id, self.scene_index)
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self._stop.set()
+        self._thread.join(timeout=5)
+        return False
+
+
 # ===========================================================================
 # GPU function â€” single clip generation
 # ===========================================================================
@@ -465,7 +514,10 @@ def update_scene(job_id: str, scene_index: int, **fields):
 @app.function(
     image=base_image,
     gpu=GPU,
-    timeout=1800,  # 30 min max (cold start + 14B model load + inference)
+    # Measured 25 Nov 2026 (9:16, 720x1280): 20 steps x ~77 s = 25.6 min of
+    # inference, ~29 min end to end with cold start. 45 min leaves headroom for
+    # a slow cold start; the DB watchdogs are kept off by _Heartbeat.
+    timeout=2700,
     retries=0,
     volumes={"/models": models_volume},
     secrets=[secrets],
@@ -962,14 +1014,15 @@ def generate_multi_scene(job_id: str, scenes: list, plan: str = "free", preferre
             )
             # Only first scene (idx=0) gets the user-uploaded image
             scene_image_url = image_url if idx == 0 else None
-            video_bytes, actual_engine = generate_with_fallback(
-                engine_key, prompt=scene_prompt,
-                job_id=f"{job_id}_scene_{idx:02d}",
-                duration_seconds=scene_dur,
-                image_url=scene_image_url,
-                supabase_client=ms_sb,
-                aspect_ratio=aspect_ratio,
-            )
+            with _Heartbeat(job_id, idx):
+                video_bytes, actual_engine = generate_with_fallback(
+                    engine_key, prompt=scene_prompt,
+                    job_id=f"{job_id}_scene_{idx:02d}",
+                    duration_seconds=scene_dur,
+                    image_url=scene_image_url,
+                    supabase_client=ms_sb,
+                    aspect_ratio=aspect_ratio,
+                )
             if actual_engine != engine_key:
                 log(job_id, f"scene [{idx+1}/{total}] fallback: {engine_key} â†’ {actual_engine}")
                 any_fallback = True
@@ -2795,11 +2848,12 @@ def generate_video_complete(
             except Exception as e:
                 log(job_id, f"cost tracking skipped: {e}")
 
-            video_bytes, actual_engine = generate_with_fallback(
-                engine_key, prompt=prompt, job_id=job_id, duration_seconds=clip_dur,
-                image_url=image_url, supabase_client=supabase_client_for_engines,
-                references=references, aspect_ratio=aspect_ratio,
-            )
+            with _Heartbeat(job_id):
+                video_bytes, actual_engine = generate_with_fallback(
+                    engine_key, prompt=prompt, job_id=job_id, duration_seconds=clip_dur,
+                    image_url=image_url, supabase_client=supabase_client_for_engines,
+                    references=references, aspect_ratio=aspect_ratio,
+                )
             # Safety net: an engine that ignored the aspect is reframed here
             video_bytes = enforce_aspect_ratio(video_bytes, job_id, aspect_ratio)
             if actual_engine != engine_key:
