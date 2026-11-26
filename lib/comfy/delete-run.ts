@@ -11,7 +11,7 @@ export type DeleteResult = { ok: true; reference_removed: string | null } | { ok
  * describes the content. What accounting, security and quotas need is kept as a tombstone: the run row (status,
  * error code, finance status, reserved cost, timestamps, runtime) with its parameters replaced by a deletion
  * mark, and the job row with its prompt cleared. The job row stays because the daily quota counts jobs: deleting a
- * generation never gives a quota back.
+ * generation never gives a quota back. The non-null jobs.prompt column receives a fixed redaction marker.
  *
  * It never touches the authorization gates, the budgets, the reservations or any RPC. A queued or running run
  * cannot be deleted. Reference images of the permanent library are never removed here.
@@ -56,11 +56,10 @@ export async function deleteRun(db: SupabaseClient, userId: string, runId: strin
     if (error) return fail("Could not delete this generation's records");
   }
 
-  // 4. The prompt copied into the job. Before the tombstone, so a failure here can still be retried.
-  // Cleared to "" rather than NULL: `jobs.prompt` is NOT NULL in the repo migrations (and so on staging
-  // and local databases), while production dropped the constraint by hand. "" holds on both.
+  // 4. Redact the prompt copied into the job. jobs.prompt is NOT NULL in the repository schema, so use a
+  // fixed marker rather than NULL. Do this before the tombstone so a failure here can still be retried.
   if (run.job_id) {
-    const { error } = await db.from("jobs").update({ prompt: "" }).eq("id", run.job_id).eq("user_id", userId).like("engine_used", "comfy:%");
+    const { error } = await db.from("jobs").update({ prompt: "[deleted]" }).eq("id", run.job_id).eq("user_id", userId).like("engine_used", "comfy:%");
     if (error) return fail("Could not clear the prompt from the job record");
   }
 
@@ -69,3 +68,4 @@ export async function deleteRun(db: SupabaseClient, userId: string, runId: strin
   if (runError) return fail("Could not finish the deletion");
   return { ok: true, reference_removed: referenceRemoved };
 }
+

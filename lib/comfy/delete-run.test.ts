@@ -74,7 +74,7 @@ describe("deleteRun: what is kept and what is removed", () => {
     expect(w.graphs).toEqual([]); expect(w.outbox).toEqual([]); expect(w.assets).toEqual([]);
     expect(isTombstone(w.runs[0].params_effective)).toBe(true);
     expect(w.runs[0].reference_path).toBeNull();
-    expect(w.jobs[0].prompt).toBe("");
+    expect(w.jobs[0].prompt).toBe("[deleted]");
   });
 
   it("keeps the accounting row and the job row: quota is never restored", async () => {
@@ -128,14 +128,14 @@ describe("deleteRun: a failure at any step is reported and the deletion can be r
       const second = await deleteRun(w.db, "me", "r1");
       expect(second).toEqual({ ok: true, reference_removed: ONE_OFF });
       expect(isTombstone(w.runs[0].params_effective)).toBe(true);
-      expect(w.jobs[0].prompt).toBe("");
+      expect(w.jobs[0].prompt).toBe("[deleted]");
       expect(w.assets).toEqual([]); expect(w.graphs).toEqual([]); expect(w.outbox).toEqual([]);
       expect([...w.files]).toEqual([]);
       expect(w.gateWrites).toEqual([]);
     });
   }
 
-  it("the job prompt is cleared before the tombstone, so a failure there is never abandoned", async () => {
+  it("the job prompt is redacted before the tombstone, so a failure there is never abandoned", async () => {
     const w = world({ ...withRef(null), failAlways: ["job"] });
     expect(await deleteRun(w.db, "me", "r1")).toMatchObject({ ok: false, status: 503 });
     // Not tombstoned: a later retry still finds the run and can clear the prompt.
@@ -147,7 +147,7 @@ describe("deleteRun: a failure at any step is reported and the deletion can be r
   it("a failure on the tombstone leaves the prompt already cleared and the run retryable", async () => {
     const w = world({ ...withRef(null), failOnce: ["tombstone"] });
     expect(await deleteRun(w.db, "me", "r1")).toMatchObject({ ok: false });
-    expect(w.jobs[0].prompt).toBe("");
+    expect(w.jobs[0].prompt).toBe("[deleted]");
     expect(await deleteRun(w.db, "me", "r1")).toMatchObject({ ok: true });
   });
 
@@ -231,3 +231,4 @@ describe("delete in the Studio history", () => {
     expect(block.indexOf("if (!res.ok) throw")).toBeLessThan(block.indexOf('setNotice("Generation deleted.")'));
   });
 });
+
