@@ -46,7 +46,18 @@ export function resolveTemplate(input: unknown, ownerId: string) {
   if (!variant) throw new InputError("Full quality with an image is not supported");
   const graph: Graph = structuredClone(({t2v, i2v, t2v_full:full})[variant as "t2v" | "i2v" | "t2v_full"]);
   for (const field of manifest.params) if (field.target) graph[field.target.node].inputs[field.target.input] = params[field.key];
-  const [width, height] = manifest.resolutions[params.aspect as keyof typeof manifest.resolutions];
+  // 704p: Turbo only, up to 5 s, portrait or landscape (measured 25 Nov 2026: 322 s for 5 s on H100, which
+  // already needs the long executor). The broker picks the executor from the bound graph size.
+  const hd = params.resolution === "704p";
+  // Until the owner redeploys alphogenai-comfy with the long executor, a 704p graph would reach the
+  // 180 s executor, time out and still consume its reservation.
+  if (hd && process.env.COMFY_H3_LONG_ENABLED !== "true") throw new InputError("704p needs the long H3 executor, which is not enabled yet");
+  if (hd && params.quality !== "turbo") throw new InputError("704p is available in Turbo only");
+  if (hd && Number(params.seconds) > 5) throw new InputError("704p is limited to 5 seconds");
+  const sizes: Record<string, readonly number[]> = hd ? manifest.hd_resolutions : manifest.resolutions;
+  const size = sizes[String(params.aspect)];
+  if (!size) throw new InputError("704p is available in portrait and landscape only");
+  const [width, height] = size;
   const n = Math.max(5, Math.round(Number(params.seconds) * 24));
   Object.assign(graph["6"].inputs, {width, height, length:n + (5 - n % 17 + 17) % 17});
   // The reference name is assigned by this server, never a client path in ComfyUI.
