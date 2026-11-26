@@ -31,6 +31,32 @@ def h3_needs_long_executor(graph: dict) -> bool:
         return False
 
 
+# Per-request limit while polling ComfyUI for the result. A slow or failed poll is not fatal: ComfyUI's
+# HTTP server can stall for several seconds while it loads models (seen 26 Nov 2026 on run 3a4fd6cb,
+# which failed on a single 5 s read timeout). Only the run deadline ends the wait.
+HISTORY_POLL_TIMEOUT_S = 10
+
+
+def wait_for_history(base: str, prompt_id: str, deadline: float, process, *,
+                     get=None, sleep=time.sleep, now=time.monotonic) -> dict | None:
+    """History entry of the prompt, or None at the deadline. Retries slow, failed or malformed
+    polls; stops at once if ComfyUI itself has exited."""
+    get = get or requests.get
+    while now() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError("COMFY_EXITED")
+        try:
+            response = get(f"{base}/history/{prompt_id}", timeout=HISTORY_POLL_TIMEOUT_S)
+            response.raise_for_status()
+            entry = response.json().get(prompt_id)
+        except (requests.RequestException, ValueError, AttributeError):
+            entry = None
+        if entry:
+            return entry
+        sleep(1)
+    return None
+
+
 def execute(graph: dict, reference: bytes | None, models: str = "/models", runtime: str = "h3-video@1",
             deadline_s: int | None = None) -> dict:
     spec = RUNTIMES[runtime]
@@ -92,31 +118,30 @@ def execute(graph: dict, reference: bytes | None, models: str = "/models", runti
         if not response.ok:
             raise ValueError("INVALID_INPUT")
         prompt_id = response.json()["prompt_id"]
-        while time.monotonic() < deadline:
-            response = requests.get(f"{base}/history/{prompt_id}", timeout=5)
-            response.raise_for_status()
-            entry = response.json().get(prompt_id)
-            if entry:
-                if entry.get("status", {}).get("status_str") != "success":
-                    raise RuntimeError("COMFY_EXECUTION_FAILED")
-                output = entry["outputs"][spec["output_node"]]
-                items = output.get("images") or output.get("videos") or output.get("gifs")
-                if not items or len(items) != 1:
-                    raise RuntimeError("UNEXPECTED_OUTPUT")
-                descriptor = items[0]
-                if descriptor.get("type") != "output":
-                    raise RuntimeError("UNEXPECTED_OUTPUT")
-                with requests.get(f"{base}/view", params=descriptor, timeout=30, stream=True) as media:
-                    media.raise_for_status()
-                    chunks, size = [], 0
-                    for chunk in media.iter_content(1024 * 1024):
-                        size += len(chunk)
-                        if size > MAX_OUTPUT_BYTES:
-                            raise ValueError("OUTPUT_TOO_LARGE")
-                        chunks.append(chunk)
-                return {spec["key"]: b"".join(chunks), "generation_seconds": round(time.monotonic() - started, 2)}
-            time.sleep(1)
-        requests.post(f"{base}/api/jobs/{prompt_id}/cancel", timeout=5)
+        entry = wait_for_history(base, prompt_id, deadline, process)
+        if entry:
+            if entry.get("status", {}).get("status_str") != "success":
+                raise RuntimeError("COMFY_EXECUTION_FAILED")
+            output = entry["outputs"][spec["output_node"]]
+            items = output.get("images") or output.get("videos") or output.get("gifs")
+            if not items or len(items) != 1:
+                raise RuntimeError("UNEXPECTED_OUTPUT")
+            descriptor = items[0]
+            if descriptor.get("type") != "output":
+                raise RuntimeError("UNEXPECTED_OUTPUT")
+            with requests.get(f"{base}/view", params=descriptor, timeout=30, stream=True) as media:
+                media.raise_for_status()
+                chunks, size = [], 0
+                for chunk in media.iter_content(1024 * 1024):
+                    size += len(chunk)
+                    if size > MAX_OUTPUT_BYTES:
+                        raise ValueError("OUTPUT_TOO_LARGE")
+                    chunks.append(chunk)
+            return {spec["key"]: b"".join(chunks), "generation_seconds": round(time.monotonic() - started, 2)}
+        try:
+            requests.post(f"{base}/api/jobs/{prompt_id}/cancel", timeout=5)
+        except requests.RequestException:
+            pass  # The single-use container is terminated anyway.
         raise TimeoutError("TIMEOUT")
     finally:
         process.terminate()
