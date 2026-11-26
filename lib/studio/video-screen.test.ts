@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { findModel } from "./catalog";
 import { EXAMPLE_CATEGORIES, VIDEO_EXAMPLES, examplesIn } from "./video-examples";
-import { isVideoRun, needsDispatchRetry, playableAsset, tileKind, tilePrompt, tileRatio, videoRuns, type TileRun } from "./video-screen";
+import { isVideoRun, needsDispatchRetry, playableAsset, tileKind, tilePrompt, tileRatio, videoFormatParams, videoRuns, type TileRun } from "./video-screen";
+import { defaultValues, outputSize, validateValues, type StudioManifest } from "./manifest";
 
 const run = (over: Partial<TileRun> = {}): TileRun => ({ id: "r", status: "done", template_version: "minimax-h3@1", assets: [], ...over });
 const mp4 = (role: string, id = role) => ({ id, role, mime: "video/mp4" });
@@ -81,5 +82,23 @@ describe("Video screen examples", () => {
     expect(examplesIn("nope")).toEqual([]);
     const total = EXAMPLE_CATEGORIES.filter(c => c.id !== "all").reduce((n, c) => n + examplesIn(c.id).length, 0);
     expect(total).toBe(12);
+  });
+});
+
+describe("Video screen formats (H3 480p/704p)", () => {
+  const h3 = findModel("minimax-h3")!.manifest as StudioManifest;
+  const base = { ...defaultValues(h3), prompt: "Luz walks along the quay" };
+  it("offers the resolution picker on the Video screen", () => {
+    expect(videoFormatParams(h3).map(p => p.key)).toEqual(["resolution"]);
+  });
+  it("mirrors the server 704p limits: Turbo only, up to 5 s, portrait or landscape", () => {
+    expect(validateValues(h3, { ...base, resolution: "704p", quality: "turbo", seconds: 5, aspect: "9:16" })).toEqual({});
+    expect(validateValues(h3, { ...base, resolution: "704p", quality: "full" }).resolution).toBe("704p is available in Turbo only");
+    expect(validateValues(h3, { ...base, resolution: "704p", seconds: 6 }).seconds).toBe("704p is limited to 5 seconds");
+    expect(validateValues(h3, { ...base, resolution: "704p", aspect: "1:1" }).aspect).toBe("704p is available in portrait and landscape only");
+    expect(validateValues(h3, { ...base, resolution: "480p", seconds: 10, aspect: "1:1" })).toEqual({});
+  });
+  it("reports the 704p output size", () => {
+    expect(outputSize(h3, { ...base, resolution: "704p", aspect: "16:9" })).toEqual([1280, 704]);
   });
 });

@@ -57,3 +57,9 @@ export function tilePrompt(run: Pick<TileRun, "params_effective">): string {
 export function needsDispatchRetry(run: Pick<TileRun, "status" | "dispatched">): boolean {
   return run.status === "queued" && run.dispatched === false;
 }
+
+/** Advanced params that are output formats, shown on the Video screen next to the simple ones (H3: resolution). */
+export const VIDEO_FORMAT_KEYS = ["resolution"] as const;
+export function videoFormatParams<P extends { key: string; tier?: string }>(manifest: { params: readonly P[] }): P[] {
+  return manifest.params.filter(p => (VIDEO_FORMAT_KEYS as readonly string[]).includes(p.key) && p.tier !== "simple");
+}

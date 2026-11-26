@@ -3,7 +3,8 @@
 import { Clapperboard, ExternalLink, Loader2, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { optionSupported, paramsByTier, referenceReachable, referenceSupported } from "@/lib/studio/manifest";
+import { optionSupported, outputSize, paramsByTier, referenceReachable, referenceSupported } from "@/lib/studio/manifest";
+import { videoFormatParams } from "@/lib/studio/video-screen";
 import { generationPreview } from "@/lib/studio/preview";
 import { AspectPicker } from "../aspect-picker";
 import { GenerateBlockers } from "../generate-blockers";
@@ -81,11 +82,19 @@ export function VideoForm({ s }: { s: StudioState }) {
                 <div key={p.key} className="space-y-2">
                   <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">{p.label}</p>
                   <AspectPicker options={p.options} value={String(values[p.key] ?? "")} onChange={v => s.setValue(p.key, v)} labels={p.optionLabels} sizes={manifest.resolutions} />
+                  <p className="text-xs text-muted-foreground/80">{p.optionLabels?.[String(values[p.key])]} · {outputSize(manifest, values)?.join(" × ")} px</p>
+                  {s.errors[p.key] && <p className="text-xs text-destructive">{s.errors[p.key]}</p>}
                 </div>
               ) : (
                 <ParamControl key={p.key} param={p} value={values[p.key]} error={s.errors[p.key]} onChange={v => s.setValue(p.key, v)}
                   isOptionSupported={o => optionSupported(manifest, values, !!s.reference, p.key, o)} />
               )
+            ))}
+
+            {/* The output format is part of this screen: H3 480p, or 704p (Turbo, up to 5 s, portrait or landscape). */}
+            {videoFormatParams(manifest).map(p => (
+              <ParamControl key={p.key} param={p} value={values[p.key]} error={s.errors[p.key]} onChange={v => s.setValue(p.key, v)}
+                isOptionSupported={o => optionSupported(manifest, values, !!s.reference, p.key, o)} />
             ))}
 
             <Link href="/admin/studio" className="flex items-center justify-between rounded-2xl border border-border/60 px-4 py-3 text-sm text-muted-foreground transition hover:bg-muted/30 hover:text-foreground">
