@@ -158,7 +158,11 @@ export function CinemaPanel({ s, onClose }: { s: StudioState; onClose: () => voi
     setNotice("Existing generation attached to this plan.");
   });
   const selectTake = (shot: Shot, take: Take) => void doWork("select:" + shot.id, async () => {
-    await post({ action: "take.select", shot_id: shot.id, take_id: take.id, version: shot.version });
+    const selected = await post<{ shot?: { version?: number } }>({ action: "take.select", shot_id: shot.id, take_id: take.id, version: shot.version });
+    // This tab's own version-checked selection changes only the selected take: a draft based on the version it replaced
+    // stays valid, so its base advances with it (otherwise every later save would be refused as "changed in another tab").
+    const next = selected.shot?.version;
+    if (Number.isSafeInteger(next) && draftBaseVersions.current.get(shot.id) === shot.version) draftBaseVersions.current.set(shot.id, next as number);
     if (story) await loadProject(story.project.id);
     setNotice("Selected take saved. Other plans were not changed.");
   });
