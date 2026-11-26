@@ -45,12 +45,12 @@ const ESTIMATES: Record<string, CostEstimate> = {
     basis: "Estimate from Modal rates; never measured on L40S.",
   },
   "longcat-avatar@1/H100": {
-    low_usd: 0.35, high_usd: 0.60, measured: true,
-    basis: "Measured on the Luz POC (10.12 s clip, 3 segments, cold model load 169 s + render 184 s, H100, 23 Nov 2026): about 0.5 USD GPU incl. CPU. Staging run pending.",
+    low_usd: 1.1, high_usd: 1.35, measured: true,
+    basis: "Measured on staging (Luz, 9.7 s speech, 3 segments, 24 Nov 2026): container start about 290 s + render 375 s + 60 s idle = 1.12 USD on the Modal invoice. Ceiling about 1.32 USD.",
   },
   "h3-video@1/H100": {
-    low_usd: 0.15, high_usd: 0.30, measured: false,
-    basis: "Estimate for a 5 s turbo clip (first pilot; invoice not yet reconciled).",
+    low_usd: 0.11, high_usd: 0.30, measured: true,
+    basis: "Measured in production on 26 Nov 2026 (Modal, H100, EU): 480p 5 s about 0.11 USD, 704p 5 s about 0.17 USD. 480p 10 s not measured yet.",
   },
 };
 

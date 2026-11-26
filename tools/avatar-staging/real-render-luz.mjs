@@ -3,9 +3,11 @@
 //     node tools/avatar-staging/real-render-luz.mjs                       # dry run: checks only, changes nothing, spends nothing
 //     node tools/avatar-staging/real-render-luz.mjs --confirm-gpu-spend   # ONLY after the owner's explicit go-ahead
 //
-// Cost (H100 0.001097 USD/s measured on the POC, CPU/memory ~0.00024 USD/s): expected ~0.55 USD (cold load ~170 s + 3 segments
-// ~185 s + 60 s scale-down), HARD ceiling ~0.96 USD (the worker is killed at 720 s). Application reservation: 0.75 USD (one run).
-// Why it cannot loop: one authorised run in the gate, one SQL claim per run, no retry of a paid execution, worker timeout 720 s.
+// Cost (Modal invoice, H100 + 128 GiB limit + 8 CPU = 0.001486 USD/s; see modal_app/comfy/app.py): expected ~1.12 USD, the cost
+// measured on the third staging attempt of 2026-11-24 (container start ~290 s + render 375 s + 60 s scale-down). HARD ceiling
+// ~1.32 USD (start window 330 s + executor timeout 500 s + 60 s scale-down), plus a few cents of CPU for the broker (<= 870 s).
+// Application reservation: 0.75 USD per run on the gate (an accounting provision, NOT a Modal billing cap: it is below the
+// measured cost). Why it cannot loop: one authorised run in the gate, one SQL claim per run, no retry of a paid execution.
 //
 // What it does: disposable admin account -> Modal staging app redeployed WITHOUT the simulation flag -> temporary Protection
 // Bypass + admin e-mail on the #125 Preview -> gate open for ONE run (2 h) -> the UI uploads the Luz portrait and voice, sets the

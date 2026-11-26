@@ -29,7 +29,7 @@ describe("executorInfo: GPU only from server sources, never guessed", () => {
     for (const env of [{}, { [MOSS_GPU_ENV]: "L40S" }]) {
       const info = executorInfo("minimax-h3", env);
       expect(info).toMatchObject({ gpu: "H100", gpu_source: "executor_code" });
-      expect(info.estimate?.measured).toBe(false);
+      expect(info.estimate).toMatchObject({ measured: true, low_usd: 0.11 }); // production runs of 26 Nov 2026
     }
   });
 
