@@ -57,8 +57,10 @@ export async function deleteRun(db: SupabaseClient, userId: string, runId: strin
   }
 
   // 4. The prompt copied into the job. Before the tombstone, so a failure here can still be retried.
+  // Cleared to "" rather than NULL: `jobs.prompt` is NOT NULL in the repo migrations (and so on staging
+  // and local databases), while production dropped the constraint by hand. "" holds on both.
   if (run.job_id) {
-    const { error } = await db.from("jobs").update({ prompt: null }).eq("id", run.job_id).eq("user_id", userId).like("engine_used", "comfy:%");
+    const { error } = await db.from("jobs").update({ prompt: "" }).eq("id", run.job_id).eq("user_id", userId).like("engine_used", "comfy:%");
     if (error) return fail("Could not clear the prompt from the job record");
   }
 
