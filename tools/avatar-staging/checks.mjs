@@ -8,7 +8,9 @@
 //   state: { gateBefore }              filled by the caller
 //   media: directory with good.wav / long.mp3 / portrait.png
 // }
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { recorder, sleep } from "../avatar-local/lib.mjs";
@@ -161,3 +163,133 @@ export const VISUAL_TODO = [
   "Parallax screens (#123): /admin/modules switches, navigation entries appearing and disappearing, Shorts / Audio / Remix pages, on mobile and desktop.",
   "Dark and light themes on each of those screens.",
 ];
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Cinema #119 with media: the full admin path on the hosted Preview, without any generation. Four finished H3-shaped runs
+// are seeded for the DISPOSABLE admin only (service role on staging; removed by cleanupData), each with a Corrected (final)
+// and an Original (raw) MP4 whose audio tones differ, so the montage can be checked to carry the Corrected audio.
+// The montage itself is built by the Preview's own route (ffmpeg on Vercel), then read back through a private signed URL.
+const STAGING_PUBLIC_BASE = "https://hhearpympdflxyfmszap.supabase.co";
+const ffmpegBin = () => createRequire(import.meta.url)("ffmpeg-static");
+const ffrun = (args) => { const r = spawnSync(ffmpegBin(), ["-hide_banner", "-loglevel", "error", "-y", ...args], { encoding: "utf8" }); if (r.status !== 0) throw new Error("ffmpeg: " + String(r.stderr).slice(0, 200)); };
+const H3_ENC = ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-ac", "2", "-ar", "32000"];
+function h3Clip(file, hue, tone) {
+  ffrun(["-f", "lavfi", "-i", "testsrc2=size=480x832:rate=24", "-f", "lavfi", "-i", `sine=frequency=${tone}:sample_rate=32000`,
+    "-vf", `hue=h=${hue}`, "-frames:v", "124", "-af", "apad", "-t", "5.184", ...H3_ENC, file]);
+}
+function pcmOf(buf, dir, name) {
+  const f = path.join(dir, name); writeFileSync(f, buf);
+  const r = spawnSync(ffmpegBin(), ["-v", "error", "-i", f, "-vn", "-f", "f32le", "-ac", "1", "-ar", "32000", "-"], { maxBuffer: 1 << 27 });
+  const out = Buffer.from(r.stdout);
+  return new Float32Array(out.buffer, out.byteOffset, Math.floor(out.length / 4));
+}
+function streamInfo(buf, dir, name) {
+  const f = path.join(dir, name); writeFileSync(f, buf);
+  const err = String(spawnSync(ffmpegBin(), ["-hide_banner", "-i", f, "-map", "0:v:0", "-f", "null", "-"], { encoding: "utf8", maxBuffer: 1 << 26 }).stderr);
+  return { frames: Number([...err.matchAll(/frame=\s*(\d+)/g)].pop()?.[1] ?? 0), audio: /Audio: aac/.test(err), video: /Video: h264/.test(err) };
+}
+/** Normalised correlation of a 0.25 s window of `a` at `ia` with `b` at `ib`, best over +-1200 samples (covers AAC priming). */
+function corrAt(a, ia, b, ib) {
+  const n = 8000; let best = -1;
+  for (let lag = -1200; lag <= 1200; lag++) {
+    let sab = 0, saa = 0, sbb = 0;
+    for (let i = 0; i < n; i++) { const x = a[ia + lag + i] ?? 0, y = b[ib + i] ?? 0; sab += x * y; saa += x * x; sbb += y * y; }
+    best = Math.max(best, sab / Math.sqrt((saa * sbb) || 1));
+  }
+  return best;
+}
+
+export async function checksCinemaMedia(ctx) {
+  const r = recorder("Cinema #119: hosted project, takes and Corrected montage (no generation)");
+  const uid = ctx.ids.admin, db = ctx.db, url = "/api/admin/studio/cinema";
+  const dir = path.join(ctx.media, "cinema"); mkdirSync(dir, { recursive: true });
+  const cinema = (body, who = "admin") => ctx.req(who, "POST", url, { json: body });
+  const board = async (pid) => (await ctx.req("admin", "GET", `${url}?project=${pid}`)).json;
+
+  // 1. Fixtures for the disposable admin only.
+  const plans = [["plan1", 0, 440, 220], ["plan2_old", 60, 550, 275], ["plan2", 120, 660, 330], ["plan3", 180, 880, 440]];
+  const R = {};
+  for (const [key, hue, fin, raw] of plans) {
+    const finalFile = path.join(dir, `${key}.mp4`), rawFile = path.join(dir, `${key}_raw.mp4`);
+    h3Clip(finalFile, hue, fin); h3Clip(rawFile, hue, raw);
+    const job = await db.from("jobs").insert({ user_id: uid, prompt: `Luz hosted fixture ${key}`, status: "done", current_stage: "completed", engine_used: "comfy:minimax-h3",
+      metadata: { output_kind: "video", template_slug: "minimax-h3", fixture: true } }).select("id").single();
+    if (job.error) throw new Error("fixture job: " + job.error.message);
+    const run = await db.from("comfy_runs").insert({ job_id: job.data.id, user_id: uid, idempotency_key: randomUUID(), runtime: "h3-video@1", template_version: "minimax-h3@1",
+      params_effective: { prompt: `Luz hosted fixture ${key}`, seconds: 5, aspect: "9:16", quality: "turbo", fixture: true }, resolved_graph_sha256: "fixture-" + key,
+      status: "done", reserved_cost_usd: 0, finance_status: "awaiting_reconciliation", finished_at: new Date().toISOString() }).select("id").single();
+    if (run.error) throw new Error("fixture run: " + run.error.message);
+    R[key] = run.data.id;
+    for (const [role, file] of [["final", finalFile], ["raw", rawFile]]) {
+      const storageKey = `${uid}/${R[key]}/${role}.mp4`;
+      const up = await db.storage.from("comfy-outputs").upload(storageKey, readFileSync(file), { contentType: "video/mp4", upsert: true });
+      if (up.error) throw new Error("fixture upload: " + up.error.message);
+      const a = await db.from("comfy_assets").insert({ run_id: R[key], owner_id: uid, role, storage_key: storageKey, mime: "video/mp4" });
+      if (a.error) throw new Error("fixture asset: " + a.error.message);
+    }
+  }
+  r.note("fixtures", "4 finished H3-shaped runs (480x832, 24 fps, 124 frames, AAC 32 kHz) seeded for the disposable admin only; Corrected and Original audio differ");
+
+  // 2. Project, scene, three plans, four takes, selection (issue #117 steps 1-3).
+  const proj = (await cinema({ action: "project.create", title: "Luz hosted " + new Date().toISOString().slice(11, 19), aspect: "9:16" })).json?.project;
+  const scene = proj ? (await cinema({ action: "scene.create", project_id: proj.id, title: "Cour" })).json?.scene : null;
+  const shots = [];
+  for (let i = 1; scene && i <= 3; i++) shots.push((await cinema({ action: "shot.create", project_id: proj.id, scene_id: scene.id, description: "Plan " + i })).json?.shot);
+  r.check("C1 project, scene and three ordered plans created", !!proj && !!scene && shots.length === 3 && shots.every((s, i) => s?.position === i));
+  if (!proj || shots.length !== 3 || shots.some((s) => !s)) return r;
+  const T = {};
+  for (const [key, idx] of [["plan1", 0], ["plan2_old", 1], ["plan2", 1], ["plan3", 2]]) T[key] = (await cinema({ action: "take.attach", shot_id: shots[idx].id, run_id: R[key] })).json?.take;
+  r.check("C2 four takes attached (two on plan 2)", ["plan1", "plan2_old", "plan2", "plan3"].every((k) => T[k]?.run_id === R[k]));
+  const versionOf = async (idx) => (await board(proj.id)).shots.find((s) => s.id === shots[idx].id).version;
+  for (const [idx, key] of [[0, "plan1"], [1, "plan2"], [2, "plan3"]]) await cinema({ action: "take.select", shot_id: shots[idx].id, take_id: T[key].id, version: await versionOf(idx) });
+  const selection = async () => { const sb = await board(proj.id); const byId = new Map(sb.takes.map((x) => [x.id, x.run_id])); return sb.shots.sort((a, b) => a.position - b.position).map((s) => byId.get(s.selected_take_id)); };
+  const sel = await selection();
+  r.check("C3 reload: the selected takes are found again in storyboard order", JSON.stringify(sel) === JSON.stringify([R.plan1, R.plan2, R.plan3]), JSON.stringify(sel));
+  const sw = await cinema({ action: "take.select", shot_id: shots[1].id, take_id: T.plan2_old.id, version: await versionOf(1) });
+  const back = await cinema({ action: "take.select", shot_id: shots[1].id, take_id: T.plan2.id, version: await versionOf(1) });
+  r.check("C4 compare takes: plan 2 switches to its alternative and back, plans 1 and 3 untouched", sw.status === 200 && back.status === 200 && JSON.stringify(await selection()) === JSON.stringify(sel));
+  const stale = await cinema({ action: "take.select", shot_id: shots[1].id, take_id: T.plan2_old.id, version: (await versionOf(1)) - 1 });
+  r.check("C5 a stale selection is refused (409)", stale.status === 409, String(stale.status));
+  r.check("C6 the non-admin cannot read or change the project", (await ctx.req("user", "GET", `${url}?project=${proj.id}`)).status === 403 &&
+    (await cinema({ action: "take.select", shot_id: shots[0].id, take_id: T.plan1.id, version: 0 }, "user")).status === 403);
+
+  // 3. Private playback of a take, then the Corrected-audio montage built by the Preview (issue #117 steps 5-6).
+  const asset1 = (await db.from("comfy_assets").select("id").eq("run_id", R.plan1).eq("role", "final").single()).data;
+  const media = (await ctx.req("admin", "GET", `/api/admin/comfy/media/${asset1.id}`)).json;
+  const clip = media?.url ? await fetch(media.url) : null;
+  const clipBuf = clip ? Buffer.from(await clip.arrayBuffer()) : Buffer.alloc(0);
+  r.check("C7 a selected take plays through a private signed URL (MP4)", clip?.status === 200 && clipBuf.subarray(4, 8).toString() === "ftyp");
+  const t0 = Date.now();
+  const mk = await ctx.req("admin", "POST", "/api/admin/studio/montages", { json: { run_ids: sel, audio: "corrected", name: "Luz hosted corrected" } });
+  const buildMs = Date.now() - t0;
+  r.check("C8 Corrected montage of the three selected takes built on Vercel (201)", mk.status === 201, `${mk.status} ${mk.json?.error ?? ""} in ${buildMs} ms`);
+  r.note("montage build time on the Preview", `${buildMs} ms, ${mk.json?.frames ?? "?"} frames, ${mk.json?.duration_s ?? "?"} s`);
+  const mid = mk.json?.item?.id;
+  if (!mid) return r;
+  const play = (await ctx.req("admin", "GET", `/api/admin/studio/montages?id=${mid}`)).json;
+  const montRes = play?.url ? await fetch(play.url) : null;
+  const montBuf = montRes ? Buffer.from(await montRes.arrayBuffer()) : Buffer.alloc(0);
+  const info = streamInfo(montBuf, dir, "montage.mp4");
+  r.check("C9 the montage is playable: 372 frames, H.264 video and AAC audio", info.frames === 372 && info.audio && info.video, JSON.stringify(info));
+  const dl = (await ctx.req("admin", "GET", `/api/admin/studio/montages?id=${mid}&download=1`)).json;
+  const dlRes = dl?.url ? await fetch(dl.url) : null;
+  r.check("C10 private download: the signed link returns the MP4 as an attachment", dlRes?.status === 200 && /attachment/.test(dlRes.headers.get("content-disposition") ?? ""), dlRes?.headers.get("content-disposition") ?? "no link");
+  const unsigned = await fetch(`${STAGING_PUBLIC_BASE}/storage/v1/object/public/comfy-outputs/${uid}/${R.plan1}/final.mp4`).catch(() => null);
+  r.check("C11 the bucket is not publicly readable", !!unsigned && unsigned.status >= 400, String(unsigned?.status));
+  const mont = pcmOf(montBuf, dir, "m.mp4"); const CLIP = Math.round((124 / 24) * 32000);
+  const detail = []; let ok = true;
+  for (const [k, key] of [[0, "plan1"], [1, "plan2"], [2, "plan3"]]) {
+    const fin = pcmOf(readFileSync(path.join(dir, `${key}.mp4`)), dir, `f${k}.mp4`), raw = pcmOf(readFileSync(path.join(dir, `${key}_raw.mp4`)), dir, `r${k}.mp4`);
+    const at = 32000, cf = corrAt(mont, k * CLIP + at, fin, at), cr = corrAt(mont, k * CLIP + at, raw, at);
+    detail.push(`clip${k + 1} Corrected ${cf.toFixed(2)} / Original ${cr.toFixed(2)}`);
+    if (!(cf > 0.85 && cr < 0.5)) ok = false;
+  }
+  r.check("C12 the montage carries the Corrected audio of each selected take, in order, and not the Original", ok, detail.join(" | "));
+  const list = (await ctx.req("admin", "GET", "/api/admin/studio/montages")).json;
+  r.check("C13 reload: the montage is listed; the non-admin cannot reach it", JSON.stringify(list).includes("Luz hosted corrected") &&
+    (await ctx.req("user", "GET", `/api/admin/studio/montages?id=${mid}`)).status === 403);
+  const del = await ctx.req("admin", "DELETE", `/api/admin/studio/montages?id=${mid}`);
+  const still = (await db.from("comfy_assets").select("id").in("run_id", sel).eq("role", "final")).data?.length;
+  r.check("C14 deleting the montage keeps every source take", del.status === 200 && still === 3, `${del.status} ${still}`);
+  return r;
+}

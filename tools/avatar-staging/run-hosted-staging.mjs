@@ -26,7 +26,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
-import { checksLongcat, checksCinema, checksParallax, VISUAL_TODO } from "./checks.mjs";
+import { checksLongcat, checksCinema, checksCinemaMedia, checksParallax, VISUAL_TODO } from "./checks.mjs";
 import { sleep } from "../avatar-local/lib.mjs";
 import { cleanupData } from "./cleanup.mjs";
 
@@ -268,7 +268,7 @@ try {
   gen(["-f", "lavfi", "-i", "sine=frequency=330:sample_rate=44100:duration=9.72", "-ac", "1", path.join(media, "good.wav")]);
   gen(["-f", "lavfi", "-i", "sine=frequency=330:sample_rate=44100:duration=12", "-ac", "1", path.join(media, "long.mp3")]);
   gen(["-f", "lavfi", "-i", "testsrc2=size=512x768", "-frames:v", "1", path.join(media, "portrait.png")]);
-  for (const [k, fn] of [["longcat", checksLongcat], ["cinema", checksCinema], ["parallax", checksParallax]]) {
+  for (const [k, fn] of [["longcat", checksLongcat], ["cinema", checksCinema], ["cinema", checksCinemaMedia], ["parallax", checksParallax]]) {
     const ctx = makeCtx({ base: `https://${hosts[k]}`, fetcher, admin, user, db, media });
     try { const r = await fn(ctx); reports.push({ pr: k, results: r.results }); } catch (e) { reports.push({ pr: k, results: [{ name: `checks crashed: ${String(e.message).slice(0, 100)}`, pass: false }] }); }
   }
