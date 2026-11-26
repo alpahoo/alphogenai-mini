@@ -14,6 +14,7 @@ import {
   Clapperboard,
   UserRoundCog,
   Users,
+  SlidersHorizontal,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { href: "/admin/gallery", label: "Gallery", icon: Images },
   { href: "/admin/engines", label: "Engines", icon: Cpu },
   { href: "/admin/template", label: "Template", icon: Paintbrush },
+  { href: "/admin/modules", label: "Modules", icon: SlidersHorizontal },
 ];
 
 export function AdminSidebar({ email }: { email: string }) {

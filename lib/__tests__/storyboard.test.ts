@@ -290,3 +290,36 @@ describe("generateStoryboard — edge cases", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// generateStoryboard — engine recorded on scenes
+// ---------------------------------------------------------------------------
+
+describe("generateStoryboard — chosen engine", () => {
+  it("records the chosen engine on a single LTX-2.5 Short", () => {
+    const sb = generateStoryboard("a voyager in the desert", 10, "premium", {
+      maxClipDuration: 10,
+      forcedScenes: 1,
+      engine: "ltx_2_5",
+    });
+    expect(sb).toHaveLength(1);
+    expect(sb[0].engine).toBe("ltx_2_5");
+  });
+
+  it("records it on every scene of a duration-based split", () => {
+    const sb = generateStoryboard("a voyager in the desert", 15, "pro", { engine: "seedance" });
+    expect(sb.length).toBeGreaterThan(1);
+    expect(sb.every((s) => s.engine === "seedance")).toBe(true);
+  });
+
+  it("records it on user-structured scenes", () => {
+    const sb = generateStoryboard("[SCENE 1] a door opens [SCENE 2] a light turns on", 10, "pro", { engine: "ltx_2_5" });
+    expect(sb).toHaveLength(2);
+    expect(sb.every((s) => s.engine === "ltx_2_5")).toBe(true);
+  });
+
+  it("keeps Wan as the default when no engine is chosen", () => {
+    const sb = generateStoryboard("a voyager in the desert", 10, "pro");
+    expect(sb.every((s) => s.engine === "wan_i2v")).toBe(true);
+  });
+});

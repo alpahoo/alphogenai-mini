@@ -14,7 +14,12 @@
  * user sees an error instead of a silent default. For these candidates the test asserts that
  * exact pair (Studio refuses, key omitted, server accepts).
  */
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+// Verdicts are those of a deployment with the long H3 executor enabled (704p allowed). Without it the
+// server refuses 704p with an explicit message, which the Studio shows after submission.
+beforeAll(() => { vi.stubEnv("COMFY_H3_LONG_ENABLED", "true"); });
+afterAll(() => { vi.unstubAllEnvs(); });
 import { resolveTemplate } from "@/lib/comfy/template";
 import { TEMPLATES } from "@/lib/comfy/templates";
 import { findModel } from "./catalog";
