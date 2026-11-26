@@ -51,11 +51,11 @@ describe("rewriteH3Prompt", () => {
 
   it("falls back to the idea when the model fails, answers badly or is not configured", async () => {
     vi.stubEnv("EVOLINK_API_KEY", "test");
-    expect(await rewriteH3Prompt("un latte", 5, vi.fn().mockRejectedValue(new Error("timeout")))).toEqual({ prompt: "un latte", rewritten: false });
-    expect(await rewriteH3Prompt("un latte", 5, vi.fn().mockResolvedValue("Sure! Here it is."))).toEqual({ prompt: "un latte", rewritten: false });
+    expect(await rewriteH3Prompt("un latte", 5, vi.fn().mockRejectedValue(new Error("timeout")))).toEqual({ prompt: "un latte", rewritten: false, reason: "llm_error" });
+    expect(await rewriteH3Prompt("un latte", 5, vi.fn().mockResolvedValue("Sure! Here it is."))).toEqual({ prompt: "un latte", rewritten: false, reason: "unusable_output" });
     vi.stubEnv("EVOLINK_API_KEY", "");
     const call = vi.fn();
-    expect(await rewriteH3Prompt("un latte", 5, call)).toEqual({ prompt: "un latte", rewritten: false });
+    expect(await rewriteH3Prompt("un latte", 5, call)).toEqual({ prompt: "un latte", rewritten: false, reason: "not_configured" });
     expect(call).not.toHaveBeenCalled();
   });
 
@@ -65,7 +65,7 @@ describe("rewriteH3Prompt", () => {
     expect(keepAsWritten(GOOD)).toBe(true);
     expect(keepAsWritten("x".repeat(600))).toBe(true);
     expect(keepAsWritten("un latte")).toBe(false);
-    expect(await rewriteH3Prompt(`  ${GOOD}  `, 5, call)).toEqual({ prompt: GOOD, rewritten: false });
+    expect(await rewriteH3Prompt(`  ${GOOD}  `, 5, call)).toEqual({ prompt: GOOD, rewritten: false, reason: "as_written" });
     expect(call).not.toHaveBeenCalled();
   });
 });

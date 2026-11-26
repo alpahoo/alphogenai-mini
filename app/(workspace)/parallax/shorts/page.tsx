@@ -12,7 +12,7 @@ export default function ParallaxShortsPage() {
   const [error, setError] = useState<string | null>(null);
   const [enabled, setEnabled] = useState<boolean | null>(null);
   // H3 only: the proposed English prompt, shown for review and editing before anything is admitted.
-  const [h3Draft, setH3Draft] = useState<{ prompt: string; rewritten: boolean } | null>(null);
+  const [h3Draft, setH3Draft] = useState<{ prompt: string; rewritten: boolean; reason?: string } | null>(null);
   const router = useRouter();
   useEffect(() => { fetch("/api/modules").then((r) => r.json()).then((data) => setEnabled(Boolean(data.modules?.parallax_shorts))).catch(() => setEnabled(false)); }, []);
 
@@ -28,7 +28,7 @@ export default function ParallaxShortsPage() {
     const response = await fetch("/api/parallax/shorts/h3-prompt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt, target_duration_seconds: duration, engine }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || typeof data.prompt !== "string") setError(data.error ?? "Impossible de préparer le prompt H3");
-    else setH3Draft({ prompt: data.prompt, rewritten: data.rewritten === true });
+    else setH3Draft({ prompt: data.prompt, rewritten: data.rewritten === true, reason: typeof data.reason === "string" ? data.reason : undefined });
     setBusy(false);
   }
 
@@ -65,7 +65,9 @@ export default function ParallaxShortsPage() {
       </fieldset>
       {h3 && h3Draft && (
         <label className="block text-sm font-medium">Prompt MiniMax H3
-          <span className="block text-xs font-normal text-muted-foreground">{h3Draft.rewritten ? "Réécrit en anglais au format H3 (scène, caméra, lumière, « Soundscape: ») à partir de votre idée. Vous pouvez le modifier avant de lancer." : "Votre texte est utilisé tel quel. Vous pouvez le modifier avant de lancer."}</span>
+          <span className="block text-xs font-normal text-muted-foreground">{h3Draft.rewritten ? "Réécrit en anglais au format H3 (scène, caméra, lumière, « Soundscape: ») à partir de votre idée. Vous pouvez le modifier avant de lancer."
+            : h3Draft.reason === "as_written" ? "Votre texte est déjà un prompt complet : il est utilisé tel quel. Vous pouvez le modifier avant de lancer."
+            : "La réécriture automatique n’a pas abouti : votre idée est reprise telle quelle. Vous pouvez la réécrire vous-même avant de lancer."}</span>
           <textarea value={h3Draft.prompt} onChange={(e) => setH3Draft({ ...h3Draft, prompt: e.target.value })} maxLength={2000} rows={7} className="mt-2 w-full rounded-xl border bg-background p-3 font-mono text-xs" />
         </label>
       )}

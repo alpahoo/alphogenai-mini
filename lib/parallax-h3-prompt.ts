@@ -33,7 +33,9 @@ export function h3SystemPrompt(seconds: number): string {
   ].join("\n");
 }
 
-export type H3PromptResult = { prompt: string; rewritten: boolean };
+/** Why the idea was kept: already an H3 prompt, no LLM key, LLM error, or an answer that was not an H3 paragraph. */
+export type H3KeptReason = "as_written" | "not_configured" | "llm_error" | "unusable_output";
+export type H3PromptResult = { prompt: string; rewritten: true } | { prompt: string; rewritten: false; reason: H3KeptReason };
 
 /** True when the idea already follows the H3 format or is long enough to be used as written. */
 export function keepAsWritten(idea: string): boolean {
@@ -54,12 +56,18 @@ export function cleanRewrite(raw: string): string | null {
 export async function rewriteH3Prompt(idea: string, seconds: number,
   call: typeof callEvoLinkLLM = callEvoLinkLLM): Promise<H3PromptResult> {
   const trimmed = idea.trim();
-  if (keepAsWritten(trimmed) || !process.env.EVOLINK_API_KEY) return { prompt: trimmed, rewritten: false };
+  if (keepAsWritten(trimmed)) return { prompt: trimmed, rewritten: false, reason: "as_written" };
+  if (!process.env.EVOLINK_API_KEY) {
+    console.warn("[h3-prompt] EVOLINK_API_KEY is not configured: idea kept as written");
+    return { prompt: trimmed, rewritten: false, reason: "not_configured" };
+  }
   try {
     const cleaned = cleanRewrite(await call(h3SystemPrompt(seconds), trimmed));
-    return cleaned ? { prompt: cleaned, rewritten: true } : { prompt: trimmed, rewritten: false };
+    if (cleaned) return { prompt: cleaned, rewritten: true };
+    console.warn("[h3-prompt] LLM answer was not an H3 paragraph: idea kept as written");
+    return { prompt: trimmed, rewritten: false, reason: "unusable_output" };
   } catch (e) {
     console.warn("[h3-prompt] rewrite failed (non-fatal):", e instanceof Error ? e.message : e);
-    return { prompt: trimmed, rewritten: false };
+    return { prompt: trimmed, rewritten: false, reason: "llm_error" };
   }
 }
