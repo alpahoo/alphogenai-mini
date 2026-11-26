@@ -1,9 +1,11 @@
-import {describe,it,expect} from "vitest";
+import {afterEach,beforeEach,describe,it,expect,vi} from "vitest";
 import {graphHash,manifest,resolveTemplate} from "./template";
 import base from "@/workflows/comfy/templates/minimax-h3/graph.t2v.api.json";
 const owner="8b3a3cd3-7c7b-4ba8-9ed5-c124f3176986";
 const input={prompt:"A cinematic landscape",seed:1};
 describe("H3 exported graph binding",()=>{
+  beforeEach(()=>vi.stubEnv("COMFY_H3_LONG_ENABLED","true"));
+  afterEach(()=>vi.unstubAllEnvs());
   it("preserves the validated lab graph and locked turbo settings",()=>{
     const r=resolveTemplate(input,owner);
     expect(r.graph).toEqual({...base,"6":{...base["6"],inputs:{...base["6"].inputs,prompt:input.prompt}}});
@@ -26,6 +28,27 @@ describe("H3 exported graph binding",()=>{
   it("keeps text punctuation and computes official frame counts",()=>{
     expect(resolveTemplate({...input,prompt:"A/B scene \\ cinematic",seconds:5},owner).graph["6"].inputs.length).toBe(124);
     expect(resolveTemplate({...input,seconds:7},owner).graph["6"].inputs.length).toBe(175);
+  });
+  it("defaults to 480p and leaves the validated graph sizes untouched",()=>{
+    const r=resolveTemplate(input,owner);
+    expect(r.params.resolution).toBe("480p");
+    expect(r.graph["6"].inputs).toMatchObject({width:480,height:832,length:124});
+  });
+  it.each([["9:16",704,1280],["16:9",1280,704]])("binds 704p %s at %ix%i, 5 s, turbo",(aspect,width,height)=>{
+    const r=resolveTemplate({...input,resolution:"704p",aspect,seconds:5},owner);
+    expect(r.graph["6"].inputs).toMatchObject({width,height,length:124});
+    expect(r.variant).toBe("t2v");
+    expect(width%32).toBe(0);
+    const i2v=resolveTemplate({...input,resolution:"704p",aspect,first_frame_path:`${owner}/frame.png`},owner);
+    expect(i2v.variant).toBe("i2v");
+    expect(i2v.graph["6"].inputs).toMatchObject({width,height});
+  });
+  it.each([{...input,resolution:"704p",quality:"full"},{...input,resolution:"704p",seconds:6},{...input,resolution:"704p",seconds:10},
+    {...input,resolution:"704p",aspect:"1:1"},{...input,resolution:"1080p"},{...input,resolution:704}])("rejects 704p outside its validated range %#",bad=>expect(()=>resolveTemplate(bad,owner)).toThrow());
+  it("refuses 704p while the long executor is not enabled",()=>{
+    vi.stubEnv("COMFY_H3_LONG_ENABLED","");
+    expect(()=>resolveTemplate({...input,resolution:"704p"},owner)).toThrow("not enabled");
+    expect(resolveTemplate(input,owner).graph["6"].inputs).toMatchObject({width:480,height:832});
   });
   it("hashes independent of object key ordering",()=>{
     const r=resolveTemplate(input,owner);expect(graphHash(Object.fromEntries(Object.entries(r.graph).reverse()))).toBe(r.hash);

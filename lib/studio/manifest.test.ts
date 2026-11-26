@@ -10,7 +10,7 @@ const owner = "8b3a3cd3-7c7b-4ba8-9ed5-c124f3176986";
 describe("Studio manifest helpers (H3)", () => {
   it("splits simple and advanced controls from the manifest, prompt rendered separately", () => {
     expect(paramsByTier(m, "simple").map(p => p.key)).toEqual(["seconds", "aspect", "quality"]);
-    expect(paramsByTier(m, "advanced").map(p => p.key)).toEqual(["seed", "audio_shift_s"]);
+    expect(paramsByTier(m, "advanced").map(p => p.key)).toEqual(["seed", "resolution", "audio_shift_s"]);
   });
 
   it("keeps the audio advance default at 0.4 s and no default seed", () => {
@@ -61,7 +61,7 @@ describe("Studio manifest helpers (H3)", () => {
 
   it("restores run params, drops unknown keys, and can reroll the seed", () => {
     const run = { prompt: "Hello", seconds: 7, aspect: "16:9", quality: "turbo", seed: 42, audio_shift_s: 0.35, steps: 99 };
-    expect(valuesFromRun(m, run, true)).toEqual({ prompt: "Hello", seconds: 7, aspect: "16:9", quality: "turbo", seed: 42, audio_shift_s: 0.35 });
+    expect(valuesFromRun(m, run, true)).toEqual({ prompt: "Hello", seconds: 7, aspect: "16:9", quality: "turbo", resolution: "480p", seed: 42, audio_shift_s: 0.35 });
     expect(valuesFromRun(m, run, false).seed).toBeUndefined();
   });
 

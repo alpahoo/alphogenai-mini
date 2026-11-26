@@ -86,6 +86,16 @@ HARDCODED_ENGINES: dict[str, dict] = {
         "clip_duration": 5.0,
         "priority": 75,
     },
+    "ltx_2_5": {
+        "name": "LTX-2.5",
+        "type": "modal_local",
+        "status": "active",
+        "plans": ["pro", "premium"],
+        "max_duration": 10.0,
+        "gpu": "H100",
+        "clip_duration": 10.0,
+        "priority": 74,
+    },
     "realesrgan_4x": {
         "name": "Real-ESRGAN 4x Upscaler",
         "type": "modal_local",

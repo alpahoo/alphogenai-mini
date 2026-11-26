@@ -86,6 +86,22 @@
       "help": "Turbo uses the validated 8-step LoRA. Full quality has no image-to-video graph."
     },
     {
+      "key": "resolution",
+      "label": "Resolution",
+      "widget": "select",
+      "options": [
+        "480p",
+        "704p"
+      ],
+      "default": "480p",
+      "tier": "advanced",
+      "optionLabels": {
+        "480p": "480p",
+        "704p": "704p"
+      },
+      "help": "704p renders 704 × 1280 (portrait) or 1280 × 704 (landscape), Turbo only, up to 5 seconds, about 6 minutes per clip on the long executor."
+    },
+    {
       "key": "audio_shift_s",
       "label": "Advance audio (seconds)",
       "widget": "number",
@@ -110,6 +126,16 @@
     "1:1": [
       640,
       640
+    ]
+  },
+  "hd_resolutions": {
+    "9:16": [
+      704,
+      1280
+    ],
+    "16:9": [
+      1280,
+      704
     ]
   },
   "locked": [
