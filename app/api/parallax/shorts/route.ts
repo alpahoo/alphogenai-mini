@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isModuleEnabled } from "@/lib/parallax-modules";
+import { screenPrompt } from "@/lib/content-policy";
+import { rewriteH3Prompt } from "@/lib/parallax-h3-prompt";
 import { isH3ShortEngine, resolveShortDuration, resolveShortEngine, shortH3Params, shortSceneCount, shortStudioUrl } from "@/lib/parallax-shorts";
 
 export async function POST(request: NextRequest) {
@@ -12,7 +14,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Parallax Shorts is disabled" }, { status: 404 });
   }
   if (!user) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-  const body = await request.json().catch(() => null) as { prompt?: unknown; target_duration_seconds?: unknown; engine?: unknown } | null;
+  const body = await request.json().catch(() => null) as { prompt?: unknown; target_duration_seconds?: unknown; engine?: unknown; prompt_ready?: unknown } | null;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   if (prompt.length < 3 || prompt.length > 2000) return NextResponse.json({ error: "A short idea is required" }, { status: 400 });
   // Engine chosen on the page; unknown or not-yet-available choices fall back to LTX-2.5.
@@ -23,12 +25,19 @@ export async function POST(request: NextRequest) {
     if ((engine === "h3_turbo_704" || duration > 5) && process.env.COMFY_H3_LONG_ENABLED !== "true") {
       return NextResponse.json({ error: "MiniMax H3 en 704p ou en 10 s attend le déploiement de l’exécuteur long. Choisissez 480p en 5 s." }, { status: 503 });
     }
+    // The page sends the H3 prompt the admin reviewed (prompt_ready). Any other caller gets the same
+    // rewrite server-side; a refused idea is screened before it reaches the rewrite.
+    let h3Prompt = prompt;
+    if (body?.prompt_ready !== true) {
+      if (screenPrompt(prompt).blocked) return NextResponse.json({ error: "Prompt does not meet the current content policy" }, { status: 400 });
+      h3Prompt = (await rewriteH3Prompt(prompt, duration)).prompt;
+    }
     // MiniMax H3 only runs through the isolated Studio pilot: same admin check, gate, budget, content
     // screening and audio correction as a Studio run. Nothing is admitted here directly.
     const admission = await fetch(new URL("/api/admin/comfy/runs", request.url), {
       method: "POST",
       headers: { "Content-Type": "application/json", cookie: request.headers.get("cookie") ?? "" },
-      body: JSON.stringify({ template: "minimax-h3", idempotency_key: randomUUID(), params: shortH3Params(engine, prompt, duration) }),
+      body: JSON.stringify({ template: "minimax-h3", idempotency_key: randomUUID(), params: shortH3Params(engine, h3Prompt, duration) }),
     });
     const data = await admission.json().catch(() => ({})) as { run_id?: unknown; dispatched?: unknown; error?: unknown };
     if (!admission.ok || typeof data.run_id !== "string") {

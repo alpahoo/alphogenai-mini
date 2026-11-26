@@ -71,6 +71,31 @@ describe("Parallax Shorts with MiniMax H3", () => {
     expect(upstream).not.toHaveBeenCalled();
   });
 
+  it("sends the reviewed H3 prompt as is when the page marks it ready", async () => {
+    vi.stubEnv("EVOLINK_API_KEY", "test");
+    const reviewed = "A latte, slow push-in. Soundscape: milk pouring.";
+    await POST(request({ prompt: reviewed, target_duration_seconds: 5, engine: "h3_turbo_480", prompt_ready: true }));
+    expect(upstream).toHaveBeenCalledTimes(1);
+    expect(sent().body.params.prompt).toBe(reviewed);
+  });
+
+  it("rewrites a raw idea server-side before admission when no reviewed prompt is sent", async () => {
+    vi.stubEnv("EVOLINK_API_KEY", "test");
+    const rewritten = "A barista pours milk into a latte on a wooden counter, slow push-in, warm light. Soundscape: milk pouring, café chatter.";
+    upstream.mockImplementation(async (url: URL | string) => String(url).includes("/chat/completions")
+      ? new Response(JSON.stringify({ choices: [{ message: { content: rewritten } }] }), { status: 200 })
+      : new Response(JSON.stringify({ run_id: RUN, dispatched: true }), { status: 202 }));
+    await POST(request({ prompt: "un latte art en cœur", target_duration_seconds: 5, engine: "h3_turbo_480" }));
+    const admission = upstream.mock.calls.find(([url]) => String(url).includes("/api/admin/comfy/runs")) as [URL, RequestInit];
+    expect(JSON.parse(String(admission[1].body)).params.prompt).toBe(rewritten);
+  });
+
+  it("refuses an idea the content policy blocks before any rewrite or admission", async () => {
+    vi.stubEnv("EVOLINK_API_KEY", "test");
+    expect((await POST(request({ prompt: "Mickey Mouse dancing", target_duration_seconds: 5, engine: "h3_turbo_480" }))).status).toBe(400);
+    expect(upstream).not.toHaveBeenCalled();
+  });
+
   it("keeps LTX-2.5 on the jobs pipeline", async () => {
     upstream.mockResolvedValue(new Response(JSON.stringify({ job: { id: "job-1" } }), { status: 201 }));
     await POST(request({ prompt: "A chef plates a dessert", target_duration_seconds: 10, engine: "ltx_2_5" }));
