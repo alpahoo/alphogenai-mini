@@ -37,6 +37,7 @@ import {
 import { enhancePrompt } from "@/lib/prompt-enhancer";
 import type { JobPlan, ReferencePayload } from "@/lib/types";
 import { assertCanCreateJob } from "@/lib/jobs/guard";
+import { isModuleEnabled } from "@/lib/parallax-modules";
 import { buildVoiceoverScript, type VoiceoverScene } from "@/lib/voiceover/voiceover-script";
 
 // LLM calls (enhancePrompt + enrichStoryboardWithLLM) can add 4-8 s on top of
@@ -93,6 +94,15 @@ export async function POST(req: Request) {
     const {
       data: { user },
     } = await authClient.auth.getUser();
+
+    // Parallax Remix submits through this route: when the module is switched off in /admin/modules (or is
+    // admin-only and the caller is not an administrator), refuse before any provider call or row write.
+    if (req.headers.get("x-alphogen-module") === "parallax_remix") {
+      if (!user) return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+      if (!(await isModuleEnabled("parallax_remix", user))) {
+        return NextResponse.json({ error: "parallax_remix is disabled" }, { status: 404 });
+      }
+    }
 
     const supabase = createServiceClient();
     const body = await req.json();

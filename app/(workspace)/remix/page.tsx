@@ -48,53 +48,55 @@ export default function RemixPage() {
   }
 
   useEffect(() => {
-    fetch("/api/modules").then((response) => response.json()).then((data) => setEnabled(Boolean(data.modules?.parallax_remix))).catch(() => setEnabled(false));
-    void loadSources();
+    // The private history is only read once the module is confirmed on for this viewer.
+    fetch("/api/modules").then((response) => response.json())
+      .then((data) => { const on = Boolean(data.modules?.parallax_remix); setEnabled(on); if (on) void loadSources(); else setLoading(false); })
+      .catch(() => { setEnabled(false); setLoading(false); });
   }, []);
 
   if (enabled === false) {
-    return <div className="min-h-screen bg-[#f5f3ee] px-5 py-8 sm:px-8"><div className="mx-auto max-w-2xl rounded-2xl border border-neutral-200 bg-white p-6"><h1 className="text-2xl font-semibold text-neutral-950">Parallax Remix désactivé</h1><p className="mt-2 text-sm text-neutral-600">Un administrateur doit réactiver ce module pour démarrer une nouvelle action.</p></div></div>;
+    return <div className="min-h-screen bg-background px-4 py-8 sm:px-8"><div className="mx-auto max-w-2xl rounded-2xl border border-border bg-card p-6 text-card-foreground"><h1 className="text-2xl font-semibold">Parallax Remix is turned off</h1><p className="mt-2 text-sm text-muted-foreground">An administrator must turn this module back on before a new remix can start.</p></div></div>;
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f3ee] px-5 py-8 sm:px-8 lg:px-10">
+    <div className="min-h-screen bg-background px-4 py-8 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-8 flex flex-col gap-5 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm sm:flex-row sm:items-end sm:justify-between">
+        <div className="mb-8 flex flex-col gap-5 rounded-2xl border border-border bg-card p-5 text-card-foreground shadow-sm sm:p-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-violet-800">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-violet-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
               <Sparkles className="h-3.5 w-3.5" /> Parallax Remix
             </div>
-            <h1 className="text-3xl font-semibold tracking-tight text-neutral-950 sm:text-4xl">Bring a finished video to life</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600">
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Bring a finished video to life</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
               Choose one of your private completed videos, describe the new motion, and continue in the existing video composer. The source stays in your account and the new result is saved as its own job.
             </p>
           </div>
-          <button type="button" onClick={() => void loadSources()} className="inline-flex items-center justify-center gap-2 rounded-xl border border-neutral-200 px-4 py-2.5 text-sm font-semibold text-neutral-800 hover:bg-neutral-50">
+          <button type="button" onClick={() => void loadSources()} className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold hover:bg-muted">
             <RefreshCw className="h-4 w-4" /> Refresh history
           </button>
         </div>
 
-        {loading && <div className="flex items-center justify-center rounded-2xl border border-neutral-200 bg-white p-12 text-sm text-neutral-500"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading your private history…</div>}
-        {!loading && error && <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">{error}</div>}
-        {!loading && !error && sources.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-neutral-300 bg-white p-10 text-center">
-            <Film className="mx-auto h-8 w-8 text-neutral-400" />
-            <h2 className="mt-3 text-lg font-semibold text-neutral-900">No completed video yet</h2>
-            <p className="mt-1 text-sm text-neutral-500">Create a private video first, then come back here to remix it.</p>
-            <Link href="/create/story" className="mt-5 inline-flex items-center gap-2 rounded-xl bg-neutral-950 px-4 py-2.5 text-sm font-semibold text-white">Open video creator <ArrowRight className="h-4 w-4" /></Link>
+        {loading && <div className="flex items-center justify-center rounded-2xl border border-border bg-card p-12 text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading your private history…</div>}
+        {enabled && !loading && error && <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-5 text-sm text-destructive">{error}</div>}
+        {enabled && !loading && !error && sources.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
+            <Film className="mx-auto h-8 w-8 text-muted-foreground" />
+            <h2 className="mt-3 text-lg font-semibold">No completed video yet</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Create a private video first, then come back here to remix it.</p>
+            <Link href="/create/story" className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground">Open video creator <ArrowRight className="h-4 w-4" /></Link>
           </div>
         )}
 
-        {!loading && !error && sources.length > 0 && (
+        {enabled && !loading && !error && sources.length > 0 && (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {sources.map((source) => (
-              <article key={source.id} className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
+              <article key={source.id} className="overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-sm">
                 <div className="aspect-video bg-neutral-900">
                   {source.output_url_final ? <video className="h-full w-full object-cover" src={source.output_url_final} controls preload="metadata" /> : null}
                 </div>
                 <div className="space-y-3 p-4">
-                  <p className="line-clamp-3 min-h-[4.5rem] text-sm font-semibold leading-6 text-neutral-900">{source.prompt}</p>
-                  <p className="text-xs text-neutral-500">{new Date(source.created_at).toLocaleString()} {source.target_duration_seconds ? `· ${source.target_duration_seconds}s` : ""}</p>
+                  <p className="line-clamp-3 min-h-[4.5rem] break-words text-sm font-semibold leading-6">{source.prompt}</p>
+                  <p className="text-xs text-muted-foreground">{new Date(source.created_at).toLocaleString()} {source.target_duration_seconds ? `· ${source.target_duration_seconds}s` : ""}</p>
                   <Link href={`/create/remix?reference_job_id=${encodeURIComponent(source.id)}`} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-800">
                     Remix this video <ArrowRight className="h-4 w-4" />
                   </Link>
