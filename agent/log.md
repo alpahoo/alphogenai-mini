@@ -3472,3 +3472,35 @@ Restent (lot avant-payant, GO requis) : DB-first reservation, quota atomique, po
 - Studio displays distinct start, execution, cancellation, submission and SDK errors; business logs include only UUID/fixed code. CI includes the new CPU suite.
 - Validation: 1,230 Vitest tests (113 files), 32 Python tests, TypeScript and production build PASS (existing lint warnings). Actual SDK with fake transport proves pre-start cancellation, input-plane metadata handling and >3MiB frame decoding. Regression covers no first frame, 210s/300s start guards, callback/database failure, wrong header, result timeout, cancellation failure and H3 behavior. Earlier fixture setup errors corrected before broad validation.
 - No merge, deploy, remote migration, model preparation, permit change or paid GPU. Next: review/merge and manual deploy only after owner approval; preserve closed gate and require separate approval for one real run.
+
+## 2026-11-23 — Codex — Parallax Video lot cadré
+- Branche `codex/parallax-video-lot` créée depuis `main`, commit `6286b08`, poussée et PR brouillon #121 ouverte.
+- Réutilisation documentée : jobs, références privées/signées, garde quota/plan, retry et UI Create mobile. `main` ne contient pas le manifest/route H3 admin ; aucun provider n’a été appelé.
+- `git diff --check` passe. Vitest n’a pas pu démarrer dans ce worktree vierge (`vitest/config` non résolu, dépendances absentes) ; la CI/installation reste à faire.
+
+
+## 2026-11-23 - Claude - Parallax Video lot (#121)
+- Cause du faux blocage : la branche partait de 01cdc54 (2026-07-31), 95 commits derriere main, avant le chemin H3 admin (7d3e7e2, 47ac9d2). main fusionne (7226a9c). Le manifest H3 est `workflows/comfy/templates/minimax-h3/manifest.json`, la route admin `app/api/admin/comfy/runs/route.ts` (+ `[id]`, `history`, `media/[id]`).
+- Premier Vitest de la branche : 146 fichiers / 1599 tests verts avant mes ajouts. Aucun run GitHub Actions n'existait sur #121 : le filtre `paths` de `comfy-admin-tests.yml` ignore les PR purement docs.
+- Ajouts : `runs/[id]/owner-scoping.test.ts` (6 tests) et `media/[id]/signed-url.test.ts` (4 tests), verifies par 5 mutations (chacune fait echouer au moins un test). `docs/parallax-video-lot.md` reecrit avec les faits corrects.
+- Lecture seule, catalogue uniquement : staging `hhearpympdflxyfmszap` (`jobs.prompt` NOT NULL ; aucun droit anon/authenticated sur comfy_* et cinema_*). Production non consultee.
+
+## 2026-11-23 - Codex - Parallax Video #121 implementation
+- Reprise depuis `922c994` dans `alphogenai-video-lot`; aucun provider, staging, production, migration ou secret touché.
+- Ajout de `lib/studio/parallax-video.ts` et de ses tests : révision Parallax figée `a98671e3c47fdb12c42789aee821268aa8f23f6c`, MIT, contrat H3 admin, historique, reprise et médias privés. Le Studio affiche le parcours `Parallax Video` uniquement pour H3 et conserve la porte serveur/quota.
+- Mise à jour de `docs/parallax-video-lot.md`, `agent/tasks.md` et `agent/review.md` pour remplacer l'ancien faux blocage documentaire et décrire les limites de la recette sans génération.
+- Vérifications : `git diff --check` PASS; Vitest `149 files / 1612 tests` PASS; `npx tsc --noEmit -p tsconfig.json` PASS; `npm run build` PASS avec avertissements préexistants. `npm ci` requis car `node_modules` était incomplet.
+- Suite : commit/push, CI et Preview; recette hébergée avec un run H3 staging déjà terminé, sans cliquer sur Generate.
+
+## 2026-11-23 - Claude - Parallax Video #121 : ecran Video greffe
+- Ecran `/admin/studio/video` (components/studio/video/*, lib/studio/video-screen.ts, video-examples.ts) greffe depuis Parallax a98671e (MIT, notice dans components/studio/video/LICENSE-parallax.txt) : disposition a deux volets, exemples, tuiles d'historique, fenetre de details, structure du formulaire. Branche sur useStudio (memes routes admin, porte, quota, reservation, historique et liens signes). Aucune route, table, migration ou fournisseur.
+- Tests ajoutes : 17 (helpers purs et rendu des tuiles), verifies par 4 mutations. Codex a ajoute lib/studio/parallax-video.ts (+ test) ; fusion 556678a.
+- Recette locale (Supabase local + simulateur HTTPS, compte de test local) : exemple -> reference de bibliotheque -> Generate -> tuile en cours -> video -> details -> telechargement Corrected (200, MP4 1,48 Mo) -> rechargement complet -> meme resultat retrouve et telechargeable ; lien ?run= ; Reuse settings. Base : run done, reference de bibliotheque, un permis consomme.
+- Recette Preview NON faite : la Preview de la branche est reliee a la production (voir agent/review.md).
+
+
+## 2026-11-23 - Codex - Preview finale #121
+- Commit local rebased et poussé : `b7d59bf` (Claude `db17dad` conservé comme parent immédiat).
+- Vercel Preview du SHA `b7d59bf` READY : `https://nextjs-with-supabase-l5zv-21ldctbcl-paul-alains-projects.vercel.app` ; CI `free-tests` et Preview Comments vertes.
+- Recette hébergée tentée sur `/admin/studio/video` : la page de login répond, mais `cinema-admin-staging@example.com` est rejeté par `Invalid login credentials`. Aucun parcours authentifié, téléchargement ou génération n'est déclaré ; blocage exact : compte/variables Supabase Auth de la Preview ne correspondent pas au compte staging préautorisé.
+- Commentaire de preuve ajouté à la PR #121 (id `7092994274`). PR toujours brouillon, aucune fusion, production ou génération payante.

@@ -44,8 +44,8 @@ const ESTIMATES: Record<string, CostEstimate> = {
     basis: "Estimate from Modal rates; never measured on L40S.",
   },
   "h3-video@1/H100": {
-    low_usd: 0.15, high_usd: 0.30, measured: false,
-    basis: "Estimate for a 5 s turbo clip (first pilot; invoice not yet reconciled).",
+    low_usd: 0.11, high_usd: 0.30, measured: true,
+    basis: "Measured in production on 26 Nov 2026 (Modal, H100, EU): 480p 5 s about 0.11 USD, 704p 5 s about 0.17 USD. 480p 10 s not measured yet.",
   },
 };
 

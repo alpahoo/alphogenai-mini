@@ -145,6 +145,12 @@ export function validateValues(manifest: StudioManifest, values: ParamValues): R
       if (!p.options?.includes(String(v))) errors[p.key] = "Choose an option";
     }
   }
+  // 704p (H3): same limits as the server binder in lib/comfy/template.ts.
+  if (values.resolution === "704p" && manifest.hd_resolutions) {
+    if (values.quality !== undefined && values.quality !== "turbo") errors.resolution ??= "704p is available in Turbo only";
+    if (Number(values.seconds) > 5) errors.seconds ??= "704p is limited to 5 seconds";
+    if (!manifest.hd_resolutions[String(values.aspect)]) errors.aspect ??= "704p is available in portrait and landscape only";
+  }
   return errors;
 }
 

@@ -1594,3 +1594,23 @@ Réfs : revue Codex 2026-07-16 ; `agent/log.md` (entrée durcissement).
 ## MOSS-QUEUE-CANCEL — 2026-11-09 — owner: codex — code_ready
 - Explicit user request: fix queued MOSS calls surviving broker timeout. Branch codex/moss-queue-cancellation; no merge, deploy, permit or paid GPU authorized.
 - Scope: capture native SDK invocation ID before GPU start; persist and cancel on 300s start timeout; separate total result deadline; safe error codes/UI; free SDK/RPC and broker regressions. H3 stream and both GPU definitions remain unchanged.
+
+## PARALLAX-VIDEO-LOT — 2026-11-23 — inventory and smallest draft slice
+- Start from `main` on `codex/parallax-video-lot`; do not invoke a provider, alter production, or add secrets.
+- Inventory the reusable authenticated job, reference, signed-storage, quota and retry paths, and record the missing H3 admin manifest/admission seam before implementing it.
+
+## PARALLAX-VIDEO-LOT (#121) - 2026-11-23 - owner: claude - in_progress
+- Reprise de la PR #121 (brouillon) a la demande du proprietaire. Le worktree de Codex `Documents/Codex/alphogenai-video-lot` etait propre, sans commit depuis 05:23, et le blocage qu'il avait note venait d'une base perimee. Ne pas reprendre cette tache sans en parler : branche locale de travail `claude/video-lot-121`, poussee vers `codex/parallax-video-lot` (fast-forward uniquement, jamais de force).
+- Perimetre : `main` fusionne dans la branche, document corrige, tests de garanties existantes sur le chemin H3 admin. Aucun fournisseur, aucune migration, aucun staging ni production touches, aucune fusion.
+- Critere : Vitest complet, tsc, lint et build verts ; CI executee sur la PR ; PR reste en brouillon.
+
+## PARALLAX-VIDEO-LOT (#121) — continuation Codex — 2026-11-23 — owner: codex — in_progress
+- Reprendre la branche après `922c994` dans le worktree dédié, sans génération fournisseur, migration, production ni fusion.
+- Livrer l’adaptateur visible Parallax Video dans le Studio H3 : référence privée, préparation contrôlée par le manifest, historique/reprise et résultat privé lisible/téléchargeable après rechargement.
+- Réutiliser les routes/jobs/médias privés AlphoGenAI et conserver `lib/cinema/LICENSE-parallax.txt`; ajouter des tests de contrat et de parcours sans appeler de provider.
+- Critères : Vitest, tsc, build, CI et Preview READY ; une recette hébergée sur un run staging déjà terminé ou dispatcher simulé ; PR #121 conservée en brouillon.
+
+## PARALLAX-VIDEO-LOT (#121) - coordination - 2026-11-23 - owner: claude (ecran) / codex (adaptateur) - code ready
+- Deux agents ont travaille sur la branche en parallele : Claude a livre l'ecran `/admin/studio/video` (db17dad, df2a7ef), Codex a pousse `lib/studio/parallax-video.ts` et son badge (b7d59bf) par-dessus db17dad. Fusion propre dans 556678a. Le badge est maintenant un lien vers l'ecran.
+- Regle pour la suite : `git fetch` avant tout push sur cette branche, jamais de force. Une seule personne par tache `in_progress`.
+- Reste : la recette depuis la Preview est BLOQUEE (voir agent/review.md : la Preview de cette branche est reliee a la production). Il faut des variables Preview propres a la branche vers le staging, comme pour #119 et #120 : changement Vercel avec la cle de service du staging, a decider par le proprietaire. Ne pas se connecter a cette Preview en l'etat.

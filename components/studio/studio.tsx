@@ -9,6 +9,8 @@ import { HistoryRail } from "./history-rail";
 import { ResultStage } from "./result-stage";
 import { useStudio } from "./use-studio";
 import { useStudioDark } from "@/lib/studio/theme";
+import { isParallaxVideoModel } from "@/lib/studio/parallax-video";
+import Link from "next/link";
 
 type MobileTab = "create" | "result" | "history";
 
@@ -37,8 +39,11 @@ export function Studio() {
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-primary to-fuchsia-500 text-white shadow-md shadow-primary/30"><Sparkles className="h-4 w-4" /></span>
             <div className="min-w-0 leading-tight">
-              <p className="text-sm font-semibold tracking-tight">Studio</p>
-              <p className="truncate text-[11px] text-muted-foreground">Create · {s.model.title} · Private admin</p>
+              <p className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+                Studio
+                {isParallaxVideoModel(s.model.slug) && <Link href="/admin/studio/video" title="Open the Video screen" className="rounded-full border border-primary/30 px-1.5 py-px text-[10px] font-medium text-primary transition hover:bg-primary/10">Parallax Video</Link>}
+              </p>
+              <p className="truncate text-[11px] text-muted-foreground">Create · {s.model.title} · Reference → private result</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
