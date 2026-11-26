@@ -31,8 +31,14 @@ export function VideoDetail({ s, open, onClose }: { s: StudioState; open: boolea
     window.addEventListener("keydown", onKey);
     return () => { window.removeEventListener("keydown", onKey); before?.focus?.(); };
   }, [open, onClose]);
-  // "Reuse settings" loads the form: the dialog has done its job.
-  useEffect(() => { if (open && /^Settings/.test(s.notice)) onClose(); }, [open, s.notice, onClose]);
+  // A new "Reuse settings" / "New seed" loads the form: the dialog has done its job. Reacting to the action counter (not
+  // to the notice text, which lingers) keeps details openable afterwards.
+  const seenReuses = useRef(s.reuses);
+  useEffect(() => {
+    if (s.reuses === seenReuses.current) return;
+    seenReuses.current = s.reuses;
+    if (open) onClose();
+  }, [open, s.reuses, onClose]);
 
   if (!open) return null;
   return (

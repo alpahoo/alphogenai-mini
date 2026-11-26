@@ -97,7 +97,7 @@ export function VideoForm({ s }: { s: StudioState }) {
                 isOptionSupported={o => optionSupported(manifest, values, !!s.reference, p.key, o)} />
             ))}
 
-            <Link href="/admin/studio" className="flex items-center justify-between rounded-2xl border border-border/60 px-4 py-3 text-sm text-muted-foreground transition hover:bg-muted/30 hover:text-foreground">
+            <Link href={`/admin/studio?model=${encodeURIComponent(model.slug)}`} onClick={s.handOff} className="flex items-center justify-between rounded-2xl border border-border/60 px-4 py-3 text-sm text-muted-foreground transition hover:bg-muted/30 hover:text-foreground">
               <span>More settings, presets and the assistant</span><ExternalLink className="h-4 w-4" aria-hidden />
             </Link>
 

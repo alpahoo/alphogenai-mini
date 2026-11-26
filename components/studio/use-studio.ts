@@ -10,6 +10,7 @@ import { anySignal, startRunPolling } from "@/lib/studio/run-poller";
 import type { Readiness, ReferenceImage, SignedMedia, StudioAsset, StudioRun } from "./types";
 import { parseServerBlockers, studioBlockers } from "@/lib/studio/blockers";
 import { useStudioAssistant } from "./use-assistant";
+import { saveHandoff, takeHandoff } from "@/lib/studio/draft-handoff";
 import { applyBuiltinPreset, presetNotice, type BuiltinPreset } from "@/lib/studio/builtin-presets";
 
 async function json<T>(res: Response): Promise<T> {
@@ -97,11 +98,22 @@ export function useStudio() {
     }
   }, [loadRun, selection]);
 
+  const handoff = useRef<ReturnType<typeof takeHandoff> | undefined>(undefined);
   // Initial load: model, run from URL (keeps the old /admin/workflows/minimax-h3?run= links working).
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const m = findModel(q.get("model"));
     if (m?.manifest) { setModelState(m); setValues(defaultValues(m.manifest)); }
+    // A draft handed over by another Studio screen (Video -> "More settings") is restored once.
+    const target = m?.manifest ? m : STUDIO_MODELS[0];
+    // Taken once per mount (kept in a ref, so a second run of this effect, e.g. React Strict Mode, still sees it).
+    if (handoff.current === undefined) handoff.current = target.manifest ? takeHandoff(target.slug, target.manifest) : null;
+    const draft = handoff.current;
+    if (draft && target.manifest) {
+      setValues({ ...defaultValues(target.manifest), ...draft.values });
+      if (draft.reference) setReference(draft.reference);
+      setNotice("Your draft from the Video screen was carried over.");
+    }
     const run = q.get("run");
     if (run) void openRun(run);
     // No run in the URL: reopen the most recent still-active run so it is polled (and expired by the server if abandoned)
@@ -276,13 +288,19 @@ export function useStudio() {
     } catch { setError("Download link unavailable"); }
   }, [signMedia]);
 
+  // Counts "Reuse settings" / "New seed" actions, so a dialog can react to a new one rather than to a lingering notice.
+  const [reuses, setReuses] = useState(0);
   const reuse = useCallback((run: StudioRun, keepSeed: boolean) => {
     if (!manifest) return;
     setValues(valuesFromRun(manifest, run.params_effective, keepSeed));
     // A private reference from another run is not re-attached automatically.
     setReference(null);
     setNotice(keepSeed ? "Settings and seed loaded. Generate to create a new run." : "Settings loaded with a new random seed.");
+    setReuses(n => n + 1);
   }, [manifest]);
+
+  /** Saves the current draft for the next Studio screen opened in this tab. */
+  const handOff = useCallback(() => saveHandoff({ model: model.slug, values, reference }), [model.slug, values, reference]);
 
   // Comparison is per displayed run: switching runs resets it.
   useEffect(() => setCompareWith(null), [current?.id]);
@@ -317,7 +335,7 @@ export function useStudio() {
     model, manifest, values, setValue, applyValues, applyPreset, selectModel, errors, variant,
     reference, uploadReference, selectLibraryReference, clearReference,
     readiness, history, historyError, refreshHistory, current, openRun, activeRun,
-    generate, canGenerate, blockers, blockerList, busy, error, setError, notice, setNotice, retryDispatch, removeRun,
+    generate, canGenerate, blockers, blockerList, busy, error, setError, notice, setNotice, retryDispatch, removeRun, reuses, handOff,
     media, signMedia, download, reuse, compareWith, setCompareWith, compareCandidates,
     assistant,
   };
