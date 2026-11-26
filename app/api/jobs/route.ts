@@ -656,6 +656,7 @@ export async function POST(req: Request) {
       const storyboardBase = generateStoryboard(enhancedPrompt, safeDuration, plan, {
         maxClipDuration: engineMaxClip,
         forcedScenes,
+        engine: safePreferredEngine as import("@/lib/types").EngineKey | undefined,
       });
       // For multi-scene jobs: enrich each scene with distinct LLM-crafted prompts
       storyboard = await enrichStoryboardWithLLM(storyboardBase, enhancedPrompt);

@@ -100,8 +100,13 @@ export function generateStoryboard(
     forcedScenes?: number;
     /** Override the default per-clip target length (rarely needed). */
     clipDuration?: number;
+    /** Engine the job will actually run on (the user's preferred engine).
+     *  Recorded on every scene so job_scenes and the editor show the real
+     *  engine instead of the Wan default. */
+    engine?: EngineKey;
   } = {}
 ): StoryboardEntry[] {
+  const sceneEngine: EngineKey = opts.engine ?? DEFAULT_ENGINE;
   // Clamp target_duration to plan limit
   const maxDur = PLAN_MAX_DURATION[plan] ?? PLAN_MAX_DURATION.free;
   const td = Math.max(Math.min(targetDuration, maxDur), MIN_CLIP_DURATION);
@@ -135,7 +140,7 @@ export function generateStoryboard(
     return capped.map((s, i) => ({
       scene_index: i,
       prompt: s.prompt.slice(0, 1000),
-      engine: DEFAULT_ENGINE,
+      engine: sceneEngine,
       duration_sec: sceneDur,
     }));
   }
@@ -153,7 +158,7 @@ export function generateStoryboard(
     return Array.from({ length: n }, (_, i) => ({
       scene_index: i,
       prompt: scenePrompt(prompt, i, n),
-      engine: DEFAULT_ENGINE,
+      engine: sceneEngine,
       duration_sec: sceneDur,
     }));
   }
@@ -189,7 +194,7 @@ export function generateStoryboard(
     scenes.push({
       scene_index: i,
       prompt: scenePrompt(prompt, i, numScenes),
-      engine: DEFAULT_ENGINE,
+      engine: sceneEngine,
       duration_sec: Math.round(sceneDur * 10) / 10,
     });
     remaining -= sceneDur;
