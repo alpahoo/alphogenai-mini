@@ -1,0 +1,84 @@
+// Prepare the LOCAL stack for the talking-avatar rehearsal. Idempotent. Never touches a cloud project.
+//
+//   node tools/avatar-local/setup.mjs
+//
+// 1. replays supabase/migrations one file per transaction (the historical chain does not replay on a blank database;
+//    exactly the five documented historical files may fail, and the H3, MOSS and avatar migrations must apply);
+// 2. writes the git-ignored .env.local from `supabase status` (keys are never printed);
+// 3. creates two local admin accounts (avatar-a / avatar-b @example.test) with random passwords, both "premium";
+// 4. opens the LOCAL gate of longcat-avatar@1 for account A only (10 runs, 10 USD, 4 hours).
+import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import path from "node:path";
+import { ROOT, psql, serviceClient, assertLocal } from "./lib.mjs";
+
+const KNOWN_FAILURES = {
+  "20251002_add_notes.sql": 'syntax error at or near "not"',
+  "20260608_byteplus_assets_thumb_and_update_policy.sql": 'relation "public.byteplus_assets" does not exist',
+  "20260609_enable_rls_app_settings.sql": 'relation "public.app_settings" does not exist',
+  "20260609_harden_function_search_path.sql": "function public.set_timestamp() does not exist",
+  "20260622_add_podcast_render_columns.sql": 'relation "public.podcasts" does not exist',
+};
+const MUST_APPLY = ["20261108_comfy_admin_h3.sql", "20261109_comfy_moss_image.sql", "20261123_comfy_longcat_avatar.sql"];
+
+const already = psql("select to_regclass('public.comfy_runtime_gates') is not null;").stdout === "t";
+if (!already) {
+  const dir = path.join(ROOT, "supabase/migrations");
+  const files = readdirSync(dir).filter((f) => /^\d{8}.*\.sql$/.test(f)).sort();
+  const applied = [], failed = {};
+  for (const f of files) {
+    const r = psql("", { file: path.join(dir, f) });
+    if (r.ok) applied.push(f); else failed[f] = r.error.replace(/^ERROR:\s*/, "");
+  }
+  console.log(`applied=${applied.length} failed=${Object.keys(failed).length}`);
+  let ok = true;
+  for (const f of MUST_APPLY) if (!applied.includes(f)) { ok = false; console.log("UNEXPECTED: " + f + " did not apply" + (failed[f] ? " :: " + failed[f] : "")); }
+  for (const [f, msg] of Object.entries(failed)) if (!(f in KNOWN_FAILURES) || !msg.includes(KNOWN_FAILURES[f])) { ok = false; console.log("UNEXPECTED FAILURE: " + f + " :: " + msg); }
+  if (!ok) process.exit(1);
+  console.log("REPLAY OK: only the five documented historical failures; avatar migration applied.");
+} else console.log("database already prepared (comfy_runtime_gates exists); skipping the replay");
+
+const ENV_FILE = path.join(ROOT, ".env.local");
+const readEnv = () => existsSync(ENV_FILE) ? Object.fromEntries(readFileSync(ENV_FILE, "utf8").split(/\r?\n/).filter((l) => l && !l.startsWith("#") && l.includes("=")).map((l) => { const i = l.indexOf("="); return [l.slice(0, i), l.slice(i + 1)]; })) : {};
+let env = readEnv();
+if (!env.SUPABASE_SERVICE_ROLE_KEY || !env.NEXT_PUBLIC_SUPABASE_URL) {
+  const r = spawnSync("npx", ["--yes", "supabase@3.2.0", "status", "-o", "env"], { cwd: ROOT, encoding: "utf8", shell: process.platform === "win32" });
+  if (r.status !== 0) throw new Error("`supabase status` failed: is the local stack running?");
+  const s = Object.fromEntries(String(r.stdout).split(/\r?\n/).filter((l) => l.includes("=")).map((l) => { const i = l.indexOf("="); return [l.slice(0, i), l.slice(i + 1).replace(/^"|"$/g, "")]; }));
+  env = { ...env, NEXT_PUBLIC_SUPABASE_URL: s.API_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY: s.ANON_KEY, SUPABASE_SERVICE_ROLE_KEY: s.SERVICE_ROLE_KEY };
+}
+assertLocal(env.NEXT_PUBLIC_SUPABASE_URL);
+const db = serviceClient(env);
+
+const users = { A: "avatar-a@example.test", B: "avatar-b@example.test" };
+env.NEXT_PUBLIC_ADMIN_EMAILS = Object.values(users).join(",");
+env.NEXT_PUBLIC_SITE_URL = "http://localhost:3000";
+const existing = (await db.auth.admin.listUsers({ perPage: 200 })).data?.users ?? [];
+for (const [key, email] of Object.entries(users)) {
+  let u = existing.find((x) => x.email === email);
+  if (!u) {
+    const password = randomBytes(18).toString("base64url");
+    const made = await db.auth.admin.createUser({ email, password, email_confirm: true });
+    if (made.error) throw new Error("createUser " + email + ": " + made.error.message);
+    u = made.data.user; env[`LOCAL_TEST_USER_${key}_PASSWORD`] = password;
+  } else if (!env[`LOCAL_TEST_USER_${key}_PASSWORD`]) {
+    const password = randomBytes(18).toString("base64url");
+    const upd = await db.auth.admin.updateUserById(u.id, { password });
+    if (upd.error) throw new Error("updateUser " + email + ": " + upd.error.message);
+    env[`LOCAL_TEST_USER_${key}_PASSWORD`] = password;
+  }
+  env[`LOCAL_TEST_USER_${key}_ID`] = u.id; env[`LOCAL_TEST_USER_${key}_EMAIL`] = email;
+}
+writeFileSync(ENV_FILE, [
+  "# LOCAL ONLY (git-ignored). Generated by tools/avatar-local/setup.mjs from the local Supabase stack.",
+  "# Never copy these values to Vercel or production. COMFY_* variables are deliberately absent:",
+  "# generation stays locked unless you start the simulated dispatcher (tools/avatar-local/dev.mjs --simulated).",
+  ...Object.entries(env).map(([k, v]) => `${k}=${v}`), "",
+].join("\n"), { mode: 0o600 });
+const A = env.LOCAL_TEST_USER_A_ID, B = env.LOCAL_TEST_USER_B_ID;
+const set = psql(`update public.profiles set plan='premium' where id in ('${A}','${B}'); select count(*) from public.profiles where id in ('${A}','${B}') and plan='premium';`);
+if (set.stdout.split("\n").pop() !== "2") throw new Error("Could not set the local premium plan: " + (set.error || set.stdout));
+const gate = psql(`update public.comfy_runtime_gates set enabled=true, licence_confirmed_at=now(), allowed_user_id='${A}', expires_at=now()+interval '4 hours', remaining_runs=10, budget_usd=10, committed_usd=0 where runtime='longcat-avatar@1'; select enabled from public.comfy_runtime_gates where runtime='longcat-avatar@1';`);
+if (gate.stdout.split("\n").pop() !== "t") throw new Error("Could not open the local gate: " + (gate.error || gate.stdout));
+console.log("accounts ready (A: gate owner, B: other admin, both premium locally); local gate opened for A only; env written to .env.local");

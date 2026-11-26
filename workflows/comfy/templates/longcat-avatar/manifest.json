@@ -1,0 +1,18 @@
+{
+  "schema": "alphogen.comfy.manifest/1",
+  "slug": "longcat-avatar",
+  "title": "Talking avatar",
+  "runtime": "longcat-avatar@1",
+  "version": 1,
+  "access": "admin",
+  "variants": {"audio": "avatar"},
+  "params": [
+    {"key": "prompt", "label": "Scene prompt", "widget": "text", "required": false, "maxLength": 600, "tier": "advanced",
+     "help": "Optional. Default: front-facing close-up, natural expression, mouth clearly visible."},
+    {"key": "seed", "label": "Seed", "widget": "number", "min": 0, "max": 2147483647, "step": 1, "tier": "advanced",
+     "help": "Leave empty for a random seed."}
+  ],
+  "locked": ["resolution", "steps", "precision", "model"],
+  "outputs": [{"kind": "video", "mime": "video/mp4"}],
+  "studio": {"kind": "video", "modes": ["audio-to-video"], "variant_axes": []}
+}

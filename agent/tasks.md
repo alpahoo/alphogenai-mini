@@ -130,6 +130,13 @@ Format d'une tâche :
 - Related delivered commit: `51bdbdc` (premium sync failure details in UI), pushed and validated with 950 tests, tsc, and build.
 - Risk: paid provider calls. No more than one targeted retry after the cause is understood.
 
+### [T-1171] LongCat avatar parlant dans le Studio admin (integration) - `status: in_progress` - `owner: claude`
+- Objectif : parcours admin portrait prive + audio prive -> MP4 d'environ 10 s (H100, INT8, 8 etapes, 480p), suivi d'etat, lecture/telechargement/suppression dans la bibliotheque, jobs et stockage prives existants, controle de propriete cote serveur, relances sans rendu en double, worker scale-to-zero. Page dediee `/admin/studio/avatar`.
+- Dependance : PR #124 (T-1170) pour le volume de poids `alphogenai-longcat-avatar-poc-weights` et les mesures ; aucun fichier en commun. Coordination Codex (#119 Cinema, #123 Parallax) : voir `docs/implementation/longcat-avatar-studio.md` (tableau des fichiers partages).
+- Fichiers : `lib/avatar/*`, `app/api/admin/studio/audio/*`, `components/studio/avatar/*`, `app/(admin)/admin/studio/avatar/page.tsx`, `lib/comfy/templates.ts`, `executor-info.ts`, `app/api/admin/comfy/runs/route.ts`, `lib/studio/catalog.ts`, `modal_app/comfy/{avatar,app,broker}.py`, `supabase/migrations/20261123_comfy_longcat_avatar.sql`, `workflows/comfy/templates/longcat-avatar/`.
+- Risques : migration (non appliquee), deploiement Modal partage avec H3/MOSS, cout GPU (1 seul rendu de recette apres accord), `.github/workflows/comfy-admin-tests.yml` a completer (voir review.md).
+- Validation : Vitest/tsc/eslint/build verts, `unittest` Python verts, rendu simule en staging, puis un seul rendu GPU de recette (cout max annonce avant).
+
 # Backlog - Roadmap Director Console (6 axes)
 
 ## Axe 1 — Polish du create flow  `status: in_progress`

@@ -6,6 +6,11 @@
 - Separate `alphogenai-comfy` Modal app; original and audio-advanced files in private `comfy-outputs`, no legacy R2 URLs.
 - No merge, migration application, deployment or paid run. Activation: `docs/implementation/h3-admin-activation.md`.
 
+## 2026-11-23 - Talking avatar (LongCat 1.6) dans le Studio admin, code prepare seulement (T-1171, claude)
+- Page `/admin/studio/avatar` : portrait prive + audio prive (nouvelle bibliotheque audio) -> MP4 ~10 s, statut, lecture, telechargement, suppression. 3e runtime `longcat-avatar@1` du circuit comfy (gate fermee, outbox, broker, medias prives).
+- Dependance PR #124 : volume de poids + mesures uniquement. Doc complete, tableau de coordination avec Codex et procedure de recette : `docs/implementation/longcat-avatar-studio.md`.
+- Rien d'applique, deploye, merge ni execute sur GPU. Migration `20261123_comfy_longcat_avatar.sql` non appliquee.
+
 > Short, current, actionable onboarding doc. If anything here disagrees with
 > `README.md`, **trust this file** (the README still contains historical
 > Runpod/SVI/AudioLDM2/LangGraph notes that no longer reflect the system).
