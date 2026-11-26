@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { BookmarkPlus, ChevronDown, Lock, Trash2, X } from "lucide-react";
 import { h3Frames, lockedSettings } from "@/lib/studio/catalog";
-import { optionSupported, paramsByTier } from "@/lib/studio/manifest";
+import { optionSupported, outputSize, paramsByTier } from "@/lib/studio/manifest";
 import { deletePreset, listPresets, savePreset, type Preset } from "@/lib/studio/presets";
 import { ParamControl } from "./param-control";
 import type { StudioState } from "./use-studio";
@@ -17,7 +17,7 @@ export function AdvancedPanel({ s, onClose }: { s: StudioState; onClose?: () => 
 
   if (!manifest) return <div className="p-5 text-sm text-muted-foreground">No adjustable settings for this model yet.</div>;
   const locked = lockedSettings(model, s.variant);
-  const resolution = manifest.resolutions?.[String(values.aspect)];
+  const resolution = outputSize(manifest, values);
 
   return (
     <div className="flex h-full flex-col">
