@@ -15,7 +15,24 @@ RUNTIMES = {
 }
 
 
-def execute(graph: dict, reference: bytes | None, models: str = "/models", runtime: str = "h3-video@1") -> dict:
+# Largest H3 render the 180 s executor ran before: 640x640 (1:1, the biggest of the 480p sizes),
+# 124 frames (5 s). Anything bigger (704p, or 480p longer than 5 s) goes to the long executor. Measured 25 Nov 2026 on H100: 704x1280 5 s
+# took 322 s of execution plus a 37 s cold start.
+H3_STANDARD_PIXEL_FRAMES = 640 * 640 * 124
+
+
+def h3_needs_long_executor(graph: dict) -> bool:
+    """True when the bound H3 graph is larger than what the standard executor was validated for.
+    The graph is bound by the server template (node 6 carries width, height and length)."""
+    try:
+        inputs = graph["6"]["inputs"]
+        return int(inputs["width"]) * int(inputs["height"]) * int(inputs["length"]) > H3_STANDARD_PIXEL_FRAMES
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def execute(graph: dict, reference: bytes | None, models: str = "/models", runtime: str = "h3-video@1",
+            deadline_s: int | None = None) -> dict:
     spec = RUNTIMES[runtime]
     root = Path("/root/ComfyUI")
     work = Path("/tmp/comfy-run")
@@ -58,7 +75,7 @@ def execute(graph: dict, reference: bytes | None, models: str = "/models", runti
     ], cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     base = "http://127.0.0.1:8188"
     started = time.monotonic()
-    deadline = started + spec["deadline_s"]
+    deadline = started + (deadline_s or spec["deadline_s"])
     try:
         while time.monotonic() < min(deadline, started + 60):
             if process.poll() is not None:

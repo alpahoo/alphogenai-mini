@@ -10,8 +10,8 @@ import type { ManifestParam, StudioManifest } from "../manifest";
 
 const param = (m: StudioManifest, key: string): ManifestParam | undefined => m.params.find(p => p.key === key);
 
-function resolutionsText(m: StudioManifest): string {
-  const entries = Object.entries(m.resolutions ?? {});
+function resolutionsText(m: StudioManifest, table: Record<string, readonly number[]> | undefined = m.resolutions): string {
+  const entries = Object.entries(table ?? {});
   return entries.length ? entries.map(([aspect, size]) => `${size.join("x")} (${aspect})`).join(", ") : "the sizes listed by get_config";
 }
 
@@ -26,7 +26,9 @@ function h3Guidance(m: StudioManifest): string {
   const aspect = param(m, "aspect");
   return [
     "Model guidance: MiniMax H3, text to video with native audio.",
-    `- Real output: ${resolutionsText(m)} at 24 fps, ${seconds?.min ?? 2} to ${seconds?.max ?? 10} seconds. This is about 480p. Never promise HD, 4K, upscaling or any other resolution or frame rate.`,
+    `- Real output: ${resolutionsText(m)} at 24 fps, ${seconds?.min ?? 2} to ${seconds?.max ?? 10} seconds. This is about 480p, the default.`,
+    ...(m.hd_resolutions ? [`- A 704p setting also exists: ${resolutionsText(m, m.hd_resolutions)}, Turbo only, up to 5 seconds, about 6 minutes per clip. Never propose it unless the administrator asks for 704p.`] : []),
+    "- Never promise 4K, upscaling or any other resolution or frame rate.",
     "- Final prompt: one English paragraph in this order: subject and action, setting, camera movement and lens, lighting and mood, texture details, then a sentence starting with \"Soundscape:\" (ambient sound, effects, music).",
     `- Prompts are limited to ${param(m, "prompt")?.maxLength ?? 2000} characters.`,
     "- Dialogue is possible. Allow about 2.5 words per second plus 1.5 seconds, and raise the duration if needed.",
