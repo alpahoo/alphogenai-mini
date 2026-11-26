@@ -1594,3 +1594,9 @@ Réfs : revue Codex 2026-07-16 ; `agent/log.md` (entrée durcissement).
 ## MOSS-QUEUE-CANCEL — 2026-11-09 — owner: codex — code_ready
 - Explicit user request: fix queued MOSS calls surviving broker timeout. Branch codex/moss-queue-cancellation; no merge, deploy, permit or paid GPU authorized.
 - Scope: capture native SDK invocation ID before GPU start; persist and cancel on 300s start timeout; separate total result deadline; safe error codes/UI; free SDK/RPC and broker regressions. H3 stream and both GPU definitions remain unchanged.
+
+## CINEMA-M1-LOCAL-RECIPE - 2026-11-22 - owner: claude - in_progress
+- Explicit owner request on PR #119 (draft, base main, head feat/cinema-m1-persistence): DB-level ownership of cinema_takes.run_id, local PostgreSQL regression tests, simulated-dispatcher launch/relaunch recipe, reproducible local recipe (documented legacy migration failures), final-SHA verification.
+- Scope: PR branch, local Supabase stack and CI only. No cloud resource, Vercel change, paid generation, merge or production action. Migration stays PREPARED ONLY (not applied anywhere outside local test databases).
+- Risk: the migration now adds one UNIQUE (id,user_id) constraint on public.comfy_runs (H3 table) so a composite FK can bind a take to the run owner. Additive, no data change, no gate/budget/reservation change; listed in agent/review.md for the owner decision.
+- Acceptance: issue #117 scenario (reload, plan-2 alternative, idempotent relaunch without double debit, Corrected montage, cross-account 403/404); hosted items (Vercel ffmpeg, mobile, real GPU) stay unverified.

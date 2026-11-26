@@ -7,10 +7,16 @@ vi.mock("@/app/api/admin/middleware",()=>({requireAdmin:vi.fn()}));
 vi.mock("@/lib/supabase/service",()=>({createServiceClient:vi.fn()}));
 vi.mock("@/lib/comfy/admin",()=>({dispatchRun:vi.fn(),pilotState:vi.fn(),runtimeGateState:vi.fn(),privateHeaders:{"Cache-Control":"private, no-store"}}));
 const rpc=vi.fn();
+const from=vi.fn();
 const request=(params:unknown={prompt:"A cinematic sunset",seed:1})=>new Request("http://localhost/api/admin/comfy/runs",{method:"POST",body:JSON.stringify({params,idempotency_key:"a3263425-3a14-4170-a22c-8959566db7ac"})});
 beforeEach(()=>{vi.clearAllMocks();vi.stubEnv("COMFY_ADMIN_ENABLED","true");vi.stubEnv("COMFY_DISPATCH_URL","https://test.modal.run");vi.stubEnv("COMFY_DISPATCH_SECRET","test");
   vi.mocked(requireAdmin).mockResolvedValue({user:{id:"admin-1",email:"admin@example.com"}});
-  vi.mocked(createServiceClient).mockReturnValue({rpc} as unknown as ReturnType<typeof createServiceClient>);
+  from.mockImplementation((table:string)=>{
+    const query={select:vi.fn().mockReturnThis(),eq:vi.fn().mockReturnThis(),maybeSingle:vi.fn().mockResolvedValue({data:null,error:null})};
+    if(table==="comfy_dispatch_outbox")query.maybeSingle.mockResolvedValue({data:{delivered_at:new Date().toISOString()},error:null});
+    return query;
+  });
+  vi.mocked(createServiceClient).mockReturnValue({rpc,from} as unknown as ReturnType<typeof createServiceClient>);
   rpc.mockResolvedValue({data:"run-1",error:null});vi.mocked(dispatchRun).mockResolvedValue(undefined);});
 describe("private admin H3 admission",()=>{
   it("rejects a non-admin before database or dispatch",async()=>{
@@ -29,6 +35,15 @@ describe("private admin H3 admission",()=>{
     await POST(request());await POST(request());
     expect(rpc).toHaveBeenCalledTimes(2);
     for(const call of rpc.mock.calls)expect(call[1]).toMatchObject({p_key:"a3263425-3a14-4170-a22c-8959566db7ac",p_user:"admin-1"});
+  });
+  it("recovers an existing admission before quota or gate checks",async()=>{
+    const runQuery={select:vi.fn().mockReturnThis(),eq:vi.fn().mockReturnThis(),maybeSingle:vi.fn().mockResolvedValue({data:{id:"already-admitted"},error:null})};
+    from.mockImplementation((table:string)=>table==="comfy_runs"?runQuery:{select:vi.fn().mockReturnThis(),eq:vi.fn().mockReturnThis(),maybeSingle:vi.fn().mockResolvedValue({data:{delivered_at:new Date().toISOString()},error:null})});
+    vi.stubEnv("COMFY_ADMIN_ENABLED","");
+    const response=await POST(request());
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({run_id:"already-admitted",dispatched:true,recovered:true});
+    expect(rpc).not.toHaveBeenCalled();
   });
   it("a failed dispatch never triggers a second admission",async()=>{
     vi.mocked(dispatchRun).mockRejectedValue(Error("offline"));await POST(request());
@@ -85,7 +100,7 @@ describe("a reference that no longer exists never reaches admission",()=>{
   const path="admin-1/11111111-1111-4111-8111-111111111111.png";
   const withReference=(exists:boolean)=>{
     const createSignedUrl=vi.fn().mockResolvedValue(exists?{data:{signedUrl:"https://signed"},error:null}:{data:null,error:{message:"Object not found"}});
-    vi.mocked(createServiceClient).mockReturnValue({rpc,storage:{from:()=>({createSignedUrl})}} as unknown as ReturnType<typeof createServiceClient>);
+    vi.mocked(createServiceClient).mockReturnValue({rpc,from,storage:{from:()=>({createSignedUrl})}} as unknown as ReturnType<typeof createServiceClient>);
     return createSignedUrl;
   };
   const withFrame=()=>request({prompt:"A cinematic sunset",seed:1,quality:"turbo",first_frame_path:path});
@@ -107,3 +122,4 @@ describe("a reference that no longer exists never reaches admission",()=>{
     expect(probe).not.toHaveBeenCalled();
   });
 });
+

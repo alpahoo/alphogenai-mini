@@ -8,6 +8,7 @@ import { CreatePanel } from "./create-panel";
 import { HistoryRail } from "./history-rail";
 import { ResultStage } from "./result-stage";
 import { useStudio } from "./use-studio";
+import { CinemaPanel } from "./cinema-panel";
 import { useStudioDark } from "@/lib/studio/theme";
 
 type MobileTab = "create" | "result" | "history";
@@ -15,6 +16,7 @@ type MobileTab = "create" | "result" | "history";
 export function Studio() {
   const s = useStudio();
   const [advanced, setAdvanced] = useState(false);
+  const [cinema, setCinema] = useState(false);
   const [tab, setTab] = useState<MobileTab>("create");
   const [dark, toggleTheme] = useStudioDark();
 
@@ -24,11 +26,11 @@ export function Studio() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setAdvanced(false);
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); void s.generate(); }
+      if (!cinema && (e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); void s.generate(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [s]);
+  }, [s, cinema]);
 
   return (
     <div className={cn(dark && "dark", "h-full")}>
@@ -42,6 +44,8 @@ export function Studio() {
             </div>
           </div>
           <div className="flex items-center gap-1.5">
+            <button type="button" onClick={() => { setCinema(v => !v); setAdvanced(false); }} aria-pressed={cinema}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-muted">{cinema ? "Create" : "Cinema"}</button>
             <span className={cn("hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] sm:inline-flex",
               s.readiness.ready ? "border-emerald-500/30 text-emerald-400" : "border-border/60 text-muted-foreground")}>
               <span className={cn("h-1.5 w-1.5 rounded-full", s.readiness.ready ? "bg-emerald-400" : "bg-muted-foreground/60")} />
@@ -66,6 +70,7 @@ export function Studio() {
           </div>
         )}
 
+        {cinema ? <CinemaPanel s={s} onClose={() => setCinema(false)} /> : <>
         {/* Mobile / tablet tabs */}
         <nav className="grid shrink-0 grid-cols-3 gap-1 border-b border-border/50 p-2 lg:hidden" aria-label="Studio sections">
           {([["create", "Create", Wand2], ["result", "Result", Sparkles], ["history", "History", History]] as const).map(([k, label, Icon]) => (
@@ -88,8 +93,9 @@ export function Studio() {
           {advanced && <aside className="hidden min-h-0 border-l border-border/50 lg:block"><AdvancedPanel s={s} /></aside>}
         </div>
 
+        </>}
         {/* Advanced drawer below lg */}
-        {advanced && (
+        {!cinema && advanced && (
           <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Advanced settings">
             <button type="button" aria-label="Close" className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setAdvanced(false)} />
             <div className={cn(dark && "dark", "absolute inset-y-0 right-0 w-full max-w-sm")}>

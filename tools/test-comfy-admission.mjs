@@ -42,3 +42,6 @@ await assert.rejects(db.query("select claim_comfy_admin_run($1)",[id]),/permissi
 await db.exec("reset role");
 await db.close();
 console.log("PASS: migration, closed gate, owner permit, single admission, idempotency, claim fencing, terminal fencing, private storage RLS and RPC grants (local PostgreSQL).");
+
+// Also validate the prepared Cinema M1 schema on a separate free in-memory PostgreSQL instance.
+await import("./test-cinema-migration.mjs");
