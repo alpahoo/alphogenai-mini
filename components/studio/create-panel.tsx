@@ -3,7 +3,7 @@
 import { Clapperboard, Image as ImageIcon, Loader2, SlidersHorizontal, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { modelsFor, type OutputKind } from "@/lib/studio/catalog";
-import { optionSupported, paramsByTier, referenceReachable, referenceSupported } from "@/lib/studio/manifest";
+import { optionSupported, outputSize, paramsByTier, referenceReachable, referenceSupported } from "@/lib/studio/manifest";
 import { ParamControl } from "./param-control";
 import { ReferenceDrop } from "./reference-drop";
 import { ReferenceLibrary } from "./reference-library";
@@ -107,7 +107,7 @@ export function CreatePanel({ s, onOpenAdvanced, advancedOpen }: { s: StudioStat
                   <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">{p.label}</p>
                   <AspectPicker options={p.options} value={String(values[p.key] ?? "")} onChange={v => s.setValue(p.key, v)}
                     labels={p.optionLabels} sizes={manifest.resolutions} />
-                  <p className="text-xs text-muted-foreground/80">{p.optionLabels?.[String(values[p.key])]} · {manifest.resolutions?.[String(values[p.key])]?.join(" × ")} px</p>
+                  <p className="text-xs text-muted-foreground/80">{p.optionLabels?.[String(values[p.key])]} · {outputSize(manifest, values)?.join(" × ")} px</p>
                 </div>
               ) : (
                 <ParamControl key={p.key} param={p} value={values[p.key]} error={s.errors[p.key]} onChange={v => s.setValue(p.key, v)}

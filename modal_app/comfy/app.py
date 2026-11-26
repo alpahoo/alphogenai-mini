@@ -59,6 +59,15 @@ broker_secret = modal.Secret.from_name("alphogenai-comfy-broker")
 # Queue time is not part of Modal's GPU execution timeout. H3 keeps its existing limits.
 MOSS_START_WINDOW_SECONDS = 300
 MOSS_COLLECT_TIMEOUT_SECONDS = 660
+# H3: 110 s to start, then the executor's own timeout, plus a 20 s transfer margin.
+H3_START_WINDOW_SECONDS = 110
+H3_COLLECT_TIMEOUT_SECONDS = 310
+# Long H3 renders (704p, or 480p longer than 5 s). The broker also post-processes and uploads after
+# collecting, so its timeout keeps a margin above the long collect, still below the SQL deadline.
+H3_LONG_EXECUTOR_TIMEOUT_SECONDS = 540
+H3_LONG_COLLECT_TIMEOUT_SECONDS = H3_START_WINDOW_SECONDS + H3_LONG_EXECUTOR_TIMEOUT_SECONDS + 20
+# 870 s: the LongCat collector's hard bound is 830 s (cold start + render + transfer grace), the long H3
+# collect is 670 s; both plus upload stay below this, which stays below the 15-minute SQL deadline (900 s).
 BROKER_TIMEOUT_SECONDS = 870
 
 
@@ -77,6 +86,34 @@ def execute_graph(graph: dict, reference: bytes | None, start_before: float):
     if time.time() >= start_before:
         raise TimeoutError("EXECUTOR_START_EXPIRED")
     yield from output_frames(execute(graph, reference))
+
+
+# Long H3 renders: identical isolation to execute_graph (no secrets, no network, read-only verified
+# volume, single-use container, one at a time, same region); only the timeouts differ. A separate
+# function so the validated 180 s executor stays exactly as it was.
+@app.function(image=gpu_image, gpu="H100", cpu=(2, 2), memory=(65536, 65536),
+              volumes={"/models": volume.with_mount_options(read_only=True)},
+              secrets=[], block_network=True, restrict_modal_access=True,
+              single_use_containers=True, min_containers=0, max_containers=1,
+              timeout=540, startup_timeout=120, region=REGION)
+def execute_graph_long(graph: dict, reference: bytes | None, start_before: float):
+    import time
+    from modal_app.comfy.executor import execute
+    from modal_app.comfy.transfer import output_frames
+    yield {"call_id": modal.current_function_call_id()}
+    if time.time() >= start_before:
+        raise TimeoutError("EXECUTOR_START_EXPIRED")
+    # Stop ComfyUI before Modal's own timeout so the job is cancelled cleanly.
+    yield from output_frames(execute(graph, reference, deadline_s=H3_LONG_EXECUTOR_TIMEOUT_SECONDS - 25))
+
+
+def h3_executor(graph: dict):
+    """The H3 executor and collect budget for a bound graph. Standard 180 s executor unless the
+    render is larger than what it was validated for."""
+    from modal_app.comfy.executor import h3_needs_long_executor
+    if h3_needs_long_executor(graph):
+        return execute_graph_long, H3_LONG_COLLECT_TIMEOUT_SECONDS
+    return execute_graph, H3_COLLECT_TIMEOUT_SECONDS
 
 
 # MOSS-Image text to image. Same isolation as H3: no secrets, no network, read-only verified volume,
@@ -214,8 +251,8 @@ def broker(run_id: str):
 
         async def collect():
             call = None
-            stream = execute_graph.remote_gen.aio(graph, reference, time.time() + 110)
-            budget = 310
+            executor, budget = h3_executor(graph)
+            stream = executor.remote_gen.aio(graph, reference, time.time() + H3_START_WINDOW_SECONDS)
             try:
                 async with asyncio.timeout(budget):
                     header = await anext(stream)

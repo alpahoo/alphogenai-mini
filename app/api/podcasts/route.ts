@@ -15,6 +15,7 @@ import {
   isSourceMode,
 } from "@/lib/podcast/podcast";
 import { isPodcastLipsyncQualityMode } from "@/lib/podcast/lipsync-quality";
+import { isModuleEnabled } from "@/lib/parallax-modules";
 
 /**
  * GET /api/podcasts — list the authenticated user's podcasts (newest first).
@@ -54,6 +55,12 @@ export async function POST(request: NextRequest) {
   try {
     const user = await getUserFromRequest(request);
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const moduleId = request.headers?.get?.("x-alphogen-module") === "parallax_audio"
+      ? "parallax_audio"
+      : "alphogenai_podcast";
+    if (!(await isModuleEnabled(moduleId, user))) {
+      return NextResponse.json({ error: `${moduleId} is disabled` }, { status: 404 });
+    }
 
     const body = await request.json().catch(() => ({}));
     const { source_mode, source_topic, source_asset_url, title, layout, aspect_ratio, language,
@@ -154,3 +161,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+

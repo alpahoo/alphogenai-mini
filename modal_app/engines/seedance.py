@@ -16,6 +16,8 @@ import time
 
 import httpx
 
+from modal_app.utils.aspect import normalize_aspect_ratio
+
 from .base import BaseEngine
 
 logger = logging.getLogger(__name__)
@@ -57,7 +59,10 @@ class SeedanceEngine(BaseEngine):
         )
 
         # ----- 1. Create generation task -----
-        task_id = self._create_task(api_key, prompt, duration, image_url=image_url)
+        task_id = self._create_task(
+            api_key, prompt, duration, image_url=image_url,
+            aspect_ratio=normalize_aspect_ratio(kwargs.get("aspect_ratio")),
+        )
         logger.info(f"[seedance] job={job_id} taskId={task_id}")
 
         # ----- 2. Poll until complete -----
@@ -73,14 +78,15 @@ class SeedanceEngine(BaseEngine):
     # -- internal helpers --------------------------------------------------
 
     def _create_task(
-        self, api_key: str, prompt: str, duration: int, image_url: str | None = None
+        self, api_key: str, prompt: str, duration: int, image_url: str | None = None,
+        aspect_ratio: str = "16:9",
     ) -> str:
         """Submit a generation task to Kie.ai. Returns taskId."""
         input_params: dict = {
             "prompt": prompt,
             "duration": duration,
             "resolution": "720p",
-            "aspect_ratio": "16:9",
+            "aspect_ratio": aspect_ratio,
             "generate_audio": True,
             "web_search": False,
             "nsfw_checker": False,

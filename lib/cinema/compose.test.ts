@@ -40,7 +40,7 @@ describe("Luz pilot case: the composer produces what the H3 manifest expects", (
   it("gives the parameters of the planned render: 9:16, 5 s, turbo, one first frame", () => {
     expect(out.modelSlug).toBe("minimax-h3");
     // The manifest defaults the Studio form starts from (validated 0.4 s audio advance) are included, nothing else.
-    expect(out.values).toEqual({ prompt: out.prompt, aspect: "9:16", seconds: 5, quality: "turbo", audio_shift_s: 0.4 });
+    expect(out.values).toEqual({ prompt: out.prompt, aspect: "9:16", seconds: 5, quality: "turbo", resolution: "480p", audio_shift_s: 0.4 });
     expect(out.notes).toEqual([]);
   });
 

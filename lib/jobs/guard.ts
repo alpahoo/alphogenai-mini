@@ -223,8 +223,8 @@ export async function assertCanCreateJob(
       };
     }
   }
-  // LTX-2.3 (Modal H100, FP8) — Pro+ only (GPU H100 = coûteux).
-  if (preferredEngine === "ltx_2_3" && plan !== "pro" && plan !== "premium") {
+  // LTX-2.3 / LTX-2.5 (Modal H100) — Pro+ only (GPU H100 = coûteux).
+  if ((preferredEngine === "ltx_2_3" || preferredEngine === "ltx_2_5") && plan !== "pro" && plan !== "premium") {
     return {
       ok: false,
       status: 403,

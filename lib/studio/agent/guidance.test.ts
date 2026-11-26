@@ -18,7 +18,10 @@ describe("model guidance for the assistant", () => {
     expect(g).toMatch(/2\.5 words per second/);
     expect(g).toMatch(/0\.4 seconds/);
     expect(g).toMatch(/first half second/);
-    expect(g).toMatch(/Never promise HD, 4K, upscaling/);
+    expect(g).toMatch(/Never promise 4K, upscaling/);
+    for (const [aspect, size] of Object.entries(m.hd_resolutions ?? {})) expect(g).toContain(`${size.join("x")} (${aspect})`);
+    expect(g).toMatch(/704p setting also exists: .*Turbo only, up to 5 seconds/);
+    expect(g).toMatch(/unless the administrator asks for 704p/);
     expect(g).toMatch(/Image to video exists only in turbo/);
     expect(g).toMatch(/2 to 10 seconds/);
   });

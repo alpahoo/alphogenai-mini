@@ -578,6 +578,7 @@ class LateResultTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "GPU_START_TIMEOUT")
         cancel.assert_awaited_once_with(terminate_containers=True)
 
+    @unittest.skipUnless(HAS_FFMPEG, "ffmpeg not installed")  # the broker converts the speech with ffmpeg before invoking
     def test_a_late_collected_result_is_published_exactly_once_and_a_late_failure_publishes_nothing(self):
         import asyncio
         from modal_app.comfy.moss_queue import MossQueueError, collect_moss

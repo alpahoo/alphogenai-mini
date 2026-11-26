@@ -43,6 +43,8 @@ export interface StudioManifest {
   variants: Record<string, string | null>;
   params: readonly ManifestParam[];
   resolutions?: Record<string, readonly number[]>;
+  /** Sizes used when the `resolution` parameter is "704p" (H3). Absent aspects are not offered in 704p. */
+  hd_resolutions?: Record<string, readonly number[]>;
   locked?: readonly string[];
   preserve_raw?: boolean;
   studio?: {
@@ -54,6 +56,12 @@ export interface StudioManifest {
 }
 
 export type ParamValues = Record<string, string | number>;
+
+/** Output size for the current values: the 704p table when that resolution is chosen, else the default one. */
+export function outputSize(manifest: StudioManifest, values: ParamValues): readonly number[] | undefined {
+  const table = values.resolution === "704p" && manifest.hd_resolutions ? manifest.hd_resolutions : manifest.resolutions;
+  return table?.[String(values.aspect)];
+}
 
 export function defaultValues(manifest: StudioManifest): ParamValues {
   const values: ParamValues = {};
