@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createBytePlusTask } from "@/lib/byteplus-client";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { isModuleEnabled } from "@/lib/parallax-modules";
 import { POST } from "./route";
+
+vi.mock("@/lib/parallax-modules", () => ({ isModuleEnabled: vi.fn() }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
@@ -362,5 +365,37 @@ describe("POST /api/jobs validation and gates", () => {
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toEqual({ error: "Invalid research job id" });
     expect(service.jobsInsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/jobs — Parallax Remix module gate", () => {
+  const remixRequest = (body: unknown) => new Request("http://localhost/api/jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-alphogen-module": "parallax_remix" },
+    body: JSON.stringify(body),
+  });
+  beforeEach(() => { vi.mocked(isModuleEnabled).mockReset(); vi.mocked(createServiceClient).mockReset(); });
+
+  it("refuses a Remix submission when the module is off for this user, before any database or provider work", async () => {
+    mockAuth(user);
+    vi.mocked(isModuleEnabled).mockResolvedValue(false);
+    const res = await POST(remixRequest({ prompt: "A slow push-in", target_duration_seconds: 5 }));
+    expect(res.status).toBe(404);
+    expect(isModuleEnabled).toHaveBeenCalledWith("parallax_remix", user);
+    expect(createServiceClient).not.toHaveBeenCalled();
+  });
+
+  it("refuses an anonymous Remix submission", async () => {
+    mockAuth(null);
+    const res = await POST(remixRequest({ prompt: "A slow push-in" }));
+    expect(res.status).toBe(401);
+    expect(isModuleEnabled).not.toHaveBeenCalled();
+  });
+
+  it("does not consult the module for ordinary video jobs", async () => {
+    mockAuth(user);
+    mockService();
+    await POST(jobsRequest({ prompt: "x" }));
+    expect(isModuleEnabled).not.toHaveBeenCalled();
   });
 });

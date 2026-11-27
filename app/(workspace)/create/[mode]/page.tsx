@@ -105,7 +105,7 @@ const MODE_CONFIG: Record<
     subtitle: "Choose a private finished video and create a separate version.",
     placeholder: "A slow camera push-in and gentle movement toward the light…",
     icon: Sparkles,
-    iconBg: "bg-violet-500/10 text-violet-700",
+    iconBg: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
     accentColor: "violet",
   },
 };
@@ -226,6 +226,16 @@ export default function CreateModePage({
   const router = useRouter();
   const searchParams = useSearchParams();
   const config = MODE_CONFIG[mode] ?? MODE_CONFIG.story;
+
+  // Parallax Remix follows /admin/modules: off (or admin-only for a non-admin) closes this entry point too.
+  const [remixEnabled, setRemixEnabled] = useState<boolean | null>(mode === "remix" ? null : true);
+  useEffect(() => {
+    if (mode !== "remix") return;
+    let live = true;
+    fetch("/api/modules").then((r) => r.json()).then((d) => { if (live) setRemixEnabled(Boolean(d.modules?.parallax_remix)); })
+      .catch(() => { if (live) setRemixEnabled(false); });
+    return () => { live = false; };
+  }, [mode]);
 
   // Plan
   const [plan, setPlan] = useState<JobPlan>("free");
@@ -703,7 +713,7 @@ export default function CreateModePage({
     try {
       const res = await fetch("/api/jobs", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(mode === "remix" && { "x-alphogen-module": "parallax_remix" }) },
         body: JSON.stringify({
           prompt: trimmed,
           target_duration_seconds: parseInt(duration, 10),
@@ -1648,6 +1658,17 @@ export default function CreateModePage({
       )}
     </div>
   );
+
+  if (mode === "remix" && remixEnabled === false) {
+    return (
+      <div className="mx-auto max-w-2xl px-5 py-8">
+        <div className="rounded-2xl border border-border bg-card p-6 text-card-foreground">
+          <h1 className="text-2xl font-semibold">Parallax Remix is turned off</h1>
+          <p className="mt-2 text-sm text-muted-foreground">An administrator must turn this module back on before a new remix can start.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex h-full bg-[#f6f6f2]">
