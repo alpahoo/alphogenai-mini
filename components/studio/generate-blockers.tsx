@@ -8,14 +8,18 @@ import { BLOCKER_GROUPS, type StudioBlocker } from "@/lib/studio/blockers";
  */
 export function GenerateBlockers({ blockers }: { blockers: StudioBlocker[] }) {
   if (!blockers.length) return null;
-  const first = blockers.find(b => b.kind === "form") ?? blockers[0];
+  // An owner/server gate is the decisive reason: surface it before a missing
+  // prompt so a closed runtime cannot look like a form problem.
+  const owner = blockers.find(b => b.kind === "owner");
+  const first = owner ?? blockers.find(b => b.kind === "form") ?? blockers[0];
+  const lead = owner ? `Generation closed: ${owner.message}` : first.message;
   if (blockers.length === 1) {
-    return <p role="status" className="mt-2 break-words text-center text-xs text-muted-foreground">{first.message}</p>;
+    return <p role="status" className="mt-2 break-words text-center text-xs text-muted-foreground">{lead}</p>;
   }
   return (
     <details role="status" className="group mt-2 text-xs text-muted-foreground">
       <summary className="cursor-pointer list-none break-words text-center hover:text-foreground">
-        {first.message} <span className="whitespace-nowrap text-muted-foreground/70">· {blockers.length} reasons, details</span>
+        {lead} <span className="whitespace-nowrap text-muted-foreground/70">· {blockers.length} reasons, details</span>
       </summary>
       <div className="mt-2 max-h-32 space-y-2 overflow-y-auto rounded-xl border border-border/50 bg-muted/30 p-3 text-left">
         {BLOCKER_GROUPS.map(g => {

@@ -9,18 +9,18 @@ const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " "
 describe("Generate blockers UI", () => {
   it("shows a single reason inline", () => {
     const t = text(renderToStaticMarkup(<GenerateBlockers blockers={[{ kind: "owner", message: "GPU authorization is off." }]} />));
-    expect(t).toContain("GPU authorization is off.");
+    expect(t).toContain("Generation closed: GPU authorization is off.");
     expect(t).not.toContain("reasons");
   });
 
-  it("lists every reason grouped by who can fix it, form problems first", () => {
+  it("surfaces a closed runtime before form problems and lists every reason", () => {
     const html = renderToStaticMarkup(<GenerateBlockers blockers={[
       { kind: "owner", code: "gate_disabled", message: "GPU authorization is off." },
       { kind: "owner", code: "expired", message: "The GPU authorization expired on 2026-11-09." },
       { kind: "form", message: "Prompt is required" },
     ]} />);
     const t = text(html);
-    expect(t).toMatch(/^ ?Prompt is required · 3 reasons/);
+    expect(t).toMatch(/^ ?Generation closed: GPU authorization is off\. · 3 reasons/);
     expect(t).toContain("Fix in the form");
     expect(t).toContain("Needs owner authorization");
     expect(t.indexOf("Fix in the form")).toBeLessThan(t.indexOf("Needs owner authorization"));
