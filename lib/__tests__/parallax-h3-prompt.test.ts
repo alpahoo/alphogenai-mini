@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanRewrite, h3SystemPrompt, keepAsWritten, rewriteH3Prompt } from "@/lib/parallax-h3-prompt";
+import { H3_REWRITE_MODELS, callH3RewriteLLM, cleanRewrite, h3SystemPrompt, keepAsWritten, rewriteH3Prompt } from "@/lib/parallax-h3-prompt";
 
 const GOOD = "A barista pours steamed milk into a latte on a wooden counter, a heart forming in the foam. Slow push-in, 50 mm lens. " +
   "Warm morning light, cozy mood. Fine detail on the crema. Soundscape: gentle milk pouring, quiet café chatter.";
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 describe("H3 prompt instructions", () => {
   it("follow the Studio H3 guidance: English paragraph, fixed order, Soundscape last, vertical, no early sound", () => {
@@ -67,5 +67,37 @@ describe("rewriteH3Prompt", () => {
     expect(keepAsWritten("un latte")).toBe(false);
     expect(await rewriteH3Prompt(`  ${GOOD}  `, 5, call)).toEqual({ prompt: GOOD, rewritten: false, reason: "as_written" });
     expect(call).not.toHaveBeenCalled();
+  });
+});
+
+describe("callH3RewriteLLM", () => {
+  const answer = (content: unknown, extra: Record<string, unknown> = {}) =>
+    new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { role: "assistant", content, ...extra } }], usage: { completion_tokens: 12 } }), { status: 200 });
+
+  it("returns the first model's text, with room for thinking models", async () => {
+    vi.stubEnv("EVOLINK_API_KEY", "test");
+    const fetchMock = vi.fn().mockResolvedValue(answer(GOOD));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await callH3RewriteLLM("sys", "idea")).toBe(GOOD);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+    expect(body).toMatchObject({ model: H3_REWRITE_MODELS[0], max_tokens: 1500 });
+  });
+
+  it("tries the second model when the first answers with empty content", async () => {
+    vi.stubEnv("EVOLINK_API_KEY", "test");
+    const fetchMock = vi.fn().mockResolvedValueOnce(answer("", { reasoning_content: "thinking" })).mockResolvedValueOnce(answer(GOOD));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await callH3RewriteLLM("sys", "idea")).toBe(GOOD);
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1].body)).model).toBe(H3_REWRITE_MODELS[1]);
+  });
+
+  it("throws with the answers' shape, never their text, when no model returns text", async () => {
+    vi.stubEnv("EVOLINK_API_KEY", "test");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(answer(null, { reasoning_content: "secret idea" })).mockResolvedValueOnce(new Response("no", { status: 503 })));
+    const error = (await callH3RewriteLLM("sys", "idea").then(() => null, (e: unknown) => e)) as Error;
+    expect(error.message).toMatch(/deepseek-chat: empty content .*"finish_reason":"stop".*"message_keys":\["role","content","reasoning_content"\]/);
+    expect(error.message).toMatch(/HTTP 503/);
+    expect(error.message).not.toMatch(/secret idea/);
   });
 });
