@@ -1594,3 +1594,7 @@ Réfs : revue Codex 2026-07-16 ; `agent/log.md` (entrée durcissement).
 ## MOSS-QUEUE-CANCEL — 2026-11-09 — owner: codex — code_ready
 - Explicit user request: fix queued MOSS calls surviving broker timeout. Branch codex/moss-queue-cancellation; no merge, deploy, permit or paid GPU authorized.
 - Scope: capture native SDK invocation ID before GPU start; persist and cancel on 300s start timeout; separate total result deadline; safe error codes/UI; free SDK/RPC and broker regressions. H3 stream and both GPU definitions remain unchanged.
+## PARALLAX-IMAGE-LOT — 2026-11-23 — validation draft #120
+- Finaliser le premier lot Image sans génération : contrat manifest MOSS, bornes, droits admin/propriétaire, média privé signé, persistance et référence de bibliothèque.
+- Ajouter uniquement les tests locaux et la recette documentée ; les contrôles hébergés restant à réaliser sont explicitement listés, sans migration production ni secret exposé.
+

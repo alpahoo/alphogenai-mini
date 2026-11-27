@@ -11,15 +11,16 @@ import type { StudioState } from "./use-studio";
 export function PrivateImage({ asset, s, sizes, aspect, className, alt = "Generated image" }: {
   asset: StudioAsset; s: StudioState; sizes?: Record<string, readonly number[]>; aspect?: string; className?: string; alt?: string;
 }) {
-  const [url, setUrl] = useState<string | null>(s.media[asset.id]?.url ?? null);
+  // The authenticated same-origin route is used for display. Signed URLs
+  // remain the download/API mechanism, but an <img> must not depend on a
+  // cross-origin signed URL resolving after a full reload.
+  const [url, setUrl] = useState<string | null>(`/api/admin/comfy/media/${encodeURIComponent(asset.id)}?inline=1`);
   const [failed, setFailed] = useState(false);
   const retried = useRef(false);
   const { signMedia } = s;
   useEffect(() => {
-    let live = true; retried.current = false; setFailed(false);
-    signMedia(asset.id).then(u => { if (live) setUrl(u); }).catch(() => { if (live) setFailed(true); });
-    return () => { live = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sign once per asset; refresh handled on error
+    retried.current = false; setFailed(false);
+    setUrl(`/api/admin/comfy/media/${encodeURIComponent(asset.id)}?inline=1`);
   }, [asset.id]);
   const size = aspect ? sizes?.[aspect] : undefined;
   const style = size ? { aspectRatio: `${size[0]}/${size[1]}` } : undefined;
